@@ -22,7 +22,7 @@
 	}
 
 	function pitcherName(line: PitcherLine): string {
-		return line.role === 'support' ? 'Support bullpen' : line.displayName;
+		return line.displayName;
 	}
 
 	function ra9(line: PitcherLine): string {

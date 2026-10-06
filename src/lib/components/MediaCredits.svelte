@@ -10,7 +10,13 @@
  let page = $state(0);
  let request = 0;
  let failedPreviews = $state<Record<string, boolean>>({});
- type Credit = { key: string; label: string; asset: MediaAsset };
+ type Credit = {
+  key: string;
+  label: string;
+  asset: MediaAsset;
+  captureEvidenceUrl?: string;
+  identityEvidenceUrl?: string;
+ };
  const rows = $derived.by(() => {
   if (!media) return [] as Credit[];
   const entries: Credit[] = [];
@@ -18,12 +24,32 @@
    if (team.logo) entries.push({ key: `${id}:current`, label: `${team.name}: current franchise mark`, asset: team.logo });
    team.historical.forEach((asset, index) => entries.push({ key: `${id}:historical:${index}`, label: `${team.name}: ${asset.firstYear}–${asset.lastYear} mark`, asset }));
   }
-  for (const [id, player] of Object.entries(media.players)) player.photos.forEach((asset, index) => entries.push({ key: `${id}:photo:${index}`, label: `${player.name}: photo ${asset.year}`, asset }));
+  for (const [id, player] of Object.entries(media.players)) {
+   player.photos.forEach((asset, index) => entries.push({
+    key: `${id}:photo:${index}`,
+    label: `${player.name}: photo ${asset.year}`,
+    asset,
+    captureEvidenceUrl: asset.captureEvidenceUrl,
+    identityEvidenceUrl: asset.identityEvidenceUrl
+   }));
+  }
+  for (const [id, asset] of Object.entries(media.atmosphere)) {
+   const team = media.teams[asset.franchiseId];
+   const owner = team?.name ?? asset.franchiseId;
+   entries.push({ key: `${id}:atmosphere`, label: `${asset.caption}: ${owner} atmosphere photo ${asset.year}`, asset });
+  }
   return entries.sort((a, b) => compareId(a.label, b.label) || compareId(a.key, b.key));
  });
  const matches = $derived.by(() => {
   const needle = query.trim().toLowerCase();
-  return needle ? rows.filter(row => `${row.label} ${row.asset.credit} ${row.asset.license}`.toLowerCase().includes(needle)) : rows;
+  return needle ? rows.filter(row => [
+   row.label,
+   row.asset.credit,
+   row.asset.license,
+   row.asset.sourceUrl,
+   row.captureEvidenceUrl,
+   row.identityEvidenceUrl
+  ].filter(Boolean).join(' ').toLowerCase().includes(needle)) : rows;
  });
  const pages = $derived(Math.max(1, Math.ceil(matches.length / 20)));
  const currentPage = $derived(Math.min(page, pages - 1));
@@ -39,18 +65,19 @@
 </script>
 
 <div class="image-credits" aria-busy={loading}>
- <p>Player portraits prefer the drafted year. Otherwise the game uses the nearest verified photo from that player's recorded playing career and labels its actual year. A portrait is not evidence of performance in that season.</p>
- <p>Marks without a verified historical year range are labelled as current franchise marks. Image copyright licences are separate from the statistical-data licence. Club marks may remain protected by trademark rights; this game is not affiliated with or endorsed by the clubs or league.</p>
- <p>Display files are resized and re-encoded as WebP. Portraits may be cropped to fit the layout. Original files, creator credits, and image licences are linked below.</p>
+ <p>Player portraits prefer the drafted year. Otherwise the game uses the nearest verified photo from that player's recorded playing career and labels its actual year. A portrait is not evidence of performance in that season. Curated archive photos also link their capture-date and player-identity evidence.</p>
+ <p>Atmosphere photographs are context only. They do not identify the simulated venue or season. Marks without a verified historical year range are labelled as current franchise marks.</p>
+ <p>Image copyright licences are separate from the statistical-data licence and do not grant trademark, privacy, publicity, or likeness rights. Club marks may remain protected by trademark rights; this game is not affiliated with or endorsed by the clubs or league.</p>
+ <p>Display files are auto-oriented, stripped of metadata, resized, and re-encoded as WebP. Portraits may be cropped to fit the layout. Original files, creator credits, image licences, and available evidence are linked below.</p>
  {#if loading}
   <p class="muted" role="status">Loading image provenance…</p>
  {:else if error}
   <p class="error" role="alert">{error}</p>
   <button class="secondary" onclick={() => void load()}>Retry image credits</button>
  {:else if media}
-  <p class="coverage">{media.diagnostics.logos} current marks · {media.diagnostics.historicalLogos} historical marks · {media.diagnostics.photos} verified photos covering {media.diagnostics.playersWithPhotos} of {media.diagnostics.playersSearched} players searched</p>
+  <p class="coverage">{media.diagnostics.logos} current marks · {media.diagnostics.historicalLogos} historical marks · {media.diagnostics.photos} verified player photos covering {media.diagnostics.playersWithPhotos} of {media.diagnostics.playersSearched} players searched · {media.diagnostics.atmospherePhotos} atmosphere photos</p>
   <a class="button secondary" href={`/media/${media.version}/manifest.json`} download>Download full image credits</a>
-  <label for="credit-search">Find an image, player, team, or photographer</label>
+  <label for="credit-search">Find an image, player, team, park, or photographer</label>
   <input id="credit-search" type="search" bind:value={query} oninput={() => page = 0} placeholder="Search image credits" />
   <p class="muted" role="status">{matches.length} credited images · Page {currentPage + 1} of {pages}</p>
   {#if !matches.length}<p>No image credits match this search.</p>{/if}
@@ -62,7 +89,16 @@
      {:else}
       <img src={row.asset.url} alt="" width={row.asset.width} height={row.asset.height} loading="lazy" decoding="async" onerror={() => failedPreviews[row.asset.url] = true} />
      {/if}
-     <div><h3>{row.label}</h3><p>{row.asset.credit}</p><div class="credit-links"><a href={row.asset.sourceUrl} target="_blank" rel="noreferrer">Original source</a><a href={row.asset.licenseUrl} rel="license" target="_blank">{row.asset.license}</a></div></div>
+     <div>
+      <h3>{row.label}</h3>
+      <p>{row.asset.credit}</p>
+      <div class="credit-links">
+       <a href={row.asset.sourceUrl} target="_blank" rel="noreferrer">Original source</a>
+       <a href={row.asset.licenseUrl} rel="license noreferrer" target="_blank">{row.asset.license}</a>
+       {#if row.captureEvidenceUrl}<a href={row.captureEvidenceUrl} target="_blank" rel="noreferrer">Capture-date evidence</a>{/if}
+       {#if row.identityEvidenceUrl}<a href={row.identityEvidenceUrl} target="_blank" rel="noreferrer">Player-identity evidence</a>{/if}
+      </div>
+     </div>
     </li>
    {/each}
   </ul>

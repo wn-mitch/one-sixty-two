@@ -48,6 +48,7 @@ interface CategoryMember {
 }
 
 interface CategoryResponse {
+	continue?: { continue?: string; cmcontinue?: string };
 	query?: { categorymembers?: CategoryMember[] };
 }
 
@@ -125,28 +126,57 @@ export async function acquireWikidataMedia(
 async function categoryMembers(
 	title: string,
 	types: 'file|subcat' | 'file' | 'subcat',
-	limit: number,
 	cacheDir: string,
 	offline: boolean
 ): Promise<CategoryMember[]> {
-	const request = `category-v1:${types}:${limit}:${title}`;
-	const url = new URL(COMMONS_ENDPOINT);
-	url.searchParams.set('action', 'query');
-	url.searchParams.set('format', 'json');
-	url.searchParams.set('formatversion', '2');
-	url.searchParams.set('list', 'categorymembers');
-	url.searchParams.set('cmtitle', `Category:${title.replace(/^Category:/, '')}`);
-	url.searchParams.set('cmtype', types);
-	url.searchParams.set('cmlimit', String(limit));
-	const response = await fetchCachedJson<CategoryResponse>(
-		cacheDir,
-		'categories',
-		request,
-		url.toString(),
-		offline,
-		(payload) => Array.isArray(payload.query?.categorymembers)
-	);
-	return response.query?.categorymembers ?? [];
+	const members: CategoryMember[] = [];
+	const seenContinuations = new Set<string>();
+	let continuation: NonNullable<CategoryResponse['continue']> | null = null;
+	do {
+		const genericToken: string = continuation?.continue?.trim() ?? '';
+		const memberToken: string = continuation?.cmcontinue?.trim() ?? '';
+		const continuationKey = memberToken || '(root)';
+		if (seenContinuations.has(continuationKey)) {
+			throw new Error(`Commons repeated category continuation token for ${title}`);
+		}
+		seenContinuations.add(continuationKey);
+		const request: string = `category-v2:${types}:${title}:${genericToken}:${memberToken}`;
+		const url = new URL(COMMONS_ENDPOINT);
+		url.searchParams.set('action', 'query');
+		url.searchParams.set('format', 'json');
+		url.searchParams.set('formatversion', '2');
+		url.searchParams.set('list', 'categorymembers');
+		url.searchParams.set('cmtitle', `Category:${title.replace(/^Category:/, '')}`);
+		url.searchParams.set('cmtype', types);
+		url.searchParams.set('cmlimit', '500');
+		if (genericToken) url.searchParams.set('continue', genericToken);
+		if (memberToken) url.searchParams.set('cmcontinue', memberToken);
+		const response: CategoryResponse = await fetchCachedJson<CategoryResponse>(
+			cacheDir,
+			'categories',
+			request,
+			url.toString(),
+			offline,
+			(payload) => Array.isArray(payload.query?.categorymembers)
+		);
+		members.push(...(response.query?.categorymembers ?? []));
+		if (response.continue && !response.continue.cmcontinue?.trim()) {
+			throw new Error(`Commons returned invalid category continuation for ${title}`);
+		}
+		continuation = response.continue ?? null;
+	} while (continuation !== null);
+
+	const seenPageIds = new Set<number>();
+	const seenTitles = new Set<string>();
+	return members
+		.filter((member): member is CategoryMember & { title: string } => Boolean(member.title))
+		.sort((a, b) => (a.pageid ?? Number.MAX_SAFE_INTEGER) - (b.pageid ?? Number.MAX_SAFE_INTEGER) || compareText(a.title, b.title))
+		.filter((member) => {
+			if ((member.pageid !== undefined && seenPageIds.has(member.pageid)) || seenTitles.has(member.title)) return false;
+			if (member.pageid !== undefined) seenPageIds.add(member.pageid);
+			seenTitles.add(member.title);
+			return true;
+		});
 }
 
 export async function discoverCommonsCategoryPhotos(
@@ -165,30 +195,35 @@ export async function discoverCommonsCategoryPhotos(
 		while (cursor < uniqueSources.length) {
 			const source = uniqueSources[cursor++];
 			const targetYears = new Set(source.targetYears);
+			const rootTitle = source.title.replace(/^Category:/, '');
+			const visitedCategories = new Set<string>([rootTitle]);
 			const [rootFiles, rootSubcategories] = await Promise.all([
-				categoryMembers(source.title, 'file', 12, cacheDir, offline),
-				categoryMembers(source.title, 'subcat', 200, cacheDir, offline)
+				categoryMembers(rootTitle, 'file', cacheDir, offline),
+				categoryMembers(rootTitle, 'subcat', cacheDir, offline)
 			]);
 			const titles = rootFiles
 				.filter((member) => member.ns === 6 && member.title)
-				.map((member) => member.title!.replace(/^File:/, ''))
-				.sort(compareText);
-			let subcategories = rootSubcategories.filter((member) => member.ns === 14 && member.title).map((member) => member.title!.replace(/^Category:/, ''));
-			const containers = subcategories.filter((title) => /\bby (?:year|season)\b/i.test(title));
-			for (const container of containers.slice(0, 2)) {
-				const nested = await categoryMembers(container, 'subcat', 100, cacheDir, offline);
-				subcategories.push(...nested.filter((member) => member.ns === 14 && member.title).map((member) => member.title!.replace(/^Category:/, '')));
+				.map((member) => member.title!.replace(/^File:/, ''));
+			const directSubcategories = rootSubcategories
+				.filter((member) => member.ns === 14 && member.title)
+				.map((member) => member.title!.replace(/^Category:/, ''));
+			const candidateYearCategories = [...directSubcategories];
+			for (const container of directSubcategories.filter((title) => /\bby (?:year|season)\b/i.test(title)).sort(compareText)) {
+				if (visitedCategories.has(container)) continue;
+				visitedCategories.add(container);
+				const nested = await categoryMembers(container, 'subcat', cacheDir, offline);
+				candidateYearCategories.push(...nested
+					.filter((member) => member.ns === 14 && member.title)
+					.map((member) => member.title!.replace(/^Category:/, '')));
 			}
-			subcategories = [...new Set(subcategories)].sort(compareText);
-			for (const category of subcategories) {
+			for (const category of [...new Set(candidateYearCategories)].sort(compareText)) {
 				const years = [...category.matchAll(/\b(18|19|20)\d{2}\b/g)].map((match) => Number(match[0]));
-				if (!years.some((year) => targetYears.has(year))) continue;
-				const members = await categoryMembers(category, 'file', 12, cacheDir, offline);
+				if (!years.some((year) => targetYears.has(year)) || visitedCategories.has(category)) continue;
+				visitedCategories.add(category);
+				const members = await categoryMembers(category, 'file', cacheDir, offline);
 				titles.push(...members
 					.filter((member) => member.ns === 6 && member.title)
-					.map((member) => member.title!.replace(/^File:/, ''))
-					.sort(compareText)
-					.slice(0, 6));
+					.map((member) => member.title!.replace(/^File:/, '')));
 			}
 			const existing = byPlayer.get(source.playerId) ?? [];
 			existing.push(...titles);
@@ -205,21 +240,25 @@ export async function acquireCommonsMetadata(
 	titles: string[],
 	cacheDir: string,
 	offline: boolean,
-	onProgress: (completed: number, total: number) => void
+	onProgress: (completed: number, total: number) => void,
+	thumbnailWidth = 384
 ): Promise<Map<string, CommonsMetadata>> {
+	if (!Number.isInteger(thumbnailWidth) || thumbnailWidth < 1 || thumbnailWidth > 4096) {
+		throw new Error(`Invalid Commons thumbnail width: ${thumbnailWidth}`);
+	}
 	const uniqueTitles = [...new Set(titles.map((title) => title.replace(/^File:/, '').trim()))].sort(compareText);
 	const groups = batches(uniqueTitles, 50);
 	const metadata = new Map<string, CommonsMetadata>();
 	let completed = 0;
 	for (const group of groups) {
-		const request = group.join('|');
+		const request = `thumbnail-v3:${thumbnailWidth}:${group.join('|')}`;
 		const url = new URL(COMMONS_ENDPOINT);
 		url.searchParams.set('format', 'json');
 		url.searchParams.set('formatversion', '2');
 		url.searchParams.set('redirects', '1');
 		url.searchParams.set('prop', 'imageinfo');
 		url.searchParams.set('iiprop', 'url|size|mime|extmetadata');
-		url.searchParams.set('iiurlwidth', '384');
+		url.searchParams.set('iiurlwidth', String(thumbnailWidth));
 		url.searchParams.set('titles', group.map((title) => `File:${title}`).join('|'));
 		const response = await fetchCachedJson<CommonsResponse>(
 			cacheDir,
@@ -239,7 +278,9 @@ export async function acquireCommonsMetadata(
 			if (page.missing || !page.pageid || !page.title || !info?.url || !info.width || !info.height || !info.mime) continue;
 			const normalizedTitle = page.title.replace(/^File:/, '');
 			const ext = info.extmetadata ?? {};
-			const rawDownload = info.thumburl ?? (info.width <= 384 && info.height <= 384 && info.mime !== 'image/svg+xml' ? info.url : null);
+			const thumbWithinRequest = info.thumbwidth === undefined || (info.thumbwidth > 0 && info.thumbwidth <= thumbnailWidth);
+			const originalWithinRequest = info.width <= thumbnailWidth && info.height <= thumbnailWidth && info.mime !== 'image/svg+xml';
+			const rawDownload = info.thumburl && thumbWithinRequest ? info.thumburl : (originalWithinRequest ? info.url : null);
 			if (!rawDownload) continue;
 			if (info.mime === 'image/svg+xml' && !new URL(rawDownload).pathname.toLowerCase().endsWith('.png')) continue;
 			const rawCredit = ext.Attribution?.value || ext.Artist?.value || null;
@@ -252,6 +293,7 @@ export async function acquireCommonsMetadata(
 				mime: info.mime,
 				downloadUrl: cleanUrl(rawDownload),
 				sourceUrl,
+				description: ext.ImageDescription?.value ? stripMarkup(ext.ImageDescription.value) : null,
 				dateOriginal: ext.DateTimeOriginal?.value ? stripMarkup(ext.DateTimeOriginal.value) : null,
 				license: ext.LicenseShortName?.value ? stripMarkup(ext.LicenseShortName.value) : null,
 				licenseUrl: ext.LicenseUrl?.value ? stripMarkup(ext.LicenseUrl.value).replace(/^http:/, 'https:') : null,

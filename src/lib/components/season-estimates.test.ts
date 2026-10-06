@@ -53,6 +53,17 @@ describe('role-relevant plain-language estimates', () => {
   expect(notes).toMatch(/zero when none are present/);
   expect(notes).not.toMatch(/pitching\.|\.estimated/);
  });
+ it('classifies a bullpen unit as pitching and discloses aggregate assumptions', () => {
+  const aggregate = { estimatedFields: ['pooledRelief.BFPWeighted', 'throws.neutral', 'pitching.BFP.estimated', 'PPF.neutral', 'bats.neutral'] };
+  const notes = seasonEstimates(aggregate, ['BP']).join(' ');
+  expect(notes).toContain('weighted by batters faced');
+  expect(notes).toContain('neutral throwing handedness');
+  expect(notes).toContain('outs plus hits, walks and hit batters');
+  expect(notes).toContain('pitching park factor');
+  expect(notes).not.toContain('Batting handedness');
+  expect(notes).not.toContain('exact method is not described');
+  expect(seasonEstimates(aggregate, ['DH']).join(' ')).not.toContain('weighted by batters faced');
+ });
  it('discloses unknown identifiers once without leaking raw jargon, and filters known irrelevant namespaces', () => {
   const notes = seasonEstimates({ estimatedFields: ['future.internalFlag', 'anotherFlag', 'fielding.LF.futureMethod', 'pitching.futureFact.estimated'] }, ['DH']);
   expect(notes).toHaveLength(1);

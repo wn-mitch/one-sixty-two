@@ -12,9 +12,13 @@
  <summary>Photo &amp; model notes</summary>
  {#if open}
   <div class="provenance">
-   <PlayerPhoto playerId={profile.playerId} year={profile.year} name={profile.displayName} />
+   {#if !profile.bullpen}<PlayerPhoto playerId={profile.playerId} year={profile.year} name={profile.displayName} />{/if}
    <div>
-    <p>Bats: {profile.bats || 'Unknown'} · Throws: {profile.throws || 'Unknown'}.</p>
+    {#if profile.bullpen}
+     <p>Pooled relief-dominant pitcher-seasons. Neutral throwing handedness; no individual portrait or WAR.</p>
+    {:else}
+     <p>Bats: {profile.bats || 'Unknown'} · Throws: {profile.throws || 'Unknown'}.</p>
+    {/if}
     <p class="muted">Simulation adjusts this season into the common 2025 environment. Composite WAR ranks choices only; it does not change the simulation.</p>
    </div>
   </div>

@@ -10,7 +10,6 @@ import {
 	RANKINGS_SOURCE_FILE
 } from './rankings/source.ts';
 
-const CORE_DATA_VERSION = '7796022550160442ae72cd544986c1c9324b38d50a0bd122aa19f591280be37f';
 const outputDir = 'static/rankings';
 const cacheDir = '.cache/rankings';
 const offline = process.argv.includes('--offline');
@@ -23,6 +22,14 @@ interface PreparedCache {
 	rankingVersion: string;
 	assets: Record<string, string>;
 }
+function record(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function version(value: unknown): value is string {
+	return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+}
+
 
 async function optionalBytes(path: string): Promise<Buffer | null> {
 	try {
@@ -37,7 +44,7 @@ function fileDigest(bytes: Uint8Array): string {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
-async function reusePrepared(compilerHash: string): Promise<boolean> {
+async function reusePrepared(compilerHash: string, dataVersion: string): Promise<boolean> {
 	const bytes = await optionalBytes(join(cacheDir, 'prepared.json'));
 	if (!bytes) return false;
 	let cache: PreparedCache;
@@ -46,7 +53,7 @@ async function reusePrepared(compilerHash: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
-	if (cache.compilerHash !== compilerHash || cache.dataVersion !== CORE_DATA_VERSION || !/^[a-f0-9]{64}$/.test(cache.rankingVersion)) return false;
+	if (cache.compilerHash !== compilerHash || cache.dataVersion !== dataVersion || !/^[a-f0-9]{64}$/.test(cache.rankingVersion)) return false;
 	const source = await optionalBytes(join(cacheDir, RANKINGS_SOURCE_FILE));
 	if (!source || fileDigest(source) !== RANKINGS_SOURCE_CHECKSUM) return false;
 	for (const [filename, checksum] of Object.entries(cache.assets)) {
@@ -68,10 +75,24 @@ async function readCoreDataVersion(): Promise<string> {
 	} catch (error) {
 		throw new Error('Core data pointer is invalid; run npm run data:prepare first.', { cause: error });
 	}
-	if (!parsed || typeof parsed !== 'object' || !('dataVersion' in parsed) || parsed.dataVersion !== CORE_DATA_VERSION) {
-		throw new Error(`Core data version must remain ${CORE_DATA_VERSION}; run npm run data:prepare first.`);
+	if (!record(parsed) || parsed.schemaVersion !== 1 || !version(parsed.dataVersion)
+		|| parsed.manifestUrl !== `/data/${parsed.dataVersion}/manifest.json`) {
+		throw new Error('Core data pointer is incompatible; run npm run data:prepare first.');
 	}
-	return CORE_DATA_VERSION;
+	const manifestBytes = await optionalBytes(join('static/data', parsed.dataVersion, 'manifest.json'));
+	if (!manifestBytes) throw new Error('Core data manifest is missing; run npm run data:prepare first.');
+	let manifest: unknown;
+	try {
+		manifest = JSON.parse(manifestBytes.toString('utf8'));
+	} catch (error) {
+		throw new Error('Core data manifest is invalid; run npm run data:prepare first.', { cause: error });
+	}
+	if (!record(manifest) || manifest.schemaVersion !== 1 || manifest.dataVersion !== parsed.dataVersion
+		|| !Array.isArray(manifest.candidates) || !record(manifest.chunks)
+		|| manifest.simulationUrl !== `/data/${parsed.dataVersion}/simulation.json`) {
+		throw new Error('Core data manifest does not match its authoritative pointer; run npm run data:prepare first.');
+	}
+	return parsed.dataVersion;
 }
 
 async function compilerHash(dataVersion: string): Promise<string> {
@@ -94,7 +115,7 @@ async function prepare(): Promise<void> {
 	const warRows = sourceTables[RANKINGS_SOURCE_FILE.replace(/\.csv$/, '')];
 	if (!warRows) throw new Error(`Pinned rankings source ${RANKINGS_SOURCE_FILE} was not parsed.`);
 	const hash = await compilerHash(dataVersion);
-	if (await reusePrepared(hash)) return;
+	if (await reusePrepared(hash, dataVersion)) return;
 	const compilation = compileRankings(dataVersion, warRows, tables);
 	const { rankings, diagnostics } = compilation;
 	const directory = join(outputDir, rankings.rankingVersion);

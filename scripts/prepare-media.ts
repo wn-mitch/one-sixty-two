@@ -7,7 +7,7 @@ import { acquireTables, CHECKSUMS, SOURCE_COMMIT } from './data/acquire.ts';
 import { canonicalJSON } from './data/compile.ts';
 import { digest } from './media/cache.ts';
 import { generateMedia } from './media/compile.ts';
-import type { DataManifest, DataPointer, TeamSourceRegistry } from './media/types.ts';
+import type { AtmosphereSourceRegistry, DataManifest, DataPointer, PlayerSourceRegistry, ReviewedPlayerPhotos, TeamSourceRegistry } from './media/types.ts';
 
 const args = new Set(process.argv.slice(2));
 for (const argument of args) {
@@ -53,13 +53,14 @@ async function canReusePrepared(compilerHash: string, dataVersion: string): Prom
 		const prepared = await readJson<PreparedCache>(join(cacheDir, 'prepared.json'), 'prepared media cache');
 		if (prepared.compilerHash !== compilerHash || prepared.dataVersion !== dataVersion) return false;
 		const pointer = await readJson<MediaPointer>(join(outputDir, 'current.json'), 'generated media pointer');
-		if (pointer.schemaVersion !== 1 || pointer.version !== prepared.version || pointer.manifestUrl !== `/media/${prepared.version}/manifest.json`) return false;
+		if (pointer.schemaVersion !== 2 || pointer.version !== prepared.version || pointer.manifestUrl !== `/media/${prepared.version}/manifest.json`) return false;
 		const manifest = await readJson<MediaManifest>(join(outputDir, prepared.version, 'manifest.json'), 'generated media manifest');
 		validateMedia(manifest, prepared.version);
 		if (manifest.dataVersion !== dataVersion || digest(canonicalJSON(manifest)) !== prepared.manifestChecksum) return false;
 		const urls = [
 			...Object.values(manifest.teams).flatMap((team) => [team.logo?.url, ...team.historical.map((logo) => logo.url)]),
-			...Object.values(manifest.players).flatMap((player) => player.photos.map((photo) => photo.url))
+			...Object.values(manifest.players).flatMap((player) => player.photos.map((photo) => photo.url)),
+			...Object.values(manifest.atmosphere).map((photo) => photo.url)
 		].filter((url): url is string => Boolean(url));
 		for (const url of new Set(urls)) {
 			const expectedPrefix = `/media/${prepared.version}/`;
@@ -76,7 +77,7 @@ async function canReusePrepared(compilerHash: string, dataVersion: string): Prom
 
 const dataPointer = await readJson<DataPointer>(join(root, 'static', 'data', 'current.json'), 'current statistical data pointer');
 if (dataPointer.schemaVersion !== 1 || !dataPointer.dataVersion || !dataPointer.manifestUrl.startsWith('/data/')) {
-	throw new Error('Current statistical data pointer is incompatible with media schema 1');
+	throw new Error('Current statistical data pointer is incompatible with statistical schema 1');
 }
 const relativeManifest = normalize(dataPointer.manifestUrl.replace(/^\//, ''));
 if (relativeManifest.startsWith(`..${sep}`) || relativeManifest.includes(`${sep}..${sep}`)) {
@@ -93,18 +94,24 @@ if (!offline && await canReusePrepared(compilerHash, dataManifest.dataVersion)) 
 	process.exit(0);
 }
 const teamSources = await readJson<TeamSourceRegistry>(join(root, 'scripts', 'media', 'team-sources.json'), 'team media source registry');
+const playerSources = await readJson<PlayerSourceRegistry>(join(root, 'scripts', 'media', 'player-sources.json'), 'curated player photo source registry');
+const reviewedPlayerPhotos = await readJson<ReviewedPlayerPhotos>(join(root, 'scripts', 'media', 'reviewed-player-photos.json'), 'reviewed portrait inventory');
+const atmosphereSources = await readJson<AtmosphereSourceRegistry>(join(root, 'scripts', 'media', 'atmosphere-sources.json'), 'atmosphere source registry');
 const tables = await acquireTables(offline);
 const generated = await generateMedia({
 	dataManifest,
 	tables,
 	teamSources,
+	playerSources,
+	reviewedPlayerPhotos,
+	atmosphereSources,
 	cacheDir,
 	outputDir,
 	offline,
 	log: (message) => console.log(`[media] ${message}`)
 });
 const pointer: MediaPointer = {
-	schemaVersion: 1,
+	schemaVersion: 2,
 	version: generated.manifest.version,
 	manifestUrl: `/media/${generated.manifest.version}/manifest.json`
 };
@@ -128,7 +135,8 @@ await writeFile(temporaryCache, `${canonicalJSON(preparedCache)}\n`);
 await rename(temporaryCache, join(cacheDir, 'prepared.json'));
 console.log(
 	`[media] Prepared ${generated.manifest.diagnostics.playersWithPhotos}/${generated.manifest.diagnostics.playersSearched} player portraits, ` +
-	`${generated.manifest.diagnostics.logos} current logos and ${generated.manifest.diagnostics.historicalLogos} historical logos: ${generated.manifest.version}`
+	`${generated.manifest.diagnostics.logos} current logos, ${generated.manifest.diagnostics.historicalLogos} historical logos, ` +
+	`and ${generated.manifest.diagnostics.atmospherePhotos} atmosphere photos: ${generated.manifest.version}`
 );
 console.log(`[media] Exclusions ${canonicalJSON(generated.exclusions)}`);
 console.log('[media] Coverage is limited to dated, reusable Wikidata P18 and verified Commons P373 category files; undated or out-of-career images are excluded.');

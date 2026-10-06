@@ -4,6 +4,10 @@ import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
+	server: {
+		// Acquisition caches are generated inputs, not browser source modules.
+		watch: { ignored: ['**/.cache/**'] }
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({

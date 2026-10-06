@@ -1,9 +1,17 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { Draft, Profile } from '#lib/game/types.ts';
+	import { draftRules } from '#lib/game/rules.ts';
 	import { innings } from '#lib/game/format.ts';
 	import type { PitcherLine, SeasonResult } from '#lib/sim/types.ts';
 	import GameDetails from './GameDetails.svelte';
 	import PlayerPhoto from './PlayerPhoto.svelte';
+	import PlayerCard from './PlayerCard.svelte';
+	import AtmosphereImage from './AtmosphereImage.svelte';
+	import SeasonMoments from './SeasonMoments.svelte';
+	import { loadRankings } from '#lib/rankings/client.ts';
+	import type { WarRankings } from '#lib/rankings/types.ts';
+	import { isHitter, warValue } from './candidate-ranking.ts';
 
 	interface Props {
 		result: SeasonResult;
@@ -19,9 +27,16 @@
 
 	let profileById = $derived(new Map(profiles.map((profile) => [profile.seasonId, profile])));
 	let rosterOpen = $state(false);
+	let rankings = $state.raw<WarRankings | null>(null);
+	onMount(() => {
+		let active = true;
+		void loadRankings(draft.dataVersion).then(value => { if (active) rankings = value; })
+			.catch(() => { if (active) rankings = null; });
+		return () => { active = false; };
+	});
 
 	function pitcherName(line: PitcherLine): string {
-		return line.role === 'support' ? 'Support bullpen' : line.displayName;
+		return line.displayName;
 	}
 
 	function ra9(line: PitcherLine): string {
@@ -70,6 +85,11 @@
 			<p class="share-status" role="status" aria-live="polite">{shareStatus}</p>
 		{/if}
 	</section>
+	<SeasonMoments {result} />
+	<div class="baseball-atmosphere">
+		<p class="eyebrow">Baseball atmosphere · Not the simulated venue</p>
+		<AtmosphereImage id="camden-atmosphere" compact />
+	</div>
 
 	<nav class="result-nav" aria-label="Season results sections"><button class="quiet" type="button" onclick={() => jumpTo('batting-heading')}>Batting</button><button class="quiet" type="button" onclick={() => jumpTo('pitching-heading')}>Pitching</button><button class="quiet" type="button" onclick={() => jumpTo('game-log-heading')}>All 162 games <span aria-hidden="true">↓</span></button></nav>
 
@@ -139,15 +159,17 @@
 	</section>
 
 	<details class="roster-review" bind:open={rosterOpen}>
-		<summary>Review the 13-player roster</summary>
+		<summary>Review the {draftRules(draft.schemaVersion).slots.length}-pick roster</summary>
 		{#if rosterOpen}
 		<ol>
 			{#each draft.picks as pick}
 				{@const profile = profileById.get(pick.seasonId)}
 				<li>
-					<strong>{pick.slot}</strong>
-					<span>{profile?.displayName ?? 'Unavailable profile'}</span>
-					<small>{profile ? `${profile.historicalTeam}, ${profile.year}` : pick.seasonId}</small>
+					{#if profile}
+						<PlayerCard {profile} assignedSlot={pick.slot} war={warValue({ profile, slots: [pick.slot] }, isHitter(pick.slot) ? 'Hitters' : 'Pitchers', rankings)} />
+					{:else}
+						<p>Unavailable profile · {pick.slot} · {pick.seasonId}</p>
+					{/if}
 				</li>
 			{/each}
 		</ol>
@@ -201,9 +223,8 @@
 	.support-note { margin: 0; font-size: var(--text-xs); }
 	.roster-review { border-block: 1px solid var(--border); }
 	.roster-review summary { font-weight: 700; }
-	.roster-review ol { margin: var(--space-4) 0; padding: 0; list-style: none; }
-	.roster-review li { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--border); }
-	.roster-review small { color: var(--muted); text-align: right; }
+	.roster-review ol { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); margin: var(--space-4) 0; padding: 0; list-style: none; }
+	.roster-review li { min-width: 0; }
 	.game-list { border-top: 1px solid var(--border); min-width: 0; }
 	.share-block { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 	.share-block > div { flex: 1 1 100%; }
@@ -225,7 +246,5 @@
 		.scoreboard h2 { font-size: var(--text-3xl); }
 		.section-heading { display: block; }
 		.section-heading > p { margin-top: var(--space-2); text-align: left; }
-		.roster-review li { grid-template-columns: 2.75rem minmax(0, 1fr); }
-		.roster-review small { grid-column: 2; text-align: left; }
 	}
 </style>

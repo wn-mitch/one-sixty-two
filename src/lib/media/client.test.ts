@@ -4,17 +4,27 @@ import type { MediaAsset, MediaManifest, PlayerPhoto } from './types.ts';
 
 const version = 'a'.repeat(64);
 function image(file: string, mediaVersion = version): MediaAsset {
- return { url: `/media/${mediaVersion}/${file}.webp`, width: 256, height: 320,
+ const hashCharacter = ([...file].reduce((sum, character) => sum + character.codePointAt(0)!, 0) % 16).toString(16);
+ return { url: `/media/${mediaVersion}/${hashCharacter.repeat(64)}.webp`, width: 256, height: 320,
   sourceUrl: 'https://images.invalid/source', license: 'CC BY 4.0',
   licenseUrl: 'https://creativecommons.org/licenses/by/4.0/', credit: 'Synthetic contributor' };
 }
-function photo(year: number, mediaVersion = version): PlayerPhoto { return { ...image(`portrait-${year}`, mediaVersion), year }; }
+function photo(year: number, mediaVersion = version): PlayerPhoto {
+ return {
+  ...image(`portrait-${year}`, mediaVersion),
+  year,
+  captureEvidenceUrl: 'https://evidence.invalid/capture',
+  identityEvidenceUrl: 'https://evidence.invalid/identity'
+ };
+}
 function manifest(mediaVersion = version): MediaManifest {
- return { schemaVersion: 1, version: mediaVersion, dataVersion: 'b'.repeat(64),
+ const atmosphere = { ...image('atmosphere', mediaVersion), id: 'club-night', caption: 'Club A at night', franchiseId: 'A', year: 2023 };
+ return { schemaVersion: 2, version: mediaVersion, dataVersion: 'b'.repeat(64),
   modifications: 'Synthetic image transformations',
   teams: { A: { name: 'Club A', color: '#224466', logo: image('modern', mediaVersion), historical: [{ ...image('predecessor', mediaVersion), firstYear: 1969, lastYear: 2004 }] } },
   players: { anonymous: { name: 'Player A', firstYear: 1961, lastYear: 1975, photos: [photo(1972, mediaVersion), photo(1961, mediaVersion), photo(1966, mediaVersion)] } },
-  diagnostics: { playersSearched: 1, playersWithPhotos: 1, photos: 3, logos: 1, historicalLogos: 1, excluded: 0 } };
+  atmosphere: { 'club-night': atmosphere },
+  diagnostics: { playersSearched: 1, playersWithPhotos: 1, photos: 3, logos: 1, historicalLogos: 1, atmospherePhotos: 1, excluded: 0 } };
 }
 
 describe('verified playing-career portraits', () => {
@@ -60,11 +70,43 @@ describe('generated image provenance validation', () => {
   media.players.anonymous.photos.push(photo(2025));
   expect(() => validateMedia(media, version)).toThrow('capture date');
  });
+ it('accepts schema 2 atmosphere and preserves HTTPS portrait evidence', () => {
+  const media = manifest();
+  expect(() => validateMedia(media, version)).not.toThrow();
+  expect(media.players.anonymous.photos[0].captureEvidenceUrl).toBe('https://evidence.invalid/capture');
+  expect(media.players.anonymous.photos[0].identityEvidenceUrl).toBe('https://evidence.invalid/identity');
+ });
+ it('rejects legacy schema or unsafe evidence URLs', () => {
+  const legacy = manifest() as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 1;
+  expect(() => validateMedia(legacy, version)).toThrow('incompatible');
+  const media = manifest();
+  media.players.anonymous.photos[0].captureEvidenceUrl = 'http://evidence.invalid/capture';
+  expect(() => validateMedia(media, version)).toThrow('evidence');
+ });
+ it('rejects external or cross-franchise atmosphere files', () => {
+  const media = manifest();
+  media.atmosphere['club-night'].url = 'https://images.invalid/atmosphere.webp';
+  expect(() => validateMedia(media, version)).toThrow('Atmosphere');
+  const wrongFranchise = manifest();
+  wrongFranchise.atmosphere['club-night'].franchiseId = 'missing';
+  expect(() => validateMedia(wrongFranchise, version)).toThrow('Atmosphere');
+ });
+ it('requires the atmosphere diagnostic to match the published entries', () => {
+  const media = manifest();
+  media.diagnostics.atmospherePhotos = 2;
+  expect(() => validateMedia(media, version)).toThrow('Atmosphere image count');
+ });
  it('rejects foreign-version or external assets rather than following an incompatible index', () => {
   const media = manifest();
   media.players.anonymous.photos[0].url = '/media/other-version/portrait.webp';
   expect(() => validateMedia(media, version)).toThrow();
   media.players.anonymous.photos[0].url = 'https://images.invalid/portrait.webp';
+  expect(() => validateMedia(media, version)).toThrow();
+ });
+ it('rejects a local asset whose filename is not content-addressed', () => {
+  const media = manifest();
+  media.players.anonymous.photos[0].url = `/media/${version}/portrait.webp`;
   expect(() => validateMedia(media, version)).toThrow();
  });
 });
@@ -76,7 +118,7 @@ it('refreshes the mutable image pointer after a failed manifest publication', as
  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
   if (url === '/media/current.json') {
    const current = ++pointerReads === 1 ? version : nextVersion;
-   return Response.json({ schemaVersion: 1, version: current, manifestUrl: `/media/${current}/manifest.json` });
+   return Response.json({ schemaVersion: 2, version: current, manifestUrl: `/media/${current}/manifest.json` });
   }
   return url === `/media/${nextVersion}/manifest.json`
    ? Response.json(manifest(nextVersion)) : new Response(null, { status: 404 });

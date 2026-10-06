@@ -33,7 +33,11 @@ export function buildFielding(tables: Tables): FieldingData {
   if (!inEra(row)) continue;
   const position = row.POS;
   const id = seasonKey(row);
-  if (position === 'OF') { accumulate(generic, id, row); continue; }
+  if (position === 'OF') {
+   accumulate(generic, id, row);
+   if (['PO', 'A', 'E'].every(column => numberField(row, column) !== undefined)) accumulate(league, fieldKey(leagueKey(row), position), row);
+   continue;
+  }
   if (!POSITIONS.includes(position as Position)) continue;
   if (!splitRows.has(row) && splits.has(fieldKey(id, position))) continue;
   accumulate(exact, fieldKey(id, position), row);
@@ -62,7 +66,8 @@ export function buildFielding(tables: Tables): FieldingData {
 export function leagueFielding(data: FieldingData, key: string): { errors: Record<Position, number>; catcherCS: number; catcherPrior2025: boolean } {
  const errors = {} as Record<Position, number>;
  for (const position of POSITIONS) {
-  const record = data.league.get(fieldKey(key, position));
+  const record = data.league.get(fieldKey(key, position))
+   ?? (['LF', 'CF', 'RF'].includes(position) ? data.league.get(fieldKey(key, 'OF')) : undefined);
   if (!record) throw new Error(`Missing positional fielding baseline: ${key}:${position}`);
   const { PO, A, E } = record.counts;
   if (PO + A + E <= 0) throw new Error(`Empty positional fielding baseline: ${key}:${position}`);
@@ -82,13 +87,17 @@ export function applyFielding(profile: Profile, data: FieldingData): void {
  profile.appearances = data.appearances.get(profile.seasonId) ?? {};
  for (const position of POSITIONS) {
   let record = data.exact.get(fieldKey(profile.seasonId, position));
+  let genericOutfield = false;
   if (!record?.reliability && ['LF', 'CF', 'RF'].includes(position)) {
    record = data.generic.get(profile.seasonId);
-   if (record?.reliability) profile.estimatedFields.push(`fielding.${position}.genericOF`);
+   if (record?.reliability) {
+    genericOutfield = true;
+    profile.estimatedFields.push(`fielding.${position}.genericOF`);
+   }
   }
   if (record?.reliability) {
    const counts = record.counts;
-   profile.fielding[position] = { ...counts };
+   if (!genericOutfield) profile.fielding[position] = { ...counts };
    if (!record.innings) profile.estimatedFields.push(`fielding.${position}.InnOuts.unavailable`);
    profile.errorRates[position] = (counts.E + 100 * baseline.errors[position]) / (counts.PO + counts.A + counts.E + 100);
   } else {

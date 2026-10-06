@@ -3,7 +3,7 @@
  import { loadMedia, selectPhoto } from '../media/client.ts';
  import type { MediaManifest } from '../media/types.ts';
  let { playerId, year, name = 'Player', size = 'medium', credits = true }: {
-  playerId: string; year: number; name?: string; size?: 'small' | 'medium' | 'large'; credits?: boolean;
+  playerId: string; year: number; name?: string; size?: 'small' | 'medium' | 'large' | 'card'; credits?: boolean;
  } = $props();
  let media = $state.raw<MediaManifest | null>(null);
  let settled = $state(false);
@@ -20,8 +20,8 @@
  });
 </script>
 
-<span class="portrait" class:small={size === 'small'} class:large={size === 'large'}>
- <span class="photo-frame" class:loading={!settled || (visible && !ready)}>
+<span class="portrait" class:small={size === 'small'} class:large={size === 'large'} class:card={size === 'card'}>
+ <span class="photo-frame" class:loading={!settled || (visible && !ready)} style:aspect-ratio={size === 'card' && visible && photo ? `${photo.width} / ${photo.height}` : undefined}>
   {#if visible && photo}
    <img src={photo.url} alt={`${name}, photographed in ${photo.year}${photo.year !== year ? '; playing-career photo, not the drafted season' : ''}`} width={photo.width} height={photo.height} loading="lazy" decoding="async" onload={event => loadedUrl = event.currentTarget.getAttribute('src') ?? ''} onerror={event => failedUrl = event.currentTarget.getAttribute('src') ?? ''} />
   {:else}
@@ -44,6 +44,10 @@
  .small { width: 3rem; flex-basis: 3rem; }
  .small .photo-date { font-size: .6875rem; }
  .large { width: 8rem; flex-basis: 8rem; }
+ .card { width: 100%; flex-basis: auto; }
+ .card .photo-frame { max-height: 28rem; border-radius: .2rem; }
+ .card img { object-fit: contain; object-position: center; }
+ .card .photo-date { text-align: left; font-size: .75rem; }
  .loading { animation: breathe 1s ease-out infinite alternate; }
  @media (prefers-reduced-motion: reduce) { .loading { animation: none; } }
 </style>

@@ -1,4 +1,4 @@
-import type { Position, Profile, Rates, SimulationData, Slot } from '../game/types.ts';
+import type { Position, Profile, Rates, ReplaySchemaVersion, SimulationData, Slot } from '../game/types.ts';
 export interface BatterLine {
  seasonId: string; playerId: string; displayName: string;
  PA: number; AB: number; H: number; doubles: number; triples: number; HR: number; BB: number; HBP: number; SO: number; R: number; RBI: number; SB: number; CS: number; SF: number;
@@ -13,6 +13,17 @@ export interface TeamInput {
  closerAvailable: boolean; closerOutsRemaining: number;
 }
 export interface TeamBox { id: string; name: string; runs: number; innings: (number | null)[]; batting: BatterLine[]; pitching: PitcherLine[] }
+export type SeasonMomentOutcome =
+ 'walk' | 'hitByPitch' | 'strikeout' | 'single' | 'double' | 'triple' | 'homeRun' |
+ 'groundedIntoDoublePlay' | 'sacrificeFly' | 'out' | 'reachedOnError' | 'stolenBase' | 'caughtStealing';
+export interface SeasonMoment {
+ gameNumber: number; opponentName: string; isHome: boolean;
+ inning: number; half: 'top' | 'bottom'; outsBefore: number; basesBefore: number;
+ challengeRunsBefore: number; opponentRunsBefore: number; challengeRunsAfter: number; opponentRunsAfter: number;
+ batterName: string; batterSeasonId: string; pitcherName: string; challengeBatting: boolean;
+ outcome: SeasonMomentOutcome; runsScored: number;
+ winBefore: number; winAfter: number; swing: number;
+}
 export interface GameInput {
  number: number; opponentId: string; opponentName: string; challengeIsHome: boolean;
  home: TeamInput; away: TeamInput; leagueRates: Rates; leagueCatcherCS: number; park: number;
@@ -22,14 +33,17 @@ export interface GameInput {
 export interface GameResult {
  number: number; opponentId: string; opponentName: string; isHome: boolean;
  home: TeamBox; away: TeamBox; challengeRuns: number; opponentRuns: number; win: boolean;
+ highlight: SeasonMoment | null; lowlight: SeasonMoment | null;
 }
 export interface SeasonInput {
+ schemaVersion: ReplaySchemaVersion; modelVersion: string;
  seed: number; roster: { profile: Profile; slot: Slot }[]; battingOrder: string[]; starterOrder: string[]; data: SimulationData;
 }
 export interface SeasonResult {
  modelVersion: string; dataVersion: string; seed: number;
  wins: number; losses: number; firstLoss: number | null; longestWinningStreak: number; runsFor: number; runsAgainst: number;
  games: GameResult[]; batting: BatterLine[]; pitching: PitcherLine[]; starterStarts: number[];
+ highlight: SeasonMoment | null; lowlight: SeasonMoment | null;
 }
 export interface ScheduleGame { opponentId: string; isHome: boolean }
 export type WorkerRequest = { runId: number; input: SeasonInput };

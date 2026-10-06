@@ -1,4 +1,4 @@
-import type { BattingCounts, PitchingCounts } from '../../src/lib/game/types.ts';
+import { MAX_SEASON_YEAR, MIN_SEASON_YEAR, type BattingCounts, type PitchingCounts } from '../../src/lib/game/types.ts';
 
 export type Row = Record<string, string>;
 export type Tables = Record<string, Row[]>;
@@ -8,7 +8,7 @@ export const pitchingColumns = ['G', 'GS', 'IPouts', 'H', 'HR', 'BB', 'HBP', 'SO
 export const teamKey = (row: Row): string => `${row.yearID}:${row.lgID}:${row.teamID}`;
 export const seasonKey = (row: Row): string => `${row.playerID}:${teamKey(row)}`;
 export const leagueKey = (row: Row): string => `${row.yearID}:${row.lgID}`;
-export const inEra = (row: Row): boolean => (row.lgID === 'AL' || row.lgID === 'NL') && Number(row.yearID) >= 1961 && Number(row.yearID) <= 2025;
+export const inEra = (row: Row): boolean => (row.lgID === 'AL' || row.lgID === 'NL') && Number(row.yearID) >= MIN_SEASON_YEAR && Number(row.yearID) <= MAX_SEASON_YEAR;
 
 export function numberField(row: Row, column: string): number | undefined {
  const raw = row[column];
@@ -45,7 +45,7 @@ export function rejectCore(group: Group, fields: string[]): void {
 }
 
 export function battingCounts(group: Group): BattingCounts {
- rejectCore(group, ['AB', 'H', '2B', '3B', 'HR', 'BB', 'HBP', 'SO', 'SH', 'SF']);
+ rejectCore(group, ['AB', 'H', '2B', '3B', 'HR', 'BB', 'HBP', 'SO', 'SH']);
  const n = group.values;
  if (n.H > n.AB || n.SO > n.AB) throw new Error('Batting hits or strikeouts exceed at-bats');
  return { AB: n.AB, H: n.H, doubles: n['2B'], triples: n['3B'], HR: n.HR, BB: n.BB, HBP: n.HBP, SO: n.SO, SH: n.SH, SF: n.SF, SB: n.SB, CS: n.CS, GIDP: n.GIDP, PA: n.AB + n.BB + n.HBP + n.SH + n.SF };

@@ -1,4 +1,5 @@
-import { MODEL_VERSION, POSITIONS, SLOTS, SUPPORTED_REPLAY_SCHEMA_VERSIONS, type Draft, type Profile, type Rates } from '../game/types.ts';
+import { HITTER_SLOTS, POSITIONS, SUPPORTED_REPLAY_SCHEMA_VERSIONS, type Draft, type Profile, type Rates, type Slot } from '../game/types.ts';
+import { draftRules } from '../game/rules.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
 
 export function validateRates(rates: Rates | undefined): void {
@@ -26,15 +27,28 @@ export function validateTeam(team: TeamInput): void {
 }
 export function validateSeason(input: SeasonInput): void {
  if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid simulation seed');
- if (input.roster.length !== 13 || new Set(input.roster.map(pick => pick.slot)).size !== 13 || new Set(input.roster.map(pick => pick.profile.playerId)).size !== 13 || new Set(input.roster.map(pick => pick.profile.seasonId)).size !== 13) throw new Error('Season requires thirteen distinct players and slots');
+ if (!SUPPORTED_REPLAY_SCHEMA_VERSIONS.includes(input.schemaVersion)) throw new Error('Season schema is incompatible');
+ const policy = draftRules(input.schemaVersion);
+ if (input.modelVersion !== policy.modelVersion) throw new Error('Season model is incompatible');
+ const rosterSlots = input.roster.map(pick => pick.slot);
+ const rosterSize = policy.slots.length;
+ if (input.roster.length !== rosterSize ||
+  new Set(rosterSlots).size !== rosterSize ||
+  new Set(input.roster.map(pick => pick.profile.playerId)).size !== rosterSize ||
+  new Set(input.roster.map(pick => pick.profile.seasonId)).size !== rosterSize ||
+  policy.slots.some(slot => !rosterSlots.includes(slot))) {
+  throw new Error(`Season requires ${rosterSize} distinct selections and policy slots`);
+ }
+ if (policy.uniqueFranchises && new Set(input.roster.map(pick => pick.profile.franchiseId)).size !== rosterSize) throw new Error('Season requires distinct franchises');
  for (const { profile, slot } of input.roster) {
-  if (!SLOTS.includes(slot) || !profile.eligibleSlots.includes(slot) || !Number.isInteger(profile.year) || profile.year < 1961 || profile.year > 2025 || (profile.league !== 'AL' && profile.league !== 'NL')) throw new Error('Invalid roster eligibility');
-  if (slot === 'CL' || slot.startsWith('SP')) validatePitcher(profile);
+  if (!policy.slots.includes(slot) || !profile.eligibleSlots.includes(slot) || !Number.isInteger(profile.year) || profile.year < policy.minYear || profile.year > policy.maxYear || (profile.league !== 'AL' && profile.league !== 'NL')) throw new Error('Invalid roster eligibility');
+  if (slot === 'CL' || slot === 'BP' || slot.startsWith('SP')) validatePitcher(profile);
   else validateHitter(profile);
   if (slot.startsWith('SP') && profile.pitching!.GS <= 0) throw new Error('Starter requires positive starts');
  }
+ const hitterSlots: readonly Slot[] = HITTER_SLOTS;
  for (const [order, expected] of [
-  [input.battingOrder, input.roster.filter(pick => !pick.slot.startsWith('SP') && pick.slot !== 'CL').map(pick => pick.profile.seasonId)],
+  [input.battingOrder, input.roster.filter(pick => hitterSlots.includes(pick.slot)).map(pick => pick.profile.seasonId)],
   [input.starterOrder, input.roster.filter(pick => pick.slot.startsWith('SP')).map(pick => pick.profile.seasonId)]
  ]) {
   if (order.length !== expected.length || new Set(order).size !== expected.length || order.some(id => !expected.includes(id))) throw new Error('Invalid lineup order');
@@ -58,5 +72,10 @@ export function validateSeason(input: SeasonInput): void {
  }
 }
 export function validateDraftVersion(draft: Draft, dataVersion: string): void {
- if (!SUPPORTED_REPLAY_SCHEMA_VERSIONS.includes(draft.schemaVersion) || draft.modelVersion !== MODEL_VERSION || draft.dataVersion !== dataVersion || draft.currentRoll !== null) throw new Error('Draft is incomplete or incompatible');
+ if (!SUPPORTED_REPLAY_SCHEMA_VERSIONS.includes(draft.schemaVersion) ||
+  draft.modelVersion !== draftRules(draft.schemaVersion).modelVersion ||
+  draft.dataVersion !== dataVersion ||
+  draft.currentRoll !== null) {
+  throw new Error('Draft is incomplete or incompatible');
+ }
 }

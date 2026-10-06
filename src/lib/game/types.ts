@@ -1,6 +1,12 @@
-export const SLOTS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'SP1', 'SP2', 'SP3', 'CL'] as const;
+export const HITTER_SLOTS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const;
+export const STARTER_SLOTS = ['SP1', 'SP2', 'SP3'] as const;
+export const LEGACY_SLOTS = [...HITTER_SLOTS, ...STARTER_SLOTS, 'CL'] as const;
+export const SLOTS = [...LEGACY_SLOTS, 'BP'] as const;
 export type Slot = typeof SLOTS[number];
 export type Position = 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
+export type HitterSlot = Position | 'DH';
+export const MIN_SEASON_YEAR = 1950;
+export const MAX_SEASON_YEAR = 2025;
 export const POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
 export const EVENTS = ['BB', 'HBP', 'SO', '1B', '2B', '3B', 'HR', 'OUT'] as const;
 export type Event = typeof EVENTS[number];
@@ -18,6 +24,10 @@ export interface Profile {
  errorRates: Record<Position, number>; catcherCS: number;
  speed: number; stealAttempt: number; stealSuccess: number; doublePlay: number;
  estimatedFields: string[];
+ bullpen?: {
+  members: { seasonId: string; playerId: string; displayName: string }[];
+  excluded: { seasonId: string; playerId: string; displayName: string };
+ };
 }
 export interface Candidate { seasonId: string; playerId: string; franchiseId: string; decade: number; eligibleSlots: Slot[] }
 export interface Franchise { id: string; name: string; decades: number[] }
@@ -37,15 +47,22 @@ export interface SimulationData {
 }
 export interface Roll { franchiseId: string; decade: number }
 export interface Pick extends Roll { seasonId: string; slot: Slot }
-export type ReplaySchemaVersion = 1 | 2;
+export type ReplaySchemaVersion = 1 | 2 | 3;
 /** The version written by new drafts. */
-export const CURRENT_REPLAY_SCHEMA_VERSION: ReplaySchemaVersion = 2;
+export const CURRENT_REPLAY_SCHEMA_VERSION = 3 as const;
 /** Every version this build can still read, simulate, and verify. */
-export const SUPPORTED_REPLAY_SCHEMA_VERSIONS: readonly ReplaySchemaVersion[] = [1, 2];
-export interface Replay {
- schemaVersion: ReplaySchemaVersion; dataVersion: string; modelVersion: string; seed: number;
+export const SUPPORTED_REPLAY_SCHEMA_VERSIONS: readonly ReplaySchemaVersion[] = [1, 2, 3];
+export type DraftAction =
+ | { type: 'roll' }
+ | { type: 'pick'; seasonId: string; slot: Slot }
+ | { type: 'reassign'; seasonId: string; slot: HitterSlot };
+interface ReplaySnapshot {
+ dataVersion: string; modelVersion: string; seed: number;
  picks: Pick[]; battingOrder: string[]; starterOrder: string[];
 }
-export interface Draft extends Replay { currentRoll: Roll | null }
-export const MODEL_VERSION = 'pa-v1';
+export type Replay =
+ | (ReplaySnapshot & { schemaVersion: 1 | 2; actions?: never })
+ | (ReplaySnapshot & { schemaVersion: 3; actions: DraftAction[] });
+export type Draft = Replay & { currentRoll: Roll | null };
+export const MODEL_VERSION = 'pa-v2';
 export const compareId = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;

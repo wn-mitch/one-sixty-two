@@ -1,21 +1,31 @@
 import { historicalBatting, historicalEra } from '../game/format.ts';
-import { compareId, type Profile, type Slot } from '../game/types.ts';
+import { compareId } from '../game/types.ts';
+import type { Profile, Slot } from '../game/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 
-export type RankingKind = 'Hitters' | 'Pitchers';
+export type RankingKind = 'Hitters' | 'Pitchers' | 'Bullpens';
 export type RankingSort = 'war' | 'metrics';
 export type CandidateEntry = { profile: Profile; slots: Slot[] };
 export type CandidateGroup = { key: string; name: string; playerId: string; kind: RankingKind; entries: CandidateEntry[] };
-export const isHitter = (slot: Slot): boolean => slot !== 'CL' && !slot.startsWith('SP');
+const kindOrder: Record<RankingKind, number> = { Hitters: 0, Pitchers: 1, Bullpens: 2 };
+
+export function isHitter(slot: Slot): boolean {
+ return slot !== 'CL' && slot !== 'BP' && !slot.startsWith('SP');
+}
 
 export function warValue(entry: CandidateEntry, kind: RankingKind, rankings: WarRankings | null): number | null {
- if (!entry.slots.some(slot => isHitter(slot) === (kind === 'Hitters'))) return null;
+ if (kind === 'Bullpens' || !entry.slots.some(slot => isHitter(slot) === (kind === 'Hitters'))) return null;
  const value = rankings?.seasons[entry.profile.seasonId]?.[kind === 'Hitters' ? 'battingWAR162' : 'pitchingWAR162'];
  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 export function compareEntries(a: CandidateEntry, b: CandidateEntry, kind: RankingKind, sort: RankingSort, rankings: WarRankings | null): number {
- if (sort === 'war') {
+ if (kind === 'Bullpens') {
+  const ap = a.profile.pitching;
+  const bp = b.profile.pitching;
+  if (!!ap !== !!bp) return ap ? -1 : 1;
+  if (ap && bp) return historicalEra(ap) - historicalEra(bp) || bp.IPouts - ap.IPouts || compareId(a.profile.seasonId, b.profile.seasonId);
+ } else if (sort === 'war') {
   const av = warValue(a, kind, rankings), bv = warValue(b, kind, rankings);
   if (av !== null && bv !== null) return bv - av || compareId(a.profile.seasonId, b.profile.seasonId);
   if (av !== bv) return av === null ? 1 : -1;
@@ -34,19 +44,29 @@ export function compareEntries(a: CandidateEntry, b: CandidateEntry, kind: Ranki
 }
 
 export function rankGroups(entries: CandidateEntry[], sort: RankingSort, rankings: WarRankings | null): CandidateGroup[] {
- const groups = new Map<string, CandidateGroup>();
+ const groupedEntries = new Map<string, { name: string; entries: Map<string, CandidateEntry> }>();
  for (const entry of entries) {
-  for (const kind of ['Hitters', 'Pitchers'] as const) {
-   if (!entry.slots.some(slot => isHitter(slot) === (kind === 'Hitters'))) continue;
-   const key = `${entry.profile.playerId}:${kind}`;
-   let group = groups.get(key);
-   if (!group) {
-    group = { key, playerId: entry.profile.playerId, name: entry.profile.displayName, kind, entries: [] };
-    groups.set(key, group);
-   }
-   group.entries.push(entry);
+  let group = groupedEntries.get(entry.profile.playerId);
+  if (!group) {
+   group = { name: entry.profile.displayName, entries: new Map() };
+   groupedEntries.set(entry.profile.playerId, group);
   }
+  if (!group.entries.has(entry.profile.seasonId)) group.entries.set(entry.profile.seasonId, entry);
  }
- for (const group of groups.values()) group.entries.sort((a, b) => compareEntries(a, b, group.kind, sort, rankings));
- return [...groups.values()].sort((a, b) => a.kind !== b.kind ? a.kind === 'Hitters' ? -1 : 1 : compareEntries(a.entries[0], b.entries[0], a.kind, sort, rankings));
+ const groups = [...groupedEntries].map(([playerId, source]) => {
+  const values = [...source.entries.values()];
+  let kind: RankingKind = 'Pitchers';
+  if (values.some(entry => entry.slots.includes('BP'))) {
+   kind = 'Bullpens';
+  } else if (values.some(entry => entry.slots.some(isHitter))) {
+   kind = 'Hitters';
+  }
+  values.sort((a, b) => compareEntries(a, b, kind, sort, rankings));
+  return { key: playerId, playerId, name: source.name, kind, entries: values };
+ });
+ return groups.sort((a, b) =>
+  kindOrder[a.kind] - kindOrder[b.kind] ||
+  compareEntries(a.entries[0], b.entries[0], a.kind, sort, rankings) ||
+  compareId(a.playerId, b.playerId)
+ );
 }

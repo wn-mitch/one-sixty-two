@@ -5,6 +5,15 @@ const MAX_BYTES = 16 * 1024;
 const MAX_TOKEN_LENGTH = Math.ceil(MAX_BYTES * 4 / 3);
 const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
+/** Encode versioned inputs for deterministic fragment round-trip verification. */
+export function encodeReplay(draft: Draft): string {
+ const bytes = new TextEncoder().encode(JSON.stringify(replayInput(draft)));
+ if (bytes.length > MAX_BYTES) throw new Error('Replay exceeds the size limit');
+ let binary = '';
+ for (const byte of bytes) binary += String.fromCharCode(byte);
+ return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
 /**
  * Decode the original fragment format. New links use /r/<id>; this remains
  * solely for completed historical links that already contain a replay token.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { availableCandidates, commitPick, createDraft, replayInput, rollDraft } from '../game/draft.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, reassignPick, replayInput, rollDraft } from '../game/draft.ts';
 import { SLOTS, type Manifest, type Replay } from '../game/types.ts';
 import { loadReplay, loadAuthoritativeManifest, REPLAY_PREFIX, storeReplay } from './replays.ts';
 
@@ -11,6 +11,8 @@ const candidates = SLOTS.map((slot, index) => ({
 	decade: 1980,
 	eligibleSlots: [slot]
 }));
+candidates[0].eligibleSlots = ['C', '1B'];
+candidates[1].eligibleSlots = ['C', '1B'];
 const manifest = {
 	schemaVersion: 1,
 	dataVersion,
@@ -38,9 +40,10 @@ function finish(): Replay {
 	while (draft.picks.length < SLOTS.length) {
 		draft = rollDraft(draft, manifest);
 		const candidate = availableCandidates(draft, manifest)[0];
-		draft = commitPick(draft, manifest, candidate.seasonId, candidate.eligibleSlots[0]);
+		draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
 	}
-	return replayInput(draft);
+	const catcher = draft.picks.find(pick => pick.slot === 'C')!;
+	return replayInput(reassignPick(draft, manifest, catcher.seasonId, '1B'));
 }
 
 function assets() {
@@ -64,6 +67,7 @@ describe('replay R2 storage', () => {
 		expect(first.key).toBe(`${REPLAY_PREFIX}${first.id}`);
 		expect(bucket.puts).toBe(1);
 		expect(await loadReplay(bucket, first.id, manifest)).toEqual(input);
+		expect(input.schemaVersion === 3 ? input.actions.at(-1)?.type : null).toBe('reassign');
 	});
 
 	it('loads the authoritative manifest only from the deployed asset binding', async () => {

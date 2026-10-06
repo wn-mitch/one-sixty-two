@@ -7,8 +7,18 @@ export interface MediaAsset {
  licenseUrl: string;
  credit: string;
 }
-export interface PlayerPhoto extends MediaAsset { year: number }
+export interface PlayerPhoto extends MediaAsset {
+ year: number;
+ captureEvidenceUrl?: string;
+ identityEvidenceUrl?: string;
+}
 export interface HistoricalLogo extends MediaAsset { firstYear: number; lastYear: number }
+export interface AtmospherePhoto extends MediaAsset {
+ id: string;
+ caption: string;
+ franchiseId: string;
+ year: number;
+}
 export interface TeamMedia {
  name: string;
  color: string;
@@ -22,12 +32,21 @@ export interface PlayerMedia {
  photos: PlayerPhoto[];
 }
 export interface MediaManifest {
- schemaVersion: 1;
+ schemaVersion: 2;
  version: string;
  dataVersion: string;
  modifications: string;
  teams: Record<string, TeamMedia>;
  players: Record<string, PlayerMedia>;
- diagnostics: { playersSearched: number; playersWithPhotos: number; photos: number; logos: number; historicalLogos: number; excluded: number };
+ atmosphere: Record<string, AtmospherePhoto>;
+ diagnostics: {
+  playersSearched: number;
+  playersWithPhotos: number;
+  photos: number;
+  logos: number;
+  historicalLogos: number;
+  atmospherePhotos: number;
+  excluded: number;
+ };
 }
-export interface MediaPointer { schemaVersion: 1; version: string; manifestUrl: string }
+export interface MediaPointer { schemaVersion: 2; version: string; manifestUrl: string }

@@ -29,6 +29,19 @@ describe('WAR source joins', () => {
 		expect(result.values.get('lahman-player:1970:AL:OLD')?.battingWAR162).toBe(2.5);
 		expect(result.diagnostics.franchiseMismatches).toBe(1);
 	});
+	it('joins the 1950 boundary and ignores pre-era source rows', () => {
+		const result = aggregateWarRows([
+			row({ year_ID: '1950' }),
+			row({ year_ID: '1949', stint_ID: '2' })
+		], {
+			people: input.people,
+			teams: [{ yearID: '1950', lgID: 'AL', teamID: 'OLD', franchID: 'OLD-F' }]
+		});
+		expect(result.values.get('lahman-player:1950:AL:OLD')?.battingWAR162).toBe(2.5);
+		expect([...result.values.keys()]).not.toContain('lahman-player:1949:AL:OLD');
+		expect(result.diagnostics.unmatchedTeams).toBe(0);
+	});
+
 
 	it('keeps negative and zero WAR and treats blanks and NA as unavailable', () => {
 		const result = aggregateWarRows([

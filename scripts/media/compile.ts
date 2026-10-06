@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { HistoricalLogo, MediaAsset, MediaManifest, PlayerPhoto, TeamMedia } from '../../src/lib/media/types.ts';
+import type { AtmospherePhoto, HistoricalLogo, MediaAsset, MediaManifest, PlayerPhoto, TeamMedia } from '../../src/lib/media/types.ts';
 import type { AcquiredTables } from '../data/acquire.ts';
 import { canonicalJSON } from '../data/compile.ts';
 import { digest } from './cache.ts';
@@ -11,21 +11,29 @@ import {
 	compareText,
 	emptyExclusions,
 	groupVerifiedWikidataMedia,
+	parseCaptureYear,
+	validateCuratedPlayerPhoto,
 	validatePlayerPhoto,
 	validateReusableAsset,
 	validateTeamSources
 } from './logic.ts';
 import { acquireCommonsMetadata, acquireWikidataMedia, discoverCommonsCategoryPhotos } from './providers.ts';
 import type {
+	AtmosphereSourceRegistry,
 	CommonsMetadata,
 	DataManifest,
 	ExclusionCounts,
 	MediaPayload,
+	PlayerSourceRegistry,
 	PreparedAsset,
+	ReviewedPlayerPhotos,
 	TeamSourceRegistry
 } from './types.ts';
-
-const modifications = 'Files are auto-oriented, metadata stripped, resized to at most 384px, and re-encoded as WebP. Portraits may be cropped for display.';
+const modifications = 'Files are auto-oriented, metadata stripped, and re-encoded as WebP. Portrait and logo derivatives are resized to at most 384px; atmosphere derivatives are resized to at most 1280px. Portraits may be cropped for display.';
+const rightsNotice = [
+	'Source file copyright licences do not grant trademark, privacy, publicity, or likeness rights.',
+	'Team names and marks may be trademarks of their respective owners. This game is not affiliated with or endorsed by the clubs or league.'
+];
 
 interface GeneratedPlayerMedia {
 	name: string;
@@ -41,6 +49,8 @@ interface PreparedPhoto {
 	license: string;
 	licenseUrl: string;
 	credit: string;
+	captureEvidenceUrl?: string;
+	identityEvidenceUrl?: string;
 }
 
 interface PreparedLogo {
@@ -48,6 +58,17 @@ interface PreparedLogo {
 	metadata: CommonsMetadata;
 	firstYear?: number;
 	lastYear?: number;
+	license: string;
+	licenseUrl: string;
+	credit: string;
+}
+
+interface PreparedAtmosphere {
+	id: string;
+	caption: string;
+	franchiseId: string;
+	year: number;
+	metadata: CommonsMetadata;
 	license: string;
 	licenseUrl: string;
 	credit: string;
@@ -75,7 +96,8 @@ async function prepareUniqueImages(
 	cacheDir: string,
 	assetDirectory: string,
 	offline: boolean,
-	onProgress: (completed: number, total: number) => void
+	onProgress: (completed: number, total: number) => void,
+	maxDimension = 384
 ): Promise<Map<number, PreparedAsset>> {
 	const unique = [...new Map(metadata.map((item) => [item.pageId, item])).values()].sort((a, b) => a.pageId - b.pageId);
 	const prepared = new Map<number, PreparedAsset>();
@@ -85,7 +107,7 @@ async function prepareUniqueImages(
 	const workers = await Promise.allSettled(Array.from({ length: workerCount }, async () => {
 		while (cursor < unique.length) {
 			const item = unique[cursor++];
-			const asset = await prepareImage(item, cacheDir, assetDirectory, offline);
+			const asset = await prepareImage(item, cacheDir, assetDirectory, offline, maxDimension);
 			prepared.set(item.pageId, asset);
 			completed++;
 			onProgress(completed, unique.length);
@@ -98,6 +120,35 @@ async function prepareUniqueImages(
 
 function totalExclusions(exclusions: ExclusionCounts): number {
 	return Object.values(exclusions).reduce((total, count) => total + count, 0);
+}
+
+function validateAtmosphereSources(registry: AtmosphereSourceRegistry, manifest: DataManifest): void {
+	const franchises = new Set(manifest.franchises.map((franchise) => franchise.id));
+	const ids = new Set<string>();
+	for (const source of registry) {
+		if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(source.id) || ids.has(source.id)
+			|| !source.title.trim() || !source.caption.trim() || !franchises.has(source.franchiseId)
+			|| !Number.isInteger(source.year)) {
+			throw new Error(`Invalid atmosphere source ${source.id || '(missing id)'}`);
+		}
+		ids.add(source.id);
+	}
+}
+
+function validatePlayerSources(registry: PlayerSourceRegistry, playerIds: Set<string>): void {
+	for (const [playerId, sources] of Object.entries(registry)) {
+		if (!playerIds.has(playerId) || !Array.isArray(sources) || sources.length === 0) {
+			throw new Error(`Curated player source does not match a verified candidate: ${playerId}`);
+		}
+		const titles = new Set<string>();
+		for (const source of sources) {
+			if (!source.title.trim() || titles.has(source.title) || !Number.isInteger(source.captureYear)
+				|| !source.captureEvidenceUrl.startsWith('https://') || !source.identityEvidenceUrl.startsWith('https://')) {
+				throw new Error(`Invalid curated player source for ${playerId}`);
+			}
+			titles.add(source.title);
+		}
+	}
 }
 
 /**
@@ -127,12 +178,16 @@ export async function generateMedia(input: {
 	dataManifest: DataManifest;
 	tables: AcquiredTables;
 	teamSources: TeamSourceRegistry;
+	playerSources: PlayerSourceRegistry;
+	reviewedPlayerPhotos: ReviewedPlayerPhotos;
+	atmosphereSources: AtmosphereSourceRegistry;
 	cacheDir: string;
 	outputDir: string;
 	offline: boolean;
 	log(message: string): void;
 }): Promise<GeneratedMedia> {
 	validateTeamSources(input.teamSources, input.dataManifest.franchises);
+	validateAtmosphereSources(input.atmosphereSources, input.dataManifest);
 	const exclusions = emptyExclusions();
 	const identities = buildCandidateIdentities(
 		input.dataManifest,
@@ -141,7 +196,9 @@ export async function generateMedia(input: {
 		input.tables.Pitching ?? [],
 		exclusions
 	);
-	const playersSearched = new Set(input.dataManifest.candidates.map((candidate) => candidate.playerId)).size;
+	const individualCandidates = input.dataManifest.candidates.filter((candidate) => !candidate.eligibleSlots?.includes('BP'));
+	const playersSearched = new Set(individualCandidates.map((candidate) => candidate.playerId)).size;
+	validatePlayerSources(input.playerSources, new Set(identities.map((identity) => identity.playerId)));
 	input.log(`Resolving ${identities.length} verified sports identities across the full candidate pool`);
 	const wikidata = await acquireWikidataMedia(
 		identities.map((identity) => identity.bbrefId),
@@ -153,7 +210,7 @@ export async function generateMedia(input: {
 	);
 	const verified = groupVerifiedWikidataMedia(identities, wikidata.photos, wikidata.categories, exclusions, wikidata.identities);
 	const targetYearsByPlayer = new Map<string, Set<number>>();
-	for (const candidate of input.dataManifest.candidates) {
+	for (const candidate of individualCandidates) {
 		const year = Number(candidate.seasonId?.split(':')[1]);
 		if (!Number.isInteger(year)) continue;
 		const years = targetYearsByPlayer.get(candidate.playerId) ?? new Set<number>();
@@ -175,7 +232,8 @@ export async function generateMedia(input: {
 	for (const identity of identities) {
 		const titles = [
 			...(verified.photos.get(identity.playerId) ?? []).map((photo) => photo.title),
-			...(categoryPhotos.get(identity.playerId) ?? [])
+			...(categoryPhotos.get(identity.playerId) ?? []),
+			...(input.playerSources[identity.playerId] ?? []).map((source) => source.title)
 		];
 		candidateTitlesByPlayer.set(identity.playerId, [...new Set(titles)].sort(compareText));
 	}
@@ -187,13 +245,42 @@ export async function generateMedia(input: {
 		if (completed === total || completed % 500 === 0) input.log(`Licence metadata ${completed}/${total}`);
 	});
 
+	const atmosphereTitles = input.atmosphereSources.map((source) => source.title);
+	input.log(`Reading reusable-source metadata for ${atmosphereTitles.length} atmosphere files`);
+	const atmosphereMetadata = await acquireCommonsMetadata(
+		atmosphereTitles,
+		input.cacheDir,
+		input.offline,
+		(completed, total) => {
+			if (completed === total) input.log(`Atmosphere licence metadata ${completed}/${total}`);
+		},
+		1280
+	);
+	const acceptedAtmosphere: PreparedAtmosphere[] = [];
+	for (const source of [...input.atmosphereSources].sort((a, b) => compareText(a.id, b.id))) {
+		const metadata = atmosphereMetadata.get(source.title);
+		if (!metadata) throw new Error(`Missing Commons metadata for atmosphere source ${source.id}`);
+		const captureYear = parseCaptureYear(metadata.dateOriginal);
+		if (captureYear !== source.year) {
+			throw new Error(`Atmosphere source ${source.id} has capture year ${String(captureYear)}, expected ${source.year}`);
+		}
+		const validation = validateReusableAsset(metadata, exclusions);
+		if (!validation) throw new Error(`Atmosphere source ${source.id} is not reusable`);
+		acceptedAtmosphere.push({ ...source, metadata, ...validation });
+	}
+
 	const selectedPhotos = new Map<string, PreparedPhoto>();
 	for (const identity of identities) {
 		const seenPages = new Set<number>();
+		const reviewedTitles = new Set(input.reviewedPlayerPhotos[identity.playerId] ?? []);
 		for (const title of candidateTitlesByPlayer.get(identity.playerId) ?? []) {
 			const metadata = commons.get(title);
 			if (!metadata) {
 				exclusions.invalidMetadata++;
+				continue;
+			}
+			if (!reviewedTitles.has(metadata.title)) {
+				exclusions.ambiguousSubject++;
 				continue;
 			}
 			if (seenPages.has(metadata.pageId)) {
@@ -201,9 +288,16 @@ export async function generateMedia(input: {
 				continue;
 			}
 			seenPages.add(metadata.pageId);
-			const validation = validatePlayerPhoto(metadata, identity.firstYear, identity.lastYear, exclusions);
+			const curated = input.playerSources[identity.playerId]?.find((source) => source.title === title);
+			const validation = curated
+				? validateCuratedPlayerPhoto(metadata, curated.captureYear, identity.firstYear, identity.lastYear, exclusions)
+				: validatePlayerPhoto(metadata, identity.firstYear, identity.lastYear, exclusions);
 			if (!validation) continue;
-			const candidate = { playerId: identity.playerId, metadata, ...validation };
+			const evidence = curated ? {
+				captureEvidenceUrl: curated.captureEvidenceUrl,
+				identityEvidenceUrl: curated.identityEvidenceUrl
+			} : {};
+			const candidate = { playerId: identity.playerId, metadata, ...validation, ...evidence };
 			const key = `${identity.playerId}\0${validation.year}`;
 			const current = selectedPhotos.get(key);
 			const candidatePortrait = metadata.height >= metadata.width && metadata.height / metadata.width <= 2.5;
@@ -266,6 +360,16 @@ export async function generateMedia(input: {
 				if (completed === total || completed % 100 === 0) input.log(`Local thumbnails ${completed}/${total}`);
 			}
 		);
+		const preparedAtmosphere = await prepareUniqueImages(
+			acceptedAtmosphere.map((photo) => photo.metadata),
+			input.cacheDir,
+			stagingDirectory,
+			input.offline,
+			(completed, total) => {
+				if (completed === total) input.log(`Local atmosphere images ${completed}/${total}`);
+			},
+			1280
+		);
 
 		const generatedPlayers: Record<string, GeneratedPlayerMedia> = {};
 		for (const identity of identities) {
@@ -278,7 +382,9 @@ export async function generateMedia(input: {
 				.sort((a, b) => a.photo.year - b.photo.year || compareText(a.asset.filename, b.asset.filename))
 				.map(({ asset, photo }) => ({
 					...semanticAsset(asset, photo),
-					year: photo.year
+					year: photo.year,
+					...(photo.captureEvidenceUrl ? { captureEvidenceUrl: photo.captureEvidenceUrl } : {}),
+					...(photo.identityEvidenceUrl ? { identityEvidenceUrl: photo.identityEvidenceUrl } : {})
 				}));
 			generatedPlayers[identity.playerId] = { name: identity.name, firstYear: identity.firstYear, lastYear: identity.lastYear, photos };
 		}
@@ -304,6 +410,19 @@ export async function generateMedia(input: {
 			generatedTeams[franchiseId] = { name: source.name, color: source.color, logo, historical };
 		}
 
+		const generatedAtmosphere: Record<string, AtmospherePhoto> = {};
+		for (const source of acceptedAtmosphere) {
+			const asset = preparedAtmosphere.get(source.metadata.pageId);
+			if (!asset) throw new Error(`Missing prepared atmosphere image page ${source.metadata.pageId}`);
+			generatedAtmosphere[source.id] = {
+				...semanticAsset(asset, source),
+				id: source.id,
+				caption: source.caption,
+				franchiseId: source.franchiseId,
+				year: source.year
+			};
+		}
+
 		const photos = Object.values(generatedPlayers).reduce((count, player) => count + player.photos.length, 0);
 		const logos = Object.values(generatedTeams).filter((team) => team.logo).length;
 		const historicalLogos = Object.values(generatedTeams).reduce((count, team) => count + team.historical.length, 0);
@@ -313,14 +432,22 @@ export async function generateMedia(input: {
 			photos,
 			logos,
 			historicalLogos,
+			atmospherePhotos: Object.keys(generatedAtmosphere).length,
 			excluded: totalExclusions(exclusions)
 		};
 		const semanticPayload: MediaPayload & { players: Record<string, GeneratedPlayerMedia> } = {
 			teams: generatedTeams,
 			players: generatedPlayers,
+			atmosphere: generatedAtmosphere,
 			diagnostics
 		};
-		const version = digest(canonicalJSON({ schemaVersion: 1, dataVersion: input.dataManifest.dataVersion, modifications, media: semanticPayload }));
+		const version = digest(canonicalJSON({
+			schemaVersion: 2,
+			dataVersion: input.dataManifest.dataVersion,
+			modifications,
+			rightsNotice,
+			media: semanticPayload
+		}));
 		const replaceUrl = (asset: MediaAsset): MediaAsset => ({ ...asset, url: `/media/${version}/${asset.url}` });
 		const teams = Object.fromEntries(Object.entries(generatedTeams).map(([id, team]) => [id, {
 			...team,
@@ -329,19 +456,64 @@ export async function generateMedia(input: {
 		}]));
 		const players = Object.fromEntries(Object.entries(generatedPlayers).map(([id, player]) => [id, {
 			...player,
-			photos: player.photos.map((item) => ({ ...replaceUrl(item), year: item.year }))
+			photos: player.photos.map((item) => ({
+				...replaceUrl(item),
+				year: item.year,
+				...(item.captureEvidenceUrl ? { captureEvidenceUrl: item.captureEvidenceUrl } : {}),
+				...(item.identityEvidenceUrl ? { identityEvidenceUrl: item.identityEvidenceUrl } : {})
+			}))
+		}]));
+		const atmosphere = Object.fromEntries(Object.entries(generatedAtmosphere).map(([id, item]) => [id, {
+			...replaceUrl(item),
+			id: item.id,
+			caption: item.caption,
+			franchiseId: item.franchiseId,
+			year: item.year
 		}]));
 		const manifest: MediaManifest = {
-			schemaVersion: 1,
+			schemaVersion: 2,
 			version,
 			dataVersion: input.dataManifest.dataVersion,
 			modifications,
 			teams,
 			players,
+			atmosphere,
 			diagnostics
 		};
 		await writeFile(join(stagingDirectory, 'manifest.json'), `${canonicalJSON(manifest)}\n`);
-		await writeFile(join(stagingDirectory, 'NOTICE.txt'), `${modifications}\nTeam names and marks may be trademarks of their respective owners. Source licences cover the image files and do not grant trademark rights.\n`);
+		const creditedAssets: Array<{
+			label: string;
+			asset: MediaAsset;
+			captureEvidenceUrl?: string;
+			identityEvidenceUrl?: string;
+		}> = [
+			...Object.entries(manifest.teams).flatMap(([id, team]) => [
+				...(team.logo ? [{ label: `${id} current mark`, asset: team.logo }] : []),
+				...team.historical.map((asset) => ({ label: `${id} ${asset.firstYear}-${asset.lastYear} mark`, asset }))
+			]),
+			...Object.entries(manifest.players).flatMap(([id, player]) =>
+				player.photos.map((asset) => ({
+					label: `${id} ${asset.year} portrait`,
+					asset,
+					captureEvidenceUrl: asset.captureEvidenceUrl,
+					identityEvidenceUrl: asset.identityEvidenceUrl
+				}))),
+			...Object.values(manifest.atmosphere).map((asset) => ({ label: `${asset.id} ${asset.year} atmosphere`, asset }))
+		];
+		creditedAssets.sort((a, b) => compareText(a.label, b.label));
+		const notice = [
+			modifications,
+			...rightsNotice,
+			...creditedAssets.map(({ label, asset, captureEvidenceUrl, identityEvidenceUrl }) => [
+				label,
+				`Credit: ${asset.credit}`,
+				`Source: ${asset.sourceUrl}`,
+				`Licence: ${asset.license} (${asset.licenseUrl})`,
+				...(captureEvidenceUrl ? [`Capture-date evidence: ${captureEvidenceUrl}`] : []),
+				...(identityEvidenceUrl ? [`Player-identity evidence: ${identityEvidenceUrl}`] : [])
+			].join('\n'))
+		].join('\n\n');
+		await writeFile(join(stagingDirectory, 'NOTICE.txt'), `${notice}\n`);
 		await mkdir(input.outputDir, { recursive: true });
 		const versionDirectory = join(input.outputDir, version);
 		try {

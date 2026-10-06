@@ -1,10 +1,11 @@
 import { goto } from '$app/navigation';
 import { loadChunk, loadManifest, loadSimulation } from './data.ts';
-import { commitPick, createDraft, rollDraft, validateDraft, validateReplay } from './draft.ts';
+import { commitPick, createDraft, reassignPick, rollDraft, validateDraft, validateReplay } from './draft.ts';
 import { persistDraft, restoreDraft, type SavedPhase } from './persistence.ts';
 import { newSeed } from './random.ts';
 import { decodeReplay, shareUrl } from './share.ts';
-import type { Draft, Manifest, Profile, Slot } from './types.ts';
+import { draftRules } from './rules.ts';
+import type { Draft, HitterSlot, Manifest, Profile, Slot } from './types.ts';
 import { prepareSeasonInput } from '../sim/season.ts';
 import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts';
 
@@ -138,7 +139,7 @@ export class Session {
    await this.hydrateRoster();
    if (epoch !== this.epoch) return;
    this.retryAction = null;
-   if (this.draft.picks.length === 13) {
+   if (this.draft.picks.length === draftRules(this.draft.schemaVersion).slots.length) {
     this.phase = 'lineup';
     this.loading = false;
     if (this.savedPhase === 'simulating' || this.savedPhase === 'results' || this.shared) await this.simulate();
@@ -235,19 +236,39 @@ export class Session {
    const profile = this.pool.find(profile => profile.seasonId === seasonId);
    if (!profile) throw new Error('Choose a loaded season from the current roll');
    this.draft = commitPick(this.draft, this.manifest, seasonId, slot);
+   this.simulationInput = null;
    this.selected.set(seasonId, profile);
    this.profiles = [...this.selected.values()];
    this.pool = [];
-   this.phase = this.draft.picks.length === 13 ? 'lineup' : 'ready';
+   this.phase = this.draft.picks.length === draftRules(this.draft.schemaVersion).slots.length ? 'lineup' : 'ready';
    this.error = '';
-   this.announce = `${profile.displayName}, ${profile.year}, drafted at ${slot}. ${this.draft.picks.length} of 13 picks complete.`;
+   this.announce = `${profile.displayName}, ${profile.year}, drafted at ${slot}. ${this.draft.picks.length} of ${draftRules(this.draft.schemaVersion).slots.length} picks complete.`;
    this.save(this.phase === 'lineup' ? 'lineup' : 'draft');
   } catch (error) { this.error = error instanceof Error ? error.message : 'Could not commit the pick'; }
+ }
+ reassign(seasonId: string, destination: HitterSlot): void {
+  if (this.busy || this.shared || !['ready', 'choosing', 'lineup'].includes(this.phase) || !this.draft || !this.manifest) return;
+  try {
+   const origin = this.draft.picks.find(pick => pick.seasonId === seasonId)?.slot;
+   const occupant = this.draft.picks.find(pick => pick.slot === destination);
+   const next = reassignPick(this.draft, this.manifest, seasonId, destination);
+   if (next === this.draft) return;
+   this.draft = next;
+   this.simulationInput = null;
+   this.error = '';
+   const name = this.selected.get(seasonId)?.displayName ?? 'Selected player';
+   const otherName = occupant ? this.selected.get(occupant.seasonId)?.displayName ?? 'Other player' : '';
+   this.announce = occupant
+    ? `${name} swapped to ${destination}; ${otherName} moved to ${origin}.`
+    : `${name} moved from ${origin} to ${destination}.`;
+   this.save(this.phase === 'lineup' ? 'lineup' : 'draft');
+  } catch (error) { this.error = error instanceof Error ? error.message : 'Could not change the assignment'; }
  }
  order(kind: 'batting' | 'starter', order: string[]): void {
   if (this.phase !== 'lineup' || !this.draft || !this.manifest || this.loading) return;
   try {
    this.draft = validateDraft({ ...this.draft, [kind === 'batting' ? 'battingOrder' : 'starterOrder']: order }, this.manifest, true);
+   this.simulationInput = null;
    this.save('lineup');
   } catch (error) { this.error = error instanceof Error ? error.message : 'Invalid lineup'; }
  }

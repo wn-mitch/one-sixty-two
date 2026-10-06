@@ -1,9 +1,10 @@
 import { validateDraft } from './draft.ts';
+import { draftRules } from './rules.ts';
 import type { Draft, Manifest } from './types.ts';
 
 export const STORAGE_KEY = '162-zero:v1';
 export type SavedPhase = 'draft' | 'lineup' | 'simulating' | 'results';
-export interface SavedDraft extends Draft { phase: SavedPhase; latestResult?: unknown }
+export type SavedDraft = Draft & { phase: SavedPhase; latestResult?: unknown };
 export interface StorageAccess { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
 export type Restore = { kind: 'empty' } | { kind: 'valid'; draft: Draft; phase: SavedPhase } | { kind: 'incompatible'; message: string } | { kind: 'unavailable'; message: string };
 export function restoreDraft(storage: StorageAccess, manifest: Manifest): Restore {
@@ -14,7 +15,8 @@ export function restoreDraft(storage: StorageAccess, manifest: Manifest): Restor
  try {
   const saved = JSON.parse(bytes) as SavedDraft;
   const draft = validateDraft(saved, manifest);
-  if (!['draft', 'lineup', 'simulating', 'results'].includes(saved.phase) || saved.phase !== 'draft' && draft.picks.length !== 13 || saved.phase === 'draft' && draft.picks.length === 13) throw new Error('Invalid saved phase');
+  const complete = draft.picks.length === draftRules(draft.schemaVersion).slots.length;
+  if (!['draft', 'lineup', 'simulating', 'results'].includes(saved.phase) || saved.phase !== 'draft' && !complete || saved.phase === 'draft' && complete) throw new Error('Invalid saved phase');
   return { kind: 'valid', draft, phase: saved.phase };
  } catch { return { kind: 'incompatible', message: 'Saved draft is incompatible. Start a new draft to replace it.' }; }
 }

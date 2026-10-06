@@ -55,16 +55,17 @@
 	<section id="draft">
 		<p class="section-number" aria-hidden="true">01</p>
 		<div>
-			<h2>Draft thirteen exact seasons</h2>
-			<p>The pool covers American and National League seasons from 1961 through 2025 that belong to the histories of the thirty current franchises. A profile stays attached to its exact historical team, league, and year. Franchise history follows the source franchise identifier, so a relocated or renamed predecessor can roll for its present-day franchise.</p>
+			<h2>Draft fourteen exact selections</h2>
+			<p>The pool covers American and National League seasons from 1950 through 2025 that belong to the histories of the thirty current franchises. A profile stays attached to its exact historical team, league, and year. Franchise history follows the source franchise identifier, so a relocated or renamed predecessor can roll for its present-day franchise.</p>
 
 			<h3>Who is eligible</h3>
 			<ul>
 				<li><strong>Hitters:</strong> at least 200 plate appearances, where PA is AB + BB + HBP + SH + SF. Every qualifying hitter can play DH. A fielding slot requires at least ten appearances at that exact position for that same team-season. Generic outfield appearances never create center-field eligibility.</li>
 				<li><strong>Starting pitchers:</strong> at least ten starts, at least 180 outs pitched, and starts in 60% or more of appearances.</li>
 				<li><strong>Closers:</strong> at least 60 outs pitched and starts in 20% or fewer appearances. Saves are shown for context, but do not determine eligibility.</li>
+				<li><strong>Bullpen remainder:</strong> a historical team-season’s relief-dominant pitcher-seasons (positive appearances and starts in at most 20% of appearances), excluding the saves leader. Tied saves use pitching outs, then season ID. The remaining pool needs positive batters faced; small individual workloads remain included.</li>
 			</ul>
-			<p>You fill C, 1B, 2B, 3B, SS, LF, CF, RF, DH, three starting-pitcher slots, and one closer slot. One athlete can appear only once, even if another season or a two-way role is available, and each franchise can be drafted only once per roster. A relocated or renamed predecessor is the same franchise, so drafting a 1987 New York Mets season also uses up the franchise history that reaches the present-day Mets. Picks are permanent for that draft.</p>
+			<p>You fill nine hitter slots (C, 1B, 2B, 3B, SS, LF, CF, RF, DH), three starter slots, CL, and BP. Each individual athlete can appear only once, even across seasons or two-way roles. Each franchise can be drafted only once, including a bullpen unit and any relocated predecessor. Exact season selections are permanent; qualifying fielding and DH assignments can move or swap before simulation. Starter rotation order remains editable.</p>
 
 			<h3>How a roll stays legal</h3>
 			<p>The game draws uniformly from franchises that still have an unused candidate for an open slot, then uniformly from that franchise’s viable decades. Used franchises and used athletes leave the pool, so a roll never repeats a team or a player. The legal-candidate index prevents the roll from stranding the roster. You still choose the exact season and any eligible open slot; the game never auto-picks.</p>
@@ -90,6 +91,7 @@
 			<h3>Era and park adjustment</h3>
 			<p>Rates start from all AL/NL records in the player’s year and league, not only draft-eligible players. Each profile receives a 100 PA or BFP league prior, is expressed relative to its source league, and is translated into the combined 2025 AL/NL batting-event environment. Hitter hit weights are divided by the source batting park factor; pitcher allowed-hit weights are divided by the source pitching park factor. Those broad run-park factors are only proxies, not event-specific home-run measurements.</p>
 			<p>Pitcher doubles and triples allowed are inferred from that source league’s non-home-run hit mix because the source does not record them directly. Missing BFP is estimated as IP outs + H + BB + HBP. Any estimate is labelled in the generated profile.</p>
+			<p>Sacrifice flies are unavailable in some early records. The compiler retains recorded counts (zero when absent) and uses conservative recorded plate-appearance components for eligibility. Cards label the incomplete SF denominator used by OBP and OPS; these are not reconstructed historical totals.</p>
 
 			<h3>Matchup assumptions</h3>
 			<ul>
@@ -126,7 +128,7 @@
 				<div class="details-body">
 					<p>Each drafted starter receives exactly 54 starts in the chosen three-pitcher order. A start’s out budget is the rounded selected-season IP outs per start, clamped from 12 to 24. The starter leaves after the plate appearance that reaches the budget, or at an inning boundary after six runs charged in that appearance. Recovery is abstracted; injuries and seasonal fatigue are not modeled.</p>
 					<p>The closer may enter at the start of inning nine or later when tied or leading by one to three runs, with at least three seasonal outs remaining, unless used in both previous challenge games. The closer works only that half inning, at most three outs, and has a season cap of floor(source IP outs × 162 / source team games).</p>
-					<p>League-average 2025 relief covers every other inning and is labelled <strong>Support bullpen</strong>. Opponent closers use the same cap and rest rules. Pitching results show outs-based baseball IP notation and RA9. They do not claim simulated ERA, wins, or saves.</p>
+					<p>Your independently drafted bullpen remainder covers every other inning. Its fixed composition excludes the selected team-season’s saves leader, not your separately drafted closer. Rates are weighted by batters faced; the source does not reconstruct relief-only innings. Neutral handedness and unlimited support workload are transparent abstractions. Legacy thirteen-pick replays use the original league-average 2025 Support bullpen. Opponent closers use the same cap and rest rules. Results show outs-based IP notation and RA9, not simulated ERA, wins, or saves.</p>
 				</div>
 			</details>
 
@@ -143,6 +145,7 @@
 		<div>
 			<h2>How the season list is ranked</h2>
 			<p>By default the draft list sorts by a composite wins-above-replacement rate called JEFFBAGWELL, taken from Neil Paine’s pinned historical WAR dataset. It averages Baseball-Reference and FanGraphs WAR, and for pitchers it also averages a runs-allowed-based estimate, then expresses every season per 162 team games. Hitters rank by its batting value and pitchers by its pitching value, so the two groups are never compared against each other on one scale. You can switch the list back to the batting and pitching metrics the simulator actually uses.</p>
+			<p>Bullpen units form their own section, sorted by pooled historical ERA, then pitching outs and stable season ID. A team remainder has no individual WAR; its included and excluded pitcher-seasons remain visible in card details.</p>
 
 			<h3>What the ranking is not</h3>
 			<p>WAR is context and comparison only. It does not feed the simulation: no drafted season becomes stronger or weaker in play because of its WAR. Rate statistics from a shortened season are not adjusted for games played, a season with no published value shows as unavailable rather than zero, and a player’s best listed season is not necessarily his best legal season for your open slot. A season whose source rows cover fewer scheduled games than the shortest completed season in the covered window is treated as an incomplete capture and shows as unavailable, because a per-162 rate from part of a season would outrank full seasons.</p>

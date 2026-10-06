@@ -1,14 +1,14 @@
 <script lang="ts">
- import { tick } from 'svelte';
- import { availableCandidates, legalSlots, openSlots } from '../game/draft.ts';
- import { average, historicalBatting, historicalEra, innings } from '../game/format.ts';
+ import { tick, untrack } from 'svelte';
+ import { availableCandidates, legalSlots } from '../game/draft.ts';
+ import { draftRules } from '../game/rules.ts';
  import type { Draft, Manifest, Profile, Slot } from '../game/types.ts';
  import { loadRankings } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
- import { isHitter, rankGroups, warValue, type RankingSort, type CandidateEntry } from './candidate-ranking.ts';
- import PlayerPhoto from './PlayerPhoto.svelte';
+ import { isHitter, rankGroups, warValue } from './candidate-ranking.ts';
+ import type { CandidateEntry, CandidateGroup, RankingKind, RankingSort } from './candidate-ranking.ts';
  import DraftAssignment from './DraftAssignment.svelte';
- import SeasonNotes from './SeasonNotes.svelte';
+ import PlayerCard from './PlayerCard.svelte';
  let { profiles, draft, manifest, busy, onDraft }: {
   profiles: Profile[]; draft: Draft; manifest: Manifest; busy: boolean;
   onDraft: (seasonId: string, slot: Slot) => void;
@@ -20,57 +20,112 @@
  let selected = $state<string | null>(null);
  let chosenSlot = $state<Slot | null>(null);
  let selectionTrigger: HTMLButtonElement | null = null;
- let expandedPlayers = $state(new Set<string>());
+ let selectedSeasons = $state(new Map<string, string>());
+ let browseRevision = $state(0);
  let sort = $state<RankingSort>('war');
  let rankings = $state.raw<WarRankings | null>(null);
  let rankingLoading = $state(true);
  let rankingError = $state(false);
  let rankingAttempt = $state(0);
- const slots = $derived(openSlots(draft));
- const candidates = $derived(availableCandidates(draft, manifest));
+ const manifestBySeason = $derived(new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])));
+ const usedPlayerIds = $derived(new Set(draft.picks.map(pick => manifestBySeason.get(pick.seasonId)?.playerId).filter((id): id is string => !!id)));
+ const usedFranchises = $derived(new Set(draft.picks.map(pick => pick.franchiseId)));
+ const candidates = $derived(draft.currentRoll
+  ? manifest.candidates.filter(candidate =>
+   candidate.franchiseId === draft.currentRoll!.franchiseId &&
+   candidate.decade === draft.currentRoll!.decade &&
+   !usedPlayerIds.has(candidate.playerId) &&
+   !usedFranchises.has(candidate.franchiseId)
+  )
+  : []);
  const candidateIndex = $derived(new Map(candidates.map(candidate => [candidate.seasonId, candidate])));
- const activeFilter = $derived(filter === 'All' || slots.includes(filter) ? filter : 'All');
+ const viableCandidateIds = $derived(new Set(availableCandidates(draft, manifest).map(candidate => candidate.seasonId)));
+ const qualificationSlots = $derived(draftRules(draft.schemaVersion).slots.filter(slot => candidates.some(candidate => candidate.eligibleSlots.includes(slot))));
+ const activeFilter = $derived(filter === 'All' || qualificationSlots.includes(filter) ? filter : 'All');
+ const occupiedSlots = $derived(new Set(draft.picks.map(pick => pick.slot)));
  const selectedCandidate = $derived(selected ? candidateIndex.get(selected) : undefined);
  const selectedProfile = $derived(selectedCandidate ? profiles.find(profile => profile.seasonId === selected) : undefined);
- const assignmentSlots = $derived(selectedCandidate ? legalSlots(draft, selectedCandidate, manifest) : []);
+ const assignmentSlots = $derived(selectedCandidate && viableCandidateIds.has(selectedCandidate.seasonId) ? legalSlots(draft, selectedCandidate, manifest) : []);
  const groups = $derived.by(() => {
   const entries: CandidateEntry[] = [];
   const needle = query.trim().toLowerCase();
   for (const profile of profiles) {
-   const candidate = candidateIndex.get(profile.seasonId);
-   if (!candidate) continue;
-   const eligible = legalSlots(draft, candidate, manifest);
-   if (activeFilter !== 'All' && !eligible.includes(activeFilter)) continue;
+   if (!candidateIndex.has(profile.seasonId)) continue;
+   if (activeFilter !== 'All' && !profile.eligibleSlots.includes(activeFilter)) continue;
    if (needle && !`${profile.displayName} ${profile.year} ${profile.historicalTeam}`.toLowerCase().includes(needle)) continue;
-   entries.push({ profile, slots: activeFilter === 'All' ? eligible : [activeFilter] });
+   entries.push({ profile, slots: activeFilter === 'All' ? profile.eligibleSlots : [activeFilter] });
   }
   return rankGroups(entries, sort, rankings);
  });
  const pageCount = $derived(Math.max(1, Math.ceil(groups.length / 20)));
  const currentPage = $derived(Math.min(page, pageCount - 1));
  const visibleGroups = $derived(groups.slice(currentPage * 20, (currentPage + 1) * 20));
- const sections = $derived((['Hitters', 'Pitchers'] as const).map(kind => ({ kind, groups: visibleGroups.filter(group => group.kind === kind) })));
+ const sectionKinds: RankingKind[] = ['Hitters', 'Pitchers', 'Bullpens'];
+ const sections = $derived(sectionKinds.map(kind => ({ kind, groups: visibleGroups.filter(group => group.kind === kind) })));
+ const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll?.franchiseId ?? ''}:${draft.currentRoll?.decade ?? ''}`);
 
+ function selectedEntry(group: CandidateGroup): CandidateEntry {
+  const seasonId = selectedSeasons.get(group.playerId);
+  return group.entries.find(entry => entry.profile.seasonId === seasonId) ?? group.entries[0];
+ }
+ function cardRankingKind(profile: Profile): RankingKind {
+  if (profile.eligibleSlots.includes('BP')) return 'Bullpens';
+  return profile.eligibleSlots.some(isHitter) ? 'Hitters' : 'Pitchers';
+ }
+ function rememberSeason(playerId: string, seasonId: string) {
+  const next = new Map(selectedSeasons);
+  next.set(playerId, seasonId);
+  selectedSeasons = next;
+ }
+ function changeSeason(group: CandidateGroup, seasonId: string) {
+  if (!group.entries.some(entry => entry.profile.seasonId === seasonId)) return;
+  const previous = selectedEntry(group).profile.seasonId;
+  rememberSeason(group.playerId, seasonId);
+  if (selected === previous) {
+   selected = seasonId;
+  }
+ }
  function resetBrowse() { page = 0; selected = null; chosenSlot = null; }
- async function selectSeason(seasonId: string, trigger: HTMLButtonElement) {
+ function resetDraftBrowse() {
+  resetBrowse();
+  selectedSeasons = new Map<string, string>();
+  browseRevision++;
+ }
+ async function selectSeason(seasonId: string, playerId: string) {
+  rememberSeason(playerId, seasonId);
   if (selected === seasonId) { clearSelection(); return; }
-  selectionTrigger = trigger;
-  selected = seasonId; chosenSlot = null;
+  const active = document.activeElement;
+  selectionTrigger = active instanceof HTMLButtonElement && active.matches('[data-choose-season]')
+   ? active
+   : document.querySelector<HTMLButtonElement>(`[data-choose-season="${CSS.escape(seasonId)}"]`);
+  selected = seasonId;
+  chosenSlot = null;
   await tick();
-  document.getElementById(`${uid}-assignment`)?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+  const dock = document.getElementById(`${uid}-assignment`);
+  (dock?.querySelector<HTMLInputElement>('input') ?? dock)?.focus({ preventScroll: true });
  }
  function clearSelection() {
-  selected = null; chosenSlot = null;
+  selected = null;
+  chosenSlot = null;
   selectionTrigger?.focus({ preventScroll: true });
  }
  function changePage(next: number) {
-  page = next; selected = null; chosenSlot = null;
+  page = next;
+  selected = null;
+  chosenSlot = null;
   document.getElementById(`${uid}-results`)?.focus();
  }
  function commit() {
   if (!busy && selected && chosenSlot && assignmentSlots.includes(chosenSlot)) onDraft(selected, chosenSlot);
  }
- $effect(() => { draft.currentRoll; draft.picks.length; resetBrowse(); });
+ function sectionDescription(kind: RankingKind): string {
+  if (kind === 'Bullpens') return 'Lowest pooled ERA first, then workload';
+  if (sort === 'metrics') return kind === 'Hitters' ? 'Best eligible OPS first' : 'Lowest eligible ERA first';
+  if (rankings) return `Best eligible ${kind === 'Hitters' ? 'batting' : 'pitching'} WAR/162 first`;
+  return 'WAR order unavailable · stable ID order';
+ }
+ $effect(() => { draftBrowseKey; untrack(resetDraftBrowse); });
+ $effect(() => { if (chosenSlot && !assignmentSlots.includes(chosenSlot)) chosenSlot = null; });
  $effect(() => {
   const version = manifest.dataVersion;
   rankingAttempt;
@@ -89,9 +144,9 @@
   <input id="{uid}-search" type="search" placeholder="Player, year, or historical team" bind:value={query} oninput={resetBrowse} disabled={busy} />
  </div>
  <fieldset class="filters" disabled={busy}>
-  <legend>Eligible open slot</legend>
+  <legend>Qualifies for position</legend>
   <div class="filter-options">
-   {#each ['All', ...slots] as slot}
+   {#each ['All', ...qualificationSlots] as slot}
     <button type="button" class="quiet filter" aria-pressed={activeFilter === slot} onclick={() => { filter = slot as Slot | 'All'; resetBrowse(); }}>{slot}</button>
    {/each}
   </div>
@@ -105,16 +160,16 @@
   <a href="/about#rankings">Ranking source &amp; method</a>
  </div>
  {#if rankingLoading}
-  <p class="ranking-status muted" role="status">Loading composite WAR/162.{sort === 'war' ? ' Seasons are in stable ID order until it arrives. Choose Historical OPS / ERA to sort by those stats now.' : ''} Drafting is available.</p>
+  <p class="ranking-status muted" role="status">Loading composite WAR/162.{sort === 'war' ? ' Cards are in stable ID order until it arrives. Choose Historical OPS / ERA to sort by those stats now.' : ''} Drafting is available.</p>
  {:else if rankingError}
   <div class="ranking-status">
-   <p role="status">Composite WAR/162 is unavailable.{sort === 'war' ? ' Seasons are in stable ID order, not ranked by WAR. Switch to Historical OPS / ERA or retry.' : ''} You can still draft.</p>
+   <p role="status">Composite WAR/162 is unavailable.{sort === 'war' ? ' Cards are in stable ID order, not ranked by WAR. Switch to Historical OPS / ERA or retry.' : ''} You can still draft.</p>
    <button type="button" class="secondary" onclick={() => rankingAttempt++}>Retry rankings</button>
   </div>
  {/if}
  <div class="list-meta" id="{uid}-results" tabindex="-1">
-  <p role="status">{groups.length} player {groups.length === 1 ? 'group' : 'groups'}{groups.length > 20 ? ` · Page ${currentPage + 1} of ${pageCount}` : ''}</p>
-  <p class="muted">Historical stats. Expand a player to compare exact seasons.</p>
+  <p role="status">{groups.length} {groups.length === 1 ? 'card' : 'cards'}{groups.length > 20 ? ` · Page ${currentPage + 1} of ${pageCount}` : ''}</p>
+  <p class="muted">Historical stats. Select an exact season on its card.</p>
  </div>
  {#if !draft.currentRoll}
   <p class="notice">Roll a franchise and era to open your next player pool.</p>
@@ -122,7 +177,7 @@
   {#if query.trim() || activeFilter !== 'All'}
    <div class="empty">
     <h3>No matches for this search.</h3>
-    <p class="muted">Try another name or browse all eligible open slots.</p>
+    <p class="muted">Try another name or browse all historical qualifications.</p>
     <button type="button" class="secondary" disabled={busy} onclick={() => { query = ''; filter = 'All'; resetBrowse(); }}>Clear search and filters</button>
    </div>
   {:else}
@@ -134,60 +189,46 @@
     <section class="player-section" aria-label={section.kind}>
      <div class="section-heading">
       <h3>{section.kind}</h3>
-      <span class="muted">{sort === 'metrics' ? section.kind === 'Hitters' ? 'Best eligible OPS first' : 'Lowest eligible ERA first' : rankings ? `Best eligible ${section.kind === 'Hitters' ? 'batting' : 'pitching'} WAR/162 first` : 'WAR order unavailable · stable ID order'}</span>
+      <span class="muted">{sectionDescription(section.kind)}</span>
      </div>
-     {#each section.groups as group (group.key)}
-      <details class="player" ontoggle={(event) => {
-       const next = new Set(expandedPlayers);
-       if (event.currentTarget.open) next.add(group.key); else next.delete(group.key);
-       expandedPlayers = next;
-      }}>
-       <summary>
-        <PlayerPhoto playerId={group.playerId} year={group.entries[0].profile.year} name={group.name} size="small" credits={false} />
-        <span class="summary-identity"><span class="player-name">{group.name}</span><span class="summary-meta">{group.entries.length} {group.entries.length === 1 ? 'season' : 'seasons'} · {group.entries[0].slots.join(' / ')}</span></span>
-        <span class="expand-label" aria-hidden="true">+</span>
-       </summary>
-       {#if expandedPlayers.has(group.key)}
-       <div class="seasons">
-        {#each group.entries as entry (entry.profile.seasonId)}
-         {@const profile = entry.profile}
-         {@const war = warValue(entry, section.kind, rankings)}
-         <article class="season" class:selected-season={selected === profile.seasonId}>
-          <div class="season-heading">
-           <div class="season-identity"><p class="eyebrow">Draft season</p><h4>{profile.year} <span>{profile.historicalTeam}</span></h4><p class="eligible">Eligible open slots: {entry.slots.join(' · ')}</p></div>
-           <button type="button" class="secondary season-toggle" disabled={busy} aria-pressed={selected === profile.seasonId} onclick={event => selectSeason(profile.seasonId, event.currentTarget)}>{selected === profile.seasonId ? 'Clear selection' : `Choose ${profile.year}`}</button>
-          </div>
-          <p class="war-value">{section.kind === 'Hitters' ? 'Batting' : 'Pitching'} composite WAR/162: <strong>{war === null ? rankingLoading ? 'Loading' : 'Unavailable' : war.toFixed(2)}</strong></p>
-          {#if profile.batting && entry.slots.some(isHitter)}
-           {@const stats = historicalBatting(profile.batting)}
-           <dl class="stats" aria-label="Historical batting statistics">
-            <div><dt>AVG</dt><dd>{average(stats.avg)}</dd></div><div><dt>OBP</dt><dd>{average(stats.obp)}</dd></div><div><dt>SLG</dt><dd>{average(stats.slg)}</dd></div><div><dt>HR</dt><dd>{profile.batting.HR}</dd></div><div><dt>PA</dt><dd>{profile.batting.PA}</dd></div>
-           </dl>
-          {/if}
-          {#if profile.pitching && entry.slots.some(slot => !isHitter(slot))}
-           <dl class="stats" aria-label="Historical pitching statistics">
-            <div><dt>IP</dt><dd>{innings(profile.pitching.IPouts)}</dd></div><div><dt>ERA</dt><dd>{historicalEra(profile.pitching).toFixed(2)}</dd></div><div><dt>SO</dt><dd>{profile.pitching.SO}</dd></div><div><dt>BB</dt><dd>{profile.pitching.BB}</dd></div><div><dt>SV</dt><dd>{profile.pitching.SV}</dd></div>
-           </dl>
-          {/if}
-          <SeasonNotes {profile} getSlots={() => selected === profile.seasonId ? assignmentSlots : legalSlots(draft, candidateIndex.get(profile.seasonId)!, manifest)} selectedSlot={selected === profile.seasonId ? chosenSlot : null} />
-         </article>
-        {/each}
+     <div class="card-grid">
+      {#each section.groups as group (`${browseRevision}:${group.key}`)}
+       {@const entry = selectedEntry(group)}
+       {@const profile = entry.profile}
+       {@const candidate = candidateIndex.get(profile.seasonId)!}
+       {@const directSlots = viableCandidateIds.has(profile.seasonId) ? legalSlots(draft, candidate, manifest) : []}
+       {@const cardKind = cardRankingKind(profile)}
+       {@const occupiedQualifications = profile.eligibleSlots.filter(slot => occupiedSlots.has(slot))}
+       <div class="candidate-card" data-candidate-group={group.playerId}>
+        <PlayerCard
+         {profile}
+         seasons={group.entries.map(item => item.profile)}
+         onSeasonChange={seasonId => changeSeason(group, seasonId)}
+         legalSlots={directSlots}
+         war={warValue({ profile, slots: profile.eligibleSlots }, cardKind, rankings)}
+         selected={selected === profile.seasonId}
+         onChoose={() => selectSeason(profile.seasonId, group.playerId)}
+        />
+        {#if occupiedQualifications.length}
+         <p class="occupied-context">Occupied qualifications:
+          {#each occupiedQualifications as slot, index}<span>{slot} (occupied)</span>{index < occupiedQualifications.length - 1 ? ' · ' : ''}{/each}
+         </p>
+        {/if}
        </div>
-       {/if}
-      </details>
-     {/each}
+      {/each}
+     </div>
     </section>
    {/if}
   {/each}
   {#if pageCount > 1}
-   <nav class="pagination" aria-label="Player groups pages">
+   <nav class="pagination" aria-label="Player card pages">
     <button type="button" class="secondary" disabled={busy || currentPage === 0} onclick={() => changePage(currentPage - 1)}>Previous</button>
     <span>{currentPage + 1} / {pageCount}</span>
     <button type="button" class="secondary" disabled={busy || currentPage === pageCount - 1} onclick={() => changePage(currentPage + 1)}>Next</button>
    </nav>
   {/if}
  {/if}
- {#if selectedProfile && assignmentSlots.length}
+ {#if selectedProfile}
   <DraftAssignment id="{uid}-assignment" profile={selectedProfile} slots={assignmentSlots} bind:chosenSlot {busy} onDraft={commit} onClose={clearSelection} />
  {/if}
 </section>
@@ -204,39 +245,20 @@
  .filter[aria-pressed='true'] { color: var(--background); border-color: var(--text); background: var(--text); }
  .list-meta { margin-block: var(--space-4); font-size: var(--text-xs); }
  .list-meta p { margin: var(--space-1) 0; }
- .section-heading { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: baseline; justify-content: space-between; margin-block: var(--space-6) var(--space-2); }
+ .section-heading { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: baseline; justify-content: space-between; margin-block: var(--space-6) var(--space-3); }
  .section-heading h3 { font-size: var(--text-lg); }
  .section-heading span { font-size: var(--text-xs); }
- .player { border-bottom: 1px solid var(--border); }
- .player > summary { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-2); list-style: none; }
- .player > summary::-webkit-details-marker { display: none; }
- .player > summary:hover { background: var(--surface); }
- .summary-identity { display: grid; gap: var(--space-1); flex: 1; min-width: 0; }
- .player-name { font-weight: 700; overflow-wrap: anywhere; }
- .summary-meta { color: var(--muted); font-size: var(--text-xs); }
- .expand-label { color: var(--muted); font-size: var(--text-xl); }
- .player[open] > summary .expand-label { transform: rotate(45deg); }
- .player[open] > summary { background: var(--surface); }
- .seasons { padding-inline: var(--space-2); }
- .season { padding-block: var(--space-4); border-top: 1px solid var(--border); }
- .season-heading { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
- .season-identity { flex: 1; min-width: 8rem; }
- .season-identity .eyebrow { margin: 0 0 var(--space-1); }
- h4 { margin: 0; font-size: var(--text-lg); font-weight: 750; }
- h4 span { display: block; font-size: var(--text-sm); font-weight: 500; color: var(--muted); }
- .eligible { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--muted); }
- .season-toggle { flex-shrink: 0; }
- .stats { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-6); margin: var(--space-4) 0 0; }
- .stats dt { font-size: var(--text-xs); color: var(--muted); }
- .stats dd { margin: var(--space-1) 0 0; font-size: var(--text-base); font-weight: 650; }
+ .card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+ .candidate-card { display: grid; gap: var(--space-2); width: 100%; max-width: 24rem; min-width: 0; margin-inline: auto; }
+ .occupied-context { margin: 0; padding-inline: var(--space-2); color: var(--muted); font-size: var(--text-xs); }
+ .occupied-context span { color: var(--text); }
  .pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-6); }
  .empty { padding-block: var(--space-4) var(--space-8); }
  .ranking-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-4); font-size: var(--text-sm); }
  .ranking-controls label { font-weight: 650; }
  .ranking-controls a { display: inline-flex; align-items: center; min-height: 2.75rem; font-size: var(--text-xs); }
  .ranking-status { font-size: var(--text-sm); }
- .war-value { margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--muted); }
- .war-value strong { color: var(--text); }
- .selected-season .season-toggle { border-color: var(--accent); color: var(--accent); }
- @media (max-width: 30rem) { .stats { gap: var(--space-4); } }
+ @media (min-width: 36rem) {
+  .card-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 24rem)); justify-content: center; }
+ }
 </style>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createBox, simulateGame } from './game.ts';
-import { createInningContext, playHalf } from './inning.ts';
+import { createInningContext, playHalf, type InningEvent } from './inning.ts';
 import { createBases, force, hit } from './advancement.ts';
 import { createWorkload } from './workload.ts';
 import { EVENT as E, eventTable, scripted, testGame, testTeam } from './test-fixtures.ts';
@@ -37,20 +37,27 @@ describe('plate appearance scoring', () => {
   expect(game.pitching.pitching[0]).toMatchObject({ R: 1, outs: 12, BB: 1 });
   expect(game.pitching.pitching[2]).toMatchObject({ R: 0, H: 1, outs: 2 });
  });
- it('ends a half on caught stealing before another PA', () => {
+ it('ends a half on caught stealing before another PA and observes the third-out event', () => {
   const game = half();
+  const events: InningEvent[] = [];
   game.offense.hitters[0].stealAttempt = 0.25;
-  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, E.SO, 0, 0.99]));
+  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, E.SO, 0, 0.99]), event => events.push(event));
   expect(game.batting.batting.reduce((sum, line) => sum + line.PA, 0)).toBe(3);
   expect(game.batting.batting[0].CS).toBe(1);
   expect(game.pitching.pitching[0]).toMatchObject({ outs: 3, SO: 2 });
+  expect(events.at(-1)).toMatchObject({ outcome: 'caughtStealing', outsBefore: 2, outsAfter: 3, basesBefore: 1, basesAfter: 0, runsScored: 0 });
  });
- it('records a successful steal without using a PA', () => {
+ it('records a successful steal from its own pre-event state without using a PA', () => {
   const game = half();
+  const events: InningEvent[] = [];
   game.offense.hitters[0].stealAttempt = 0.25;
-  playHalf(game.context, Infinity, scripted([E.BB, 0, 0, E.SO]));
+  playHalf(game.context, Infinity, scripted([E.BB, 0, 0, E.SO]), event => events.push(event));
   expect(game.batting.batting[0]).toMatchObject({ SB: 1, CS: 0 });
   expect(game.batting.batting.reduce((sum, line) => sum + line.PA, 0)).toBe(4);
+  expect(events[1]).toMatchObject({
+   outcome: 'stolenBase', outsBefore: 0, outsAfter: 0, basesBefore: 1, basesAfter: 2,
+   batterName: game.offense.hitters[0].displayName, batterSeasonId: game.offense.hitters[0].seasonId
+  });
  });
  it('does not attempt a double play with two outs', () => {
   const game = half();
@@ -94,6 +101,15 @@ describe('plate appearance scoring', () => {
   expect(game.batting.batting[1]).toMatchObject({ PA: 1, SF: 1, AB: 0, RBI: 1 });
   expect(game.batting.batting[0].R).toBe(1);
  });
+ it('observes a non-home-run walkoff by its credited hit result', () => {
+  const game = half();
+  const events: InningEvent[] = [];
+  playHalf(game.context, 1, scripted([E.triple, E.triple]), event => events.push(event));
+  expect(events[1]).toMatchObject({
+   outcome: 'single', outsBefore: 0, basesBefore: 4,
+   offenseRunsBefore: 0, offenseRunsAfter: 1, runsScored: 1
+  });
+ });
 });
 
 describe('runner advancement', () => {
@@ -125,6 +141,13 @@ describe('runner advancement', () => {
  });
 });
 
+function walkoffGrandSlamEvents(): number[] {
+ const values = [E.HR, E.HR, E.HR, E.SO, E.SO, E.SO, E.SO, E.SO, E.SO];
+ for (let inning = 2; inning <= 8; inning++) values.push(E.SO, E.SO, E.SO, E.SO, E.SO, E.SO);
+ values.push(E.SO, E.SO, E.SO, E.BB, 0.9, E.BB, E.BB, E.HR);
+ return values;
+}
+
 describe('complete games', () => {
  it('omits the bottom ninth when home already leads', () => {
   const events = [E.SO, E.SO, E.SO, E.HR, E.SO, E.SO, E.SO, ...Array<number>(45).fill(E.SO)];
@@ -153,6 +176,44 @@ describe('complete games', () => {
   const game = simulateGame(testGame(), scripted([...Array<number>(51).fill(E.SO), E.BB, 0.9, E.BB, E.BB, E.HR]));
   expect(game.home.runs).toBe(4);
   expect(game.home.batting[0]).toMatchObject({ HR: 1, RBI: 4, R: 1 });
+ });
+ it('records the actual bases-loaded bottom-ninth grand slam as a terminal highlight', () => {
+  const input = testGame();
+  input.number = 81;
+  input.opponentName = 'Test Visitors';
+  const game = simulateGame(input, scripted(walkoffGrandSlamEvents()));
+  expect(game).toMatchObject({ challengeRuns: 4, opponentRuns: 3, win: true });
+  expect(game.highlight).toMatchObject({
+   gameNumber: 81, opponentName: 'Test Visitors', isHome: true,
+   inning: 9, half: 'bottom', outsBefore: 0, basesBefore: 7,
+   challengeRunsBefore: 0, opponentRunsBefore: 3, challengeRunsAfter: 4, opponentRunsAfter: 3,
+   batterName: input.home.hitters[0].displayName, batterSeasonId: input.home.hitters[0].seasonId,
+   pitcherName: input.away.pitchers[input.away.closerIndex].displayName, challengeBatting: true,
+   outcome: 'homeRun', runsScored: 4, winAfter: 1
+  });
+  expect(game.highlight!.swing).toBeGreaterThan(0.5);
+ });
+ it('reverses the same home grand slam into an opponent lowlight without changing event facts', () => {
+  const input = testGame();
+  input.challengeIsHome = false;
+  const game = simulateGame(input, scripted(walkoffGrandSlamEvents()));
+  expect(game.lowlight).toMatchObject({
+   inning: 9, half: 'bottom', basesBefore: 7, challengeBatting: false,
+   challengeRunsBefore: 3, opponentRunsBefore: 0, challengeRunsAfter: 3, opponentRunsAfter: 4,
+   outcome: 'homeRun', runsScored: 4, winAfter: 0
+  });
+  expect(game.lowlight!.swing).toBeLessThan(-0.5);
+ });
+ it('does not consume randomness or change boxes when moment observation is disabled', () => {
+  const values = walkoffGrandSlamEvents();
+  let trackedCalls = 0;
+  let untrackedCalls = 0;
+  const trackedRandom = () => values[trackedCalls++] ?? E.SO;
+  const untrackedRandom = () => values[untrackedCalls++] ?? E.SO;
+  const tracked = simulateGame(testGame(), trackedRandom);
+  const untracked = simulateGame(testGame(), untrackedRandom, null);
+  expect({ ...tracked, highlight: null, lowlight: null }).toEqual(untracked);
+  expect(trackedCalls).toBe(untrackedCalls);
  });
  it('starts extra innings with empty bases and produces a real winner', () => {
   const game = simulateGame(testGame(), scripted([...Array<number>(54).fill(E.SO), E.HR]));

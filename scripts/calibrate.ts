@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomStream } from '../src/lib/game/random.ts';
-import type { Position, Profile, Rates, SimulationData, Slot } from '../src/lib/game/types.ts';
+import { HITTER_SLOTS, MODEL_VERSION, POSITIONS, type Position, type Profile, type Rates, type SimulationData, type Slot } from '../src/lib/game/types.ts';
 import { simulateGame } from '../src/lib/sim/game.ts';
 import { simulateSeason } from '../src/lib/sim/season.ts';
 import { syntheticProfile } from '../src/lib/sim/fixtures.ts';
@@ -13,7 +13,6 @@ interface Options {
 }
 
 const DEFENSE: Record<Position, number> = { C: 0, '1B': 1, '2B': 2, '3B': 3, SS: 4, LF: 5, CF: 6, RF: 7 };
-const HITTER_SLOTS: Slot[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
 
 function parseOptions(arguments_: string[]): Options {
 	let seed = 162;
@@ -34,8 +33,10 @@ function parseOptions(arguments_: string[]): Options {
 
 function commonProfile(id: string, slot: Slot, rates: Rates, data: SimulationData): Profile {
 	const profile = syntheticProfile(id, rates);
+	profile.franchiseId = `fixture:${id}`;
+	profile.teamId = `fixture:${id}`;
 	profile.eligibleSlots = [slot];
-	profile.appearances = slot === 'DH' ? {} : { [slot as Position]: 162 };
+	profile.appearances = POSITIONS.includes(slot as Position) ? { [slot as Position]: 162 } : {};
 	profile.battingRates = [...rates];
 	profile.pitchingRates = [...rates];
 	profile.errorRates = { ...data.leagueErrorRates };
@@ -51,7 +52,11 @@ function makeTeam(id: string, data: SimulationData, hitterRates = data.leagueRat
 	const hitters = HITTER_SLOTS.map((slot, index) => commonProfile(`${id}-h${index}`, slot, index === 0 ? hitterRates : data.leagueRates, data));
 	const starter = commonProfile(`${id}-starter`, 'SP1', starterRates, data);
 	const closer = commonProfile(`${id}-closer`, 'CL', data.leagueRates, data);
-	const bullpen = commonProfile(`${id}-support`, 'CL', data.leagueRates, data);
+	const bullpen = commonProfile(`${id}-support`, 'BP', data.leagueRates, data);
+	bullpen.displayName = `${id} bullpen remainder`;
+	bullpen.pitching!.G = 60;
+	bullpen.pitching!.GS = 0;
+	bullpen.pitching!.IPouts = 486;
 	return {
 		id,
 		name: id,
@@ -85,15 +90,20 @@ function gameInput(number: number, challengeIsHome: boolean, data: SimulationDat
 function averageSeason(seed: number, data: SimulationData, hitterRates = data.leagueRates, starterRates = data.leagueRates): SeasonInput {
 	const team = makeTeam('challenge', data, hitterRates);
 	const starters = ['SP1', 'SP2', 'SP3'].map((slot, index) => commonProfile(`challenge-sp${index}`, slot as Slot, index === 0 ? starterRates : data.leagueRates, data));
-	const roster = [...team.hitters.map((profile, index) => ({ profile, slot: HITTER_SLOTS[index] })), ...starters.map((profile, index) => ({ profile, slot: `SP${index + 1}` as Slot })), { profile: team.pitchers[1], slot: 'CL' as Slot }];
+	const roster = [...team.hitters.map((profile, index) => ({ profile, slot: HITTER_SLOTS[index] })), ...starters.map((profile, index) => ({ profile, slot: `SP${index + 1}` as Slot })), { profile: team.pitchers[1], slot: 'CL' as Slot }, { profile: team.pitchers[2], slot: 'BP' as Slot }];
 	const opponents = data.opponents.map(source => {
 		const average = makeTeam(source.id, data);
 		return { id: source.id, name: source.id, park: 1, hitters: average.hitters,
 			starters: Array.from({ length: 5 }, (_, index) => commonProfile(`${source.id}-sp${index}`, 'SP1', data.leagueRates, data)),
 			closer: average.pitchers[1], bullpen: average.pitchers[2] };
 	});
-	return { seed, roster, battingOrder: team.hitters.map(profile => profile.seasonId), starterOrder: starters.map(profile => profile.seasonId),
-		data: { ...data, opponents, bullpen: commonProfile('league-support', 'CL', data.leagueRates, data) } };
+	const leagueBullpen = commonProfile('league-support', 'BP', data.leagueRates, data);
+	leagueBullpen.displayName = 'League support bullpen';
+	leagueBullpen.pitching!.G = 60;
+	leagueBullpen.pitching!.GS = 0;
+	leagueBullpen.pitching!.IPouts = 486;
+	return { schemaVersion: 3, modelVersion: MODEL_VERSION, seed, roster, battingOrder: team.hitters.map(profile => profile.seasonId), starterOrder: starters.map(profile => profile.seasonId),
+		data: { ...data, opponents, bullpen: leagueBullpen } };
 }
 
 function runGame(seed: number, index: number, data: SimulationData, hitterRates?: Rates, starterRates?: Rates): GameResult {
@@ -182,6 +192,7 @@ async function main(): Promise<void> {
 
 	console.log(JSON.stringify({
 		dataVersion: simulation.dataVersion,
+		modelVersion: MODEL_VERSION,
 		seed: options.seed,
 		games: options.games,
 		observedRunsPerTeamGame: simulation.observedRuns,

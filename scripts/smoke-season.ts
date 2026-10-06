@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft } from '../src/lib/game/draft.ts';
 import { decodeReplay, encodeReplay } from '../src/lib/game/share.ts';
-import { compareId, SLOTS, type Draft, type Manifest, type Profile, type Slot } from '../src/lib/game/types.ts';
+import { compareId, HITTER_SLOTS, SLOTS, type Draft, type Manifest, type Profile, type Slot } from '../src/lib/game/types.ts';
 import { buildSchedule, prepareSeasonInput, simulateSeason } from '../src/lib/sim/season.ts';
 import type { SeasonResult } from '../src/lib/sim/types.ts';
 import { loadVerificationData, ProfileChunks } from './verification-data.ts';
@@ -51,7 +51,7 @@ function pitcherValue(profile: Profile): number {
 }
 
 function chooseProfile(profiles: Profile[], slot: Slot, policy: Policy): Profile {
-	const hitter = SLOTS.indexOf(slot) < 9;
+	const hitter = (HITTER_SLOTS as readonly Slot[]).includes(slot);
 	return profiles.toSorted((left, right) => {
 		const difference = (hitter ? hitterValue(left) : pitcherValue(left)) - (hitter ? hitterValue(right) : pitcherValue(right));
 		if (difference !== 0) {
@@ -107,6 +107,7 @@ function assertConcreteSeason(result: SeasonResult): void {
 
 async function main(): Promise<void> {
 	const options = parseOptions(process.argv.slice(2));
+	assert.equal(SLOTS.length, 14, 'Current smoke contract requires fourteen roster slots');
 	const { manifest, simulation } = await loadVerificationData();
 	const { draft, profiles } = await draftRoster(manifest, options.seed, options.policy, new ProfileChunks(manifest));
 	assert.equal(draft.picks.length, SLOTS.length, 'Smoke policy did not fill every roster slot');
@@ -115,7 +116,12 @@ async function main(): Promise<void> {
 
 	const schedule = buildSchedule(draft.seed, simulation.opponents.map(opponent => opponent.id));
 	assert.equal(schedule.filter(game => game.isHome).length, 81, 'Smoke schedule must contain exactly 81 home games');
-	const result = simulateSeason(prepareSeasonInput(draft, profiles, simulation));
+	const prepared = prepareSeasonInput(draft, profiles, simulation);
+	const result = simulateSeason(prepared);
+	const draftedBullpen = prepared.roster.find(pick => pick.slot === 'BP')!.profile;
+	assert.equal(result.modelVersion, prepared.modelVersion, 'Season result did not preserve the validated model version');
+	assert.equal(result.pitching[4].seasonId, draftedBullpen.seasonId, 'Season did not deploy the drafted bullpen remainder');
+	assert.equal(result.pitching[4].displayName, draftedBullpen.displayName, 'Season did not preserve the drafted bullpen identity');
 	assertConcreteSeason(result);
 	assert.deepStrictEqual(result.games.map(game => ({ opponentId: game.opponentId, isHome: game.isHome })), schedule, 'Season games do not match the deterministic schedule');
 	if (options.policy === 'best') {

@@ -100,7 +100,7 @@ export async function acquireAttribution(offline = false): Promise<Attribution> 
 		licenseUrl: LICENSE_URL,
 		sourceCommit: SOURCE_COMMIT,
 		changes:
-			'Filtered the source to 1961–2025 American and National League records in current franchise histories; grouped team-season stints; joined batting, pitching, appearances, and fielding records; discarded unused biographical fields; prepared common-environment event rates; and repackaged the transformed profiles and 2025 opposition data for browser simulation.',
+			'Filtered the source to 1950–2025 American and National League records in current franchise histories; grouped team-season stints; joined batting, pitching, appearances, and fielding records; compiled relief-dominant team-season bullpen remainders; discarded unused biographical fields; prepared common-environment event rates; and repackaged the transformed profiles and 2025 opposition data for browser simulation.',
 		fullNotice
 	};
 }

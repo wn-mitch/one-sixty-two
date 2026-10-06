@@ -8,6 +8,9 @@
  import Progress from '#lib/components/Progress.svelte';
  import Results from '#lib/components/Results.svelte';
  import TeamLogo from '#lib/components/TeamLogo.svelte';
+ import AtmosphereImage from '#lib/components/AtmosphereImage.svelte';
+ import { draftRules } from '#lib/game/rules.ts';
+ import { SLOTS } from '#lib/game/types.ts';
  const session = new Session();
  onMount(() => { void session.initialize(); return () => session.dispose(); });
  $effect(() => {
@@ -24,7 +27,7 @@
 
 <svelte:head>
  <title>162-0 | The undefeated baseball challenge</title>
- <meta name="description" content="Roll a franchise and decade. Draft thirteen historical player-seasons. Can your team survive 162 games without a loss?" />
+ <meta name="description" content="Roll a franchise and decade. Draft fourteen historical selections. Can your team survive 162 games without a loss?" />
 </svelte:head>
 
 <main>
@@ -50,7 +53,7 @@
    <div class="welcome-copy">
     <p class="eyebrow">Baseball history. One undefeated season.</p>
     <h1>Can you go <strong>162-0?</strong></h1>
-    <p class="intro">Roll a franchise and decade. Draft nine hitters, three starters, and a closer — one franchise and one athlete each. Take your team through all 162 games.</p>
+    <p class="intro">Roll a franchise and decade. Draft nine hitters, three starters, a closer, and a team-season bullpen remainder. One pick per franchise; each athlete only once. Take your team through all 162 games.</p>
     <div class="actions">
      <button class="primary start" disabled={session.loading || !session.manifest} onclick={() => session.requestNew()}>Start draft <span aria-hidden="true">↗</span></button>
      {#if session.savedDraft}<button class="secondary" disabled={session.loading} onclick={() => void session.resume()}>Resume draft</button>{/if}
@@ -59,26 +62,28 @@
     <p class="start-note">Great teams still lose. That's the challenge.</p>
    </div>
    <aside class="welcome-lineup" aria-label="Your challenge roster">
-    <div class="preview-heading"><span class="eyebrow">The roster card</span><span>13 picks</span></div>
+    <div class="preview-heading"><span class="eyebrow">The roster card</span><span>{SLOTS.length} picks</span></div>
     <h2>Build from the greats.<br />Win with your choices.</h2>
     <div class="preview-line"><strong>09</strong><div><span>Hitters</span><small>C · 1B · 2B · 3B · SS · LF · CF · RF · DH</small></div></div>
     <div class="preview-line"><strong>03</strong><div><span>Starting pitchers</span><small>Your rotation. 54 starts apiece.</small></div></div>
-    <div class="preview-line"><strong>01</strong><div><span>Closer</span><small>League-average support behind them.</small></div></div>
+    <div class="preview-line"><strong>01</strong><div><span>Closer</span><small>Season innings cap and rest.</small></div></div>
+    <div class="preview-line"><strong>01</strong><div><span>Bullpen remainder</span><small>A historical team’s relief pool, without its saves leader.</small></div></div>
     <div class="franchise-preview">
      {#if session.manifest}
       <div class="team-marks">{#each session.manifest.franchises.slice(0, 4) as franchise}<TeamLogo franchiseId={franchise.id} label={franchise.name} size="small" />{/each}</div>
      {/if}
-     <p>30 franchises · 1961–2025 player-seasons<br />Actual 2025 opposition</p>
+     <p>30 franchises · 1950–2025 seasons<br />Actual 2025 opposition</p>
     </div>
+    <AtmosphereImage id="fenway-night" />
    </aside>
   </section>
  {:else if session.draft && session.manifest}
   {#if session.phase === 'ready' || session.phase === 'revealing' || session.phase === 'choosing'}
-   <div class="draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of 13 locked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
+   <div class="draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <div class="draft-layout">
-    <aside><Roster draft={session.draft} profiles={session.profiles} /></aside>
+    <aside><Roster draft={session.draft} profiles={session.profiles} manifest={session.manifest} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} /></aside>
     <section class="draft-main" aria-label="Make your next pick">
-     <Reveal roll={session.draft.currentRoll} manifest={session.manifest} revealing={session.phase === 'revealing'} pickNumber={session.draft.picks.length + 1} />
+     <Reveal roll={session.draft.currentRoll} manifest={session.manifest} revealing={session.phase === 'revealing'} pickNumber={session.draft.picks.length + 1} schemaVersion={session.draft.schemaVersion} />
      {#if session.phase === 'ready'}
       <div class="next-roll"><p class="muted">{session.draft.picks.length ? "Pick locked in. Who's next?" : 'Your roster starts with one roll.'}</p><button id="roll-next" class="primary" disabled={session.busy} onclick={() => void session.roll()}>Roll next franchise <span aria-hidden="true">↗</span></button></div>
      {:else if session.loading || session.phase === 'revealing'}
@@ -90,7 +95,7 @@
    </div>
   {:else if session.phase === 'lineup'}
    <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <Lineup draft={session.draft} profiles={session.profiles} busy={session.busy} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
+   <Lineup draft={session.draft} profiles={session.profiles} manifest={session.manifest} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
   {:else if session.phase === 'simulating'}
    <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <Progress completed={session.completed} revealed={session.revealed} result={session.result} onskip={() => session.skip()} />

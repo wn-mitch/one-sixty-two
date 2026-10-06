@@ -1,11 +1,13 @@
 import {
  compareId,
  CURRENT_REPLAY_SCHEMA_VERSION,
- MODEL_VERSION,
- SLOTS,
+ HITTER_SLOTS,
+ STARTER_SLOTS,
  SUPPORTED_REPLAY_SCHEMA_VERSIONS,
  type Candidate,
  type Draft,
+ type DraftAction,
+ type HitterSlot,
  type Manifest,
  type Pick,
  type Replay,
@@ -13,248 +15,38 @@ import {
  type Roll,
  type Slot
 } from './types.ts';
+import { analyzeDraft, canFinishDraft, isViableForSlot } from './draft-analysis.ts';
 import { randomStream } from './random.ts';
+import { draftRules, type DraftRulePolicy } from './rules.ts';
 
-interface RulePolicy {
- schemaVersion: ReplaySchemaVersion;
- uniqueFranchises: boolean;
+function requireCurrentRules(draft: Draft): DraftRulePolicy {
+ if (draft.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION) throw new Error('Saved draft is incompatible');
+ return draftRules(CURRENT_REPLAY_SCHEMA_VERSION);
 }
 
-const RULE_POLICIES: Record<ReplaySchemaVersion, RulePolicy> = {
- 1: { schemaVersion: 1, uniqueFranchises: false },
- 2: { schemaVersion: 2, uniqueFranchises: true }
-};
-
-function requireCurrentRules(draft: Draft): RulePolicy {
- if (draft.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION) throw new Error('Saved draft is incompatible');
- return RULE_POLICIES[CURRENT_REPLAY_SCHEMA_VERSION];
+function emptyDraft(manifest: Manifest, seed: number, schemaVersion: ReplaySchemaVersion): Draft {
+ const policy = draftRules(schemaVersion);
+ const snapshot = {
+  schemaVersion,
+  dataVersion: manifest.dataVersion,
+  modelVersion: policy.modelVersion,
+  seed,
+  picks: [],
+  currentRoll: null,
+  battingOrder: [],
+  starterOrder: []
+ };
+ return (schemaVersion === 3 ? { ...snapshot, schemaVersion, actions: [] } : snapshot) as Draft;
 }
 
 export function createDraft(manifest: Manifest, seed: number): Draft {
  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Invalid draft seed');
- return { schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, dataVersion: manifest.dataVersion, modelVersion: MODEL_VERSION, seed, picks: [], currentRoll: null, battingOrder: [], starterOrder: [] };
+ return emptyDraft(manifest, seed, CURRENT_REPLAY_SCHEMA_VERSION);
 }
 
 export function openSlots(draft: Draft): Slot[] {
  const occupied = new Set(draft.picks.map(pick => pick.slot));
- return SLOTS.filter(slot => !occupied.has(slot));
-}
-
-function unusedCandidates(draft: Draft, manifest: Manifest, policy: RulePolicy): Candidate[] {
- const candidatesBySeason = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
- const usedPlayers = new Set<string>();
- const usedFranchises = new Set<string>();
- for (const pick of draft.picks) {
-  const candidate = candidatesBySeason.get(pick.seasonId);
-  if (candidate) usedPlayers.add(candidate.playerId);
-  if (policy.uniqueFranchises) usedFranchises.add(pick.franchiseId);
- }
- const slots = new Set(openSlots(draft));
- return manifest.candidates.filter(candidate =>
-  !usedPlayers.has(candidate.playerId) &&
-  !usedFranchises.has(candidate.franchiseId) &&
-  candidate.eligibleSlots.some(slot => slots.has(slot))
- );
-}
-
-/** Hall's condition for the historical player-only rule. */
-function canFinishByPlayer(candidates: Candidate[], slots: Slot[], excludedPlayer?: string): boolean {
- const players = new Map<Slot, Set<string>>(slots.map(slot => [slot, new Set()]));
- for (const candidate of candidates) {
-  if (candidate.playerId === excludedPlayer) continue;
-  for (const slot of candidate.eligibleSlots) players.get(slot)?.add(candidate.playerId);
- }
- const assigned = new Map<string, Slot>();
- const visit = (slot: Slot, seen: Set<string>): boolean => {
-  for (const player of players.get(slot) ?? []) {
-   if (seen.has(player)) continue;
-   seen.add(player);
-   const previous = assigned.get(player);
-   if (!previous || visit(previous, seen)) {
-    assigned.set(player, slot);
-    return true;
-   }
-  }
-  return false;
- };
- return slots.every(slot => visit(slot, new Set()));
-}
-
-function playerPoolIsPlentiful(candidates: Candidate[], slots: Slot[]): boolean {
- const players = new Map(slots.map(slot => [slot, new Set<string>()]));
- for (const candidate of candidates) {
-  for (const slot of candidate.eligibleSlots) {
-   const set = players.get(slot);
-   if (set && set.size < slots.length) set.add(candidate.playerId);
-  }
- }
- return slots.every(slot => players.get(slot)!.size >= slots.length);
-}
-
-/**
- * This is deliberately stronger than separate player and franchise matchings.
- * With n franchises each offering n players for every slot, fewer than n prior
- * choices cannot exhaust either resource, so a greedy joint assignment exists.
- */
-function jointPoolIsPlentiful(candidates: Candidate[], slots: Slot[]): boolean {
- const bySlot = new Map(slots.map(slot => [slot, new Map<string, Set<string>>()]));
- for (const candidate of candidates) {
-  for (const slot of candidate.eligibleSlots) {
-   const franchises = bySlot.get(slot);
-   if (!franchises) continue;
-   let players = franchises.get(candidate.franchiseId);
-   if (!players) {
-    players = new Set();
-    franchises.set(candidate.franchiseId, players);
-   }
-   if (players.size < slots.length) players.add(candidate.playerId);
-  }
- }
- return slots.every(slot => {
-  let deepFranchises = 0;
-  for (const players of bySlot.get(slot)!.values()) {
-   if (players.size >= slots.length && ++deepFranchises >= slots.length) return true;
-  }
-  return false;
- });
-}
-
-interface CandidatePair {
- playerId: string;
- franchiseId: string;
-}
-
-/** Exact joint player/franchise search, reached only after the abundant-pool proof fails. */
-function canFinishJointly(candidates: Candidate[], slots: Slot[]): boolean {
- if (slots.length === 0) return true;
- if (jointPoolIsPlentiful(candidates, slots)) return true;
-
- const pairsBySlot = new Map<Slot, CandidatePair[]>(slots.map(slot => [slot, []]));
- const seenBySlot = new Map<Slot, Map<string, Set<string>>>(slots.map(slot => [slot, new Map()]));
- for (const candidate of candidates) {
-  for (const slot of candidate.eligibleSlots) {
-   const seenByFranchise = seenBySlot.get(slot);
-   if (!seenByFranchise) continue;
-   let players = seenByFranchise.get(candidate.franchiseId);
-   if (!players) {
-    players = new Set();
-    seenByFranchise.set(candidate.franchiseId, players);
-   }
-   if (players.has(candidate.playerId)) continue;
-   players.add(candidate.playerId);
-   pairsBySlot.get(slot)!.push({ playerId: candidate.playerId, franchiseId: candidate.franchiseId });
-  }
- }
- for (const pairs of pairsBySlot.values()) {
-  pairs.sort((a, b) => compareId(a.franchiseId, b.franchiseId) || compareId(a.playerId, b.playerId));
- }
-
- const usedPlayers = new Set<string>();
- const usedFranchises = new Set<string>();
- const failed = new Set<string>();
- const search = (remaining: Slot[]): boolean => {
-  if (remaining.length === 0) return true;
-  const key = JSON.stringify([
-   remaining,
-   [...usedPlayers].sort(compareId),
-   [...usedFranchises].sort(compareId)
-  ]);
-  if (failed.has(key)) return false;
-
-  let chosen = remaining[0];
-  let options = pairsBySlot.get(chosen)!.filter(pair =>
-   !usedPlayers.has(pair.playerId) && !usedFranchises.has(pair.franchiseId)
-  );
-  for (const slot of remaining.slice(1)) {
-   const available = pairsBySlot.get(slot)!.filter(pair =>
-    !usedPlayers.has(pair.playerId) && !usedFranchises.has(pair.franchiseId)
-   );
-   if (available.length < options.length) {
-    chosen = slot;
-    options = available;
-   }
-  }
-  if (options.length === 0) {
-   failed.add(key);
-   return false;
-  }
-  const next = remaining.filter(slot => slot !== chosen);
-  for (const pair of options) {
-   usedPlayers.add(pair.playerId);
-   usedFranchises.add(pair.franchiseId);
-   const possible = next.every(slot => pairsBySlot.get(slot)!.some(option =>
-    !usedPlayers.has(option.playerId) && !usedFranchises.has(option.franchiseId)
-   ));
-   if (possible && search(next)) return true;
-   usedPlayers.delete(pair.playerId);
-   usedFranchises.delete(pair.franchiseId);
-  }
-  failed.add(key);
-  return false;
- };
- return search(slots);
-}
-function canFinishAfterPick(candidates: Candidate[], slots: Slot[], candidate: Candidate, policy: RulePolicy): boolean {
- const remaining = candidates.filter(item =>
-  item.playerId !== candidate.playerId &&
-  (!policy.uniqueFranchises || item.franchiseId !== candidate.franchiseId)
- );
- return policy.uniqueFranchises
-  ? canFinishJointly(remaining, slots)
-  : canFinishByPlayer(remaining, slots);
-}
-
-interface DraftAnalysis {
- policy: RulePolicy;
- slots: Slot[];
- unused: Candidate[];
- plentiful: boolean;
- viability: Map<string, boolean>;
-}
-
-const analysisCache = new WeakMap<Draft, WeakMap<Manifest, DraftAnalysis>>();
-
-function analyzeDraft(draft: Draft, manifest: Manifest): DraftAnalysis {
- let byManifest = analysisCache.get(draft);
- if (!byManifest) {
-  byManifest = new WeakMap();
-  analysisCache.set(draft, byManifest);
- }
- const cached = byManifest.get(manifest);
- if (cached) return cached;
- const policy = RULE_POLICIES[draft.schemaVersion];
- const slots = openSlots(draft);
- const unused = unusedCandidates(draft, manifest, policy);
- const analysis = {
-  policy,
-  slots,
-  unused,
-  plentiful: policy.uniqueFranchises
-   ? jointPoolIsPlentiful(unused, slots)
-   : playerPoolIsPlentiful(unused, slots),
-  viability: new Map<string, boolean>()
- };
- byManifest.set(manifest, analysis);
- return analysis;
-}
-
-function isViableForSlot(analysis: DraftAnalysis, candidate: Candidate, slot: Slot): boolean {
- if (analysis.plentiful) return true;
- const key = JSON.stringify([
-  candidate.playerId,
-  analysis.policy.uniqueFranchises ? candidate.franchiseId : '',
-  slot
- ]);
- const cached = analysis.viability.get(key);
- if (cached !== undefined) return cached;
- const viable = canFinishAfterPick(
-  analysis.unused,
-  analysis.slots.filter(other => other !== slot),
-  candidate,
-  analysis.policy
- );
- analysis.viability.set(key, viable);
- return viable;
+ return draftRules(draft.schemaVersion).slots.filter(slot => !occupied.has(slot));
 }
 
 export function legalSlots(draft: Draft, candidate: Candidate, manifest: Manifest): Slot[] {
@@ -286,61 +78,201 @@ function nextRoll(draft: Draft, manifest: Manifest, random: () => number): Roll 
  return { franchiseId, decade: decades[Math.floor(random() * decades.length)] };
 }
 
-function commitPickWithPolicy(draft: Draft, manifest: Manifest, seasonId: string, slot: Slot): Draft {
+function appendAction(draft: Draft, action: DraftAction): DraftAction[] {
+ if (draft.schemaVersion !== 3) throw new Error('Saved draft is incompatible');
+ return [...draft.actions, action];
+}
+
+function applyRoll(draft: Draft, manifest: Manifest, random: () => number, record: boolean): Draft {
+ const policy = draftRules(draft.schemaVersion);
+ if (draft.currentRoll) throw new Error('A draft roll is already pending');
+ if (draft.picks.length === policy.slots.length) throw new Error('The roster is complete');
+ const result = { ...draft, currentRoll: nextRoll(draft, manifest, random) } as Draft;
+ if (record) return { ...result, actions: appendAction(draft, { type: 'roll' }) } as Draft;
+ return result;
+}
+
+function commitPickWithPolicy(
+ draft: Draft,
+ manifest: Manifest,
+ seasonId: string,
+ slot: Slot,
+ policy: DraftRulePolicy,
+ record: boolean
+): Draft {
  if (!draft.currentRoll) throw new Error('Roll before choosing a player');
  const candidate = manifest.candidates.find(item => item.seasonId === seasonId);
  if (!candidate || candidate.franchiseId !== draft.currentRoll.franchiseId || candidate.decade !== draft.currentRoll.decade) {
   throw new Error('Choose a season from the current roll');
  }
  const year = Number(candidate.seasonId.split(':')[1]);
- if (!Number.isInteger(year) || year < 1961 || year > 2025) throw new Error('Season is outside the supported era');
- if (!SLOTS.includes(slot) || !legalSlots(draft, candidate, manifest).includes(slot)) {
+ if (!Number.isInteger(year) || year < policy.minYear || year > policy.maxYear) {
+  throw new Error('Season is outside the supported era');
+ }
+ if (!policy.slots.includes(slot) || !legalSlots(draft, candidate, manifest).includes(slot)) {
   throw new Error('Player is not eligible for that empty slot');
  }
  const picks: Pick[] = [...draft.picks, { ...draft.currentRoll, seasonId, slot }];
- const result: Draft = { ...draft, picks, currentRoll: null };
- if (picks.length === 13) {
-  result.battingOrder = SLOTS.slice(0, 9).map(position => picks.find(pick => pick.slot === position)!.seasonId);
-  result.starterOrder = SLOTS.slice(9, 12).map(position => picks.find(pick => pick.slot === position)!.seasonId);
+ let result = { ...draft, picks, currentRoll: null } as Draft;
+ if (picks.length === policy.slots.length) {
+  result = {
+   ...result,
+   battingOrder: HITTER_SLOTS.map(position => picks.find(pick => pick.slot === position)!.seasonId),
+   starterOrder: STARTER_SLOTS.map(position => picks.find(pick => pick.slot === position)!.seasonId)
+  } as Draft;
+ }
+ if (record) return { ...result, actions: appendAction(draft, { type: 'pick', seasonId, slot }) } as Draft;
+ return result;
+}
+
+
+function reassignedDraft(
+ draft: Draft,
+ manifest: Manifest,
+ seasonId: string,
+ destination: HitterSlot,
+ record: boolean
+): Draft {
+ requireCurrentRules(draft);
+ const selectedPick = draft.picks.find(pick => pick.seasonId === seasonId);
+ const selectedCandidate = selectedPick && manifest.candidates.find(candidate => candidate.seasonId === selectedPick.seasonId);
+ if (!selectedPick || !selectedCandidate || !HITTER_SLOTS.includes(selectedPick.slot as HitterSlot)) {
+  throw new Error('Choose a drafted position player');
+ }
+ const origin = selectedPick.slot as HitterSlot;
+ if (origin === destination) return draft;
+ if (!HITTER_SLOTS.includes(destination) || !selectedCandidate.eligibleSlots.includes(destination)) {
+  throw new Error('Player does not qualify for that position');
+ }
+ const otherPick = draft.picks.find(pick => pick.slot === destination);
+ if (otherPick) {
+  const otherCandidate = manifest.candidates.find(candidate => candidate.seasonId === otherPick.seasonId);
+  if (!otherCandidate?.eligibleSlots.includes(origin)) {
+   throw new Error('The other player cannot move to the original position');
+  }
+ }
+ const picks = draft.picks.map(pick => {
+  if (pick.seasonId === seasonId) return { ...pick, slot: destination };
+  if (otherPick && pick.seasonId === otherPick.seasonId) return { ...pick, slot: origin };
+  return pick;
+ });
+ const result = { ...draft, picks } as Draft;
+ if (!canFinishDraft(result, manifest)) throw new Error('This move would prevent completing the roster');
+ if (result.currentRoll && availableCandidates(result, manifest, result.currentRoll).length === 0) {
+  throw new Error('This move would leave the current roll without a legal pick');
+ }
+ if (record) {
+  return { ...result, actions: appendAction(draft, { type: 'reassign', seasonId, slot: destination }) } as Draft;
  }
  return result;
 }
 
-function replayPicks(input: Replay, manifest: Manifest): { draft: Draft; random: () => number } {
- if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid draft seed');
- const policy = RULE_POLICIES[input.schemaVersion];
- let draft: Draft = {
-  schemaVersion: policy.schemaVersion,
-  dataVersion: manifest.dataVersion,
-  modelVersion: MODEL_VERSION,
-  seed: input.seed,
-  picks: [],
-  currentRoll: null,
-  battingOrder: [],
-  starterOrder: []
- };
+export interface LegalReassignment {
+ slot: HitterSlot;
+ swapWith: string | null;
+}
+
+export function legalReassignments(draft: Draft, manifest: Manifest, seasonId: string): LegalReassignment[] {
+ requireCurrentRules(draft);
+ const selected = draft.picks.find(pick => pick.seasonId === seasonId);
+ if (!selected || !HITTER_SLOTS.includes(selected.slot as HitterSlot)) return [];
+ const result: LegalReassignment[] = [];
+ for (const slot of HITTER_SLOTS) {
+  if (slot === selected.slot) continue;
+  try {
+   const reassigned = reassignedDraft(draft, manifest, seasonId, slot, false);
+   const occupant = draft.picks.find(pick => pick.slot === slot);
+   if (reassigned !== draft) result.push({ slot, swapWith: occupant?.seasonId ?? null });
+  } catch (error) {
+   if (error instanceof Error && (
+    error.message === 'Player does not qualify for that position' ||
+    error.message === 'The other player cannot move to the original position' ||
+    error.message === 'This move would prevent completing the roster' ||
+    error.message === 'This move would leave the current roll without a legal pick'
+   )) continue;
+   throw error;
+  }
+ }
+ return result;
+}
+
+export function reassignPick(draft: Draft, manifest: Manifest, seasonId: string, destination: HitterSlot): Draft {
+ return reassignedDraft(draft, manifest, seasonId, destination, true);
+}
+
+function validAction(value: unknown): DraftAction {
+ if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid draft action');
+ const action = value as Record<string, unknown>;
+ if (action.type === 'roll') {
+  if (Object.keys(action).length !== 1) throw new Error('Invalid draft action');
+  return { type: 'roll' };
+ }
+ if (action.type === 'pick') {
+  if (Object.keys(action).length !== 3 || typeof action.seasonId !== 'string' ||
+   typeof action.slot !== 'string' || !draftRules(3).slots.includes(action.slot as Slot)) {
+   throw new Error('Invalid draft action');
+  }
+  return { type: 'pick', seasonId: action.seasonId, slot: action.slot as Slot };
+ }
+ if (action.type === 'reassign') {
+  if (Object.keys(action).length !== 3 || typeof action.seasonId !== 'string' ||
+   typeof action.slot !== 'string' || !HITTER_SLOTS.includes(action.slot as HitterSlot)) {
+   throw new Error('Invalid draft action');
+  }
+  return { type: 'reassign', seasonId: action.seasonId, slot: action.slot as HitterSlot };
+ }
+ throw new Error('Invalid draft action');
+}
+
+function replayActions(input: Extract<Replay, { schemaVersion: 3 }>, manifest: Manifest): { draft: Draft; random: () => number } {
+ if (!Array.isArray(input.actions)) throw new Error('Invalid draft actions');
+ let draft = emptyDraft(manifest, input.seed, 3);
+ const random = randomStream(input.seed, 'draft');
+ for (const value of input.actions) {
+  const action = validAction(value);
+  const previous = draft;
+  if (action.type === 'roll') draft = applyRoll(draft, manifest, random, true);
+  else if (action.type === 'pick') {
+   draft = commitPickWithPolicy(draft, manifest, action.seasonId, action.slot, draftRules(3), true);
+  } else {
+   draft = reassignedDraft(draft, manifest, action.seasonId, action.slot, true);
+   if (draft === previous) throw new Error('Invalid draft action');
+  }
+ }
+ return { draft, random };
+}
+
+function replayLegacy(input: Extract<Replay, { schemaVersion: 1 | 2 }>, manifest: Manifest): { draft: Draft; random: () => number } {
+ const policy = draftRules(input.schemaVersion);
+ let draft = emptyDraft(manifest, input.seed, input.schemaVersion);
  const random = randomStream(input.seed, 'draft');
  for (const pick of input.picks) {
   const roll = nextRoll(draft, manifest, random);
   if (roll.franchiseId !== pick.franchiseId || roll.decade !== pick.decade) {
    throw new Error('Draft roll does not match its seed');
   }
-  draft = commitPickWithPolicy({ ...draft, currentRoll: roll }, manifest, pick.seasonId, pick.slot);
+  draft = commitPickWithPolicy({ ...draft, currentRoll: roll } as Draft, manifest, pick.seasonId, pick.slot, policy, false);
  }
  return { draft, random };
 }
 
+function replayChronology(input: Replay, manifest: Manifest): { draft: Draft; random: () => number } {
+ if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid draft seed');
+ return input.schemaVersion === 3 ? replayActions(input, manifest) : replayLegacy(input, manifest);
+}
+
 export function rollDraft(draft: Draft, manifest: Manifest): Draft {
- requireCurrentRules(draft);
+ const policy = requireCurrentRules(draft);
  if (draft.currentRoll) return draft;
- if (draft.picks.length === 13) throw new Error('The roster is complete');
- const { draft: replayed, random } = replayPicks(draft, manifest);
- return { ...draft, currentRoll: nextRoll(replayed, manifest, random) };
+ if (draft.picks.length === policy.slots.length) throw new Error('The roster is complete');
+ const { draft: replayed, random } = replayActions(draft as Extract<Draft, { schemaVersion: 3 }>, manifest);
+ if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
+ return applyRoll(replayed, manifest, random, true);
 }
 
 export function commitPick(draft: Draft, manifest: Manifest, seasonId: string, slot: Slot): Draft {
- requireCurrentRules(draft);
- return commitPickWithPolicy(draft, manifest, seasonId, slot);
+ const policy = requireCurrentRules(draft);
+ return commitPickWithPolicy(draft, manifest, seasonId, slot, policy, true);
 }
 
 function validateOrder(value: unknown, expected: string[]): string[] {
@@ -353,30 +285,47 @@ function validateOrder(value: unknown, expected: string[]): string[] {
  return value;
 }
 
+function sameRoll(left: Roll | null | undefined, right: Roll | null): boolean {
+ if (left == null) return right === null;
+ return right !== null && Object.keys(left).length === 2 &&
+  left.franchiseId === right.franchiseId && left.decade === right.decade;
+}
+
+function samePicks(value: Pick[], expected: Pick[]): boolean {
+ if (value.length !== expected.length) return false;
+ return value.every((pick, index) => {
+  if (!pick || typeof pick !== 'object' || Object.keys(pick).length !== 4) return false;
+  const other = expected[index];
+  return pick.seasonId === other.seasonId && pick.slot === other.slot &&
+   pick.franchiseId === other.franchiseId && pick.decade === other.decade;
+ });
+}
+
 function validateWithRules(value: unknown, manifest: Manifest, allowHistorical: boolean, complete: boolean): Draft {
  if (!value || typeof value !== 'object') throw new Error('Invalid draft');
  const input = value as Draft;
  if (!SUPPORTED_REPLAY_SCHEMA_VERSIONS.includes(input.schemaVersion) ||
-  (!allowHistorical && input.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION) ||
-  input.dataVersion !== manifest.dataVersion ||
-  input.modelVersion !== MODEL_VERSION) {
+  (!allowHistorical && input.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION)) {
+  throw new Error('Saved draft is incompatible');
+ }
+ const policy = draftRules(input.schemaVersion);
+ if (input.dataVersion !== manifest.dataVersion || input.modelVersion !== policy.modelVersion) {
   throw new Error('Saved draft is incompatible');
  }
  if (!Array.isArray(input.picks) ||
-  input.picks.length > SLOTS.length ||
-  complete && input.picks.length !== SLOTS.length ||
+  input.picks.length > policy.slots.length ||
+  complete && input.picks.length !== policy.slots.length ||
   input.picks.some(pick => !pick || typeof pick !== 'object')) {
   throw new Error('Invalid draft picks');
  }
- const { draft, random } = replayPicks(input, manifest);
- if (input.currentRoll != null) {
-  if (draft.picks.length === SLOTS.length) throw new Error('Complete roster cannot have a pending roll');
-  const expected = nextRoll(draft, manifest, random);
-  if (input.currentRoll.franchiseId !== expected.franchiseId || input.currentRoll.decade !== expected.decade) {
-   throw new Error('Invalid saved roll');
-  }
-  draft.currentRoll = expected;
+ if (!allowHistorical && !Object.prototype.hasOwnProperty.call(input, 'currentRoll')) throw new Error('Invalid saved roll');
+ const { draft } = replayChronology(input, manifest);
+ if (!samePicks(input.picks, draft.picks)) throw new Error('Invalid draft snapshot');
+ if (!sameRoll(input.currentRoll, draft.currentRoll)) {
+  if (complete && input.currentRoll) throw new Error('Complete roster cannot have a pending roll');
+  throw new Error('Invalid saved roll');
  }
+ if (complete && draft.currentRoll) throw new Error('Complete roster cannot have a pending roll');
  draft.battingOrder = validateOrder(input.battingOrder, draft.battingOrder);
  draft.starterOrder = validateOrder(input.starterOrder, draft.starterOrder);
  return draft;
@@ -394,5 +343,8 @@ export function validateReplay(value: unknown, manifest: Manifest): Draft {
 
 export function replayInput(draft: Draft): Replay {
  const { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder } = draft;
+ if (schemaVersion === 3) {
+  return { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder, actions: draft.actions };
+ }
  return { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder };
 }

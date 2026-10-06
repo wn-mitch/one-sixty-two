@@ -58,6 +58,7 @@ export function compileProfiles(tables: Tables): CompiledProfiles {
    const park = parkFactor(team, 'BPF', profile);
    profile.battingRates = prepareRates(battingEvents(batter.counts), league.batting, baselines.target, park);
    const missing = batter.group.missing;
+   if (missing.has('SF')) profile.estimatedFields.push('batting.SF.estimated');
    if (missing.has('SB') || missing.has('CS')) {
     profile.estimatedFields.push('baserunning.league');
     const opportunities = batter.counts.H + batter.counts.BB + batter.counts.HBP;

@@ -36,6 +36,10 @@ export function historicalOPS(profile: Profile): number {
  return (obpDenominator ? (b.H + b.BB + b.HBP) / obpDenominator : 0) + (b.AB ? (b.H + b.doubles + 2 * b.triples + 3 * b.HR) / b.AB : 0);
 }
 
+export function isReliefProfile(profile: Profile): boolean {
+ return Boolean(profile.pitching && profile.pitching.G > 0 && profile.pitching.GS / profile.pitching.G <= 0.2);
+}
+
 export function poolBullpen(profiles: Profile[], id: string): Profile {
  if (!profiles.length) throw new Error(`No relief evidence for ${id}`);
  const counts: PitchingCounts = { G: 0, GS: 0, IPouts: 0, H: 0, HR: 0, BB: 0, HBP: 0, SO: 0, BFP: 0, ER: 0, SV: 0 };
@@ -51,8 +55,7 @@ export function poolBullpen(profiles: Profile[], id: string): Profile {
 
 export function buildOpponents(compiled: CompiledProfiles): { opponents: Opponent[]; bullpen: Profile } {
  const contemporary = compiled.profiles.filter(profile => profile.year === 2025);
- const isRelief = (profile: Profile): boolean => Boolean(profile.pitching && profile.pitching.G > 0 && profile.pitching.GS / profile.pitching.G <= 0.2);
- const bullpen = poolBullpen(contemporary.filter(isRelief), 'league:bullpen');
+ const bullpen = poolBullpen(contemporary.filter(isReliefProfile), 'league:bullpen');
  const opponents = compiled.currentTeams.map(team => {
   const players = contemporary.filter(profile => profile.teamId === team.teamID && profile.league === team.lgID);
   const assigned = assignHitters(players);
@@ -60,7 +63,7 @@ export function buildOpponents(compiled: CompiledProfiles): { opponents: Opponen
   const hitters = assigned.map((profile, index) => ({ ...profile, eligibleSlots: [index === 8 ? 'DH' : POSITIONS[index]] as Profile['eligibleSlots'] })).sort((a, b) => historicalOPS(b) - historicalOPS(a) || b.batting!.PA - a.batting!.PA || compareId(a.seasonId, b.seasonId));
   const starters = players.filter(profile => profile.pitching && profile.pitching.GS > 0).sort((a, b) => b.pitching!.GS - a.pitching!.GS || b.pitching!.IPouts - a.pitching!.IPouts || compareId(a.seasonId, b.seasonId)).slice(0, 5);
   if (starters.length !== 5) throw new Error(`Opponent lacks five starters: ${team.franchID}`);
-  const relief = players.filter(isRelief).sort((a, b) => b.pitching!.SV - a.pitching!.SV || b.pitching!.IPouts - a.pitching!.IPouts || compareId(a.seasonId, b.seasonId));
+  const relief = players.filter(isReliefProfile).sort((a, b) => b.pitching!.SV - a.pitching!.SV || b.pitching!.IPouts - a.pitching!.IPouts || compareId(a.seasonId, b.seasonId));
   if (relief.length < 2) throw new Error(`Opponent lacks closer/support relief: ${team.franchID}`);
   const park = team.BPF?.trim() ? Number(team.BPF) : 100;
   if (!Number.isFinite(park) || park <= 0) throw new Error(`Invalid opponent park: ${team.franchID}`);

@@ -13,6 +13,9 @@ import type {
 const YEAR_DATE = /^(\d{4})(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?(?:(?:T| )(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d)?)?$/;
 const FREE_CC_LICENSE = /^CC (?:BY(?:-SA)?|ZERO)(?:[- ]\d+(?:\.\d+)?)?$/i;
 const PUBLIC_DOMAIN_LICENSE = /^(?:public domain|CC0(?: 1\.0)?|PDM|PD(?:[- ].*)?)$/i;
+const MULTI_SUBJECT_TITLE = /\b(?:and|versus|vs\.?)\b|(?:^|[\s_-])&(?:[\s_-]|$)/i;
+const MULTI_SUBJECT_DESCRIPTION = /\((?:left|right|center|centre|middle)\)|\b(?:flanked by|pictured with|poses? with|alongside|shaking hands with|players (?:line|lining) up|group (?:photo|photograph)|team (?:photo|photograph))\b/i;
+const MEMORABILIA_SUBJECT = /\b(?:baseball|trading|sports)\s+card\b|\b(?:autograph(?:ed)?|memorabilia|plaque|statue|bobblehead|figurine|magazine cover|program cover|bowman gum|topps|fleer|donruss|upper deck|panini)\b/i;
 
 export function compareText(left: string, right: string): number {
 	return left < right ? -1 : left > right ? 1 : 0;
@@ -25,6 +28,7 @@ export function emptyExclusions(): ExclusionCounts {
 		missingCareer: 0,
 		missingWikidata: 0,
 		ambiguousIdentity: 0,
+		ambiguousSubject: 0,
 		missingCaptureYear: 0,
 		outsideCareer: 0,
 		unsupportedLicense: 0,
@@ -92,7 +96,9 @@ export function buildCandidateIdentities(
 	pitching: CsvRow[],
 	excluded: ExclusionCounts
 ): CandidateIdentity[] {
-	const candidateIds = new Set(manifest.candidates.map((candidate) => candidate.playerId));
+	const candidateIds = new Set(manifest.candidates
+		.filter((candidate) => !candidate.eligibleSlots?.includes('BP'))
+		.map((candidate) => candidate.playerId));
 	const peopleById = new Map(people.map((row) => [row.playerID, row]));
 	const career = new Map<string, { firstYear: number; lastYear: number }>();
 	const careerRows = [batting, pitching];
@@ -204,12 +210,31 @@ export function validateReusableAsset(
 	return { license, licenseUrl: normalizeLicenseUrl(license, metadata.licenseUrl), credit };
 }
 
+function validatePlayerSubject(metadata: CommonsMetadata, excluded: ExclusionCounts): boolean {
+	if (!/^image\/(?:jpeg|png|tiff|webp|gif)$/i.test(metadata.mime)) {
+		excluded.invalidMetadata++;
+		return false;
+	}
+	const title = metadata.title.replace(/\.[^.]+$/, '');
+	const description = metadata.description ? stripMarkup(metadata.description) : '';
+	if (
+		MULTI_SUBJECT_TITLE.test(title) ||
+		MULTI_SUBJECT_DESCRIPTION.test(description) ||
+		MEMORABILIA_SUBJECT.test(`${title}\n${description}\n${metadata.credit ?? ''}`)
+	) {
+		excluded.ambiguousSubject++;
+		return false;
+	}
+	return true;
+}
+
 export function validatePlayerPhoto(
 	metadata: CommonsMetadata,
 	firstYear: number,
 	lastYear: number,
 	excluded: ExclusionCounts
 ): { year: number; license: string; licenseUrl: string; credit: string } | null {
+	if (!validatePlayerSubject(metadata, excluded)) return null;
 	const year = parseCaptureYear(metadata.dateOriginal);
 	if (year === null) {
 		excluded.missingCaptureYear++;
@@ -221,6 +246,36 @@ export function validatePlayerPhoto(
 	}
 	const asset = validateReusableAsset(metadata, excluded);
 	return asset ? { year, ...asset } : null;
+}
+
+export function validateCuratedPlayerPhoto(
+	metadata: CommonsMetadata,
+	captureYear: number,
+	firstYear: number,
+	lastYear: number,
+	excluded: ExclusionCounts
+): { year: number; license: string; licenseUrl: string; credit: string } | null {
+	if (!validatePlayerSubject(metadata, excluded)) return null;
+	if (!Number.isInteger(captureYear) || captureYear < 1800 || captureYear > 2100) {
+		excluded.invalidMetadata++;
+		return null;
+	}
+	const metadataDate = metadata.dateOriginal?.trim() ?? '';
+	const metadataYear = parseCaptureYear(metadata.dateOriginal);
+	if (metadataDate && metadataYear === null) {
+		excluded.missingCaptureYear++;
+		return null;
+	}
+	if (metadataYear !== null && metadataYear !== captureYear) {
+		excluded.invalidMetadata++;
+		return null;
+	}
+	if (captureYear < firstYear || captureYear > lastYear) {
+		excluded.outsideCareer++;
+		return null;
+	}
+	const asset = validateReusableAsset(metadata, excluded);
+	return asset ? { year: captureYear, ...asset } : null;
 }
 
 export function validateTeamSources(

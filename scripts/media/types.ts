@@ -1,4 +1,4 @@
-import type { MediaAsset, PlayerMedia, TeamMedia } from '../../src/lib/media/types.ts';
+import type { AtmospherePhoto, MediaAsset, PlayerMedia, TeamMedia } from '../../src/lib/media/types.ts';
 
 export interface DataPointer {
 	schemaVersion: 1;
@@ -8,7 +8,7 @@ export interface DataPointer {
 
 export interface DataManifest {
 	dataVersion: string;
-	candidates: Array<{ playerId: string; seasonId?: string }>;
+	candidates: Array<{ playerId: string; seasonId?: string; eligibleSlots?: string[] }>;
 	franchises: Array<{ id: string; name: string }>;
 }
 
@@ -20,6 +20,27 @@ export interface TeamSourceEntry {
 }
 
 export type TeamSourceRegistry = Record<string, TeamSourceEntry>;
+
+export interface AtmosphereSourceEntry {
+	id: string;
+	title: string;
+	caption: string;
+	franchiseId: string;
+	year: number;
+}
+
+export type AtmosphereSourceRegistry = AtmosphereSourceEntry[];
+
+export interface PlayerSourceEntry {
+	title: string;
+	captureYear: number;
+	captureEvidenceUrl: string;
+	identityEvidenceUrl: string;
+}
+
+export type PlayerSourceRegistry = Record<string, PlayerSourceEntry[]>;
+
+export type ReviewedPlayerPhotos = Record<string, string[]>;
 
 export interface CandidateIdentity {
 	playerId: string;
@@ -66,6 +87,7 @@ export interface CommonsMetadata {
 	mime: string;
 	downloadUrl: string;
 	sourceUrl: string;
+	description?: string | null;
 	dateOriginal: string | null;
 	license: string | null;
 	licenseUrl: string | null;
@@ -79,12 +101,14 @@ export interface PreparedAsset extends MediaAsset {
 export interface MediaPayload {
 	teams: Record<string, TeamMedia>;
 	players: Record<string, PlayerMedia>;
+	atmosphere: Record<string, AtmospherePhoto>;
 	diagnostics: {
 		playersSearched: number;
 		playersWithPhotos: number;
 		photos: number;
 		logos: number;
 		historicalLogos: number;
+		atmospherePhotos: number;
 		excluded: number;
 	};
 }
@@ -95,6 +119,7 @@ export interface ExclusionCounts {
 	missingCareer: number;
 	missingWikidata: number;
 	ambiguousIdentity: number;
+	ambiguousSubject: number;
 	missingCaptureYear: number;
 	outsideCareer: number;
 	unsupportedLicense: number;

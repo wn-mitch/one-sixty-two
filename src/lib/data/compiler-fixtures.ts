@@ -6,7 +6,7 @@ export const syntheticAttribution: Attribution = { title: 'Synthetic test data',
 export function syntheticTables(): Tables {
  const tables: Tables = { Teams: [], TeamsFranchises: [], People: [], Batting: [], Pitching: [], Appearances: [], Fielding: [], FieldingOFsplit: [] };
  for (let index = 0; index < 30; index++) tables.TeamsFranchises.push({ franchID: `F${index}`, franchName: 'Old unused label' });
- const years = [1961, 1970, 1980, 1990, 2000, 2010, 2025];
+ const years = [1950, 1960, 1961, 1970, 1980, 1990, 2000, 2010, 2025];
  for (const year of years) {
   const teamCount = year === 2025 ? 30 : 2;
   for (let index = 0; index < teamCount; index++) {
@@ -17,12 +17,12 @@ export function syntheticTables(): Tables {
     const row = { ...key, playerID };
     tables.People.push({ ID: String(tables.People.length), playerID, nameFirst: 'Player', nameLast: String(tables.People.length), bats: 'R', throws: 'R' });
     if (player < 9) {
-     tables.Batting.push({ ...row, stint: '1', AB: '280', H: '80', '2B': '15', '3B': '3', HR: '10', BB: '30', HBP: '3', SO: '50', SH: '1', SF: '3', SB: '5', CS: '2', GIDP: '5' });
+     tables.Batting.push({ ...row, stint: '1', AB: '280', H: '80', '2B': '15', '3B': '3', HR: '10', BB: '30', HBP: '3', SO: '50', SH: '1', SF: year < 1954 ? '' : '3', SB: '5', CS: '2', GIDP: '5' });
      tables.Appearances.push({ ...row, ...(player < 8 ? { [`G_${POSITIONS[player].toLowerCase()}`]: '100' } : {}) });
      if (player < 8) {
       const field = { ...row, stint: '1', POS: POSITIONS[player], PO: '100', A: '40', E: '2', InnOuts: '900', SB: player === 0 ? '20' : '', CS: player === 0 ? '10' : '' };
-      if (player >= 5) tables.FieldingOFsplit.push(field);
-      else tables.Fielding.push(field);
+      if (player >= 5 && year >= 1954) tables.FieldingOFsplit.push(field);
+      else tables.Fielding.push(player >= 5 ? { ...field, POS: 'OF' } : field);
      }
     } else {
      const starter = player < 14;

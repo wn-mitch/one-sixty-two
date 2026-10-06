@@ -1,21 +1,24 @@
 <script lang="ts">
- import type { Manifest, Roll } from '../game/types.ts';
+ import type { Manifest, ReplaySchemaVersion, Roll } from '../game/types.ts';
+ import { draftRules } from '../game/rules.ts';
  import TeamLogo from './TeamLogo.svelte';
- let { roll, manifest, revealing, pickNumber }: {
-  roll: Roll | null; manifest: Manifest; revealing: boolean; pickNumber: number;
+ import AtmosphereImage from './AtmosphereImage.svelte';
+ let { roll, manifest, revealing, pickNumber, schemaVersion }: {
+  roll: Roll | null; manifest: Manifest; revealing: boolean; pickNumber: number; schemaVersion: ReplaySchemaVersion;
  } = $props();
  const franchise = $derived(manifest.franchises.find(item => item.id === roll?.franchiseId));
  const coverage = $derived(manifest.coverage.find(item => item.decade === roll?.decade));
+ const policy = $derived(draftRules(schemaVersion));
 </script>
 
 <section class="reveal" class:revealing aria-label="Current draft roll" aria-busy={revealing} aria-live="polite" aria-atomic="true">
  {#if roll}<div class="team-mark"><TeamLogo franchiseId={roll.franchiseId} label={franchise?.name ?? roll.franchiseId} size="large" /></div>{/if}
  <div class="reveal-copy">
-  <p class="eyebrow">Pick {pickNumber} of 13</p>
+  <p class="eyebrow">Pick {pickNumber} of {policy.slots.length}</p>
   {#if roll}
    <div class="roll-copy">
     <h2>{franchise?.name ?? roll.franchiseId}</h2>
-    <p class="era">{coverage ? `${coverage.firstYear}–${coverage.lastYear}` : `${Math.max(1961, roll.decade)}–${Math.min(2025, roll.decade + 9)}`}</p>
+    <p class="era">{Math.max(policy.minYear, coverage?.firstYear ?? roll.decade)}–{Math.min(policy.maxYear, coverage?.lastYear ?? roll.decade + 9)}</p>
    </div>
    <p class="muted">{revealing ? 'Revealing your player pool…' : 'Choose one exact season from this franchise.'}</p>
   {:else}
@@ -31,6 +34,7 @@
   </svg>
  {/if}
 </section>
+{#if roll}<AtmosphereImage franchiseId={roll.franchiseId} compact />{/if}
 
 <style>
  .reveal { display: flex; align-items: center; gap: var(--space-6); padding: var(--space-6) 0; border-block: 1px solid var(--border); }

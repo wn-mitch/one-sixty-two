@@ -17,20 +17,24 @@
  });
 </script>
 <svelte:window onkeydown={event => { if (event.key === 'Escape' && !busy) onClose(); }} />
-<section {id} class="assignment-dock" aria-label={`Draft ${profile.year} ${profile.displayName}`} bind:clientHeight={height}>
+<section {id} class="assignment-dock" aria-label={`Draft ${profile.year} ${profile.displayName}`} bind:clientHeight={height} tabindex="-1">
  <div class="assignment-inner">
   <div class="selected-identity">
    <p class="selected-name" title={`${profile.year} ${profile.displayName}`}><strong>{profile.year}</strong> {profile.displayName}</p>
-   <p class="permanent muted">Choose a slot. Picks are permanent.</p>
+   <p class="permanent muted">The season stays with your roster. Its fielding assignment can change.</p>
   </div>
   <button type="button" class="quiet clear" disabled={busy} onclick={onClose}>Clear selection</button>
   <fieldset disabled={busy} class="slot-choice">
-   <legend>Assign to a legal empty slot</legend>
-   <div class="slot-options">
-    {#each slots as slot}
-     <label class:chosen={chosenSlot === slot}><input type="radio" name="{uid}-assignment" value={slot} checked={chosenSlot === slot} onchange={() => chosenSlot = slot} /><span>{slot}</span></label>
-    {/each}
-   </div>
+   <legend>Available now</legend>
+   {#if slots.length}
+    <div class="slot-options">
+     {#each slots as slot}
+      <label class:chosen={chosenSlot === slot}><input type="radio" name="{uid}-assignment" value={slot} checked={chosenSlot === slot} onchange={() => chosenSlot = slot} /><span>{slot}</span></label>
+     {/each}
+    </div>
+   {:else}
+    <p class="reassign-guidance" role="status">Reassign your roster to make room.</p>
+   {/if}
   </fieldset>
   <button type="button" class="primary commit" disabled={busy || !chosenSlot || !slots.includes(chosenSlot)} onclick={onDraft}>Draft player{chosenSlot ? ` at ${chosenSlot}` : ''}</button>
  </div>
@@ -40,11 +44,12 @@
  .assignment-dock { position: fixed; inset-inline: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--border); padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right)) calc(var(--space-3) + env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); }
  .assignment-inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3); max-width: 80rem; margin-inline: auto; }
  .selected-identity { min-width: 0; align-self: center; }
- .selected-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; font-size: var(--text-sm); }
+ .selected-name { overflow-wrap: anywhere; margin: 0; font-size: var(--text-sm); }
  .permanent { margin: var(--space-1) 0 0; font-size: var(--text-xs); }
  .clear { font-size: var(--text-xs); padding-inline: var(--space-2); }
  fieldset { grid-column: 1 / -1; border: 0; padding: 0; margin: 0; min-width: 0; }
  legend { font-size: var(--text-xs); color: var(--muted); margin-bottom: var(--space-2); }
+ .reassign-guidance { margin: 0; min-height: 2.75rem; display: flex; align-items: center; font-size: var(--text-sm); font-weight: 650; }
  .slot-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
  .slot-options label { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 2.75rem; min-width: 2.75rem; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; font-size: var(--text-sm); }
  .slot-options label:hover { background: var(--surface-hover); }

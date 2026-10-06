@@ -2,7 +2,7 @@
  "ANA":{"name":"Los Angeles Angels","color":"#BA0021","current":{"title":"Los Angeles Angels Cap Insignia.svg"},"historical":[{"title":"California Angels logo (1972-1988).svg","firstYear":1972,"lastYear":1988}]},
  "ARI":{"name":"Arizona Diamondbacks","color":"#30CED8","current":{"title":"Arizona Diamondbacks logo teal.svg"},"historical":[]},
  "ATL":{"name":"Atlanta Braves","color":"#CE1141","current":{"title":"Atlanta Braves Insignia.svg"},"historical":[]},
- "BAL":{"name":"Baltimore Orioles","color":"#DF4601","current":null,"historical":[]},
+ "BAL":{"name":"Baltimore Orioles","color":"#DF4601","current":null,"historical":[{"title":"Baltimore Orioles wordmark 1995 to 2008.png","firstYear":1995,"lastYear":2008}]},
  "BOS":{"name":"Boston Red Sox","color":"#BD3039","current":{"title":"Boston Red Sox cap logo.svg"},"historical":[]},
  "CHC":{"name":"Chicago Cubs","color":"#0E3386","current":{"title":"Chicago Cubs logo.svg"},"historical":[]},
  "CHW":{"name":"Chicago White Sox","color":"#C4CED4","current":{"title":"Chicago White Sox Insignia.svg"},"historical":[]},

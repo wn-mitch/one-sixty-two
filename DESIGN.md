@@ -14,7 +14,7 @@ Restrained global palette with purposeful franchise-colour identity panels. Defi
 
 ## Typography and Composition
 
-System sans for labels, body, and stats; tabular numerals. Compact scoreboard-style result hierarchy. Team marks lead the franchise reveal. Player photos accompany season comparison rows. The completed roster reads as a collected lineup, with clear positional and batting/starting order. No nested decorative card shells.
+System sans for labels, body, controls, and tabular stats. Compact scoreboard-style result hierarchy. Original exact-season baseball cards use cool print stock and eight decade-specific framing/name treatments, derived from the selected season rather than photograph year. A serif name is limited to the 1950s treatment. Team marks remain labelled historical or current-franchise identity. Fronts prioritize exact year, identity, qualifications, photo year, and comparison stats; backs disclose full historical facts, model limitations, source and licence. No copied manufacturer layouts, rarity tiers, fabricated faces, fake aging, metallic effects, or decorative thick side stripes.
 
 ## Imagery
 
@@ -22,7 +22,7 @@ Use free reusable sources first, retaining per-file source, credit, licence, and
 
 ## Interaction and Responsive Behaviour
 
-Keep all existing draft rules, permanent picks, search and filtering, lineup controls, local resume, worker computation, all 162 game details, sharing, and retry states. Phone layout prioritizes the next pick and compact expandable roster; desktop retains the roster rail. Selecting a season must never insert a full-height panel between the season list and the action that completes the pick: chosen year, legal slot radios, and the Draft button stay together in a persistent dock while the season list stays scrollable behind it. Tables scroll only inside labelled regions. Respect reduced motion and keyboard phase focus.
+Keep permanent exact-season picks, qualification-aware search and filtering, lineup controls, local resume, worker computation, all 162 game details, sharing, and retries. Fielding/DH assignment changes use inline labelled Move/Swap controls with reciprocal qualifications and completion checks; pitching uses rotation order. Phone layout prioritizes the next pick and compact expandable roster; desktop retains the roster rail. Candidate cards use a one-column phone grid, at least 17rem per wider-grid column and at most 24rem per card. Details/Front changes the semantic face immediately, retaining disclosure focus and exact-year selection. Chosen year, legal slot radios, and Draft remain together in the persistent dock. Start/Roll/Simulate and result records stay ahead of atmosphere photography. Season highlight and lowlight cards follow sharing, remain concise on phones, and label neutral league-rate win expectancy separately from factual play and final-score copy. Tables scroll only inside labelled regions. Respect reduced motion and keyboard phase focus.
 
 ## Verification
 

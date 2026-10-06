@@ -36,12 +36,20 @@ export function seasonEstimates(profile: Pick<Profile, 'estimatedFields'>, legal
     const fact = match && pitchingFacts[match[1]];
     notes.add(fact ? `The source has missing ${fact}. The displayed count retains only available records (zero when none are present), not a verified complete season total.` : unknownNote);
    }
+  } else if (field === 'batting.SF.estimated') {
+   if (batting) notes.add('Sacrifice flies are not fully recorded for this source season. Batting counts retain available records (zero when absent), and plate appearances use only recorded components. Displayed OBP and OPS use that incomplete sacrifice-fly denominator, not a reconstructed historical total.');
   } else if (field === 'bats.neutral') {
    if (batting) notes.add('Batting handedness is unknown, so the model applies no batter platoon adjustment.');
   } else if (field === 'throws.neutral') {
+   if (pitching && profile.estimatedFields.includes('pooledRelief.BFPWeighted')) {
+    notes.add('The pooled bullpen uses neutral throwing handedness, so the model applies no pitcher platoon adjustment.');
+    continue;
+   }
    if (pitching) notes.add('Throwing handedness is unknown, so the model applies no pitcher platoon adjustment.');
   } else if (field === 'BPF.neutral' || field === 'PPF.neutral') {
    if (field === 'BPF.neutral' ? batting : pitching) notes.add(`The historical ${field === 'BPF.neutral' ? 'batting' : 'pitching'} park factor is missing, so era adjustment treats this park as neutral.`);
+  } else if (field === 'pooledRelief.BFPWeighted') {
+   if (pitching) notes.add('This team-season remainder pools relief-dominant pitcher-seasons after excluding the saves leader. Normalized pitching rates are weighted by batters faced. These are not reconstructed relief-only innings; support workload is unlimited.');
   } else if (field === 'baserunning.league') {
    if (batting) notes.add("Missing stolen-base or caught-stealing counts use that season and league's steal-attempt and success rates.");
   } else if (field === 'doublePlay.league') {

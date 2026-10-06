@@ -3,15 +3,17 @@ import {
  availableCandidates,
  commitPick,
  createDraft,
+ legalReassignments,
  legalSlots,
+ reassignPick,
  replayInput,
  rollDraft,
  validateDraft,
  validateReplay
 } from './draft.ts';
-import { decodeReplay } from './share.ts';
+import { decodeReplay, encodeReplay } from './share.ts';
 import { persistDraft, restoreDraft, STORAGE_KEY } from './persistence.ts';
-import { MODEL_VERSION, SLOTS, type Candidate, type Draft, type Manifest, type Replay, type Slot } from './types.ts';
+import { HITTER_SLOTS, LEGACY_SLOTS, STARTER_SLOTS, SLOTS, type Candidate, type Draft, type Manifest, type Replay, type Slot } from './types.ts';
 import { randomStream } from './random.ts';
 
 function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Manifest {
@@ -99,20 +101,18 @@ function scarcePool(openCandidates: Candidate[], open: Slot[]): Manifest {
 }
 
 describe('permanent deterministic drafting', () => {
- it('finishes every seeded draft with thirteen distinct athletes and franchises', () => {
-  for (let seed = 0; seed < 32; seed++) {
-   const initial = createDraft(manifest, seed);
-   expect(initial.schemaVersion).toBe(2);
-   expect(legalSlots(initial, candidates[0], manifest)).toEqual(['C']);
-   const draft = finish(seed);
-   const selected = draft.picks.map(pick => manifest.candidates.find(item => item.seasonId === pick.seasonId)!);
-   expect(new Set(selected.map(candidate => candidate.playerId)).size).toBe(SLOTS.length);
-   expect(new Set(selected.map(candidate => candidate.franchiseId)).size).toBe(SLOTS.length);
-   expect(draft.picks.map(pick => pick.slot).sort()).toEqual([...SLOTS].sort());
-   expect(draft.battingOrder).toHaveLength(9);
-   expect(draft.starterOrder).toHaveLength(3);
-   expect(validateDraft(draft, manifest, true)).toEqual(draft);
-  }
+ it.each(Array.from({ length: 32 }, (_, seed) => seed))('finishes seed %i with fourteen distinct identities and franchises', seed => {
+  const initial = createDraft(manifest, seed);
+  expect(initial.schemaVersion).toBe(3);
+  expect(legalSlots(initial, candidates[0], manifest)).toEqual(['C']);
+  const draft = finish(seed);
+  const selected = draft.picks.map(pick => manifest.candidates.find(item => item.seasonId === pick.seasonId)!);
+  expect(new Set(selected.map(candidate => candidate.playerId)).size).toBe(SLOTS.length);
+  expect(new Set(selected.map(candidate => candidate.franchiseId)).size).toBe(SLOTS.length);
+  expect(draft.picks.map(pick => pick.slot).sort()).toEqual([...SLOTS].sort());
+  expect(draft.battingOrder).toHaveLength(9);
+  expect(draft.starterOrder).toHaveLength(3);
+  expect(validateDraft(draft, manifest, true)).toEqual(draft);
  });
 
  it('removes every decade of a used franchise and every incarnation of a used athlete', () => {
@@ -178,6 +178,10 @@ describe('permanent deterministic drafting', () => {
   expect(persistDraft(storage, draft, 'draft')).toBeNull();
   expect(restoreDraft(storage, manifest)).toEqual({ kind: 'valid', draft, phase: 'draft' });
   expect(rollDraft(draft, manifest)).toBe(draft);
+  expect(() => validateDraft({
+   ...draft,
+   currentRoll: { ...draft.currentRoll!, decade: draft.currentRoll!.decade + 10 }
+  }, manifest)).toThrow('saved roll');
   const candidate = availableCandidates(draft, manifest)[0];
   const next = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
   expect(() => commitPick(next, manifest, candidate.seasonId, candidate.eligibleSlots[0])).toThrow('Roll before');
@@ -186,22 +190,18 @@ describe('permanent deterministic drafting', () => {
  });
 
  it('preserves a closing-pitcher-only final roll', () => {
-  let finalDraft: Draft | undefined;
-  for (let seed = 0; seed < 256 && !finalDraft; seed++) {
-   let draft = createDraft(manifest, seed);
-   while (draft.picks.length < 12) {
-    draft = rollDraft(draft, manifest);
-    const candidate = availableCandidates(draft, manifest)[0];
-    draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
-   }
-   if (draft.picks.every(pick => pick.slot !== 'CL')) finalDraft = draft;
+  let finalDraft = createDraft(manifest, 25);
+  while (finalDraft.picks.length < SLOTS.length - 1) {
+   finalDraft = rollDraft(finalDraft, manifest);
+   const candidate = availableCandidates(finalDraft, manifest)[0];
+   finalDraft = commitPick(finalDraft, manifest, candidate.seasonId, legalSlots(finalDraft, candidate, manifest)[0]);
   }
-  expect(finalDraft).toBeDefined();
-  const rolled = rollDraft(finalDraft!, manifest);
+  expect(finalDraft.picks.every(pick => pick.slot !== 'CL')).toBe(true);
+  const rolled = rollDraft(finalDraft, manifest);
   const remaining = availableCandidates(rolled, manifest);
   expect(remaining).toHaveLength(1);
   expect(legalSlots(rolled, remaining[0], manifest)).toEqual(['CL']);
-  expect(validateDraft(commitPick(rolled, manifest, remaining[0].seasonId, 'CL'), manifest, true).picks).toHaveLength(13);
+  expect(validateDraft(commitPick(rolled, manifest, remaining[0].seasonId, 'CL'), manifest, true).picks).toHaveLength(SLOTS.length);
  });
 
  it('rejects duplicate-franchise forgeries in saves and current replays', () => {
@@ -222,13 +222,23 @@ describe('permanent deterministic drafting', () => {
   expect(() => validateDraft({ ...draft, battingOrder: Array(9).fill(draft.battingOrder[0]) }, manifest, true)).toThrow('lineup');
   const oldCandidates = candidates.map(candidate => ({
    ...candidate,
-   seasonId: candidate.seasonId.replace(/:(?:19|20)\d{2}:/, ':1952:'),
+   seasonId: candidate.seasonId.replace(/:(?:19|20)\d{2}:/, ':1949:'),
    decade: 1950
   }));
   const old = makeManifest(oldCandidates, 'old');
-  const rolled = rollDraft(createDraft(old, 0), old);
-  const candidate = availableCandidates(rolled, old)[0];
-  expect(() => commitPick(rolled, old, candidate.seasonId, legalSlots(rolled, candidate, old)[0])).toThrow('supported era');
+  const candidate = oldCandidates[0];
+  const rolled = {
+   ...createDraft(old, 0),
+   currentRoll: { franchiseId: candidate.franchiseId, decade: candidate.decade }
+  };
+  expect(() => commitPick(rolled, old, candidate.seasonId, 'C')).toThrow('supported era');
+  const boundaryCandidates = candidates.map(candidate => ({
+   ...candidate,
+   seasonId: candidate.seasonId.replace(/:(?:19|20)\d{2}:/, ':1950:'),
+   decade: 1950
+  }));
+  const boundary = makeManifest(boundaryCandidates, 'boundary');
+  expect(finish(0, boundary).picks).toHaveLength(SLOTS.length);
  });
 
  it('validates current replay inputs and isolates random streams', () => {
@@ -244,8 +254,214 @@ describe('permanent deterministic drafting', () => {
   expect(() => validateReplay({ ...replayInput(draft), dataVersion: 'new' }, manifest)).toThrow('incompatible');
  });
 
+ it('moves a drafted hitter while preserving a pending roll and replays the exact selected season', () => {
+  const flexible = makeManifest(candidates.map(candidate => {
+   if (candidate.eligibleSlots.includes('RF') || candidate.eligibleSlots.includes('DH')) {
+    return { ...candidate, eligibleSlots: ['RF', 'DH'] as Slot[] };
+   }
+   return { ...candidate, eligibleSlots: [...candidate.eligibleSlots] };
+  }), 'flexible-v1');
+  let pending: Draft | undefined;
+  for (let seed = 0; seed < 256 && !pending; seed++) {
+   let draft = createDraft(flexible, seed);
+   while (draft.picks.length < SLOTS.length) {
+    draft = rollDraft(draft, flexible);
+    const options = availableCandidates(draft, flexible);
+    const rfPick = draft.picks.find(pick => pick.slot === 'RF');
+    const dhCandidate = options.find(candidate => candidate.eligibleSlots.includes('DH') && candidate.seasonId !== rfPick?.seasonId);
+    if (rfPick && dhCandidate && draft.picks.length < SLOTS.length - 1 && draft.picks.every(pick => pick.slot !== 'DH')) {
+     pending = draft;
+     break;
+    }
+    const candidate = options[0];
+    const slot = legalSlots(draft, candidate, flexible).find(value => value !== 'DH') ??
+     legalSlots(draft, candidate, flexible)[0];
+    draft = commitPick(draft, flexible, candidate.seasonId, slot);
+   }
+  }
+  expect(pending).toBeDefined();
+  const original = pending!.picks.find(pick => pick.slot === 'RF')!;
+  const roll = pending!.currentRoll;
+  const pickCount = pending!.picks.length;
+  const moved = reassignPick(pending!, flexible, original.seasonId, 'DH');
+  if (moved.schemaVersion !== 3) throw new Error('Expected current draft');
+  expect(moved.currentRoll).toEqual(roll);
+  expect(moved.seed).toBe(pending!.seed);
+  expect(moved.picks).toHaveLength(pickCount);
+  expect(moved.actions.at(-1)).toEqual({ type: 'reassign', seasonId: original.seasonId, slot: 'DH' });
+  const target = availableCandidates(moved, flexible)[0];
+  expect(legalSlots(moved, target, flexible)).toContain('RF');
+  let completed = commitPick(moved, flexible, target.seasonId, 'RF');
+  completed = reassignPick(completed, flexible, original.seasonId, 'RF');
+  while (completed.picks.length < SLOTS.length) {
+   completed = rollDraft(completed, flexible);
+   const candidate = availableCandidates(completed, flexible)[0];
+   completed = commitPick(completed, flexible, candidate.seasonId, legalSlots(completed, candidate, flexible)[0]);
+  }
+  expect(decodeReplay(encodeReplay(completed), flexible)).toEqual(completed);
+ });
+
+ it('swaps reciprocal hitter assignments without changing chronology or lineup order', () => {
+  const flexible = makeManifest(candidates.map(candidate => {
+   if (candidate.eligibleSlots.includes('C') || candidate.eligibleSlots.includes('1B')) {
+    return { ...candidate, eligibleSlots: ['C', '1B'] as Slot[] };
+   }
+   return { ...candidate, eligibleSlots: [...candidate.eligibleSlots] };
+  }), 'swap-v1');
+  const draft = finish(162, flexible);
+  const catcher = draft.picks.find(pick => pick.slot === 'C')!;
+  const firstBaseman = draft.picks.find(pick => pick.slot === '1B')!;
+  const battingOrder = [...draft.battingOrder];
+  const starterOrder = [...draft.starterOrder];
+  expect(legalReassignments(draft, flexible, catcher.seasonId)).toContainEqual({
+   slot: '1B',
+   swapWith: firstBaseman.seasonId
+  });
+  const swapped = reassignPick(draft, flexible, catcher.seasonId, '1B');
+  expect(swapped.picks.map(pick => pick.seasonId)).toEqual(draft.picks.map(pick => pick.seasonId));
+  expect(swapped.picks.find(pick => pick.seasonId === catcher.seasonId)?.slot).toBe('1B');
+  expect(swapped.picks.find(pick => pick.seasonId === firstBaseman.seasonId)?.slot).toBe('C');
+  expect(swapped.battingOrder).toEqual(battingOrder);
+  expect(swapped.starterOrder).toEqual(starterOrder);
+  expect(validateReplay(replayInput(swapped), flexible)).toEqual(swapped);
+  expect(reassignPick(swapped, flexible, catcher.seasonId, '1B')).toBe(swapped);
+ });
+
+ it('rejects incompatible swaps, non-hitters, and moves that strand completion', () => {
+  const selected: Candidate = {
+   seasonId: 'selected:1982:AL:A',
+   playerId: 'selected',
+   franchiseId: 'A',
+   decade: 1980,
+   eligibleSlots: ['C', '1B']
+  };
+  const remaining: Candidate = {
+   seasonId: 'remaining:1982:AL:B',
+   playerId: 'remaining',
+   franchiseId: 'B',
+   decade: 1980,
+   eligibleSlots: ['1B']
+  };
+  const fillers = SLOTS.filter(slot => slot !== 'C' && slot !== '1B').map((slot, index) => ({
+   seasonId: `fixed${index}:1982:AL:T${index}`,
+   playerId: `fixed${index}`,
+   franchiseId: `F${index}`,
+   decade: 1980,
+   eligibleSlots: [slot]
+  } satisfies Candidate));
+  const source = makeManifest([selected, remaining, ...fillers], 'stranding-v1');
+  const picked = [selected, ...fillers].map(candidate => ({
+   seasonId: candidate.seasonId,
+   slot: candidate === selected ? 'C' as const : candidate.eligibleSlots[0],
+   franchiseId: candidate.franchiseId,
+   decade: candidate.decade
+  }));
+  const draft = { ...createDraft(source, 1), picks: picked };
+  expect(() => reassignPick(draft, source, selected.seasonId, '1B')).toThrow('prevent completing');
+
+  const reciprocal = makeManifest([selected, remaining, ...fillers], 'incompatible-swap-v1');
+  const starter = fillers.find(candidate => candidate.eligibleSlots.includes('SP1'))!;
+  const occupied = {
+   ...createDraft(reciprocal, 1),
+   picks: [
+    { seasonId: selected.seasonId, slot: 'C' as const, franchiseId: 'A', decade: 1980 },
+    { seasonId: remaining.seasonId, slot: '1B' as const, franchiseId: 'B', decade: 1980 },
+    { seasonId: starter.seasonId, slot: 'SP1' as const, franchiseId: starter.franchiseId, decade: starter.decade }
+   ]
+  };
+  expect(() => reassignPick(occupied, reciprocal, selected.seasonId, '1B')).toThrow('other player');
+  expect(() => reassignPick(occupied, reciprocal, selected.seasonId, 'DH')).toThrow('does not qualify');
+  expect(() => reassignPick(occupied, reciprocal, starter.seasonId, 'DH')).toThrow('Choose a drafted position player');
+  expect(() => reassignPick(occupied, reciprocal, 'not-drafted', 'DH')).toThrow('Choose a drafted position player');
+ });
+
+ it('rejects a reassignment that leaves its exact pending roll without a legal pick', () => {
+  const selected: Candidate = {
+   seasonId: 'selected:1982:AL:A',
+   playerId: 'selected',
+   franchiseId: 'A',
+   decade: 1980,
+   eligibleSlots: ['C', '1B']
+  };
+  const pendingCandidate: Candidate = {
+   seasonId: 'pending:1982:AL:P',
+   playerId: 'pending',
+   franchiseId: 'P',
+   decade: 1980,
+   eligibleSlots: ['1B']
+  };
+  const rescue: Candidate = {
+   seasonId: 'rescue:1982:AL:Q',
+   playerId: 'rescue',
+   franchiseId: 'Q',
+   decade: 1980,
+   eligibleSlots: ['C']
+  };
+  const fillers = SLOTS.filter(slot => slot !== 'C' && slot !== '1B').map((slot, index) => ({
+   seasonId: `pending-fixed${index}:1982:AL:T${index}`,
+   playerId: `pending-fixed${index}`,
+   franchiseId: `PF${index}`,
+   decade: 1980,
+   eligibleSlots: [slot]
+  } satisfies Candidate));
+  const source = makeManifest([selected, pendingCandidate, rescue, ...fillers], 'pending-stranding-v1');
+  const draft = {
+   ...createDraft(source, 1),
+   picks: [selected, ...fillers].map(candidate => ({
+    seasonId: candidate.seasonId,
+    slot: candidate === selected ? 'C' as const : candidate.eligibleSlots[0],
+    franchiseId: candidate.franchiseId,
+    decade: candidate.decade
+   })),
+   currentRoll: { franchiseId: 'P', decade: 1980 }
+  };
+  expect(() => reassignPick(draft, source, selected.seasonId, '1B')).toThrow('current roll');
+ });
+
+ it('reserves a scarce bullpen franchise when evaluating individual picks', () => {
+  const open = [
+   { seasonId: 'hitter-a:1982:AL:A', playerId: 'hitter-a', franchiseId: 'A', decade: 1980, eligibleSlots: ['C'] },
+   { seasonId: 'hitter-b:1982:AL:B', playerId: 'hitter-b', franchiseId: 'B', decade: 1980, eligibleSlots: ['C'] },
+   { seasonId: 'bullpen:1982:AL:A', playerId: 'bullpen:A', franchiseId: 'A', decade: 1980, eligibleSlots: ['BP'] }
+  ] satisfies Candidate[];
+  const pool = scarcePool(open, ['C', 'BP']);
+  const draft = draftWithOnlySlotsOpen(pool, ['C', 'BP']);
+  expect(legalSlots(draft, open[0], pool)).toEqual([]);
+  expect(legalSlots(draft, open[1], pool)).toEqual(['C']);
+ });
+
+ it('rejects forged snapshots and malformed or reordered action histories', () => {
+  const flexible = makeManifest(candidates.map(candidate => {
+   if (candidate.eligibleSlots.includes('C') || candidate.eligibleSlots.includes('1B')) {
+    return { ...candidate, eligibleSlots: ['C', '1B'] as Slot[] };
+   }
+   return { ...candidate, eligibleSlots: [...candidate.eligibleSlots] };
+  }), 'forgery-v1');
+  const complete = finish(162, flexible);
+  const catcher = complete.picks.find(pick => pick.slot === 'C')!;
+  const moved = reassignPick(complete, flexible, catcher.seasonId, '1B');
+  if (moved.schemaVersion !== 3) throw new Error('Expected current replay');
+  const input = replayInput(moved);
+  if (input.schemaVersion !== 3) throw new Error('Expected current replay');
+  const forgedPick = {
+   ...input,
+   picks: input.picks.map((pick, index) => index === 0 ? { ...pick, slot: 'DH' as const } : pick)
+  };
+  expect(() => validateReplay(forgedPick, flexible)).toThrow('snapshot');
+  expect(() => validateReplay({ ...input, actions: input.actions.slice(0, -1) }, flexible)).toThrow('snapshot');
+  expect(() => validateReplay({ ...input, actions: [...input.actions, input.actions.at(-1)!] }, flexible)).toThrow('Invalid draft action');
+  expect(() => validateReplay({ ...input, actions: [input.actions.at(-1)!, ...input.actions.slice(0, -1)] }, flexible)).toThrow();
+  expect(() => validateReplay({ ...input, actions: [input.actions[1], input.actions[0], ...input.actions.slice(2)] }, flexible)).toThrow();
+  expect(() => validateReplay({ ...input, actions: [input.actions[0], input.actions[0], ...input.actions.slice(1)] }, flexible)).toThrow();
+  expect(() => validateReplay({
+   ...input,
+   actions: [...input.actions.slice(0, -1), { type: 'reassign', seasonId: 'undrafted:1982:AL:X', slot: 'C' }]
+  }, flexible)).toThrow('Choose a drafted position player');
+  expect(() => validateReplay({ ...input, actions: [...input.actions, { type: 'unknown' }] }, flexible)).toThrow('Invalid draft action');
+ });
+
  it('verifies a completed schema-one replay under its immutable player-only rules', () => {
-  const legacyCandidates = SLOTS.map((slot, index) => ({
+  const legacyCandidates = LEGACY_SLOTS.map((slot, index) => ({
    seasonId: `legacy${index}:1982:AL:A`,
    playerId: `legacy${index}`,
    franchiseId: 'A',
@@ -256,11 +472,11 @@ describe('permanent deterministic drafting', () => {
   const legacy: Replay = {
    schemaVersion: 1,
    dataVersion: legacyManifest.dataVersion,
-   modelVersion: MODEL_VERSION,
+   modelVersion: 'pa-v1',
    seed: 162,
    picks: legacyCandidates.map((candidate, index) => ({
     seasonId: candidate.seasonId,
-    slot: SLOTS[index],
+    slot: LEGACY_SLOTS[index],
     franchiseId: 'A',
     decade: 1980
    })),
@@ -280,6 +496,50 @@ describe('permanent deterministic drafting', () => {
   expect(() => validateDraft(legacy, legacyManifest, true)).toThrow('incompatible');
   expect(() => rollDraft(restored, legacyManifest)).toThrow('incompatible');
   expect(() => commitPick({ ...restored, currentRoll: { franchiseId: 'A', decade: 1980 } }, legacyManifest, legacy.picks[0].seasonId, 'C')).toThrow('incompatible');
+ });
+
+ it('verifies schema-two chronology with its original era, slots, and unique-franchise policy', () => {
+  const legacyCandidates = LEGACY_SLOTS.map((slot, index) => ({
+   seasonId: `schema2-${index}:1982:AL:T${index}`,
+   playerId: `schema2-${index}`,
+   franchiseId: `F${index}`,
+   decade: 1980,
+   eligibleSlots: [slot]
+  } satisfies Candidate));
+  const ignored = [
+   { seasonId: 'early:1959:AL:E', playerId: 'early', franchiseId: 'E', decade: 1950, eligibleSlots: ['C'] },
+   { seasonId: 'bullpen:1982:AL:BP', playerId: 'bullpen:BP', franchiseId: 'BP', decade: 1980, eligibleSlots: ['BP'] }
+  ] satisfies Candidate[];
+  const source = makeManifest([...legacyCandidates, ...ignored], 'legacy-v2');
+  const random = randomStream(162, 'draft');
+  const remaining = [...legacyCandidates];
+  const picks: Replay['picks'] = [];
+  while (remaining.length) {
+   const franchises = remaining.map(candidate => candidate.franchiseId).sort();
+   const franchiseId = franchises[Math.floor(random() * franchises.length)];
+   random();
+   const index = remaining.findIndex(candidate => candidate.franchiseId === franchiseId);
+   const [candidate] = remaining.splice(index, 1);
+   picks.push({
+    seasonId: candidate.seasonId,
+    slot: candidate.eligibleSlots[0],
+    franchiseId,
+    decade: 1980
+   });
+  }
+  const replay: Replay = {
+   schemaVersion: 2,
+   dataVersion: source.dataVersion,
+   modelVersion: 'pa-v1',
+   seed: 162,
+   picks,
+   battingOrder: HITTER_SLOTS.map(slot => legacyCandidates.find(candidate => candidate.eligibleSlots.includes(slot))!.seasonId),
+   starterOrder: STARTER_SLOTS.map(slot => legacyCandidates.find(candidate => candidate.eligibleSlots.includes(slot))!.seasonId)
+  };
+  const restored = validateReplay(replay, source);
+  expect(restored.picks).toHaveLength(LEGACY_SLOTS.length);
+  expect(new Set(restored.picks.map(pick => pick.franchiseId)).size).toBe(LEGACY_SLOTS.length);
+  expect(restored.picks.some(pick => pick.seasonId === ignored[0].seasonId || pick.seasonId === ignored[1].seasonId)).toBe(false);
  });
 
  it('does not overwrite incompatible saves and allows blocked-storage play', () => {

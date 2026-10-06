@@ -30,11 +30,42 @@ describe('candidate role ranking', () => {
   expect(groups[0].entries.map(item => item.profile.seasonId)).toEqual(['best', 'first']);
   expect(warValue(entry('first', ['DH']), 'Pitchers', data)).toBeNull();
  });
- it('separates two-way batting and pitching ranks without leaking closed roles', () => {
-  const data = rankings({ both: { battingWAR162: 2, pitchingWAR162: 9 }, other: { battingWAR162: 5, pitchingWAR162: 3 } });
-  const groups = rankGroups([entry('both', ['DH', 'SP1']), entry('other', ['DH', 'SP1'])], 'war', data);
-  expect(groups.map(group => `${group.kind}:${group.playerId}`)).toEqual(['Hitters:other', 'Hitters:both', 'Pitchers:both', 'Pitchers:other']);
-  expect(rankGroups([entry('both', ['SP1'])], 'war', data).map(group => group.kind)).toEqual(['Pitchers']);
+ it('keeps two-way and pitching-only seasons in one athlete group while following the active role', () => {
+  const data = rankings({ both: { battingWAR162: 2, pitchingWAR162: 9 }, pitching: { battingWAR162: null, pitchingWAR162: 11 }, other: { battingWAR162: 5, pitchingWAR162: 3 } });
+  const all = rankGroups([entry('both', ['DH', 'SP1'], 'same'), entry('pitching', ['SP1'], 'same'), entry('other', ['DH', 'SP1'])], 'war', data);
+  expect(all.map(group => `${group.kind}:${group.playerId}`)).toEqual(['Hitters:other', 'Hitters:same']);
+  expect(all[1].entries.map(item => item.profile.seasonId)).toEqual(['both', 'pitching']);
+  const pitchers = rankGroups([entry('both', ['SP1'], 'same'), entry('pitching', ['SP1'], 'same'), entry('other', ['SP1'])], 'war', data);
+  expect(pitchers.map(group => `${group.kind}:${group.playerId}`)).toEqual(['Pitchers:same', 'Pitchers:other']);
+  expect(pitchers[0].entries.map(item => item.profile.seasonId)).toEqual(['pitching', 'both']);
+ });
+ it('deduplicates exact seasons within the player identity group', () => {
+  const duplicate = entry('same-season', ['DH'], 'same-player');
+  const groups = rankGroups([duplicate, duplicate, entry('other-season', ['DH'], 'same-player')], 'metrics', null);
+  expect(groups).toHaveLength(1);
+  expect(groups[0].key).toBe('same-player');
+  expect(groups[0].entries.map(item => item.profile.seasonId)).toEqual(['other-season', 'same-season']);
+ });
+ it('puts bullpen units in their own section ordered by ERA, workload, then season ID without WAR', () => {
+  const lowEra = entry('low-era', ['BP'], 'bullpen:A');
+  lowEra.profile.pitching!.ER = 20;
+  const moreOuts = entry('more-outs', ['BP'], 'bullpen:B');
+  const fewerOuts = entry('fewer-outs', ['BP'], 'bullpen:C');
+  fewerOuts.profile.pitching!.IPouts = 200;
+  fewerOuts.profile.pitching!.ER = 20;
+  const data = rankings({
+   'low-era': { battingWAR162: 99, pitchingWAR162: 99 },
+   'more-outs': { battingWAR162: null, pitchingWAR162: 50 },
+   'fewer-outs': { battingWAR162: null, pitchingWAR162: 60 }
+  });
+  const groups = rankGroups([fewerOuts, moreOuts, lowEra], 'war', data);
+  expect(groups.map(group => `${group.kind}:${group.playerId}`)).toEqual([
+   'Bullpens:bullpen:A',
+   'Bullpens:bullpen:B',
+   'Bullpens:bullpen:C'
+  ]);
+  expect(warValue(lowEra, 'Bullpens', data)).toBeNull();
+  expect(compareEntries(entry('a', ['BP']), entry('z', ['BP']), 'Bullpens', 'war', data)).toBeLessThan(0);
  });
  it('uses stable identity order without rankings, never an implicit OPS fallback', () => {
   const a = entry('a'), z = entry('z');
