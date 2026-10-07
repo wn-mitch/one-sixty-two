@@ -2,16 +2,34 @@
  import { onMount } from 'svelte';
  import { draftRules } from '../game/rules.ts';
  import type { Draft, HitterSlot, Manifest, Profile } from '../game/types.ts';
- import PlayerCard from './PlayerCard.svelte';
+ import { loadMedia } from '../media/client.ts';
+ import type { MediaManifest } from '../media/types.ts';
+ import type { WarRankings } from '../rankings/types.ts';
+ import RosterItem from './RosterItem.svelte';
  import RosterAssignment from './RosterAssignment.svelte';
- let { draft, manifest, profiles, busy, onReassign }: {
+ let {
+  draft,
+  manifest,
+  profiles,
+  busy,
+  rankings = null,
+  rankingLoading = false,
+  rankingError = false,
+  onReassign
+ }: {
   draft: Draft;
   manifest: Manifest;
   profiles: Profile[];
   busy: boolean;
+  rankings?: WarRankings | null;
+  rankingLoading?: boolean;
+  rankingError?: boolean;
   onReassign: (seasonId: string, destination: HitterSlot) => void;
  } = $props();
  let expanded = $state(false);
+ let summary = $state<HTMLElement>();
+ let media = $state.raw<MediaManifest | null>(null);
+ let mediaStatus = $state<'loading' | 'ready' | 'unavailable'>('loading');
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
  const bySlot = $derived(new Map(draft.picks.map(pick => [pick.slot, pick])));
  const slots = $derived(draftRules(draft.schemaVersion).slots);
@@ -22,15 +40,28 @@
  onMount(() => {
   const desktop = window.matchMedia('(min-width: 64rem)');
   const adapt = () => { expanded = desktop.matches; };
+  let disposed = false;
+  void loadMedia()
+   .then(value => {
+    if (disposed) return;
+    media = value;
+    mediaStatus = 'ready';
+   })
+   .catch(() => {
+    if (!disposed) mediaStatus = 'unavailable';
+   });
   adapt();
   desktop.addEventListener('change', adapt);
-  return () => desktop.removeEventListener('change', adapt);
+  return () => {
+   disposed = true;
+   desktop.removeEventListener('change', adapt);
+  };
  });
 </script>
 
 <aside class="roster" aria-label="Your drafted roster">
  <details bind:open={expanded}>
-  <summary><span>Your roster</span> <span class="count">{draft.picks.length} / {slots.length} picked</span></summary>
+  <summary bind:this={summary}><span>Your roster</span> <span class="count">{draft.picks.length} / {slots.length} picked</span></summary>
   <div class="pick-track" aria-hidden="true">{#each slots as slot}<span class:locked={bySlot.has(slot)}></span>{/each}</div>
   {#if expanded}
   <div class="roster-content">
@@ -49,7 +80,7 @@
          <span class="slot">{slot}</span>
          {#if pick}
           {#if profile}
-           <div class="collected-identity"><PlayerCard {profile} assignedSlot={pick.slot} compact /></div>
+           <div class="collected-identity"><RosterItem {profile} assignedSlot={pick.slot} {manifest} {rankings} {rankingLoading} {rankingError} {media} {mediaStatus} inspectionReturnFocus={summary} /></div>
           {:else}
            <span class="name">Loading selected season…</span>
           {/if}

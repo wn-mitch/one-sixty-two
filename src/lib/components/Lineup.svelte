@@ -1,26 +1,24 @@
 <script lang="ts">
- import { onMount } from 'svelte';
  import type { Draft, HitterSlot, Manifest, Profile } from '../game/types.ts';
  import { draftRules } from '../game/rules.ts';
  import PlayerCard from './PlayerCard.svelte';
- import { loadRankings } from '../rankings/client.ts';
+ import { rankingForSeason } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import { isHitter, warValue } from './candidate-ranking.ts';
  import RosterAssignment from './RosterAssignment.svelte';
- let { draft, manifest, profiles, busy, onReassign, onOrder, onsimulate }: {
-  draft: Draft; manifest: Manifest; profiles: Profile[]; busy: boolean;
+ let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onsimulate }: {
+  draft: Draft;
+  manifest: Manifest;
+  profiles: Profile[];
+  rankings: WarRankings | null;
+  rankingLoading: boolean;
+  rankingError: boolean;
+  busy: boolean;
   onReassign: (seasonId: string, destination: HitterSlot) => void;
   onOrder: (kind: 'batting' | 'starter', order: string[]) => void;
   onsimulate: () => void;
  } = $props();
  let announcement = $state('');
- let rankings = $state.raw<WarRankings | null>(null);
- onMount(() => {
-  let active = true;
-  void loadRankings(draft.dataVersion).then(value => { if (active) rankings = value; })
-   .catch(() => { if (active) rankings = null; });
-  return () => { active = false; };
- });
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
  const bySeasonPick = $derived(new Map(draft.picks.map(pick => [pick.seasonId, pick])));
  const closerPick = $derived(draft.picks.find(pick => pick.slot === 'CL'));
@@ -59,7 +57,7 @@
    <div class="closer">
     <h3>Closer</h3>
     {#if closer}
-     <PlayerCard profile={closer} assignedSlot="CL" war={warValue({ profile: closer, slots: ['CL'] }, 'Pitchers', rankings)} />
+     <PlayerCard profile={closer} assignedSlot="CL" war={warValue({ profile: closer, slots: ['CL'] }, 'Pitchers', rankings)} ranking={rankingForSeason(rankings, closer.seasonId)} {rankings} {manifest} {rankingLoading} {rankingError} />
     {:else}
      <p class="muted">Loading selected closer…</p>
     {/if}
@@ -67,7 +65,7 @@
    </div>
    <div class="support">
     <h3>{draft.schemaVersion === 3 ? 'Drafted bullpen remainder' : 'Support bullpen'}</h3>
-    {#if bullpen}<PlayerCard profile={bullpen} assignedSlot="BP" />{/if}
+    {#if bullpen}<PlayerCard profile={bullpen} assignedSlot="BP" war={warValue({ profile: bullpen, slots: ['BP'] }, 'Bullpens', rankings)} ranking={rankingForSeason(rankings, bullpen.seasonId)} {rankings} {manifest} {rankingLoading} {rankingError} />{/if}
     <p class="workload muted">{draft.schemaVersion === 3 ? 'Pooled relief-dominant pitcher-seasons, excluding this team-season’s saves leader, handle the remaining innings with unlimited support workload. Composition stays fixed independently of your closer.' : 'League-average 2025 relief handles the innings your starters and closer do not.'} This is a pitching abstraction, not a full 26-player roster.</p>
    </div>
   </section>
@@ -94,7 +92,7 @@
     </div>
     </div>
     {#if profile && pick}
-     <PlayerCard {profile} assignedSlot={pick.slot} war={warValue({ profile, slots: [pick.slot] }, isHitter(pick.slot) ? 'Hitters' : 'Pitchers', rankings)} />
+     <PlayerCard {profile} assignedSlot={pick.slot} war={warValue({ profile, slots: [pick.slot] }, isHitter(pick.slot) ? 'Hitters' : 'Pitchers', rankings)} ranking={rankingForSeason(rankings, profile.seasonId)} {rankings} {manifest} {rankingLoading} {rankingError} />
     {/if}
     {#if kind === 'batting'}
      <div class="assignment-control">

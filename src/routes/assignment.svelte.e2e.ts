@@ -134,8 +134,12 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await seasonSelector.selectOption(scenario.target.seasonId);
 	const card = season.locator(`.player-card[data-season-id="${scenario.target.seasonId}"]`);
 	await expect(card).toBeVisible();
-	await card.getByRole('button', { name: 'Details', exact: true }).click();
-	await expect(card.getByRole('button', { name: 'Front', exact: true })).toBeVisible();
+	await card.getByRole('button', { name: 'Inspect card', exact: true }).click();
+	const dialog = page.locator('dialog.card-inspection[open]');
+	await expect(dialog).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Turn over', exact: true })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(dialog).toHaveCount(0);
 
 	const choose = card.locator(`[data-choose-season="${scenario.target.seasonId}"]`);
 	await expect(choose).toHaveAccessibleName(`Choose ${profile.year}`);
@@ -168,7 +172,7 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await occupant.locator('[data-assignment-action]').click();
 
 	await expect(card.getByRole('button', { name: `Clear selection`, exact: true })).toHaveAttribute('aria-pressed', 'true');
-	await expect(card.getByRole('button', { name: 'Front', exact: true })).toBeVisible();
+	await expect(card.locator('[data-card][data-face="front"]').first()).toBeVisible();
 	await expect(dock.locator(`input[value="${scenario.targetSlot}"]`)).toBeVisible();
 	let saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
 	expect(saved.currentRoll).toEqual(pendingRoll);
@@ -179,7 +183,7 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await occupant.locator('[data-assignment-select]').selectOption(scenario.targetSlot);
 	await occupant.locator('[data-assignment-action]').click();
 	await expect(dock.locator('input:checked')).toHaveCount(0);
-	await expect(card.getByRole('button', { name: 'Front', exact: true })).toBeVisible();
+	await expect(card.locator('[data-card][data-face="front"]').first()).toBeVisible();
 	await occupant.locator('[data-assignment-select]').selectOption(scenario.move.slot);
 	await occupant.locator('[data-assignment-action]').click();
 	await dock.locator(`input[value="${scenario.targetSlot}"]`).check();
@@ -212,8 +216,11 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await restoredSelector.selectOption(scenario.target.seasonId);
 	const restoredCard = season.locator(`.player-card[data-season-id="${scenario.target.seasonId}"]`);
 	await expect(restoredCard).toBeVisible();
-	await restoredCard.getByRole('button', { name: 'Details', exact: true }).click();
-	await restoredCard.getByRole('button', { name: 'Front', exact: true }).click();
+	await restoredCard.getByRole('button', { name: 'Inspect card', exact: true }).click();
+	const restoredDialog = page.locator('dialog.card-inspection[open]');
+	await expect(restoredDialog).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(restoredDialog).toHaveCount(0);
 	await restoredCard.getByRole('button', { name: `Choose ${profile.year}`, exact: true }).click();
 	await page.locator(`.assignment-dock input[value="${scenario.targetSlot}"]`).check();
 	await page.getByRole('button', { name: `Draft player at ${scenario.targetSlot}`, exact: true }).click();

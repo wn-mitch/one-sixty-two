@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import type { Draft, Profile } from '#lib/game/types.ts';
+	import type { Draft, Manifest, Profile } from '#lib/game/types.ts';
 	import { draftRules } from '#lib/game/rules.ts';
 	import { innings } from '#lib/game/format.ts';
 	import type { PitcherLine, SeasonResult } from '#lib/sim/types.ts';
@@ -9,7 +8,7 @@
 	import PlayerCard from './PlayerCard.svelte';
 	import AtmosphereImage from './AtmosphereImage.svelte';
 	import SeasonMoments from './SeasonMoments.svelte';
-	import { loadRankings } from '#lib/rankings/client.ts';
+	import { rankingForSeason } from '#lib/rankings/client.ts';
 	import type { WarRankings } from '#lib/rankings/types.ts';
 	import { isHitter, warValue } from './candidate-ranking.ts';
 
@@ -17,23 +16,20 @@
 		result: SeasonResult;
 		draft: Draft;
 		profiles: Profile[];
+		manifest: Manifest;
+		rankings: WarRankings | null;
+		rankingLoading: boolean;
+		rankingError: boolean;
 		onNew: () => void;
 		onShare: () => void;
 		shareLink: string;
 		shareStatus: string;
 	}
 
-	let { result, draft, profiles, onNew, onShare, shareLink, shareStatus }: Props = $props();
+	let { result, draft, profiles, manifest, rankings, rankingLoading, rankingError, onNew, onShare, shareLink, shareStatus }: Props = $props();
 
 	let profileById = $derived(new Map(profiles.map((profile) => [profile.seasonId, profile])));
 	let rosterOpen = $state(false);
-	let rankings = $state.raw<WarRankings | null>(null);
-	onMount(() => {
-		let active = true;
-		void loadRankings(draft.dataVersion).then(value => { if (active) rankings = value; })
-			.catch(() => { if (active) rankings = null; });
-		return () => { active = false; };
-	});
 
 	function pitcherName(line: PitcherLine): string {
 		return line.displayName;
@@ -166,7 +162,7 @@
 				{@const profile = profileById.get(pick.seasonId)}
 				<li>
 					{#if profile}
-						<PlayerCard {profile} assignedSlot={pick.slot} war={warValue({ profile, slots: [pick.slot] }, isHitter(pick.slot) ? 'Hitters' : 'Pitchers', rankings)} />
+						<PlayerCard {profile} assignedSlot={pick.slot} war={warValue({ profile, slots: [pick.slot] }, pick.slot === 'BP' ? 'Bullpens' : isHitter(pick.slot) ? 'Hitters' : 'Pitchers', rankings)} ranking={rankingForSeason(rankings, profile.seasonId)} {rankings} {manifest} {rankingLoading} {rankingError} />
 					{:else}
 						<p>Unavailable profile · {pick.slot} · {pick.seasonId}</p>
 					{/if}

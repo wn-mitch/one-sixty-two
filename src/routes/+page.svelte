@@ -11,8 +11,33 @@
  import AtmosphereImage from '#lib/components/AtmosphereImage.svelte';
  import { draftRules } from '#lib/game/rules.ts';
  import { SLOTS } from '#lib/game/types.ts';
+ import { loadRankings } from '#lib/rankings/client.ts';
+ import type { WarRankings } from '#lib/rankings/types.ts';
  const session = new Session();
+ let rankings = $state.raw<WarRankings | null>(null);
+ let rankingLoading = $state(false);
+ let rankingError = $state(false);
+ let rankingAttempt = $state(0);
+ const rankingVersion = $derived(session.draft?.dataVersion ?? session.manifest?.dataVersion ?? null);
+ function retryRankings() {
+  rankingAttempt++;
+ }
  onMount(() => { void session.initialize(); return () => session.dispose(); });
+ $effect(() => {
+  const version = rankingVersion;
+  rankingAttempt;
+  let disposed = false;
+  rankings = null;
+  rankingLoading = !!version;
+  rankingError = false;
+  if (version) {
+   void loadRankings(version)
+    .then(value => { if (!disposed) rankings = value; })
+    .catch(() => { if (!disposed) rankingError = true; })
+    .finally(() => { if (!disposed) rankingLoading = false; });
+  }
+  return () => { disposed = true; };
+ });
  $effect(() => {
   const phase = session.phase;
   const choosing = phase === 'choosing' && !session.loading;
@@ -81,7 +106,7 @@
   {#if session.phase === 'ready' || session.phase === 'revealing' || session.phase === 'choosing'}
    <div class="draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <div class="draft-layout">
-    <aside><Roster draft={session.draft} profiles={session.profiles} manifest={session.manifest} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} /></aside>
+    <aside><Roster draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} /></aside>
     <section class="draft-main" aria-label="Make your next pick">
      <Reveal roll={session.draft.currentRoll} manifest={session.manifest} revealing={session.phase === 'revealing'} pickNumber={session.draft.picks.length + 1} schemaVersion={session.draft.schemaVersion} />
      {#if session.phase === 'ready'}
@@ -89,18 +114,18 @@
      {:else if session.loading || session.phase === 'revealing'}
       <div class="stack" role="status" aria-label="Loading available player seasons"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><span class="muted">Finding eligible seasons…</span></div>
      {:else if session.pool.length > 0}
-      <CandidateList profiles={session.pool} draft={session.draft} manifest={session.manifest} busy={session.busy} onDraft={(id, slot) => session.commit(id, slot)} />
+      <CandidateList profiles={session.pool} draft={session.draft} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} busy={session.busy} onDraft={(id, slot) => session.commit(id, slot)} />
      {/if}
     </section>
    </div>
   {:else if session.phase === 'lineup'}
    <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <Lineup draft={session.draft} profiles={session.profiles} manifest={session.manifest} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
+   <Lineup draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
   {:else if session.phase === 'simulating'}
    <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <Progress completed={session.completed} revealed={session.revealed} result={session.result} onskip={() => session.skip()} />
   {:else if session.phase === 'results' && session.result}
-   <Results result={session.result} draft={session.draft} profiles={session.profiles} onNew={() => session.requestNew()} onShare={() => void session.share()} shareLink={session.shareLink} shareStatus={session.shareStatus} />
+   <Results result={session.result} draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => session.requestNew()} onShare={() => void session.share()} shareLink={session.shareLink} shareStatus={session.shareStatus} />
   {/if}
  {/if}
 </main>

@@ -42,5 +42,8 @@
 	},
 	"imports": {
 		"#lib/*": "./src/lib/*"
+	},
+	"dependencies": {
+		"animejs": "4.2.2"
 	}
 }

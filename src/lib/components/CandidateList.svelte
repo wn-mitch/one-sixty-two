@@ -3,17 +3,35 @@
  import { availableCandidates, legalSlots } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
  import type { Draft, Manifest, Profile, Slot } from '../game/types.ts';
- import { loadRankings } from '../rankings/client.ts';
+ import { rankingForSeason } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import { isHitter, rankGroups, warValue } from './candidate-ranking.ts';
  import type { CandidateEntry, CandidateGroup, RankingKind, RankingSort } from './candidate-ranking.ts';
+ import { candidateGridMotion, createCandidateGridMotion } from '../cards/grid-motion.ts';
  import DraftAssignment from './DraftAssignment.svelte';
  import PlayerCard from './PlayerCard.svelte';
- let { profiles, draft, manifest, busy, onDraft }: {
-  profiles: Profile[]; draft: Draft; manifest: Manifest; busy: boolean;
+ let { profiles, draft, manifest, rankings, rankingLoading, rankingError, onRetryRankings, busy, onDraft }: {
+  profiles: Profile[];
+  draft: Draft;
+  manifest: Manifest;
+  rankings: WarRankings | null;
+  rankingLoading: boolean;
+  rankingError: boolean;
+  onRetryRankings: () => void;
+  busy: boolean;
   onDraft: (seasonId: string, slot: Slot) => void;
  } = $props();
+ interface CandidateMotionState {
+  draftKey: string;
+  page: number;
+  query: string;
+  filter: Slot | 'All';
+  sort: RankingSort;
+  rankings: WarRankings | null;
+ }
  const uid = $props.id();
+ const gridMotion = createCandidateGridMotion();
+ let candidateMotionState: CandidateMotionState | null = null;
  let query = $state('');
  let filter = $state<Slot | 'All'>('All');
  let page = $state(0);
@@ -23,10 +41,7 @@
  let selectedSeasons = $state(new Map<string, string>());
  let browseRevision = $state(0);
  let sort = $state<RankingSort>('war');
- let rankings = $state.raw<WarRankings | null>(null);
- let rankingLoading = $state(true);
- let rankingError = $state(false);
- let rankingAttempt = $state(0);
+ let results = $state<HTMLElement>();
  const manifestBySeason = $derived(new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])));
  const usedPlayerIds = $derived(new Set(draft.picks.map(pick => manifestBySeason.get(pick.seasonId)?.playerId).filter((id): id is string => !!id)));
  const usedFranchises = $derived(new Set(draft.picks.map(pick => pick.franchiseId)));
@@ -126,19 +141,35 @@
  }
  $effect(() => { draftBrowseKey; untrack(resetDraftBrowse); });
  $effect(() => { if (chosenSlot && !assignmentSlots.includes(chosenSlot)) chosenSlot = null; });
- $effect(() => {
-  const version = manifest.dataVersion;
-  rankingAttempt;
-  let disposed = false;
-  rankings = null; rankingLoading = true; rankingError = false;
-  void loadRankings(version).then(value => { if (!disposed) rankings = value; })
-   .catch(() => { if (!disposed) rankingError = true; })
-   .finally(() => { if (!disposed) rankingLoading = false; });
-  return () => { disposed = true; };
+ $effect.pre(() => {
+  const next: CandidateMotionState = {
+   draftKey: draftBrowseKey,
+   page: currentPage,
+   query,
+   filter: activeFilter,
+   sort,
+   rankings
+  };
+  const previous = candidateMotionState;
+  candidateMotionState = next;
+  if (!previous) {
+   gridMotion.skip();
+   return;
+  }
+  const reordered = next.query !== previous.query ||
+   next.filter !== previous.filter ||
+   next.sort !== previous.sort ||
+   next.rankings !== previous.rankings;
+  if (next.draftKey !== previous.draftKey || !reordered) {
+   if (next.draftKey !== previous.draftKey || next.page !== previous.page) gridMotion.skip();
+   return;
+  }
+  const revision = gridMotion.capture();
+  void tick().then(() => gridMotion.play(revision));
  });
 </script>
 
-<section class="candidates" aria-label="Choose a historical player season" aria-busy={busy}>
+<section use:candidateGridMotion={gridMotion} class="candidates" aria-label="Choose a historical player season" aria-busy={busy}>
  <div class="search-row">
   <label for="{uid}-search">Find your pick</label>
   <input id="{uid}-search" type="search" placeholder="Player, year, or historical team" bind:value={query} oninput={resetBrowse} disabled={busy} />
@@ -164,10 +195,10 @@
  {:else if rankingError}
   <div class="ranking-status">
    <p role="status">Composite WAR/162 is unavailable.{sort === 'war' ? ' Cards are in stable ID order, not ranked by WAR. Switch to Historical OPS / ERA or retry.' : ''} You can still draft.</p>
-   <button type="button" class="secondary" onclick={() => rankingAttempt++}>Retry rankings</button>
+   <button type="button" class="secondary" onclick={onRetryRankings}>Retry rankings</button>
   </div>
  {/if}
- <div class="list-meta" id="{uid}-results" tabindex="-1">
+ <div class="list-meta" id="{uid}-results" bind:this={results} tabindex="-1">
   <p role="status">{groups.length} {groups.length === 1 ? 'card' : 'cards'}{groups.length > 20 ? ` · Page ${currentPage + 1} of ${pageCount}` : ''}</p>
   <p class="muted">Historical stats. Select an exact season on its card.</p>
  </div>
@@ -206,6 +237,12 @@
          onSeasonChange={seasonId => changeSeason(group, seasonId)}
          legalSlots={directSlots}
          war={warValue({ profile, slots: profile.eligibleSlots }, cardKind, rankings)}
+         ranking={rankingForSeason(rankings, profile.seasonId)}
+         {rankings}
+         {manifest}
+         {rankingLoading}
+         {rankingError}
+         inspectionReturnFocus={results}
          selected={selected === profile.seasonId}
          onChoose={() => selectSeason(profile.seasonId, group.playerId)}
         />
