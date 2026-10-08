@@ -1,6 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "162-zero",
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "162-0.dev", "custom_domain": true }
+  ],
   "main": ".svelte-kit/cloudflare/_worker.js",
   "compatibility_date": "2026-10-05",
   "compatibility_flags": ["nodejs_als"],

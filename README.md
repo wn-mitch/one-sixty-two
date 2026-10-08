@@ -33,6 +33,8 @@ npx wrangler deploy --dry-run
 just deploy
 ```
 
+Production runs at https://162-0.dev on the `162-zero` Worker. `just deploy` publishes the application and its custom-domain binding; Cloudflare manages DNS and TLS. The existing workers.dev endpoint remains available.
+
 The rankings index pins the same source revision and SHA-256 as the statistical compiler. A season whose source rows cover fewer scheduled games than the shortest completed season in the covered window is published as unavailable rather than ranked from a fraction of a season.
 
 The data compiler pins an immutable third-party transport commit and SHA-256 for every source CSV. Changed or missing bytes fail rather than selecting another release. Output URLs use a SHA-256 version of canonical transformed payloads. The versioned `diagnostics.json` records exclusions and estimated-field counts without display names.
