@@ -24,6 +24,7 @@
 		wide = false,
 		turned = $bindable(false),
 		onSelect,
+		onPlace,
 		manifest = null,
 		ranking = null,
 		rankings = null,
@@ -43,6 +44,7 @@
 		wide?: boolean;
 		turned?: boolean;
 		onSelect?: (trigger: HTMLButtonElement) => void;
+		onPlace?: (slot: Slot, trigger: HTMLButtonElement) => void;
 		manifest?: Manifest | null;
 		ranking?: WarSeasonRanking | null;
 		rankings?: WarRankings | null;
@@ -89,6 +91,11 @@
 		onSelect?.(trigger);
 	}
 
+	function place(slot: Slot, trigger: HTMLButtonElement): void {
+		if (!available.includes(slot)) return;
+		onPlace?.(slot, trigger);
+	}
+
 	onMount(() => {
 		let disposed = false;
 		void loadMedia()
@@ -114,42 +121,81 @@
 	aria-label={`${profile.year} ${profile.displayName} player card`}
 >
 	<header class="controller">
-		<div class="season-row">
-			{#if onSeasonChange}
-				<label class="season-picker">
-					<span>Exact season</span>
-					<select
-						aria-label={`Exact season for ${profile.displayName}`}
-						value={profile.seasonId}
-						onchange={event => onSeasonChange?.(event.currentTarget.value)}
-					>
-						{#each seasonChoices as season (season.seasonId)}
-							<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>
-						{/each}
-					</select>
-				</label>
-			{:else}
-				<div class="fixed-season"><span>Exact season</span><strong>{profile.year}</strong></div>
-			{/if}
-			{#if assignedSlot}<span class="assignment">Assigned {assignedSlot}</span>{/if}
-		</div>
-
-		{#if draftMode && !wide}
-			<p class="compact-qualification"><strong>{profile.year}</strong> · {profile.eligibleSlots.join(' · ')}{available.length ? ` · Open ${available.join(' · ')}` : legalSlots !== undefined ? ' · No open position' : ''}</p>
-		{:else}
-			<div class="qualification" aria-label="Season qualifications and availability">
-				<div role="group" aria-label="Qualifies for">
-					<span class="qualification-label">Qualifies for</span>
-					<span class="slot-list">{#each profile.eligibleSlots as slot}<span class:available-slot={legalSlots?.includes(slot)} class:assigned-slot={assignedSlot === slot}>{slot}</span>{/each}</span>
-				</div>
-				{#if legalSlots !== undefined}
-					<div role="group" aria-label="Available now"><span class="qualification-label">Available now</span><strong>{available.length ? available.join(' · ') : 'None'}</strong></div>
-					{#if available.length === 0}<p>Reassign your roster to make room.</p>{/if}
+		{#if draftMode && wide}
+			<div class="wide-controls" role="group" aria-label={`Season and placement controls for ${profile.displayName}`}>
+				{#if onSeasonChange}
+					<label class="season-picker wide-season-picker">
+						<span class="sr-only">Exact season</span>
+						<select
+							aria-label={`Exact season for ${profile.displayName}`}
+							value={profile.seasonId}
+							onchange={event => onSeasonChange?.(event.currentTarget.value)}
+						>
+							{#each seasonChoices as season (season.seasonId)}
+								<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>
+							{/each}
+						</select>
+					</label>
+				{:else}
+					<span class="fixed-season"><span class="sr-only">Exact season</span><strong>{profile.year}</strong></span>
 				{/if}
+				<span class="placement-list" aria-label={`Preview placement for ${profile.displayName} ${profile.year}`}>
+					{#each profile.eligibleSlots as slot}
+						{@const open = available.includes(slot)}
+						<button
+							type="button"
+							class="placement"
+							disabled={!open}
+							aria-label={open ? `Preview ${profile.year} ${profile.displayName} at ${slot}` : `${slot} unavailable for ${profile.year} ${profile.displayName}`}
+							title={open ? `${slot} placement preview` : `${slot} unavailable`}
+							onclick={event => open && place(slot, event.currentTarget)}
+						>{slot}</button>
+					{/each}
+				</span>
+				{#if legalSlots !== undefined && !available.length}<span class="no-open-position">No open position</span>{/if}
+				<button type="button" class="draft-turn" aria-label="Turn over" aria-pressed={turned} onclick={() => turned = !turned}>
+					<span aria-hidden="true">↻</span><span class="sr-only">Turn over</span>
+				</button>
 			</div>
+		{:else}
+			<div class="season-row">
+				{#if onSeasonChange}
+					<label class="season-picker">
+						<span>Exact season</span>
+						<select
+							aria-label={`Exact season for ${profile.displayName}`}
+							value={profile.seasonId}
+							onchange={event => onSeasonChange?.(event.currentTarget.value)}
+						>
+							{#each seasonChoices as season (season.seasonId)}
+								<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>
+							{/each}
+						</select>
+					</label>
+				{:else}
+					<div class="fixed-season"><span>Exact season</span><strong>{profile.year}</strong></div>
+				{/if}
+				{#if assignedSlot}<span class="assignment">Assigned {assignedSlot}</span>{/if}
+			</div>
+
+			{#if draftMode}
+				<p class="compact-qualification"><strong>{profile.year}</strong> · {profile.eligibleSlots.join(' · ')}{available.length ? ` · Open ${available.join(' · ')}` : legalSlots !== undefined ? ' · No open position' : ''}</p>
+			{:else}
+				<div class="qualification" aria-label="Season qualifications and availability">
+					<div role="group" aria-label="Qualifies for">
+						<span class="qualification-label">Qualifies for</span>
+						<span class="slot-list">{#each profile.eligibleSlots as slot}<span class:available-slot={legalSlots?.includes(slot)} class:assigned-slot={assignedSlot === slot}>{slot}</span>{/each}</span>
+					</div>
+					{#if legalSlots !== undefined}
+						<div role="group" aria-label="Available now"><span class="qualification-label">Available now</span><strong>{available.length ? available.join(' · ') : 'None'}</strong></div>
+						{#if available.length === 0}<p>Reassign your roster to make room.</p>{/if}
+					{/if}
+				</div>
+			{/if}
 		{/if}
 		{#if rankingStatus}<p class="ranking-status" role="status">{rankingStatus}</p>{/if}
 	</header>
+	
 
 	<div class="art-frame">
 		{#if draftMode}
@@ -157,7 +203,7 @@
 				<CardFlip
 					bind:turned
 					s={card}
-					showControl={wide}
+					showControl={false}
 					onDetails={() => void details?.showDetails()}
 					onFrontSelect={select}
 				/>
@@ -185,7 +231,6 @@
 		{/if}
 	</div>
 	{#if draftMode && wide}<div class="draft-disclosures" hidden={!turned}><CardDetails bind:this={details} s={card} /></div>{/if}
-	{#if draftMode && wide && selected}<button type="button" class="cancel-selection" onclick={event => select(event.currentTarget)}>Cancel selection</button>{/if}
 
 	{#if compact}
 		<p class="compact-identity"><strong>{profile.displayName}</strong><span>{profile.year} · {assignedSlot ?? card.pos}</span></p>
@@ -215,9 +260,10 @@
 	.player-card.draft-mode { max-width: none; }
 	.draft-mode .art-frame { order: 0; }
 	.draft-mode .controller { order: 1; }
-	.draft-disclosures { order: 2; }
-	.draft-mode .cancel-selection { order: 3; }
+	.draft-turn { flex: 0 0 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0 .6rem; color: var(--card-ink); background: var(--surface-raised, var(--surface)); border: 1px solid var(--border); border-radius: .25rem; font-size: 1.1rem; }
+	.draft-disclosures { order: 3; }
 	.draft-mode:not(.wide) .ranking-status { display: none; }
+	.draft-mode.wide .ranking-status { display: none; }
 	.player-card.draft-mode.selected .art-frame { transform: translateY(-.2rem); }
 	.player-card.draft-mode.selected .art-frame > :global(*) { outline: 3px solid var(--focus); outline-offset: 4px; }
 	.player-card.draft-mode:not(.selected) .art-frame { transition: opacity .18s ease-out, transform .18s ease-out; }
@@ -238,18 +284,22 @@
 	.ranking-status { color: var(--card-muted); font-size: .78rem; line-height: 1.4; }
 	.compact-qualification { color: var(--card-muted); font-size: .76rem; line-height: 1.35; overflow-wrap: anywhere; }
 	.compact-qualification strong { color: var(--card-ink); }
+	.placement-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+	.placement { min-height: 2.75rem; min-width: 2.75rem; padding: .3rem .5rem; color: var(--card-ink); background: color-mix(in oklch, var(--surface) 72%, var(--focus)); border: 1px solid var(--focus); border-radius: .25rem; font-size: .72rem; font-weight: 750; }
+	.wide-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; width: 100%; }
+	.wide-season-picker { flex: 1 1 8rem; min-width: 7rem; }
+	.wide-season-picker select { min-height: 2.75rem; padding-block: .25rem; }
+	.wide-controls .placement-list { display: contents; }
+	.wide-controls .placement { flex: 0 0 2.75rem; }
+	.placement:disabled { color: var(--card-muted); border-color: var(--border); background: var(--surface); cursor: not-allowed; opacity: .7; text-decoration: line-through; }
+	.no-open-position { color: var(--card-muted); font-size: .72rem; font-weight: 700; }
 	.art-frame { width: min(100%, 20rem); margin-inline: auto; }
 	.draft-mode.wide { --card-front-width: 100%; --card-back-width: 410px; }
 	.draft-mode.wide .art-frame { width: 100%; }
 	.draft-mode.wide :global(.card-details) { width: min(100%, 410px); margin-inline: auto; }
-	.draft-mode.wide .cancel-selection { width: min(100%, 410px); margin: 1rem auto 0; }
-	.art-trigger {
-		all: unset;
-		display: block;
-		width: 100%;
-		cursor: pointer;
-	}
+	.art-trigger { all: unset; display: block; width: 100%; cursor: pointer; }
 	.art-trigger:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+	.draft-turn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 	.card-actions { display: grid; grid-template-columns: 1fr; gap: .5rem; }
 	.card-actions button { min-height: 2.75rem; }
 	.compact { max-width: 12rem; gap: .5rem; }
@@ -259,5 +309,7 @@
 	.compact-identity strong { overflow-wrap: anywhere; }
 	.compact-identity span { color: var(--card-muted); }
 	.compact .card-actions { grid-template-columns: 1fr; }
+	.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 	@media (max-width: 22rem) { .card-actions { grid-template-columns: 1fr; } }
 </style>
+

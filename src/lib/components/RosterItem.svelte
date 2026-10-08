@@ -13,7 +13,8 @@
   rankingLoading = false,
   rankingError = false,
   media = null,
-  mediaStatus = 'loading'
+  mediaStatus = 'loading',
+  showPosition = false
  }: {
   profile: Profile;
   assignedSlot: Slot;
@@ -23,6 +24,7 @@
   rankingError?: boolean;
   media?: MediaManifest | null;
   mediaStatus?: CardMediaStatus;
+  showPosition?: boolean;
  } = $props();
 
  const card = $derived(createCardViewModel({
@@ -42,7 +44,7 @@
  </span>
  <span class="identity">
   <strong>{profile.displayName}</strong>
-  <span>{profile.year}</span>
+  <span>{profile.year}{#if showPosition} · {assignedSlot}{/if}</span>
  </span>
 </span>
 

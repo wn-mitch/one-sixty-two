@@ -33,6 +33,8 @@
 		padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right));
 	}
 	.site:has(:global(.draft-board)) { max-width: 90rem; }
+	.site:has(:global(.draft-board.wide)) { padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
+	.site:has(:global(.draft-board.wide)) .site-header { display: none; }
 	.site-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); min-height: 4rem; border-bottom: 1px solid var(--border); }
 	.site-header > a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: var(--text-sm); }
 	.wordmark { color: var(--text); text-decoration: none; font-size: var(--text-xl) !important; font-weight: 850; letter-spacing: -.04em; gap: var(--space-3); }

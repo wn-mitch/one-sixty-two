@@ -4,13 +4,14 @@
 	import { draftRules } from '../game/rules.ts';
 	import TeamLogo from './TeamLogo.svelte';
 
-	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor }: {
+	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor, compact = false }: {
 		roll: Roll | null;
 		manifest: Manifest;
 		revealing: boolean;
 		pickNumber: number;
 		schemaVersion: ReplaySchemaVersion;
 		teamColor?: string;
+		compact?: boolean;
 	} = $props();
 
 	const franchise = $derived(manifest.franchises.find(item => item.id === roll?.franchiseId));
@@ -26,6 +27,7 @@
 	class="reveal"
 	class:team-colored={palette !== null}
 	class:revealing
+	class:compact
 	style={bannerStyle}
 	aria-label="Current draft roll"
 	aria-busy={revealing}
@@ -34,7 +36,7 @@
 >
 	{#if roll}
 		<div class="team-mark">
-			<TeamLogo franchiseId={roll.franchiseId} label={franchise?.name ?? roll.franchiseId} />
+			<TeamLogo franchiseId={roll.franchiseId} label={franchise?.name ?? roll.franchiseId} size={compact ? 'small' : 'medium'} />
 		</div>
 	{/if}
 	<div class="reveal-copy">
@@ -96,6 +98,15 @@
 		.era { margin-top: var(--space-1); }
 		.status { font-size: .75rem; }
 	}
+	.reveal.compact { padding: 0; gap: .625rem; border: 0; border-radius: var(--radius); background: transparent; color: var(--text); }
+	.compact .team-mark { display: flex; align-items: center; padding: .25rem; background: var(--reveal-ground, var(--surface)); border-radius: var(--radius) 0 0 var(--radius); }
+	.compact .reveal-copy { display: flex; align-items: center; gap: .875rem; }
+	.compact .roll-copy { order: -1; justify-content: start; gap: .75rem; padding: .5rem .75rem .5rem 0; color: var(--reveal-ink, var(--text)); background: var(--reveal-ground, var(--surface)); border-radius: 0 var(--radius) var(--radius) 0; }
+	.compact .team-mark + .reveal-copy { margin-left: -.625rem; }
+	.compact h2 { font-size: 1.375rem; text-wrap: nowrap; }
+	.compact .era { font-size: 1.25rem; }
+	.compact .eyebrow { margin: 0; color: var(--muted); font-size: .75rem; white-space: nowrap; }
+	.compact .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	@media (prefers-reduced-motion: reduce) {
 		.revealing .roll-copy { animation: none; }
 	}

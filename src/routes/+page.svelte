@@ -102,8 +102,8 @@
   </section>
  {:else if session.draft && session.manifest}
   {#if session.phase === 'ready' || session.phase === 'revealing' || session.phase === 'choosing'}
-   <div class="draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <DraftBoard draft={session.draft} manifest={session.manifest} pool={session.pool} profiles={session.profiles} phase={session.phase} loading={session.loading} busy={session.busy} error={session.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void session.roll()} onDraft={(id, slot) => session.commit(id, slot)} onReassign={(id, slot) => session.reassign(id, slot)} />
+   <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
+   <DraftBoard draft={session.draft} manifest={session.manifest} pool={session.pool} profiles={session.profiles} phase={session.phase} loading={session.loading} busy={session.busy} error={session.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void session.roll()} onDraft={(id, slot) => session.commit(id, slot)} onReassign={(id, slot) => session.reassign(id, slot)} onNew={() => session.requestNew()} />
   {:else if session.phase === 'lineup'}
    <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <Lineup draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
@@ -118,6 +118,8 @@
 
 <style>
  main { min-height: 65vh; padding-block: var(--space-6); }
+ main:has(:global(.draft-board.wide)) { padding-top: 0; }
+ main:has(:global(.draft-board.wide)) .narrow-draft-top { display: none; }
  .welcome { display: grid; gap: var(--space-12); padding-block: var(--space-8) var(--space-4); }
  .welcome-copy { min-width: 0; }
  .welcome .eyebrow { margin: 0 0 var(--space-4); }

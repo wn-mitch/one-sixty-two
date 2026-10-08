@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { availableCandidates, createDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
 import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
 import { STORAGE_KEY, cardScenario, currentManifest, openSavedDraft, type CardScenario } from './draft-test-fixtures.ts';
 
@@ -11,6 +11,11 @@ type RetentionScenario = {
 	legalAlternative: Profile;
 	illegalAlternative: Profile;
 	slot: Slot;
+};
+
+type BlockedScenario = {
+	draft: Draft;
+	profile: Profile;
 };
 
 function savedDraft(page: Page): Promise<Draft> {
@@ -92,6 +97,41 @@ async function retentionScenario(request: APIRequestContext, manifest: Manifest)
 	throw new Error('Current data did not produce a multi-season legal/illegal destination-retention scenario in 500 deterministic rolls');
 }
 
+async function blockedScenario(request: APIRequestContext, manifest: Manifest): Promise<BlockedScenario> {
+	const profilesByChunk = new Map<string, Profile[]>();
+	const bySeason = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
+	for (let seed = 1; seed <= 20; seed++) {
+		let draft = createDraft(manifest, seed);
+		for (let pick = 0; pick < 13; pick++) {
+			draft = rollDraft(draft, manifest);
+			const roll = draft.currentRoll!;
+			const available = availableCandidates(draft, manifest);
+			const availableIds = new Set(available.map(candidate => candidate.seasonId));
+			const usedPlayers = new Set(draft.picks.map(item => bySeason.get(item.seasonId)!.playerId));
+			const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
+			let profiles = profilesByChunk.get(chunkUrl);
+			if (!profiles) {
+				const response = await request.get(chunkUrl);
+				expect(response.ok()).toBe(true);
+				profiles = await response.json() as Profile[];
+				profilesByChunk.set(chunkUrl, profiles);
+			}
+			const byPlayer = new Map<string, Profile[]>();
+			for (const profile of profiles) {
+				if (!bySeason.has(profile.seasonId) || usedPlayers.has(profile.playerId)) continue;
+				const entries = byPlayer.get(profile.playerId) ?? [];
+				entries.push(profile);
+				byPlayer.set(profile.playerId, entries);
+			}
+			const blocked = [...byPlayer.values()].find(entries => entries.every(profile => !availableIds.has(profile.seasonId)));
+			if (blocked) return { draft, profile: blocked[0] };
+			const candidate = available[0];
+			draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
+		}
+	}
+	throw new Error('Current data did not produce a fully blocked unused candidate group');
+}
+
 async function searchFor(page: Page, profile: Profile) {
 	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(profile.displayName);
 	const group = page.locator(`[data-candidate-group="${profile.playerId}"]`);
@@ -159,6 +199,73 @@ test.describe('draft interaction boundaries', () => {
 		expect(committed.actions).toHaveLength((before.actions?.length ?? 0) + 1);
 		expect(committed.actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.profile.seasonId, slot: scenario.slot });
 		await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeVisible();
+	});
+
+	test('hides fully blocked desktop groups until the explicit toggle without disabling qualification filters', async ({ page, request }) => {
+		const manifest = await currentManifest(request);
+		const scenario = await blockedScenario(request, manifest);
+		await openSavedDraft(page, scenario.draft);
+		await page.getByRole('searchbox', { name: 'Find your pick' }).fill(scenario.profile.displayName);
+
+		const group = page.locator(`[data-candidate-group="${scenario.profile.playerId}"]`);
+		await expect(group).toHaveCount(0);
+		const toggle = page.getByRole('button', { name: 'Show blocked cards', exact: true });
+		await expect(toggle).toBeVisible();
+		await toggle.click();
+		await expect(group).toBeVisible();
+
+		const filter = page.locator('.filters').getByRole('button', { name: scenario.profile.eligibleSlots[0], exact: true });
+		await expect(filter).toBeEnabled();
+		await group.getByRole('combobox', { name: `Exact season for ${scenario.profile.displayName}`, exact: true }).selectOption(scenario.profile.seasonId);
+		await group.locator('button.select-front').click();
+		await expect(page.locator('.field-panel .pick-confirmation')).toHaveAttribute('data-selected-season', scenario.profile.seasonId);
+		await expect(page.locator('.field-panel').getByRole('button', { name: 'Draft player', exact: true })).toBeDisabled();
+	});
+
+
+	test('keeps a remembered legal alternate and the selected blocked season visible on desktop', async ({ page, request }) => {
+		const manifest = await currentManifest(request);
+		const scenario = await retentionScenario(request, manifest);
+		await openSavedDraft(page, scenario.draft);
+		const before = await savedDraft(page);
+
+		await selectWideCandidate(page, scenario.primary);
+		await placeAt(page, scenario.slot, page.locator('.field-panel'));
+		const group = page.locator(`[data-candidate-group="${scenario.primary.playerId}"]`);
+		const selector = group.getByRole('combobox', { name: `Exact season for ${scenario.primary.displayName}`, exact: true });
+		await selector.selectOption(scenario.legalAlternative.seasonId);
+		const confirmation = page.locator('.field-panel .pick-confirmation');
+		await expect(confirmation).toHaveAttribute('data-selected-season', scenario.legalAlternative.seasonId);
+		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
+		await expectNoPersistenceChange(page, before);
+
+		await selector.selectOption(scenario.illegalAlternative.seasonId);
+		await expect(confirmation).toHaveAttribute('data-selected-season', scenario.illegalAlternative.seasonId);
+		await expect(confirmation).toHaveAttribute('data-pending-slot', '');
+		await expect(group.locator(`.player-card[data-season-id="${scenario.illegalAlternative.seasonId}"]`)).toBeVisible();
+		await expectNoPersistenceChange(page, before);
+	});
+	test('uses desktop placement controls for a preview and still requires explicit confirmation', async ({ page, request }) => {
+		const manifest = await currentManifest(request);
+		const scenario = await cardScenario(request, manifest, () => true);
+		await openSavedDraft(page, scenario.draft);
+		const before = await savedDraft(page);
+
+		await selectWideCandidate(page, scenario.profile);
+		const group = page.locator(`[data-candidate-group="${scenario.profile.playerId}"]`);
+		const placement = group.getByRole('button', {
+			name: `Preview ${scenario.profile.year} ${scenario.profile.displayName} at ${scenario.slot}`,
+			exact: true
+		});
+		await expect(placement).toBeVisible();
+		await placement.click();
+		const confirmation = page.locator('.field-panel .pick-confirmation');
+		await expect(confirmation).toHaveAttribute('data-selected-season', scenario.profile.seasonId);
+		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
+		await expectNoPersistenceChange(page, before);
+
+		await confirmation.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true }).click();
+		await expect.poll(async () => (await savedDraft(page)).picks.length).toBe(before.picks.length + 1);
 	});
 });
 
