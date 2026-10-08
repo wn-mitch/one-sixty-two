@@ -1,6 +1,6 @@
 import { historicalBatting, historicalEra } from '../game/format.ts';
 import { compareId } from '../game/types.ts';
-import type { Profile, Slot } from '../game/types.ts';
+import type { HitterSlot, Profile, Slot } from '../game/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 
 export type RankingKind = 'Hitters' | 'Pitchers' | 'Bullpens';
@@ -9,7 +9,7 @@ export type CandidateEntry = { profile: Profile; slots: Slot[] };
 export type CandidateGroup = { key: string; name: string; playerId: string; kind: RankingKind; entries: CandidateEntry[] };
 const kindOrder: Record<RankingKind, number> = { Hitters: 0, Pitchers: 1, Bullpens: 2 };
 
-export function isHitter(slot: Slot): boolean {
+export function isHitter(slot: Slot): slot is HitterSlot {
  return slot !== 'CL' && slot !== 'BP' && !slot.startsWith('SP');
 }
 

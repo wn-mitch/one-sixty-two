@@ -19,7 +19,7 @@
  const selectedPick = $derived(draft.picks.find(pick => pick.seasonId === seasonId));
  const origin = $derived(selectedPick && HITTER_SLOTS.includes(selectedPick.slot as HitterSlot) ? selectedPick.slot as HitterSlot : null);
  const selectedName = $derived(bySeason.get(seasonId)?.displayName ?? 'Selected player');
- const editable = $derived(draft.schemaVersion === 3 && origin !== null);
+ const editable = $derived(origin !== null);
 
  const options = $derived.by(() => {
   if (!editable || !origin) return [];

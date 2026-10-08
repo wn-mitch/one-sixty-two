@@ -5,9 +5,12 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Manifest, Profile, Slot } from '../lib/game/types.ts';
 import { selectPhoto } from '../lib/media/client.ts';
-import type { MediaManifest, MediaPointer } from '../lib/media/types.ts';
+import type { CaptureDate, MediaManifest, MediaPointer } from '../lib/media/types.ts';
+import { photoLabel } from '../lib/media/photo-policy.ts';
 import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 import { isHitter } from '../lib/components/candidate-ranking.ts';
+import type { CompactPixelClip } from './compact-test-harness.ts';
+import { imagePixelDigest } from './image-test-helpers.ts';
 
 const ERAS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'] as const;
 const WIDTHS = [240, 320, 330, 410] as const;
@@ -27,6 +30,7 @@ interface HarnessAssets {
 
 let harnessAssets: HarnessAssets | undefined;
 let harnessDirectory: string | undefined;
+
 
 async function getJson<T>(request: APIRequestContext, url: string): Promise<T> {
 	const response = await request.get(url);
@@ -62,7 +66,7 @@ function isTwoWay(profile: Profile): boolean {
 }
 
 function selectedPhoto(media: MediaManifest, profile: Profile): boolean {
-	return !!selectPhoto(media, profile.playerId, profile.year);
+	return !!selectPhoto(media, profile.playerId, profile.year, profile.franchiseId);
 }
 
 async function selectSpecimens(
@@ -113,6 +117,7 @@ import Card from ${JSON.stringify(cardPath)};
 import CardFlip from ${JSON.stringify(resolve('src/lib/cards/CardFlip.svelte'))};
 import { createCardViewModel } from ${JSON.stringify(modelPath)};
 import { contrast, mix } from ${JSON.stringify(tokensPath)};
+import { compactNameClips as readCompactNameClips, inspectCompact as inspectCompactModels, previewCompact as renderCompact, disposeCompact } from ${JSON.stringify(resolve('src/routes/compact-test-harness.ts'))};
 
 let models = [];
 
@@ -122,6 +127,16 @@ export function prepare(input) {
 		model: createCardViewModel({ profile, slot, media: input.media, manifest: input.manifest, rankings: input.rankings })
 	}));
 }
+
+export function inspectCompact({ eras, widths }) {
+	return inspectCompactModels(models.map(entry => entry.model), eras, widths);
+}
+
+export function previewCompact(era) {
+	return renderCompact(models[0].model, era);
+}
+
+export { disposeCompact, readCompactNameClips as compactNameClips };
 
 function afterLayout() {
 	return tick()
@@ -234,6 +249,19 @@ export async function inspect({ eras, widths }) {
 		host.remove();
 	}
 }
+
+export async function preview() {
+	const host = document.createElement('div');
+	host.id = 'portrait-policy-preview';
+	host.style.cssText = 'position:absolute;left:0;top:0;z-index:10000;display:grid;grid-template-columns:repeat(4,320px);gap:16px;padding:16px;background:#121419;';
+	document.body.append(host);
+	for (const { model } of models) {
+		const frame = document.createElement('div'); frame.style.width = '320px'; host.append(frame);
+		mount(Card, { target: frame, props: { s: model, face: 'front', onDetails: () => {} } });
+	}
+	await afterLayout();
+	await Promise.all([...host.querySelectorAll('img')].map(image => image.decode().catch(() => {})));
+}
 `, 'utf8');
 	const output = join(directory, 'dist');
 	await build({
@@ -295,8 +323,91 @@ test('keeps every era composition within its live card geometry', async ({ page,
 		brokenArcRefs: string[];
 	};
 
-	expect(result.cases).toBe(ERAS.length * specimens.length * (WIDTHS.length * 2 + 2));
 	expect(result.failures).toEqual([]);
 	expect(result.duplicateArcIds).toEqual([]);
 	expect(result.brokenArcRefs).toEqual([]);
+});
+
+test('shows reviewed uncertain dates and uniform contexts across all eight eras', async ({ page, request }, testInfo) => {
+	const [manifest, current, rankings] = await Promise.all([currentManifest(request), currentMedia(request), currentRankings(request)]);
+	const base = (await selectSpecimens(request, manifest, current))[0];
+	const approved = Object.values(current.players).flatMap(player => player.photos).filter(photo => photo.review === 'approved');
+	expect(approved.length).toBeGreaterThan(0);
+	const media: MediaManifest = { ...current, schemaVersion: 3, players: {} };
+	const expected: string[] = [];
+	const specimens = ERAS.map((era, i) => {
+		const year = Number(era.slice(0, 4)) + 5;
+		const id = `synthetic-media-${i}`;
+		const dates: CaptureDate[] = [{ kind: 'exact', year }, { kind: 'approximate', year: year - 1 }, { kind: 'range', firstYear: year - 3, lastYear: year + 1 }, { kind: 'unknown' }];
+		const captureDate = dates[i % dates.length];
+		const selected = approved[i % approved.length];
+		const photo = { ...selected, year: captureDate.kind === 'exact' ? captureDate.year : undefined, captureDate,
+			uniform: i === 4 ? 'minor' as const : i === 5 ? 'other' as const : 'mlb' as const,
+			context: i >= 6 ? 'later' as const : 'playing' as const };
+		media.players[id] = { name: 'Example Athlete', firstYear: 1950, lastYear: 2025, photos: [photo] };
+		expected.push(photoLabel(photo, year));
+		return { ...base, label: id, profile: { ...base.profile, playerId: id, displayName: 'Example Athlete', year, seasonId: `${id}:${year}:AL:${base.profile.franchiseId}` } };
+	});
+	await installHarness(page);
+	const result = await page.evaluate(async input => {
+		const harness = (window as typeof window & { CardLayoutHarness: { prepare(input: unknown): void; inspect(input: unknown): Promise<{ failures: unknown[] }>; preview(): Promise<void> } }).CardLayoutHarness;
+		harness.prepare(input); const result = await harness.inspect({ eras: input.eras, widths: [240, 320] }); await harness.preview(); return result;
+	}, { specimens, media, manifest, rankings, eras: ERAS });
+	expect(result.failures).toEqual([]);
+	const host = page.locator('#portrait-policy-preview');
+	// Use the actual rendered image alt text: the photo year must not be replaced with the card year.
+	for (const label of expected) await expect(host.getByRole('img', { name: `Example Athlete · ${label}`, exact: true })).toHaveCount(1);
+	await expect(host.locator('[data-card][data-face="front"]')).toHaveCount(8);
+	await host.screenshot({ path: testInfo.outputPath('portrait-policy-eight-eras.png') });
+});
+
+test('keeps compact text readable above every era finish at its minimum width', async ({ page, request }, testInfo) => {
+	const [manifest, media, rankings] = await Promise.all([
+		currentManifest(request), currentMedia(request), currentRankings(request)
+	]);
+	const specimens = await selectSpecimens(request, manifest, media);
+	await installHarness(page);
+	const failures = await page.evaluate(async input => {
+		const harness = (window as typeof window & { CardLayoutHarness: {
+			prepare(input: unknown): void;
+			inspectCompact(input: unknown): Promise<unknown[]>;
+		} }).CardLayoutHarness;
+		harness.prepare(input);
+		return harness.inspectCompact({ eras: input.eras, widths: [64, 72, 96] });
+	}, { specimens, media, manifest, rankings, eras: ERAS });
+	expect(failures).toEqual([]);
+	try {
+		for (const era of ERAS) {
+			await page.evaluate(era => (window as typeof window & {
+				CardLayoutHarness: { previewCompact(era: string): Promise<void> };
+			}).CardLayoutHarness.previewCompact(era), era);
+			const preview = page.locator('#compact-card-preview');
+			await preview.screenshot({ path: testInfo.outputPath(`compact-${era}.png`) });
+			const clips = await page.evaluate(() => (window as typeof window & {
+				CardLayoutHarness: { compactNameClips(): CompactPixelClip[] };
+			}).CardLayoutHarness.compactNameClips());
+			expect(clips.length, `${era} compact name must expose rendered glyph bounds`).toBeGreaterThan(0);
+			const withFinish = await Promise.all(clips.map(clip => page.screenshot({ clip, type: 'png' })));
+			await preview.locator('[data-layer="material"]').evaluate(node => {
+				(node as HTMLElement).style.visibility = 'hidden';
+			});
+			const withoutFinish = await Promise.all(clips.map(clip => page.screenshot({ clip, type: 'png' })));
+			for (const [index, image] of withoutFinish.entries()) {
+				const visiblePixels = await imagePixelDigest(page, { base64: withFinish[index].toString('base64') });
+				const hiddenPixels = await imagePixelDigest(page, { base64: image.toString('base64') });
+				if (hiddenPixels.sha256 !== visiblePixels.sha256) {
+					const visiblePath = testInfo.outputPath(`${era}-name-${index + 1}-with-finish.png`);
+					const hiddenPath = testInfo.outputPath(`${era}-name-${index + 1}-without-finish.png`);
+					await Promise.all([writeFile(visiblePath, withFinish[index]), writeFile(hiddenPath, image)]);
+					await testInfo.attach(`${era}-name-${index + 1}-with-finish.png`, { path: visiblePath, contentType: 'image/png' });
+					await testInfo.attach(`${era}-name-${index + 1}-without-finish.png`, { path: hiddenPath, contentType: 'image/png' });
+				}
+				expect(hiddenPixels, `${era} finish must not change compact name glyph or backing pixels`).toEqual(visiblePixels);
+			}
+		}
+	} finally {
+		await page.evaluate(() => (window as typeof window & {
+			CardLayoutHarness: { disposeCompact(): Promise<void> };
+		}).CardLayoutHarness.disposeCompact());
+	}
 });

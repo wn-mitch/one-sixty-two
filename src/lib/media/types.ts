@@ -8,9 +8,35 @@ export interface MediaAsset {
  credit: string;
 }
 export interface PlayerPhoto extends MediaAsset {
- year: number;
+ /** Present only for an exact capture year; publication and upload dates are not capture dates. */
+ year?: number;
+ captureDate?: CaptureDate;
+ sourceId?: string;
+ uniform?: PhotoUniform;
+ context?: 'playing' | 'later' | 'unclassified';
+ franchiseId?: string;
+ review?: 'approved' | 'legacy';
+ evidence?: PhotoEvidence;
+ crop?: PhotoCrop;
  captureEvidenceUrl?: string;
  identityEvidenceUrl?: string;
+}
+export type CaptureDate =
+ | { kind: 'exact'; year: number }
+ | { kind: 'approximate'; year: number }
+ | { kind: 'range'; firstYear: number; lastYear: number }
+ | { kind: 'unknown' };
+export type PhotoUniform = 'mlb' | 'minor' | 'other' | 'unclassified';
+/** Fractions of the auto-oriented source image, before resizing. */
+export interface PhotoCrop { x: number; y: number; width: number; height: number }
+export interface PhotoEvidence {
+ identityUrl: string;
+ uniformUrl: string;
+ contextUrl: string;
+ rightsUrl: string;
+ rightsBasis: string;
+ sourceChecksum: string;
+ snapshotChecksum: string;
 }
 export interface HistoricalLogo extends MediaAsset { firstYear: number; lastYear: number }
 export interface AtmospherePhoto extends MediaAsset {
@@ -32,7 +58,7 @@ export interface PlayerMedia {
  photos: PlayerPhoto[];
 }
 export interface MediaManifest {
- schemaVersion: 2;
+ schemaVersion: 2 | 3;
  version: string;
  dataVersion: string;
  modifications: string;
@@ -49,4 +75,4 @@ export interface MediaManifest {
   excluded: number;
  };
 }
-export interface MediaPointer { schemaVersion: 2; version: string; manifestUrl: string }
+export interface MediaPointer { schemaVersion: 2 | 3; version: string; manifestUrl: string }

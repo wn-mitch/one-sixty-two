@@ -1,4 +1,4 @@
-import type { AtmospherePhoto, MediaAsset, PlayerMedia, TeamMedia } from '../../src/lib/media/types.ts';
+import type { AtmospherePhoto, CaptureDate, MediaAsset, PhotoCrop, PhotoEvidence, PhotoUniform, PlayerMedia, TeamMedia } from '../../src/lib/media/types.ts';
 
 export interface DataPointer {
 	schemaVersion: 1;
@@ -8,7 +8,7 @@ export interface DataPointer {
 
 export interface DataManifest {
 	dataVersion: string;
-	candidates: Array<{ playerId: string; seasonId?: string; eligibleSlots?: string[] }>;
+	candidates: Array<{ playerId: string; seasonId?: string; eligibleSlots?: string[]; franchiseId?: string; decade?: number }>;
 	franchises: Array<{ id: string; name: string }>;
 }
 
@@ -48,6 +48,8 @@ export interface CandidateIdentity {
 	name: string;
 	firstYear: number;
 	lastYear: number;
+	wikidataId?: string;
+	commonsCategories?: string[];
 }
 
 export interface WikidataIdentity {
@@ -92,7 +94,37 @@ export interface CommonsMetadata {
 	license: string | null;
 	licenseUrl: string | null;
 	credit: string | null;
+	/** Provider-qualified identity; Commons page IDs remain available for legacy registries. */
+	sourceId?: string;
+	categories?: string[];
+	rightsText?: string;
 }
+
+export interface ApprovedPhotoReview {
+	playerId: string;
+	sourceId: string;
+	status: 'approved';
+	metadata: CommonsMetadata;
+	captureDate: CaptureDate;
+	uniform: Exclude<PhotoUniform, 'unclassified'>;
+	context: 'playing' | 'later';
+	franchiseId?: string;
+	crop?: PhotoCrop;
+	captureEvidenceUrl?: string;
+	evidence: PhotoEvidence;
+	/** Notes record what was inspected, including the underlying work's rights for reproductions. */
+	notes: string;
+	visualReview: true;
+	rights: { kind: 'original' | 'reproduction'; underlyingRightsUrl?: string };
+}
+export interface RejectedPhotoReview {
+	playerId: string;
+	sourceId: string;
+	status: 'rejected';
+	reason: string;
+	evidenceUrl: string;
+}
+export type PhotoReview = ApprovedPhotoReview | RejectedPhotoReview;
 
 export interface PreparedAsset extends MediaAsset {
 	filename: string;

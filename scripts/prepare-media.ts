@@ -5,9 +5,9 @@ import type { MediaManifest, MediaPointer } from '../src/lib/media/types.ts';
 import { validateMedia } from '../src/lib/media/client.ts';
 import { acquireTables, CHECKSUMS, SOURCE_COMMIT } from './data/acquire.ts';
 import { canonicalJSON } from './data/compile.ts';
-import { digest } from './media/cache.ts';
+import { atomicWrite, digest } from './media/cache.ts';
 import { generateMedia } from './media/compile.ts';
-import type { AtmosphereSourceRegistry, DataManifest, DataPointer, PlayerSourceRegistry, ReviewedPlayerPhotos, TeamSourceRegistry } from './media/types.ts';
+import type { AtmosphereSourceRegistry, DataManifest, DataPointer, PhotoReview, PlayerSourceRegistry, ReviewedPlayerPhotos, TeamSourceRegistry } from './media/types.ts';
 
 const args = new Set(process.argv.slice(2));
 for (const argument of args) {
@@ -43,6 +43,8 @@ async function compilerFingerprint(dataManifestPath: string): Promise<string> {
 	for (const path of [
 		join(root, 'scripts', 'prepare-media.ts'),
 		join(root, 'src', 'lib', 'media', 'types.ts'),
+		join(root, 'src', 'lib', 'media', 'client.ts'),
+		join(root, 'src', 'lib', 'media', 'photo-policy.ts'),
 		...mediaFiles.map((name) => join(root, 'scripts', 'media', name))
 	]) hash.update(path).update(await readFile(path));
 	return hash.digest('hex');
@@ -53,7 +55,7 @@ async function canReusePrepared(compilerHash: string, dataVersion: string): Prom
 		const prepared = await readJson<PreparedCache>(join(cacheDir, 'prepared.json'), 'prepared media cache');
 		if (prepared.compilerHash !== compilerHash || prepared.dataVersion !== dataVersion) return false;
 		const pointer = await readJson<MediaPointer>(join(outputDir, 'current.json'), 'generated media pointer');
-		if (pointer.schemaVersion !== 2 || pointer.version !== prepared.version || pointer.manifestUrl !== `/media/${prepared.version}/manifest.json`) return false;
+		if (pointer.schemaVersion !== 3 || pointer.version !== prepared.version || pointer.manifestUrl !== `/media/${prepared.version}/manifest.json`) return false;
 		const manifest = await readJson<MediaManifest>(join(outputDir, prepared.version, 'manifest.json'), 'generated media manifest');
 		validateMedia(manifest, prepared.version);
 		if (manifest.dataVersion !== dataVersion || digest(canonicalJSON(manifest)) !== prepared.manifestChecksum) return false;
@@ -96,6 +98,7 @@ if (!offline && await canReusePrepared(compilerHash, dataManifest.dataVersion)) 
 const teamSources = await readJson<TeamSourceRegistry>(join(root, 'scripts', 'media', 'team-sources.json'), 'team media source registry');
 const playerSources = await readJson<PlayerSourceRegistry>(join(root, 'scripts', 'media', 'player-sources.json'), 'curated player photo source registry');
 const reviewedPlayerPhotos = await readJson<ReviewedPlayerPhotos>(join(root, 'scripts', 'media', 'reviewed-player-photos.json'), 'reviewed portrait inventory');
+const photoReviews = await readJson<PhotoReview[]>(join(root, 'scripts', 'media', 'photo-reviews.json'), 'photo classification reviews');
 const atmosphereSources = await readJson<AtmosphereSourceRegistry>(join(root, 'scripts', 'media', 'atmosphere-sources.json'), 'atmosphere source registry');
 const tables = await acquireTables(offline);
 const generated = await generateMedia({
@@ -104,6 +107,7 @@ const generated = await generateMedia({
 	teamSources,
 	playerSources,
 	reviewedPlayerPhotos,
+	photoReviews,
 	atmosphereSources,
 	cacheDir,
 	outputDir,
@@ -111,10 +115,17 @@ const generated = await generateMedia({
 	log: (message) => console.log(`[media] ${message}`)
 });
 const pointer: MediaPointer = {
-	schemaVersion: 2,
+	schemaVersion: 3,
 	version: generated.manifest.version,
 	manifestUrl: `/media/${generated.manifest.version}/manifest.json`
 };
+validateMedia(generated.manifest, generated.manifest.version);
+try {
+	const previous = JSON.parse(await readFile(join(outputDir, 'current.json'), 'utf8')) as MediaPointer;
+	if (previous.version !== pointer.version) await atomicWrite(join(outputDir, 'previous.json'), `${canonicalJSON(previous)}\n`);
+} catch (error) {
+	if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+}
 const temporaryPointer = join(outputDir, `.current-${randomUUID()}.json`);
 await writeFile(temporaryPointer, `${canonicalJSON(pointer)}\n`);
 try {
@@ -139,4 +150,4 @@ console.log(
 	`and ${generated.manifest.diagnostics.atmospherePhotos} atmosphere photos: ${generated.manifest.version}`
 );
 console.log(`[media] Exclusions ${canonicalJSON(generated.exclusions)}`);
-console.log('[media] Coverage is limited to dated, reusable Wikidata P18 and verified Commons P373 category files; undated or out-of-career images are excluded.');
+console.log('[media] Published approved sources; run media:discover and media:audit to research remaining gaps.');

@@ -12,12 +12,13 @@ export interface ReplayObject {
 
 export interface ReplayPutOptions {
 	httpMetadata?: { contentType?: string };
+	onlyIf?: { etagDoesNotMatch?: string };
 }
 
 /** The subset of R2Bucket used by production and isolated unit tests. */
 export interface ReplayBucket {
 	get(key: string): Promise<ReplayObject | null>;
-	put(key: string, value: ArrayBuffer | Uint8Array | string, options?: ReplayPutOptions): Promise<unknown>;
+	put(key: string, value: ArrayBuffer | Uint8Array | string, options?: ReplayPutOptions): Promise<unknown | null>;
 }
 
 /** Cloudflare's ASSETS Fetcher, kept structural for local tests and workerd. */

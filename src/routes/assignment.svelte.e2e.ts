@@ -216,6 +216,6 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await expect.poll(async () => (await savedDraft(page)).actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
 	const completed = await savedDraft(page);
 	expect(completed.picks.at(-1)?.seasonId).toBe(scenario.target.seasonId);
-	expect(completed.schemaVersion).toBe(3);
+	expect(completed.schemaVersion).toBe(4);
 	expect(completed.actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
 });

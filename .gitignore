@@ -23,6 +23,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+.wrangler.browser-suite-*.json
 .cache/
 static/data/
 static/rankings/

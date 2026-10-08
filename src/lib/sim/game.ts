@@ -1,27 +1,31 @@
 import { buildMatchups } from './matchup.ts';
 import { createInningContext, playHalf, type InningEvent, type InningObserver } from './inning.ts';
 import type { GameInput, GameResult, SeasonMoment, TeamBox, TeamInput } from './types.ts';
-import { validateRates, validateTeam } from './validation.ts';
+import { validateDefensiveEnvironment, validateTeam } from './validation.ts';
 import { WinExpectancyModel } from './win-expectancy.ts';
+import { createDefensiveRunComponents } from './value.ts';
 import { beginHalf, createWorkload } from './workload.ts';
 
 export function createBox(team: TeamInput): TeamBox {
  return {
   id: team.id, name: team.name, runs: 0, innings: [],
   batting: team.hitters.map(profile => ({ seasonId: profile.seasonId, playerId: profile.playerId, displayName: profile.displayName,
-   PA: 0, AB: 0, H: 0, doubles: 0, triples: 0, HR: 0, BB: 0, HBP: 0, SO: 0, R: 0, RBI: 0, SB: 0, CS: 0, SF: 0 })),
+   PA: 0, AB: 0, H: 0, doubles: 0, triples: 0, HR: 0, BB: 0, HBP: 0, SO: 0, R: 0, RBI: 0, SB: 0, CS: 0, SF: 0,
+   battingRuns: 0, stealRuns: 0, defensiveRuns: 0, defensiveComponents: createDefensiveRunComponents(), fieldingOuts: 0, caughtAdvancing: 0 })),
   pitching: team.pitchers.map((profile, index) => ({ seasonId: profile.seasonId, playerId: profile.playerId, displayName: profile.displayName,
    role: index === team.bullpenIndex ? 'support' : index === team.closerIndex ? 'closer' : 'starter',
-   outs: 0, H: 0, BB: 0, HBP: 0, SO: 0, R: 0, starts: index === team.starterIndex ? 1 : 0, appearances: index === team.starterIndex ? 1 : 0 }))
+   outs: 0, H: 0, BB: 0, HBP: 0, SO: 0, R: 0, starts: index === team.starterIndex ? 1 : 0, appearances: index === team.starterIndex ? 1 : 0,
+   BF: 0, pitchingRunsAboveNeutral: 0 })),
+  battingRuns: 0, stealRuns: 0, defensiveRuns: 0, defensiveComponents: createDefensiveRunComponents(), pitchingRunsAboveNeutral: 0
  };
 }
 
 /** Full innings with no synthetic ties, ghost runners, or fallback winners. */
-export function simulateGame(input: GameInput, random: () => number, winExpectancy: WinExpectancyModel | null = new WinExpectancyModel(input.leagueRates)): GameResult {
+export function simulateGame(input: GameInput, random: () => number, winExpectancy: WinExpectancyModel | null = new WinExpectancyModel(input.defenseEnvironment.leagueRates)): GameResult {
  validateTeam(input.home);
  validateTeam(input.away);
- validateRates(input.leagueRates);
- if (!Number.isFinite(input.park) || input.park <= 0 || !Number.isFinite(input.leagueCatcherCS) || input.leagueCatcherCS < 0 || input.leagueCatcherCS > 1) throw new Error('Invalid game environment');
+ validateDefensiveEnvironment(input.defenseEnvironment);
+ if (!Number.isFinite(input.park) || input.park <= 0) throw new Error('Invalid game environment');
  const maxPA = input.limits?.maxPA ?? 1000;
  const maxInnings = input.limits?.maxInnings ?? 100;
  if (!Number.isInteger(maxPA) || maxPA < 1 || maxPA > 1000 || !Number.isInteger(maxInnings) || maxInnings < 9 || maxInnings > 100) throw new Error('Invalid simulation safety limits');
@@ -29,11 +33,12 @@ export function simulateGame(input: GameInput, random: () => number, winExpectan
  const away = createBox(input.away);
  const homeWorkload = createWorkload(input.home);
  const awayWorkload = createWorkload(input.away);
- const homeMatchups = input.homeMatchups ?? buildMatchups(input.home.hitters, input.away.pitchers, input.leagueRates, input.park);
- const awayMatchups = input.awayMatchups ?? buildMatchups(input.away.hitters, input.home.pitchers, input.leagueRates, input.park);
+ const rates = input.defenseEnvironment.leagueRates;
+ const homeMatchups = input.homeMatchups ?? buildMatchups(input.home.hitters, input.away.pitchers, rates, input.park);
+ const awayMatchups = input.awayMatchups ?? buildMatchups(input.away.hitters, input.home.pitchers, rates, input.park);
  if (homeMatchups.length !== 9 * input.away.pitchers.length * 8 || awayMatchups.length !== 9 * input.home.pitchers.length * 8) throw new Error('Invalid game matchup table');
- const top = createInningContext(input.away, input.home, away, home, homeWorkload, awayMatchups, input.leagueCatcherCS, maxPA);
- const bottom = createInningContext(input.home, input.away, home, away, awayWorkload, homeMatchups, input.leagueCatcherCS, maxPA);
+ const top = createInningContext(input.away, input.home, away, home, homeWorkload, awayMatchups, input.defenseEnvironment, maxPA);
+ const bottom = createInningContext(input.home, input.away, home, away, awayWorkload, homeMatchups, input.defenseEnvironment, maxPA);
  let highlight: SeasonMoment | null = null;
  let lowlight: SeasonMoment | null = null;
  let activeInning = 1;
@@ -59,7 +64,8 @@ export function simulateGame(input: GameInput, random: () => number, winExpectan
    opponentRunsBefore: input.challengeIsHome ? awayRunsBefore : homeRunsBefore,
    challengeRunsAfter: input.challengeIsHome ? homeRunsAfter : awayRunsAfter,
    opponentRunsAfter: input.challengeIsHome ? awayRunsAfter : homeRunsAfter,
-   batterName: event.batterName, batterSeasonId: event.batterSeasonId, pitcherName: event.pitcherName,
+   batterName: event.batterName, batterSeasonId: event.batterSeasonId,
+   pitcherName: event.pitcherName, pitcherSeasonId: event.pitcherSeasonId,
    challengeBatting: input.challengeIsHome === (activeHalf === 'bottom'),
    outcome: event.outcome, runsScored: event.runsScored,
    winBefore, winAfter, swing

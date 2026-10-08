@@ -3,6 +3,7 @@
 	import type { PitcherLine } from '#lib/sim/types.ts';
 	import type { GameResult } from '#lib/sim/types.ts';
 	import TeamLogo from './TeamLogo.svelte';
+	import { tableScroll } from './table-scroll.ts';
 
 	interface Props {
 		game: GameResult;
@@ -40,7 +41,7 @@
 
 	{#if expanded}
 	<div class="game-content">
-		<div class="table-scroll line-score" tabindex="0" role="region" aria-label={`Game ${game.number} inning line score`}>
+		<div class="table-scroll line-score" use:tableScroll role="region" aria-label={`Game ${game.number} inning line score`}>
 			<table>
 				<caption>Inning line score</caption>
 				<thead>
@@ -73,7 +74,7 @@
 					<span>{box.runs} {box.runs === 1 ? 'run' : 'runs'}</span>
 				</div>
 
-				<div class="table-scroll" tabindex="0" role="region" aria-label={`${box.name} batting box score for game ${game.number}`}>
+				<div class="table-scroll" use:tableScroll role="region" aria-label={`${box.name} batting box score for game ${game.number}`}>
 					<table>
 						<caption>{box.name} batting</caption>
 						<thead>
@@ -97,7 +98,7 @@
 					</table>
 				</div>
 
-				<div class="table-scroll" tabindex="0" role="region" aria-label={`${box.name} pitching box score for game ${game.number}`}>
+				<div class="table-scroll" use:tableScroll role="region" aria-label={`${box.name} pitching box score for game ${game.number}`}>
 					<table>
 						<caption>{box.name} pitching</caption>
 						<thead>

@@ -130,7 +130,7 @@ test('keeps a changed exact season in the narrow designed-back sheet through ran
 	const changedCandidate = manifest.candidates.find(candidate => candidate.seasonId === changedProfile!.seasonId)!;
 	const slot = legalSlots(scenario.draft, changedCandidate, manifest)[0];
 	const changedScenario: CardScenario = { ...scenario, candidate: changedCandidate, profile: changedProfile!, slot };
-	const photo = selectPhoto(media, changedProfile!.playerId, changedProfile!.year);
+	const photo = selectPhoto(media, changedProfile!.playerId, changedProfile!.year, changedProfile!.franchiseId);
 	expect(photo).not.toBeNull();
 	const gate = Promise.withResolvers<void>();
 	await page.route('**/rankings/*/manifest.json', async route => {
@@ -227,7 +227,7 @@ test('an image load failure preserves the chosen exact season and draft action',
 	const scenario = await cardScenario(request, manifest, candidate =>
 		!candidate.eligibleSlots.includes('BP') && !!media.players[candidate.playerId]?.photos.length
 	);
-	const photo = selectPhoto(media, scenario.candidate.playerId, scenario.profile.year);
+	const photo = selectPhoto(media, scenario.candidate.playerId, scenario.profile.year, scenario.profile.franchiseId);
 	expect(photo).not.toBeNull();
 	const logo = selectLogo(media, scenario.profile.franchiseId, scenario.profile.year);
 	expect(logo).not.toBeNull();
@@ -356,6 +356,7 @@ test.describe('normal card motion', () => {
 		await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
 		expect(groupsFor(scenario.draft, manifest, scenario.profiles, 'war', rankings)).not.toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'metrics', rankings));
 		const art = page.locator('.art-trigger').first();
+		await art.scrollIntoViewIfNeeded();
 		const surface = art.locator('[data-card][data-face="front"]');
 		await art.dispatchEvent('pointermove', { pointerType: 'touch', clientX: 1, clientY: 1 });
 		expect(await surface.evaluate(node => (node as HTMLElement).style.transform)).toBe('');

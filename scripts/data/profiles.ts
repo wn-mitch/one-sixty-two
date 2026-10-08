@@ -1,4 +1,4 @@
-import { compareId, POSITIONS, type Franchise, type Position, type Profile, type Slot } from '../../src/lib/game/types.ts';
+import { compareId, HITTER_SLOTS, POSITIONS, type Franchise, type Position, type Profile, type Slot } from '../../src/lib/game/types.ts';
 import { battingEvents, pitchingEvents, prepareRates } from '../../src/lib/sim/rates.ts';
 import { buildBaselines, type Baselines } from './baselines.ts';
 import { inEra, leagueKey, numberField, teamKey, type Row, type Tables } from './counts.ts';
@@ -47,7 +47,7 @@ export function compileProfiles(tables: Tables): CompiledProfiles {
    seasonId: id, playerId: row.playerID, displayName: `${person.nameFirst} ${person.nameLast}`, franchiseId: team.franchID,
    teamId: row.teamID, year: Number(row.yearID), league: row.lgID, historicalTeam: team.name, teamGames,
    bats: ['L', 'R', 'B'].includes(person.bats) ? person.bats : '', throws: ['L', 'R'].includes(person.throws) ? person.throws : '',
-   eligibleSlots: [], appearances: {}, fielding: {}, errorRates: {} as Record<Position, number>, catcherCS: 0,
+   eligibleSlots: [], primaryHitterSlot: null, appearances: {}, fielding: {}, defense: { positions: {} },
    speed: 0.5, stealAttempt: clamp(league.stealAttempt, 0, 0.25), stealSuccess: league.stealSuccess, doublePlay: league.doublePlay, estimatedFields: []
   };
   if (!profile.bats) profile.estimatedFields.push('bats.neutral');
@@ -76,8 +76,14 @@ export function compileProfiles(tables: Tables): CompiledProfiles {
    if (batter.counts.PA >= 200) {
     profile.eligibleSlots = POSITIONS.filter(position => (profile.appearances[position] ?? 0) >= 10);
     profile.eligibleSlots.push('DH');
-   }
-  }
+    const eligibleHitterSlots = HITTER_SLOTS.filter(slot => profile.eligibleSlots.includes(slot));
+    let primary = eligibleHitterSlots[0] ?? 'DH';
+    for (const slot of eligibleHitterSlots.slice(1)) {
+     if ((profile.appearances[slot] ?? 0) > (profile.appearances[primary] ?? 0)) primary = slot;
+    }
+    profile.primaryHitterSlot = primary;
+   } else if (profile.primaryHitterSlot === null) profile.primaryHitterSlot = 'DH';
+  } else profile.primaryHitterSlot = null;
   if (pitcher) {
    profile.pitching = { ...pitcher.counts };
    profile.pitchingRates = prepareRates(pitchingEvents(pitcher.counts, league.hitShares), league.pitching, baselines.target, parkFactor(team, 'PPF', profile));

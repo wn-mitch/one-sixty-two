@@ -3,7 +3,6 @@ import {
  CURRENT_REPLAY_SCHEMA_VERSION,
  HITTER_SLOTS,
  STARTER_SLOTS,
- SUPPORTED_REPLAY_SCHEMA_VERSIONS,
  type Candidate,
  type Draft,
  type DraftAction,
@@ -11,7 +10,6 @@ import {
  type Manifest,
  type Pick,
  type Replay,
- type ReplaySchemaVersion,
  type Roll,
  type Slot
 } from './types.ts';
@@ -24,24 +22,24 @@ function requireCurrentRules(draft: Draft): DraftRulePolicy {
  return draftRules(CURRENT_REPLAY_SCHEMA_VERSION);
 }
 
-function emptyDraft(manifest: Manifest, seed: number, schemaVersion: ReplaySchemaVersion): Draft {
- const policy = draftRules(schemaVersion);
- const snapshot = {
-  schemaVersion,
+function emptyDraft(manifest: Manifest, seed: number): Draft {
+ const policy = draftRules(CURRENT_REPLAY_SCHEMA_VERSION);
+ return {
+  schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION,
   dataVersion: manifest.dataVersion,
   modelVersion: policy.modelVersion,
   seed,
   picks: [],
   currentRoll: null,
   battingOrder: [],
-  starterOrder: []
+  starterOrder: [],
+  actions: []
  };
- return (schemaVersion === 3 ? { ...snapshot, schemaVersion, actions: [] } : snapshot) as Draft;
 }
 
 export function createDraft(manifest: Manifest, seed: number): Draft {
  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Invalid draft seed');
- return emptyDraft(manifest, seed, CURRENT_REPLAY_SCHEMA_VERSION);
+ return emptyDraft(manifest, seed);
 }
 
 export function openSlots(draft: Draft): Slot[] {
@@ -79,7 +77,6 @@ function nextRoll(draft: Draft, manifest: Manifest, random: () => number): Roll 
 }
 
 function appendAction(draft: Draft, action: DraftAction): DraftAction[] {
- if (draft.schemaVersion !== 3) throw new Error('Saved draft is incompatible');
  return [...draft.actions, action];
 }
 
@@ -209,7 +206,7 @@ function validAction(value: unknown): DraftAction {
  }
  if (action.type === 'pick') {
   if (Object.keys(action).length !== 3 || typeof action.seasonId !== 'string' ||
-   typeof action.slot !== 'string' || !draftRules(3).slots.includes(action.slot as Slot)) {
+   typeof action.slot !== 'string' || !draftRules(CURRENT_REPLAY_SCHEMA_VERSION).slots.includes(action.slot as Slot)) {
    throw new Error('Invalid draft action');
   }
   return { type: 'pick', seasonId: action.seasonId, slot: action.slot as Slot };
@@ -224,16 +221,16 @@ function validAction(value: unknown): DraftAction {
  throw new Error('Invalid draft action');
 }
 
-function replayActions(input: Extract<Replay, { schemaVersion: 3 }>, manifest: Manifest): { draft: Draft; random: () => number } {
+function replayActions(input: Replay, manifest: Manifest): { draft: Draft; random: () => number } {
  if (!Array.isArray(input.actions)) throw new Error('Invalid draft actions');
- let draft = emptyDraft(manifest, input.seed, 3);
+ let draft = emptyDraft(manifest, input.seed);
  const random = randomStream(input.seed, 'draft');
  for (const value of input.actions) {
   const action = validAction(value);
   const previous = draft;
   if (action.type === 'roll') draft = applyRoll(draft, manifest, random, true);
   else if (action.type === 'pick') {
-   draft = commitPickWithPolicy(draft, manifest, action.seasonId, action.slot, draftRules(3), true);
+   draft = commitPickWithPolicy(draft, manifest, action.seasonId, action.slot, draftRules(CURRENT_REPLAY_SCHEMA_VERSION), true);
   } else {
    draft = reassignedDraft(draft, manifest, action.seasonId, action.slot, true);
    if (draft === previous) throw new Error('Invalid draft action');
@@ -242,30 +239,17 @@ function replayActions(input: Extract<Replay, { schemaVersion: 3 }>, manifest: M
  return { draft, random };
 }
 
-function replayLegacy(input: Extract<Replay, { schemaVersion: 1 | 2 }>, manifest: Manifest): { draft: Draft; random: () => number } {
- const policy = draftRules(input.schemaVersion);
- let draft = emptyDraft(manifest, input.seed, input.schemaVersion);
- const random = randomStream(input.seed, 'draft');
- for (const pick of input.picks) {
-  const roll = nextRoll(draft, manifest, random);
-  if (roll.franchiseId !== pick.franchiseId || roll.decade !== pick.decade) {
-   throw new Error('Draft roll does not match its seed');
-  }
-  draft = commitPickWithPolicy({ ...draft, currentRoll: roll } as Draft, manifest, pick.seasonId, pick.slot, policy, false);
- }
- return { draft, random };
-}
 
 function replayChronology(input: Replay, manifest: Manifest): { draft: Draft; random: () => number } {
  if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid draft seed');
- return input.schemaVersion === 3 ? replayActions(input, manifest) : replayLegacy(input, manifest);
+ return replayActions(input, manifest);
 }
 
 export function rollDraft(draft: Draft, manifest: Manifest): Draft {
  const policy = requireCurrentRules(draft);
  if (draft.currentRoll) return draft;
  if (draft.picks.length === policy.slots.length) throw new Error('The roster is complete');
- const { draft: replayed, random } = replayActions(draft as Extract<Draft, { schemaVersion: 3 }>, manifest);
+ const { draft: replayed, random } = replayActions(draft, manifest);
  if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
  return applyRoll(replayed, manifest, random, true);
 }
@@ -301,13 +285,10 @@ function samePicks(value: Pick[], expected: Pick[]): boolean {
  });
 }
 
-function validateWithRules(value: unknown, manifest: Manifest, allowHistorical: boolean, complete: boolean): Draft {
+function validateWithRules(value: unknown, manifest: Manifest, requireCurrentRoll: boolean, complete: boolean): Draft {
  if (!value || typeof value !== 'object') throw new Error('Invalid draft');
  const input = value as Draft;
- if (!SUPPORTED_REPLAY_SCHEMA_VERSIONS.includes(input.schemaVersion) ||
-  (!allowHistorical && input.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION)) {
-  throw new Error('Saved draft is incompatible');
- }
+ if (input.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION) throw new Error('Saved draft is incompatible');
  const policy = draftRules(input.schemaVersion);
  if (input.dataVersion !== manifest.dataVersion || input.modelVersion !== policy.modelVersion) {
   throw new Error('Saved draft is incompatible');
@@ -318,7 +299,7 @@ function validateWithRules(value: unknown, manifest: Manifest, allowHistorical: 
   input.picks.some(pick => !pick || typeof pick !== 'object')) {
   throw new Error('Invalid draft picks');
  }
- if (!allowHistorical && !Object.prototype.hasOwnProperty.call(input, 'currentRoll')) throw new Error('Invalid saved roll');
+ if (requireCurrentRoll && !Object.prototype.hasOwnProperty.call(input, 'currentRoll')) throw new Error('Invalid saved roll');
  const { draft } = replayChronology(input, manifest);
  if (!samePicks(input.picks, draft.picks)) throw new Error('Invalid draft snapshot');
  if (!sameRoll(input.currentRoll, draft.currentRoll)) {
@@ -333,18 +314,15 @@ function validateWithRules(value: unknown, manifest: Manifest, allowHistorical: 
 
 /** Validate an ongoing save under the current draft rules only. */
 export function validateDraft(value: unknown, manifest: Manifest, complete = false): Draft {
- return validateWithRules(value, manifest, false, complete);
+ return validateWithRules(value, manifest, true, complete);
 }
 
-/** Validate a completed immutable replay under the rules recorded in that replay. */
+/** Validate a completed immutable replay under the sole current replay contract. */
 export function validateReplay(value: unknown, manifest: Manifest): Draft {
- return validateWithRules(value, manifest, true, true);
+ return validateWithRules(value, manifest, false, true);
 }
 
 export function replayInput(draft: Draft): Replay {
- const { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder } = draft;
- if (schemaVersion === 3) {
-  return { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder, actions: draft.actions };
- }
- return { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder };
+ const { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder, actions } = draft;
+ return { schemaVersion, dataVersion, modelVersion, seed, picks, battingOrder, starterOrder, actions };
 }

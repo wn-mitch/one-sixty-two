@@ -1,9 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { createBox, simulateGame } from './game.ts';
 import { createInningContext, playHalf, type InningEvent } from './inning.ts';
-import { createBases, force, hit } from './advancement.ts';
+import {
+ CONTACT_DOUBLE_PLAY,
+ CONTACT_ERROR,
+ CONTACT_FIRST_ATTEMPT,
+ CONTACT_FIRST_OUT,
+ CONTACT_HIT_CONVERSION,
+ CONTACT_OUTFIELD,
+ CONTACT_RESPONSIBILITY,
+ CONTACT_SECOND_ATTEMPT,
+ CONTACT_SECOND_OUT,
+ CONTACT_THIRD_ATTEMPT,
+ CONTACT_THIRD_OUT,
+ CONTACT_UNIFORM_COUNT
+} from './contact.ts';
+import { neutralDefensivePosition } from './defense.ts';
 import { createWorkload } from './workload.ts';
-import { EVENT as E, eventTable, scripted, testGame, testTeam } from './test-fixtures.ts';
+import { EVENT as E, eventTable, scripted, testDefenseEnvironment, testGame, testTeam } from './test-fixtures.ts';
+
+function contact(event: number, values: Readonly<Record<number, number>> = {}): number[] {
+ const packet = Array<number>(CONTACT_UNIFORM_COUNT).fill(0.99);
+ for (const [index, value] of Object.entries(values)) packet[Number(index)] = value;
+ return [event, ...packet];
+}
 
 function half() {
  const offense = testTeam('batting');
@@ -11,11 +31,16 @@ function half() {
  const batting = createBox(offense);
  const pitching = createBox(defense);
  const workload = createWorkload(defense);
- const context = createInningContext(offense, defense, batting, pitching, workload, eventTable(3), 0.25, 1000);
+ const context = createInningContext(offense, defense, batting, pitching, workload, eventTable(3), testDefenseEnvironment(), 1000);
  return { offense, defense, batting, pitching, workload, context };
 }
 
 describe('plate appearance scoring', () => {
+ it('credits every assigned defender with workload on strikeouts', () => {
+  const game = half();
+  playHalf(game.context, Infinity, scripted([E.SO, E.SO, E.SO]));
+  expect(game.pitching.batting.map(line => line.fieldingOuts)).toEqual([...Array(8).fill(3), 0]);
+ });
  it('forces a bases-loaded walk, without an AB or hit', () => {
   const game = half();
   playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.BB, E.BB, E.BB]));
@@ -33,7 +58,7 @@ describe('plate appearance scoring', () => {
   const game = half();
   game.workload.budget = 12;
   game.pitching.pitching[0].outs = 11;
-  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, E.double, 0]));
+  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, ...contact(E.double, { [CONTACT_FIRST_ATTEMPT]: 0, [CONTACT_FIRST_OUT]: 0.99 })]));
   expect(game.pitching.pitching[0]).toMatchObject({ R: 1, outs: 12, BB: 1 });
   expect(game.pitching.pitching[2]).toMatchObject({ R: 0, H: 1, outs: 2 });
  });
@@ -59,25 +84,73 @@ describe('plate appearance scoring', () => {
    batterName: game.offense.hitters[0].displayName, batterSeasonId: game.offense.hitters[0].seasonId
   });
  });
+ it('records an advancement out separately from caught stealing and stops on the third out', () => {
+  const game = half();
+  const events: InningEvent[] = [];
+  game.offense.hitters[0].stealAttempt = 0.25;
+  playHalf(game.context, Infinity, scripted([
+   E.BB, 0, 0,
+   E.SO,
+   E.SO,
+   ...contact(E.single, { [CONTACT_SECOND_ATTEMPT]: 0, [CONTACT_SECOND_OUT]: 0 })
+  ]), event => events.push(event));
+  expect(game.batting.batting[0]).toMatchObject({ SB: 1, CS: 0, caughtAdvancing: 1 });
+  expect(game.batting.batting[3]).toMatchObject({ H: 1, AB: 1 });
+  expect(game.pitching.pitching[0]).toMatchObject({ outs: 3, H: 1 });
+  expect(game.batting.runs).toBe(0);
+  expect(events.at(-1)).toMatchObject({ outcome: 'single', outsBefore: 2, outsAfter: 3, runsScored: 0 });
+ });
  it('does not attempt a double play with two outs', () => {
   const game = half();
   game.offense.hitters[3].doublePlay = 1;
-  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, E.SO, 0.9, E.OUT, 0.1, 0.9]));
+  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, E.SO, 0.9, ...contact(E.OUT, { [CONTACT_RESPONSIBILITY]: 0.1 })]));
   expect(game.pitching.pitching[0].outs).toBe(3);
   expect(game.context.bases.runners[0]).toBe(0);
  });
  it('ends a one-out half with a double play and never exceeds three outs', () => {
   const game = half();
-  game.offense.hitters[2].doublePlay = 0.4;
-  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, E.OUT, 0.1, 0.9, 0]));
+  game.offense.hitters[2].doublePlay = 0;
+  game.context.prepared.doublePlay.fill(1);
+  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.SO, 0.9, ...contact(E.OUT, {
+   [CONTACT_RESPONSIBILITY]: 0.1,
+   [CONTACT_HIT_CONVERSION]: 0.99,
+   [CONTACT_ERROR]: 0.99,
+   [CONTACT_DOUBLE_PLAY]: 0
+  })]));
   expect(game.pitching.pitching[0].outs).toBe(3);
   expect(game.batting.batting[2]).toMatchObject({ AB: 1, RBI: 0 });
   expect(game.context.bases.runners[0]).toBe(-1);
+  expect(game.pitching.defensiveComponents.doublePlay).toBeGreaterThan(0);
+  expect(game.batting.battingRuns + game.pitching.defensiveRuns + game.pitching.pitchingRunsAboveNeutral).toBeCloseTo(0, 10);
+ });
+ it('attributes converted-hit throwing value to the independently selected outfielder', () => {
+  const game = half();
+  game.context.prepared.hitPrevention[4] = -1;
+  game.context.prepared.outfieldThrowing[7] = 1;
+  playHalf(game.context, Infinity, scripted([
+   ...contact(E.double),
+   ...contact(E.OUT, {
+    [CONTACT_RESPONSIBILITY]: 0.45,
+    [CONTACT_HIT_CONVERSION]: 0,
+    [CONTACT_OUTFIELD]: 0.9,
+    [CONTACT_SECOND_ATTEMPT]: 0.62
+   }),
+   E.SO, E.SO, E.SO
+  ]));
+  const selected = game.pitching.batting[game.defense.defense.RF].defensiveComponents.outfieldThrowing;
+  const others = game.pitching.batting
+   .filter((_, index) => index !== game.defense.defense.RF)
+   .reduce((sum, line) => sum + Math.abs(line.defensiveComponents.outfieldThrowing), 0);
+  expect(selected).toBeGreaterThan(0);
+  expect(others).toBe(0);
  });
  it('records an error as AB but neither hit nor RBI', () => {
   const game = half();
-  game.context.errors.fill(1);
-  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.BB, E.BB, E.OUT, 0.1, 0]));
+  game.context.prepared.errorBaseline.fill(0.12);
+  playHalf(game.context, Infinity, scripted([E.BB, 0.9, E.BB, E.BB, ...contact(E.OUT, {
+   [CONTACT_RESPONSIBILITY]: 0.1,
+   [CONTACT_ERROR]: 0
+  })]));
   expect(game.batting.runs).toBe(1);
   expect(game.batting.batting[3]).toMatchObject({ AB: 1, H: 0, RBI: 0 });
   expect(game.pitching.pitching[0]).toMatchObject({ H: 0, R: 1 });
@@ -85,26 +158,40 @@ describe('plate appearance scoring', () => {
  it('maps positional error reliability to the assigned defensive hitter', () => {
   const offense = testTeam('offense');
   const defense = testTeam('defense');
+  const originalC = defense.defense.C;
+  defense.hitters[originalC].defense.positions.C!.errorAvoidance = 1;
   [defense.defense.C, defense.defense.SS] = [defense.defense.SS, defense.defense.C];
-  defense.hitters[4].errorRates.C = 1;
+  defense.hitters[defense.defense.C].defense.positions.C = neutralDefensivePosition('C');
+  defense.hitters[defense.defense.C].defense.positions.C!.errorAvoidance = -1;
+  defense.hitters[defense.defense.SS].defense.positions.SS = neutralDefensivePosition('SS');
+  const environment = testDefenseEnvironment();
+  environment.leagueErrorRates.C = 0.12;
   const batting = createBox(offense);
   const pitching = createBox(defense);
-  const context = createInningContext(offense, defense, batting, pitching, createWorkload(defense), eventTable(3), 0.25, 1000);
-  playHalf(context, Infinity, scripted([E.OUT, 0.01, 0, 0.9]));
-  expect(context.errors[0]).toBe(1);
+  const context = createInningContext(offense, defense, batting, pitching, createWorkload(defense), eventTable(3), environment, 1000);
+  playHalf(context, Infinity, scripted(contact(E.OUT, { [CONTACT_RESPONSIBILITY]: 0.01, [CONTACT_ERROR]: 0.11 })));
+  expect(context.prepared.errorBaseline[0]).toBe(0.12);
+  expect(context.prepared.hitterByPosition[0]).toBe(defense.defense.C);
   expect(batting.batting[0]).toMatchObject({ AB: 1, H: 0 });
   expect(batting.batting.reduce((sum, line) => sum + line.PA, 0)).toBe(4);
  });
  it('credits tag-up SF and RBI without AB', () => {
   const game = half();
-  playHalf(game.context, Infinity, scripted([E.triple, E.OUT, 0.1, 0.9, 0]));
+  playHalf(game.context, Infinity, scripted([
+   ...contact(E.triple),
+   ...contact(E.OUT, {
+    [CONTACT_RESPONSIBILITY]: 0.65,
+    [CONTACT_THIRD_ATTEMPT]: 0,
+    [CONTACT_THIRD_OUT]: 0.99
+   })
+  ]));
   expect(game.batting.batting[1]).toMatchObject({ PA: 1, SF: 1, AB: 0, RBI: 1 });
   expect(game.batting.batting[0].R).toBe(1);
  });
  it('observes a non-home-run walkoff by its credited hit result', () => {
   const game = half();
   const events: InningEvent[] = [];
-  playHalf(game.context, 1, scripted([E.triple, E.triple]), event => events.push(event));
+  playHalf(game.context, 1, scripted([...contact(E.triple), ...contact(E.triple)]), event => events.push(event));
   expect(events[1]).toMatchObject({
    outcome: 'single', outsBefore: 0, basesBefore: 4,
    offenseRunsBefore: 0, offenseRunsAfter: 1, runsScored: 1
@@ -112,34 +199,6 @@ describe('plate appearance scoring', () => {
  });
 });
 
-describe('runner advancement', () => {
- it('preserves lead-runner occupancy when a single cannot send second home', () => {
-  const game = half();
-  const bases = createBases(game.batting, game.pitching);
-  force(bases, 0, 0);
-  force(bases, 1, 0);
-  expect(hit(bases, 1, 2, 0, game.offense.hitters, () => 0.99)).toBe(1);
-  expect([...bases.runners]).toEqual([2, 1, 0]);
-  expect(game.batting.runs).toBe(0);
- });
- it('lets first take third only after the lead runner scores', () => {
-  const game = half();
-  const bases = createBases(game.batting, game.pitching);
-  force(bases, 0, 0);
-  force(bases, 1, 0);
-  hit(bases, 1, 2, 0, game.offense.hitters, () => 0);
-  expect([...bases.runners]).toEqual([2, -1, 1]);
-  expect(game.batting.runs).toBe(1);
- });
- it('scores second and third on a double and holds first at third when needed', () => {
-  const game = half();
-  const bases = createBases(game.batting, game.pitching);
-  for (let index = 0; index < 3; index++) force(bases, index, 0);
-  hit(bases, 2, 3, 0, game.offense.hitters, () => 0.99);
-  expect([...bases.runners]).toEqual([-1, 3, 2]);
-  expect(game.batting.runs).toBe(2);
- });
-});
 
 function walkoffGrandSlamEvents(): number[] {
  const values = [E.HR, E.HR, E.HR, E.SO, E.SO, E.SO, E.SO, E.SO, E.SO];
@@ -156,19 +215,19 @@ describe('complete games', () => {
   expect(game.away.pitching.reduce((sum, line) => sum + line.outs, 0)).toBe(24);
  });
  it('truncates a triple to a single when third scores the non-HR winning run', () => {
-  const game = simulateGame(testGame(), scripted([...Array<number>(51).fill(E.SO), E.triple, E.triple]));
+  const game = simulateGame(testGame(), scripted([...Array<number>(51).fill(E.SO), ...contact(E.triple), ...contact(E.triple)]));
   expect(game.home.runs).toBe(1);
   const hitter = game.home.batting[7];
   expect(hitter).toMatchObject({ H: 1, triples: 0, doubles: 0, RBI: 1 });
   expect(game.home.batting[6]).toMatchObject({ triples: 1, R: 1 });
  });
  it('credits a walk-off triple as a double when second supplies the winner', () => {
-  const game = simulateGame(testGame(), scripted([...Array<number>(51).fill(E.SO), E.double, E.triple]));
+  const game = simulateGame(testGame(), scripted([...Array<number>(51).fill(E.SO), ...contact(E.double), ...contact(E.triple)]));
   expect(game.home.batting[7]).toMatchObject({ H: 1, doubles: 1, triples: 0 });
   expect(game.home.runs).toBe(1);
  });
  it('stops a bases-loaded non-HR walkoff after the first winning runner', () => {
-  const game = simulateGame(testGame(), scripted([...Array<number>(51).fill(E.SO), E.BB, 0.9, E.BB, E.BB, E.triple]));
+  const game = simulateGame(testGame(), scripted([...Array<number>(51).fill(E.SO), E.BB, 0.9, E.BB, E.BB, ...contact(E.triple)]));
   expect(game.home.runs).toBe(1);
   expect(game.home.batting[0]).toMatchObject({ H: 1, triples: 0, RBI: 1 });
  });
@@ -188,7 +247,8 @@ describe('complete games', () => {
    inning: 9, half: 'bottom', outsBefore: 0, basesBefore: 7,
    challengeRunsBefore: 0, opponentRunsBefore: 3, challengeRunsAfter: 4, opponentRunsAfter: 3,
    batterName: input.home.hitters[0].displayName, batterSeasonId: input.home.hitters[0].seasonId,
-   pitcherName: input.away.pitchers[input.away.closerIndex].displayName, challengeBatting: true,
+   pitcherName: input.away.pitchers[input.away.closerIndex].displayName,
+   pitcherSeasonId: input.away.pitchers[input.away.closerIndex].seasonId, challengeBatting: true,
    outcome: 'homeRun', runsScored: 4, winAfter: 1
   });
   expect(game.highlight!.swing).toBeGreaterThan(0.5);

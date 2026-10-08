@@ -50,7 +50,7 @@ export function poolBullpen(profiles: Profile[], id: string): Profile {
   for (let i = 0; i < 8; i++) rates[i] += profile.pitchingRates![i] * source.BFP;
  }
  if (!counts.BFP) throw new Error(`Empty bullpen evidence: ${id}`);
- return { ...profiles[0], seasonId: id, playerId: id, displayName: 'Support bullpen', bats: '', throws: '', eligibleSlots: [], batting: undefined, battingRates: undefined, pitching: counts, pitchingRates: normalize(rates), estimatedFields: ['pooledRelief.BFPWeighted', 'throws.neutral'], fielding: {}, historicalTeam: id === 'league:bullpen' ? 'League relief pool' : profiles[0].historicalTeam };
+ return { ...profiles[0], seasonId: id, playerId: id, displayName: 'Support bullpen', bats: '', throws: '', eligibleSlots: [], primaryHitterSlot: null, appearances: {}, batting: undefined, battingRates: undefined, pitching: counts, pitchingRates: normalize(rates), estimatedFields: ['pooledRelief.BFPWeighted', 'throws.neutral'], fielding: {}, defense: { positions: {} }, historicalTeam: id === 'league:bullpen' ? 'League relief pool' : profiles[0].historicalTeam };
 }
 
 export function buildOpponents(compiled: CompiledProfiles): { opponents: Opponent[]; bullpen: Profile } {

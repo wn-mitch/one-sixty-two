@@ -3,11 +3,11 @@ import { defineConfig } from '@playwright/test';
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 4162);
 
 export default defineConfig({
-	// The end-to-end suite runs against the real Worker on local workerd, so server
-	// routes and the R2 replay binding are exercised for real rather than mocked.
+	// The suite runs against local workerd with local R2. The test launcher replaces
+	// only BROWSER.quickAction with a loopback Playwright capture bridge.
 	webServer: {
 		command:
-			`npm run build && npx wrangler dev --port ${port} --ip 127.0.0.1 --local --show-interactive-dev-session=false`,
+			'npm run build && node scripts/test-server.ts',
 		port,
 		// Includes preparing and hashing the reviewed portrait inventory.
 		timeout: 600000,

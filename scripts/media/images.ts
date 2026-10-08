@@ -6,6 +6,8 @@ import { promisify } from 'node:util';
 import { canonicalJSON } from '../data/compile.ts';
 import { digest, fetchCachedBytes } from './cache.ts';
 import type { CommonsMetadata, PreparedAsset } from './types.ts';
+import type { PhotoCrop } from '../../src/lib/media/types.ts';
+import { isPhotoCrop } from '../../src/lib/media/photo-policy.ts';
 
 const execFileAsync = promisify(execFile);
 const IMAGE_PIPELINE_VERSION = 'commons-thumb-webp-v2';
@@ -47,14 +49,18 @@ export async function prepareImage(
 	cacheDir: string,
 	assetDirectory: string,
 	offline: boolean,
-	maxDimension = 384
+	maxDimension = 384,
+	crop?: PhotoCrop,
+	expectedChecksum?: string
 ): Promise<PreparedAsset> {
 	if (!Number.isInteger(maxDimension) || maxDimension < 1 || maxDimension > 4096) {
 		throw new Error(`Invalid image maximum dimension: ${maxDimension}`);
 	}
 	const sourceBytes = await fetchCachedBytes(cacheDir, metadata.downloadUrl, offline);
 	const sourceChecksum = digest(sourceBytes);
-	const key = digest(`${IMAGE_PIPELINE_VERSION}\0${maxDimension}\0${metadata.downloadUrl}\0${sourceChecksum}`);
+	if (expectedChecksum && sourceChecksum !== expectedChecksum) throw new Error(`Reviewed image bytes changed for ${metadata.sourceId ?? metadata.pageId}`);
+	if (crop && !isPhotoCrop(crop)) throw new Error('Invalid reviewed photo crop');
+	const key = digest(`${IMAGE_PIPELINE_VERSION}\0${maxDimension}\0${metadata.downloadUrl}\0${sourceChecksum}${crop ? `\0crop-v1:${canonicalJSON(crop)}` : ''}`);
 	const optimizedDirectory = join(cacheDir, 'optimized');
 	const optimizedPath = join(optimizedDirectory, `${key}.webp`);
 	const optimizedMetadataPath = join(optimizedDirectory, `${key}.json`);
@@ -65,12 +71,24 @@ export async function prepareImage(
 		const temporaryOutput = join(optimizedDirectory, `.${key}.${randomUUID()}.webp`);
 		try {
 			await writeFile(temporaryInput, sourceBytes);
+			// Read the auto-oriented decoded dimensions: provider thumbnail dimensions can be inaccurate.
+			const cropArguments: string[] = [];
+			if (crop) {
+				const { stdout: dimensions } = await execFileAsync('magick', [temporaryInput, '-auto-orient', '-format', '%w %h', 'info:'], { timeout: 10_000 });
+				const [w, h] = dimensions.trim().split(/\s+/).map(Number);
+				if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1) throw new Error('Invalid source dimensions for crop');
+				const x = Math.floor(crop.x * w), y = Math.floor(crop.y * h);
+				const width = Math.max(1, Math.min(w - x, Math.round(crop.width * w)));
+				const height = Math.max(1, Math.min(h - y, Math.round(crop.height * h)));
+				cropArguments.push('-crop', `${width}x${height}+${x}+${y}`, '+repage');
+			}
 			await execFileAsync('magick', [
 				'-limit', 'memory', '256MiB',
 				'-limit', 'map', '512MiB',
 				'-limit', 'disk', '1GiB',
 				temporaryInput,
 				'-auto-orient',
+				...cropArguments,
 				'-strip',
 				'-thumbnail', `${maxDimension}x${maxDimension}>`,
 				'-define', 'webp:method=6',

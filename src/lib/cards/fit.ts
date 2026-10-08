@@ -243,12 +243,20 @@ function emitFitted(cards: Iterable<HTMLElement>): void {
 
 function schedule(controller: CardController, force = false): void {
 	controller.force ||= force;
+	controller.card.dataset.fitState = 'unsettled';
 	if (controller.frame !== undefined) return;
 	controller.frame = requestAnimationFrame(() => {
 		controller.frame = undefined;
-		const changed = fitCard(controller, controller.force);
-		controller.force = false;
-		if (changed) emitFitted([controller.card]);
+		try {
+			fitCard(controller, controller.force);
+			controller.card.dataset.fitState = 'settled';
+		} catch (error) {
+			controller.card.dataset.fitState = 'failed';
+			throw error;
+		} finally {
+			controller.force = false;
+			emitFitted([controller.card]);
+		}
 	});
 }
 

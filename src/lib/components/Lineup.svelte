@@ -64,9 +64,9 @@
     <p class="workload muted">Available from the ninth inning when tied or ahead by 1–3. One inning per appearance, with a season innings cap and rest after two consecutive games.</p>
    </div>
    <div class="support">
-    <h3>{draft.schemaVersion === 3 ? 'Drafted bullpen remainder' : 'Support bullpen'}</h3>
+    <h3>Drafted bullpen remainder</h3>
     {#if bullpen}<PlayerCard profile={bullpen} assignedSlot="BP" war={warValue({ profile: bullpen, slots: ['BP'] }, 'Bullpens', rankings)} ranking={rankingForSeason(rankings, bullpen.seasonId)} {rankings} {manifest} {rankingLoading} {rankingError} />{/if}
-    <p class="workload muted">{draft.schemaVersion === 3 ? 'Pooled relief-dominant pitcher-seasons, excluding this team-season’s saves leader, handle the remaining innings with unlimited support workload. Composition stays fixed independently of your closer.' : 'League-average 2025 relief handles the innings your starters and closer do not.'} This is a pitching abstraction, not a full 26-player roster.</p>
+    <p class="workload muted">Pooled relief-dominant pitcher-seasons, excluding this team-season’s saves leader, handle the remaining innings with unlimited support workload. Composition stays fixed independently of your closer. This is a pitching abstraction, not a full 26-player roster.</p>
    </div>
   </section>
  </div>

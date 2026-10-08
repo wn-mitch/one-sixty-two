@@ -13,7 +13,7 @@ import {
 } from './draft.ts';
 import { decodeReplay, encodeReplay } from './share.ts';
 import { persistDraft, restoreDraft, STORAGE_KEY } from './persistence.ts';
-import { HITTER_SLOTS, LEGACY_SLOTS, STARTER_SLOTS, SLOTS, type Candidate, type Draft, type Manifest, type Replay, type Slot } from './types.ts';
+import { SLOTS, type Candidate, type Draft, type Manifest, type Slot } from './types.ts';
 import { randomStream } from './random.ts';
 
 function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Manifest {
@@ -27,6 +27,7 @@ function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Ma
   chunks: {},
   simulationUrl: '',
   attributionUrl: '',
+  showcaseUrl: '',
   archiveUrl: '',
   approximations: [],
   coverage: [],
@@ -103,7 +104,7 @@ function scarcePool(openCandidates: Candidate[], open: Slot[]): Manifest {
 describe('permanent deterministic drafting', () => {
  it.each(Array.from({ length: 32 }, (_, seed) => seed))('finishes seed %i with fourteen distinct identities and franchises', seed => {
   const initial = createDraft(manifest, seed);
-  expect(initial.schemaVersion).toBe(3);
+  expect(initial.schemaVersion).toBe(4);
   expect(legalSlots(initial, candidates[0], manifest)).toEqual(['C']);
   const draft = finish(seed);
   const selected = draft.picks.map(pick => manifest.candidates.find(item => item.seasonId === pick.seasonId)!);
@@ -284,7 +285,7 @@ describe('permanent deterministic drafting', () => {
   const roll = pending!.currentRoll;
   const pickCount = pending!.picks.length;
   const moved = reassignPick(pending!, flexible, original.seasonId, 'DH');
-  if (moved.schemaVersion !== 3) throw new Error('Expected current draft');
+  if (moved.schemaVersion !== 4) throw new Error('Expected current draft');
   expect(moved.currentRoll).toEqual(roll);
   expect(moved.seed).toBe(pending!.seed);
   expect(moved.picks).toHaveLength(pickCount);
@@ -440,9 +441,9 @@ describe('permanent deterministic drafting', () => {
   const complete = finish(162, flexible);
   const catcher = complete.picks.find(pick => pick.slot === 'C')!;
   const moved = reassignPick(complete, flexible, catcher.seasonId, '1B');
-  if (moved.schemaVersion !== 3) throw new Error('Expected current replay');
+  if (moved.schemaVersion !== 4) throw new Error('Expected current replay');
   const input = replayInput(moved);
-  if (input.schemaVersion !== 3) throw new Error('Expected current replay');
+  if (input.schemaVersion !== 4) throw new Error('Expected current replay');
   const forgedPick = {
    ...input,
    picks: input.picks.map((pick, index) => index === 0 ? { ...pick, slot: 'DH' as const } : pick)
@@ -460,94 +461,31 @@ describe('permanent deterministic drafting', () => {
   expect(() => validateReplay({ ...input, actions: [...input.actions, { type: 'unknown' }] }, flexible)).toThrow('Invalid draft action');
  });
 
- it('verifies a completed schema-one replay under its immutable player-only rules', () => {
-  const legacyCandidates = LEGACY_SLOTS.map((slot, index) => ({
-   seasonId: `legacy${index}:1982:AL:A`,
-   playerId: `legacy${index}`,
-   franchiseId: 'A',
-   decade: 1980,
-   eligibleSlots: [slot]
-  })) satisfies Candidate[];
-  const legacyManifest = makeManifest(legacyCandidates, 'legacy-v1');
-  const legacy: Replay = {
-   schemaVersion: 1,
-   dataVersion: legacyManifest.dataVersion,
-   modelVersion: 'pa-v1',
-   seed: 162,
-   picks: legacyCandidates.map((candidate, index) => ({
-    seasonId: candidate.seasonId,
-    slot: LEGACY_SLOTS[index],
-    franchiseId: 'A',
-    decade: 1980
-   })),
-   battingOrder: legacyCandidates.slice(0, 9).map(candidate => candidate.seasonId),
-   starterOrder: legacyCandidates.slice(9, 12).map(candidate => candidate.seasonId)
-  };
-  const restored = validateReplay(legacy, legacyManifest);
-  expect(restored.schemaVersion).toBe(1);
-  expect(new Set(restored.picks.map(pick => pick.franchiseId))).toEqual(new Set(['A']));
-  const token = btoa(JSON.stringify(legacy)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  expect(decodeReplay(token, legacyManifest)).toEqual(restored);
-  const incompatibleToken = btoa(JSON.stringify({ ...legacy, dataVersion: 'retired' }))
-   .replace(/\+/g, '-')
-   .replace(/\//g, '_')
-   .replace(/=+$/, '');
-  expect(() => decodeReplay(incompatibleToken, legacyManifest)).toThrow('incompatible');
-  expect(() => validateDraft(legacy, legacyManifest, true)).toThrow('incompatible');
-  expect(() => rollDraft(restored, legacyManifest)).toThrow('incompatible');
-  expect(() => commitPick({ ...restored, currentRoll: { franchiseId: 'A', decade: 1980 } }, legacyManifest, legacy.picks[0].seasonId, 'C')).toThrow('incompatible');
- });
-
- it('verifies schema-two chronology with its original era, slots, and unique-franchise policy', () => {
-  const legacyCandidates = LEGACY_SLOTS.map((slot, index) => ({
-   seasonId: `schema2-${index}:1982:AL:T${index}`,
-   playerId: `schema2-${index}`,
-   franchiseId: `F${index}`,
-   decade: 1980,
-   eligibleSlots: [slot]
-  } satisfies Candidate));
-  const ignored = [
-   { seasonId: 'early:1959:AL:E', playerId: 'early', franchiseId: 'E', decade: 1950, eligibleSlots: ['C'] },
-   { seasonId: 'bullpen:1982:AL:BP', playerId: 'bullpen:BP', franchiseId: 'BP', decade: 1980, eligibleSlots: ['BP'] }
-  ] satisfies Candidate[];
-  const source = makeManifest([...legacyCandidates, ...ignored], 'legacy-v2');
-  const random = randomStream(162, 'draft');
-  const remaining = [...legacyCandidates];
-  const picks: Replay['picks'] = [];
-  while (remaining.length) {
-   const franchises = remaining.map(candidate => candidate.franchiseId).sort();
-   const franchiseId = franchises[Math.floor(random() * franchises.length)];
-   random();
-   const index = remaining.findIndex(candidate => candidate.franchiseId === franchiseId);
-   const [candidate] = remaining.splice(index, 1);
-   picks.push({
-    seasonId: candidate.seasonId,
-    slot: candidate.eligibleSlots[0],
-    franchiseId,
-    decade: 1980
-   });
+ it('rejects every pre-cutover replay schema and model at replay, URL, and persistence boundaries', () => {
+  const current = replayInput(finish());
+  for (const schemaVersion of [1, 2, 3]) {
+   const obsolete = { ...current, schemaVersion };
+   expect(() => validateReplay(obsolete, manifest)).toThrow('incompatible');
+   const token = btoa(JSON.stringify(obsolete)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+   expect(() => decodeReplay(token, manifest)).toThrow('incompatible');
   }
-  const replay: Replay = {
-   schemaVersion: 2,
-   dataVersion: source.dataVersion,
-   modelVersion: 'pa-v1',
-   seed: 162,
-   picks,
-   battingOrder: HITTER_SLOTS.map(slot => legacyCandidates.find(candidate => candidate.eligibleSlots.includes(slot))!.seasonId),
-   starterOrder: STARTER_SLOTS.map(slot => legacyCandidates.find(candidate => candidate.eligibleSlots.includes(slot))!.seasonId)
-  };
-  const restored = validateReplay(replay, source);
-  expect(restored.picks).toHaveLength(LEGACY_SLOTS.length);
-  expect(new Set(restored.picks.map(pick => pick.franchiseId)).size).toBe(LEGACY_SLOTS.length);
-  expect(restored.picks.some(pick => pick.seasonId === ignored[0].seasonId || pick.seasonId === ignored[1].seasonId)).toBe(false);
+
+  const obsoleteModel = { ...current, modelVersion: 'pa-v2' };
+  expect(() => validateReplay(obsoleteModel, manifest)).toThrow('incompatible');
+
+  const storage = memoryStorage();
+  const saved = JSON.stringify({ ...current, schemaVersion: 3, modelVersion: 'pa-v2', phase: 'results' });
+  storage.setItem(STORAGE_KEY, saved);
+  expect(restoreDraft(storage, manifest)).toMatchObject({ kind: 'incompatible' });
+  expect(storage.getItem(STORAGE_KEY)).toBe(saved);
  });
 
  it('does not overwrite incompatible saves and allows blocked-storage play', () => {
   const storage = memoryStorage();
-  const legacy = JSON.stringify({ ...finish(), schemaVersion: 1 });
-  storage.setItem(STORAGE_KEY, legacy);
+  const obsolete = JSON.stringify({ ...finish(), schemaVersion: 1 });
+  storage.setItem(STORAGE_KEY, obsolete);
   expect(restoreDraft(storage, manifest).kind).toBe('incompatible');
-  expect(storage.getItem(STORAGE_KEY)).toBe(legacy);
+  expect(storage.getItem(STORAGE_KEY)).toBe(obsolete);
   const blocked = {
    getItem: () => { throw new Error('blocked'); },
    setItem: () => { throw new Error('blocked'); },

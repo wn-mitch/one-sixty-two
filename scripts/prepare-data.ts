@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { acquireTables, CHECKSUMS, SOURCE_COMMIT } from './data/acquire.ts';
 import { acquireAttribution, writeArchive } from './data/attribution.ts';
 import { canonicalJSON, compileData } from './data/compile.ts';
+import { acquireRankingsSource, RANKINGS_SOURCE_CHECKSUM, RANKINGS_SOURCE_COMMIT, RANKINGS_SOURCE_FILE } from './rankings/source.ts';
 
 interface PreparedCache { compilerHash: string; dataVersion: string; assets: Record<string, string> }
 const cacheDir = '.cache/lahman';
@@ -32,25 +33,30 @@ async function reusePrepared(compilerHash: string): Promise<boolean> {
   const raw = await optionalBytes(join(cacheDir, filename));
   if (!raw || createHash('sha256').update(raw).digest('hex') !== checksum) return false;
  }
- if (!cache.assets['current.json'] || !cache.assets[`${cache.dataVersion}/manifest.json`] || !cache.assets[`${cache.dataVersion}/transformed-data.tar.gz`]) return false;
+ const warSource = await optionalBytes(join('.cache/rankings', RANKINGS_SOURCE_FILE));
+ if (!warSource || createHash('sha256').update(warSource).digest('hex') !== RANKINGS_SOURCE_CHECKSUM) return false;
+ if (!cache.assets['current.json'] || !cache.assets[`${cache.dataVersion}/manifest.json`] || !cache.assets[`${cache.dataVersion}/showcase.json`] || !cache.assets[`${cache.dataVersion}/defense-source.json`] || !cache.assets[`${cache.dataVersion}/transformed-data.tar.gz`]) return false;
  for (const [filename, checksum] of Object.entries(cache.assets)) {
   if (!/^(current\.json|[a-f0-9]{64}\/[A-Za-z0-9_.-]+)$/.test(filename)) return false;
   const asset = await optionalBytes(join(outputDir, filename));
   if (!asset || createHash('sha256').update(asset).digest('hex') !== checksum) return false;
  }
- console.log(`Verified cached data ${cache.dataVersion}; all eight source checksums and generated assets match.`);
+ console.log(`Verified cached data ${cache.dataVersion}; every required source checksum and generated asset matches.`);
  return true;
 }
 
 async function prepare(): Promise<void> {
  const attribution = await acquireAttribution(offline);
- const compilerFiles = ['scripts/prepare-data.ts', 'src/lib/game/types.ts', 'src/lib/sim/rates.ts', ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
- const hash = createHash('sha256').update(SOURCE_COMMIT).update(canonicalJSON(CHECKSUMS)).update(canonicalJSON(attribution));
+ const simulationFiles = (await readdir('src/lib/sim')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts')).sort().map(name => `src/lib/sim/${name}`);
+ const compilerFiles = ['scripts/prepare-data.ts', 'scripts/rankings/source.ts', 'src/lib/cards/finish.ts', 'src/lib/game/types.ts', ...simulationFiles, ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
+ const hash = createHash('sha256').update(SOURCE_COMMIT).update(canonicalJSON(CHECKSUMS)).update(RANKINGS_SOURCE_COMMIT).update(RANKINGS_SOURCE_CHECKSUM).update(canonicalJSON(attribution));
  for (const filename of compilerFiles) hash.update(filename).update(await readFile(filename));
  const compilerHash = hash.digest('hex');
  if (await reusePrepared(compilerHash)) return;
- const tables = await acquireTables(offline);
- const compilation = compileData(tables, attribution, SOURCE_COMMIT);
+ const [tables, sourceTables] = await Promise.all([acquireTables(offline), acquireRankingsSource(offline)]);
+ const warRows = sourceTables[RANKINGS_SOURCE_FILE.replace(/\.csv$/, '')];
+ if (!warRows) throw new Error(`Pinned defensive source ${RANKINGS_SOURCE_FILE} was not parsed.`);
+ const compilation = compileData(tables, attribution, SOURCE_COMMIT, warRows);
  const { dataVersion } = compilation.manifest;
  const dir = join(outputDir, dataVersion);
  await mkdir(dir, { recursive: true });

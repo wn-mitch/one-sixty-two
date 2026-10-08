@@ -1,14 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { parseCsv } from '../../../scripts/data/acquire.ts';
+import { parseCsv, type CsvRow } from '../../../scripts/data/acquire.ts';
 import { buildBaselines } from '../../../scripts/data/baselines.ts';
+import { applyDefense } from '../../../scripts/data/defense.ts';
 import { buildBullpenCandidates } from '../../../scripts/data/bullpens.ts';
 import { canonicalJSON, compileData } from '../../../scripts/data/compile.ts';
 import { battingColumns, battingCounts, groupCounts, pitchingColumns, pitchingCounts, seasonKey } from '../../../scripts/data/counts.ts';
 import { buildFielding, leagueFielding } from '../../../scripts/data/fielding.ts';
 import { assignHitters } from '../../../scripts/data/opponents.ts';
+import { groupJoinedWarRows } from '../../../scripts/data/source-join.ts';
 import { compileProfiles, percentile } from '../../../scripts/data/profiles.ts';
-import { POSITIONS } from '../game/types.ts';
+import { POSITIONS, type DefensiveEnvironment, type Rates, type ShowcaseCard } from '../game/types.ts';
+import { validateProfile } from '../sim/validation.ts';
 import { syntheticAttribution, syntheticTables } from './compiler-fixtures.ts';
+
+const DEFENSE_ENVIRONMENT: DefensiveEnvironment = {
+ leagueRates: [0.08, 0.012, 0.225, 0.145, 0.044, 0.004, 0.033, 0.457] as Rates,
+ leagueErrorRates: Object.fromEntries(POSITIONS.map(position => [position, 0.01])) as Record<typeof POSITIONS[number], number>,
+ leagueStealAttempt: 0.03,
+ leagueStealSuccess: 0.75,
+ leagueDoublePlay: 0.08
+};
+
+const UNMATCHED_REQUIRED_WAR_SOURCE: CsvRow[] = [{
+ key_bbref: 'missing-source-person',
+ year_ID: '2000',
+ lg_ID: 'AL',
+ team_ID: 'OLD0',
+ stint_ID: '1',
+ franch_ID: 'F0',
+ sched: '162',
+ pa: '600',
+ innings: '0',
+ fld162: '0',
+ gms_C: '0',
+ gms_1B: '0',
+ gms_2B: '0',
+ gms_3B: '0',
+ gms_SS: '0',
+ gms_LF: '0',
+ gms_CF: '0',
+ gms_RF: '0',
+ gms_OF: '0'
+}];
 
 describe('historical data compiler', () => {
  it('sums repeated stints but keeps traded team-seasons distinct', () => {
@@ -28,6 +61,7 @@ describe('historical data compiler', () => {
   expect(first.franchiseId).toBe('F0');
   expect(first.historicalTeam).toBe('Historical club 0');
   expect(first.eligibleSlots).toEqual(['C', 'DH']);
+  expect(first.primaryHitterSlot).toBe('C');
   expect(first.appearances.C).toBe(100);
   expect(first.batting).toMatchObject({ SF: 0, PA: 314 });
   expect(first.estimatedFields).toContain('batting.SF.estimated');
@@ -36,6 +70,35 @@ describe('historical data compiler', () => {
   expect(first.battingRates!.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 12);
   expect(result.franchises.find(franchise => franchise.id === 'F0')!.name).toBe('Current club 0');
   expect(result.franchises.find(franchise => franchise.id === 'F2')!.decades).toEqual([2020]);
+ });
+ it('includes DH appearances in primary-slot selection and breaks ties in canonical hitter-slot order', () => {
+  const tables = syntheticTables();
+  const appearance = tables.Appearances.find(row => row.yearID === '1950' && row.teamID === 'OLD0' && row.G_c === '100')!;
+  appearance.G_dh = '120';
+  const dhPrimary = compileProfiles(tables).profiles.find(profile => profile.seasonId === seasonKey(appearance))!;
+  expect(dhPrimary.primaryHitterSlot).toBe('DH');
+
+  appearance.G_dh = '100';
+  const tied = compileProfiles(tables).profiles.find(profile => profile.seasonId === seasonKey(appearance))!;
+  expect(tied.primaryHitterSlot).toBe('C');
+ });
+ it('keeps fielding appearances but clears the primary hitter slot for pitching-only candidates', () => {
+  const tables = syntheticTables();
+  const pitcher = tables.Pitching.find(row => row.yearID === '1950' && row.teamID === 'OLD0' && row.GS === '20')!;
+  tables.Appearances.push({
+   yearID: pitcher.yearID,
+   lgID: pitcher.lgID,
+   teamID: pitcher.teamID,
+   playerID: pitcher.playerID,
+   G_1b: '1'
+  });
+
+  const profile = compileProfiles(tables).candidates.find(candidate => candidate.seasonId === seasonKey(pitcher))!;
+  expect(profile.batting).toBeUndefined();
+  expect(profile.appearances['1B']).toBe(1);
+  expect(profile.eligibleSlots).toEqual(['SP1', 'SP2', 'SP3']);
+  expect(profile.primaryHitterSlot).toBeNull();
+  expect(() => validateProfile(profile)).not.toThrow();
  });
  it('uses the recorded PA lower bound for eligibility when sacrifice flies are unavailable', () => {
   const tables = syntheticTables();
@@ -63,27 +126,35 @@ describe('historical data compiler', () => {
   expect([1950, 1960, 1961].every(year => candidates.some(profile => profile.year === year))).toBe(true);
  });
 
- it('does not turn generic OF into positional eligibility and uses labelled reliability fallback', () => {
+ it('uses generic OF only as labelled throwing evidence and never as exact-position fielding', () => {
   const tables = syntheticTables();
   const exact = tables.FieldingOFsplit.find(row => row.yearID === '2025' && row.POS === 'LF')!;
-  tables.FieldingOFsplit = tables.FieldingOFsplit.filter(row => row !== exact);
-  tables.Fielding.push({ ...exact, POS: 'OF' });
-  const profile = compileProfiles(tables).profiles.find(profile => profile.seasonId === seasonKey(exact))!;
-  expect(profile.estimatedFields).toContain('fielding.LF.genericOF');
+  const cohortRows = tables.FieldingOFsplit.filter(row => row.yearID === '2025' && row.POS === 'LF').slice(0, 5);
+  for (const row of cohortRows) {
+   tables.FieldingOFsplit = tables.FieldingOFsplit.filter(candidate => candidate !== row);
+   tables.Fielding.push({ ...row, POS: 'OF' });
+  }
+  const compiled = compileProfiles(tables);
+  const profile = compiled.profiles.find(candidate => candidate.seasonId === seasonKey(exact))!;
+  applyDefense([profile], compiled.fielding, groupJoinedWarRows([], { people: tables.People, teams: tables.Teams }), DEFENSE_ENVIRONMENT);
   expect(profile.eligibleSlots).toContain('LF');
   expect(profile.eligibleSlots).not.toContain('CF');
-  expect(profile.errorRates.LF).toBeGreaterThan(0);
   expect(profile.fielding.LF).toBeUndefined();
+  expect(profile.defense.positions.LF!.outfieldThrowing).toBeDefined();
+  expect(profile.defense.positions.LF!.evidence.outfieldThrowing.status).toBe('genericOutfield');
+  expect(profile.defense.positions.LF!.expectedRunsSaved162).toBeNull();
  });
  it('uses unsplit generic outfield evidence at the 1950 boundary', () => {
   const tables = syntheticTables();
   const source = tables.Fielding.find(row => row.yearID === '1950' && row.POS === 'OF')!;
-  const profile = compileProfiles(tables).profiles.find(candidate => candidate.seasonId === seasonKey(source))!;
+  const compiled = compileProfiles(tables);
+  const profile = compiled.profiles.find(candidate => candidate.seasonId === seasonKey(source))!;
   const position = POSITIONS.find(candidate => (profile.appearances[candidate] ?? 0) > 0)!;
+  applyDefense([profile], compiled.fielding, groupJoinedWarRows([], { people: tables.People, teams: tables.Teams }), DEFENSE_ENVIRONMENT);
   expect(profile.eligibleSlots).toContain(position);
-  expect(profile.estimatedFields).toContain(`fielding.${position}.genericOF`);
-  expect(profile.errorRates[position]).toBeGreaterThan(0);
   expect(profile.fielding[position]).toBeUndefined();
+  expect(profile.defense.positions[position]!.evidence.outfieldThrowing.status).toBe('genericOutfield');
+  expect(profile.defense.positions[position]!.evidence.hitPrevention.status).toBe('neutralMissingEvidence');
  });
 
  it('does not double count generic OF or duplicate exact OF rows in league baselines', () => {
@@ -205,20 +276,35 @@ describe('historical data compiler', () => {
  });
  it('compiles all thirty opponents, versioned chunks and exact slot assignments reproducibly', () => {
   const tables = syntheticTables();
-  const first = compileData(tables, syntheticAttribution, 'fixture');
-  const second = compileData(tables, syntheticAttribution, 'fixture');
+  expect(() => compileData(tables, syntheticAttribution, 'fixture', [])).toThrow('WAR');
+  const first = compileData(tables, syntheticAttribution, 'fixture', UNMATCHED_REQUIRED_WAR_SOURCE);
+  const second = compileData(tables, syntheticAttribution, 'fixture', UNMATCHED_REQUIRED_WAR_SOURCE);
   expect(first.manifest.dataVersion).toBe(second.manifest.dataVersion);
   expect(first.manifest.franchises).toHaveLength(30);
+  expect(first.manifest.showcaseUrl).toBe(`/data/${first.manifest.dataVersion}/showcase.json`);
+  const showcase = first.files['showcase.json'] as ShowcaseCard[];
+  expect(showcase).toHaveLength(32);
+  expect(new Set(showcase.map(card => card.profile.seasonId)).size).toBe(32);
+  expect(showcase.every(card => card.profile.eligibleSlots.includes(card.slot))).toBe(true);
   expect(first.manifest.coverage.slice(0, 2)).toEqual([
    { decade: 1950, firstYear: 1950, lastYear: 1950, label: '1950–1950' },
    { decade: 1960, firstYear: 1960, lastYear: 1961, label: '1960–1961' }
   ]);
+  const simulation = first.files['simulation.json'] as {
+   defenseMethodVersion: string;
+   valuationVersion: string;
+   opponents: { hitters: { eligibleSlots: string[]; defense: { positions: Record<string, unknown> } }[]; starters: unknown[] }[];
+  };
+  expect(simulation).toMatchObject({ defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1' });
   expect(first.manifest.candidates.some(candidate => candidate.seasonId === 'bullpen:1950:AL:OLD0' && candidate.eligibleSlots.includes('BP'))).toBe(true);
   expect((first.files['F0-1950.json'] as { eligibleSlots: string[] }[]).some(profile => profile.eligibleSlots.includes('BP'))).toBe(true);
-  const simulation = first.files['simulation.json'] as { opponents: { hitters: { eligibleSlots: string[] }[]; starters: unknown[] }[] };
   expect(simulation.opponents).toHaveLength(30);
   for (const team of simulation.opponents) {
    expect(team.starters).toHaveLength(5);
+   for (const hitter of team.hitters) {
+    const slot = hitter.eligibleSlots[0];
+    if (slot !== 'DH') expect(hitter.defense.positions[slot]).toBeDefined();
+   }
    expect(team.hitters.map(profile => profile.eligibleSlots[0]).sort()).toEqual([...POSITIONS, 'DH'].sort());
   }
   expect(first.manifest.diagnostics.excludedBatting).toBe(0);

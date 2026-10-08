@@ -215,7 +215,7 @@
 					aria-label={`Select ${profile.year} ${profile.displayName}`}
 					onclick={event => select(event.currentTarget)}
 				>
-					<Card s={card} interactive={!compact} onDetails={() => undefined} />
+					<Card s={card} {compact} interactive={!compact} onDetails={() => undefined} />
 				</button>
 			{/if}
 		{:else}
@@ -226,7 +226,7 @@
 				aria-label={`Inspect ${profile.year} ${profile.displayName} card`}
 				onclick={event => inspect(event.currentTarget)}
 			>
-				<Card s={card} interactive={!compact} thumbnail={compact} onDetails={() => inspect(artTrigger)} />
+				<Card s={card} {compact} interactive={!compact} thumbnail={compact} onDetails={() => inspect(artTrigger)} />
 			</button>
 		{/if}
 	</div>
@@ -304,7 +304,7 @@
 	.card-actions button { min-height: 2.75rem; }
 	.compact { max-width: 12rem; gap: .5rem; }
 	.compact .controller { display: none; }
-	.compact .art-frame { width: min(100%, 8rem); }
+	.compact .art-frame { width: min(100%, 8rem); min-width: 72px; }
 	.compact-identity { display: grid; gap: .14rem; margin: 0; font-size: .78rem; line-height: 1.25; text-align: center; }
 	.compact-identity strong { overflow-wrap: anywhere; }
 	.compact-identity span { color: var(--card-muted); }

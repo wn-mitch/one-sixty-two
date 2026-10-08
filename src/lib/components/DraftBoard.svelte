@@ -48,7 +48,7 @@
  const selectedProfile = $derived(selectedSeasonId ? poolBySeason.get(selectedSeasonId) : undefined);
  const selectedCandidate = $derived(selectedSeasonId ? manifestBySeason.get(selectedSeasonId) : undefined);
  const destinations = $derived(selectedCandidate ? legalSlots(draft, selectedCandidate, manifest) : []);
- const moveTargets = $derived(movingSeasonId && draft.schemaVersion === 3 ? legalReassignments(draft, manifest, movingSeasonId) : []);
+ const moveTargets = $derived(movingSeasonId ? legalReassignments(draft, manifest, movingSeasonId) : []);
  const movingProfile = $derived(movingSeasonId ? rosterBySeason.get(movingSeasonId) : undefined);
  const inspectedProfile = $derived(inspectedSeasonId ? rosterBySeason.get(inspectedSeasonId) : undefined);
  const activeProfile = $derived(inspectedProfile ?? movingProfile ?? selectedProfile);
@@ -160,7 +160,7 @@
   }
   if (occupant) {
    trigger = nextTrigger;
-   if (HITTER_SLOTS.includes(slot as HitterSlot) && draft.schemaVersion === 3) {
+   if (HITTER_SLOTS.includes(slot as HitterSlot)) {
     movingSeasonId = occupant.seasonId;
     inspectedSeasonId = null;
     sheetTab = 'field';

@@ -10,14 +10,15 @@ import {
 	buildCandidateIdentities,
 	compareText,
 	emptyExclusions,
-	groupVerifiedWikidataMedia,
 	parseCaptureYear,
 	validateCuratedPlayerPhoto,
 	validatePlayerPhoto,
 	validateReusableAsset,
 	validateTeamSources
 } from './logic.ts';
-import { acquireCommonsMetadata, acquireWikidataMedia, discoverCommonsCategoryPhotos } from './providers.ts';
+import { inventoryMetadata } from './inventory.ts';
+import { prepareReviewedPhoto, validateReviews } from './reviews.ts';
+import { captureLabel } from '../../src/lib/media/photo-policy.ts';
 import type {
 	AtmosphereSourceRegistry,
 	CommonsMetadata,
@@ -25,6 +26,7 @@ import type {
 	ExclusionCounts,
 	MediaPayload,
 	PlayerSourceRegistry,
+	PhotoReview,
 	PreparedAsset,
 	ReviewedPlayerPhotos,
 	TeamSourceRegistry
@@ -180,6 +182,7 @@ export async function generateMedia(input: {
 	teamSources: TeamSourceRegistry;
 	playerSources: PlayerSourceRegistry;
 	reviewedPlayerPhotos: ReviewedPlayerPhotos;
+	photoReviews?: PhotoReview[];
 	atmosphereSources: AtmosphereSourceRegistry;
 	cacheDir: string;
 	outputDir: string;
@@ -199,40 +202,14 @@ export async function generateMedia(input: {
 	const individualCandidates = input.dataManifest.candidates.filter((candidate) => !candidate.eligibleSlots?.includes('BP'));
 	const playersSearched = new Set(individualCandidates.map((candidate) => candidate.playerId)).size;
 	validatePlayerSources(input.playerSources, new Set(identities.map((identity) => identity.playerId)));
-	input.log(`Resolving ${identities.length} verified sports identities across the full candidate pool`);
-	const wikidata = await acquireWikidataMedia(
-		identities.map((identity) => identity.bbrefId),
-		input.cacheDir,
-		input.offline,
-		(completed, total) => {
-			if (completed === total || completed % 1_000 === 0) input.log(`Identity lookup ${completed}/${total}`);
-		}
-	);
-	const verified = groupVerifiedWikidataMedia(identities, wikidata.photos, wikidata.categories, exclusions, wikidata.identities);
-	const targetYearsByPlayer = new Map<string, Set<number>>();
-	for (const candidate of individualCandidates) {
-		const year = Number(candidate.seasonId?.split(':')[1]);
-		if (!Number.isInteger(year)) continue;
-		const years = targetYearsByPlayer.get(candidate.playerId) ?? new Set<number>();
-		years.add(year);
-		targetYearsByPlayer.set(candidate.playerId, years);
-	}
-	const categorySources = identities.flatMap((identity) =>
-		(verified.categories.get(identity.playerId) ?? []).map((category) => ({
-			playerId: identity.playerId,
-			title: category.title,
-			targetYears: [...(targetYearsByPlayer.get(identity.playerId) ?? new Set([identity.firstYear, identity.lastYear]))].sort((a, b) => a - b)
-		}))
-	);
-	input.log(`Discovering dated alternatives in ${categorySources.length} verified Commons player categories`);
-	const categoryPhotos = await discoverCommonsCategoryPhotos(categorySources, input.cacheDir, input.offline, (completed, total) => {
-		if (completed === total || completed % 250 === 0) input.log(`Category discovery ${completed}/${total}`);
-	});
+	const reviews = input.photoReviews ?? [];
+	validateReviews(reviews, new Set(identities.map(identity => identity.playerId)), new Set(input.dataManifest.franchises.map(franchise => franchise.id)));
+	const reviewKeys = new Set(reviews.map(review => `${review.playerId}\0${review.sourceId}`));
+	input.log(`Compiling reviewed inventory for ${identities.length} player identities`);
 	const candidateTitlesByPlayer = new Map<string, string[]>();
 	for (const identity of identities) {
 		const titles = [
-			...(verified.photos.get(identity.playerId) ?? []).map((photo) => photo.title),
-			...(categoryPhotos.get(identity.playerId) ?? []),
+			...(input.reviewedPlayerPhotos[identity.playerId] ?? []),
 			...(input.playerSources[identity.playerId] ?? []).map((source) => source.title)
 		];
 		candidateTitlesByPlayer.set(identity.playerId, [...new Set(titles)].sort(compareText));
@@ -241,21 +218,11 @@ export async function generateMedia(input: {
 	const photoTitles = [...candidateTitlesByPlayer.values()].flat();
 	const allTitles = [...new Set([...photoTitles, ...logoTitles])].sort(compareText);
 	input.log(`Reading reusable-source metadata for ${allTitles.length} candidate files`);
-	const commons = await acquireCommonsMetadata(allTitles, input.cacheDir, input.offline, (completed, total) => {
-		if (completed === total || completed % 500 === 0) input.log(`Licence metadata ${completed}/${total}`);
-	});
+	const commons = await inventoryMetadata(allTitles, input.cacheDir, input.offline);
 
 	const atmosphereTitles = input.atmosphereSources.map((source) => source.title);
 	input.log(`Reading reusable-source metadata for ${atmosphereTitles.length} atmosphere files`);
-	const atmosphereMetadata = await acquireCommonsMetadata(
-		atmosphereTitles,
-		input.cacheDir,
-		input.offline,
-		(completed, total) => {
-			if (completed === total) input.log(`Atmosphere licence metadata ${completed}/${total}`);
-		},
-		1280
-	);
+	const atmosphereMetadata = await inventoryMetadata(atmosphereTitles, input.cacheDir, input.offline, 1280);
 	const acceptedAtmosphere: PreparedAtmosphere[] = [];
 	for (const source of [...input.atmosphereSources].sort((a, b) => compareText(a.id, b.id))) {
 		const metadata = atmosphereMetadata.get(source.title);
@@ -279,6 +246,7 @@ export async function generateMedia(input: {
 				exclusions.invalidMetadata++;
 				continue;
 			}
+			if (reviewKeys.has(`${identity.playerId}\0${metadata.sourceId ?? `commons:${metadata.pageId}`}`)) continue;
 			if (!reviewedTitles.has(metadata.title)) {
 				exclusions.ambiguousSubject++;
 				continue;
@@ -373,7 +341,7 @@ export async function generateMedia(input: {
 
 		const generatedPlayers: Record<string, GeneratedPlayerMedia> = {};
 		for (const identity of identities) {
-			const photos = (acceptedPhotosByPlayer.get(identity.playerId) ?? [])
+			const photos: PlayerPhoto[] = (acceptedPhotosByPlayer.get(identity.playerId) ?? [])
 				.map((photo) => {
 					const asset = prepared.get(photo.metadata.pageId);
 					if (!asset) throw new Error(`Missing prepared player image page ${photo.metadata.pageId}`);
@@ -383,11 +351,19 @@ export async function generateMedia(input: {
 				.map(({ asset, photo }) => ({
 					...semanticAsset(asset, photo),
 					year: photo.year,
+					captureDate: { kind: 'exact', year: photo.year },
+					sourceId: photo.metadata.sourceId ?? `commons:${photo.metadata.pageId}`,
+					uniform: 'unclassified', context: 'unclassified', review: 'legacy',
 					...(photo.captureEvidenceUrl ? { captureEvidenceUrl: photo.captureEvidenceUrl } : {}),
 					...(photo.identityEvidenceUrl ? { identityEvidenceUrl: photo.identityEvidenceUrl } : {})
 				}));
 			generatedPlayers[identity.playerId] = { name: identity.name, firstYear: identity.firstYear, lastYear: identity.lastYear, photos };
 		}
+		for (const review of reviews) {
+			if (review.status !== 'approved') continue;
+			generatedPlayers[review.playerId].photos.push(await prepareReviewedPhoto(review, input.cacheDir, stagingDirectory, input.offline));
+		}
+		for (const player of Object.values(generatedPlayers)) player.photos.sort((a, b) => compareText(a.sourceId ?? a.url, b.sourceId ?? b.url));
 
 		const generatedTeams: Record<string, TeamMedia> = {};
 		for (const [franchiseId, source] of Object.entries(input.teamSources).sort(([a], [b]) => compareText(a, b))) {
@@ -442,7 +418,7 @@ export async function generateMedia(input: {
 			diagnostics
 		};
 		const version = digest(canonicalJSON({
-			schemaVersion: 2,
+			schemaVersion: 3,
 			dataVersion: input.dataManifest.dataVersion,
 			modifications,
 			rightsNotice,
@@ -457,8 +433,8 @@ export async function generateMedia(input: {
 		const players = Object.fromEntries(Object.entries(generatedPlayers).map(([id, player]) => [id, {
 			...player,
 			photos: player.photos.map((item) => ({
+				...item,
 				...replaceUrl(item),
-				year: item.year,
 				...(item.captureEvidenceUrl ? { captureEvidenceUrl: item.captureEvidenceUrl } : {}),
 				...(item.identityEvidenceUrl ? { identityEvidenceUrl: item.identityEvidenceUrl } : {})
 			}))
@@ -471,7 +447,7 @@ export async function generateMedia(input: {
 			year: item.year
 		}]));
 		const manifest: MediaManifest = {
-			schemaVersion: 2,
+			schemaVersion: 3,
 			version,
 			dataVersion: input.dataManifest.dataVersion,
 			modifications,
@@ -493,7 +469,7 @@ export async function generateMedia(input: {
 			]),
 			...Object.entries(manifest.players).flatMap(([id, player]) =>
 				player.photos.map((asset) => ({
-					label: `${id} ${asset.year} portrait`,
+					label: `${id} ${captureLabel(asset)} portrait`,
 					asset,
 					captureEvidenceUrl: asset.captureEvidenceUrl,
 					identityEvidenceUrl: asset.identityEvidenceUrl

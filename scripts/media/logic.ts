@@ -1,4 +1,5 @@
 import type { CsvRow } from '../data/acquire.ts';
+import { reusablePhotoLicense } from '../../src/lib/media/photo-policy.ts';
 import type {
 	CandidateIdentity,
 	CommonsMetadata,
@@ -11,8 +12,6 @@ import type {
 } from './types.ts';
 
 const YEAR_DATE = /^(\d{4})(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?(?:(?:T| )(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d)?)?$/;
-const FREE_CC_LICENSE = /^CC (?:BY(?:-SA)?|ZERO)(?:[- ]\d+(?:\.\d+)?)?$/i;
-const PUBLIC_DOMAIN_LICENSE = /^(?:public domain|CC0(?: 1\.0)?|PDM|PD(?:[- ].*)?)$/i;
 const MULTI_SUBJECT_TITLE = /\b(?:and|versus|vs\.?)\b|(?:^|[\s_-])&(?:[\s_-]|$)/i;
 const MULTI_SUBJECT_DESCRIPTION = /\((?:left|right|center|centre|middle)\)|\b(?:flanked by|pictured with|poses? with|alongside|shaking hands with|players (?:line|lining) up|group (?:photo|photograph)|team (?:photo|photograph))\b/i;
 const MEMORABILIA_SUBJECT = /\b(?:baseball|trading|sports)\s+card\b|\b(?:autograph(?:ed)?|memorabilia|plaque|statue|bobblehead|figurine|magazine cover|program cover|bowman gum|topps|fleer|donruss|upper deck|panini)\b/i;
@@ -49,7 +48,7 @@ export function parseCaptureYear(value: string | null): number | null {
 export function isReusableLicense(value: string | null): boolean {
 	if (!value) return false;
 	const normalized = stripMarkup(value);
-	return FREE_CC_LICENSE.test(normalized) || PUBLIC_DOMAIN_LICENSE.test(normalized);
+	return reusablePhotoLicense(normalized);
 }
 
 export function normalizeLicenseUrl(license: string, value: string | null): string {
@@ -127,7 +126,6 @@ export function buildCandidateIdentities(
 		const bbrefId = toWikidataBbrefId(person.bbrefID ?? '');
 		if (!bbrefId) {
 			excluded.missingBbref++;
-			continue;
 		}
 		const years = career.get(playerId);
 		if (!years) {
@@ -139,7 +137,7 @@ export function buildCandidateIdentities(
 			excluded.missingPeople++;
 			continue;
 		}
-		identities.push({ playerId, bbrefId, name, ...years });
+		identities.push({ playerId, bbrefId: bbrefId ?? '', name, ...years });
 	}
 	return identities;
 }

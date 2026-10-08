@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { acquireTables } from './data/acquire.ts';
 import { canonicalJSON } from './data/compile.ts';
@@ -89,7 +89,8 @@ async function readCoreDataVersion(): Promise<string> {
 	}
 	if (!record(manifest) || manifest.schemaVersion !== 1 || manifest.dataVersion !== parsed.dataVersion
 		|| !Array.isArray(manifest.candidates) || !record(manifest.chunks)
-		|| manifest.simulationUrl !== `/data/${parsed.dataVersion}/simulation.json`) {
+		|| manifest.simulationUrl !== `/data/${parsed.dataVersion}/simulation.json`
+		|| manifest.showcaseUrl !== `/data/${parsed.dataVersion}/showcase.json`) {
 		throw new Error('Core data manifest does not match its authoritative pointer; run npm run data:prepare first.');
 	}
 	return parsed.dataVersion;
@@ -97,9 +98,16 @@ async function readCoreDataVersion(): Promise<string> {
 
 async function compilerHash(dataVersion: string): Promise<string> {
 	const hash = createHash('sha256').update(dataVersion).update(RANKINGS_SOURCE_CHECKSUM);
-	for (const filename of ['scripts/prepare-rankings.ts', 'scripts/rankings/source.ts', 'scripts/rankings/compile.ts', 'src/lib/rankings/types.ts']) {
-		hash.update(filename).update(await readFile(filename));
-	}
+	const files = [
+		'scripts/prepare-rankings.ts',
+		'scripts/rankings/source.ts',
+		'scripts/rankings/compile.ts',
+		'src/lib/game/types.ts',
+		'src/lib/rankings/types.ts',
+		'src/lib/sim/rates.ts',
+		...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)
+	];
+	for (const filename of files) hash.update(filename).update(await readFile(filename));
 	return hash.digest('hex');
 }
 

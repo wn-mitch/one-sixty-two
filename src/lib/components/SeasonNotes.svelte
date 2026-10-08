@@ -12,7 +12,7 @@
  <summary>Photo &amp; model notes</summary>
  {#if open}
   <div class="provenance">
-   {#if !profile.bullpen}<PlayerPhoto playerId={profile.playerId} year={profile.year} name={profile.displayName} />{/if}
+   {#if !profile.bullpen}<PlayerPhoto playerId={profile.playerId} year={profile.year} franchiseId={profile.franchiseId} name={profile.displayName} />{/if}
    <div>
     {#if profile.bullpen}
      <p>Pooled relief-dominant pitcher-seasons. Neutral throwing handedness; no individual portrait or WAR.</p>

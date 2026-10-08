@@ -9,6 +9,8 @@
   "compatibility_date": "2026-10-05",
   "compatibility_flags": ["nodejs_als"],
   "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
+  "browser": { "binding": "BROWSER" },
+  "vars": { "PUBLIC_ORIGIN": "https://162-0.dev" },
   "r2_buckets": [
     { "binding": "REPLAYS", "bucket_name": "162-zero-replays" }
   ]

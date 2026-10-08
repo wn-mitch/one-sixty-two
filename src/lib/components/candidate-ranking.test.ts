@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { POSITIONS, type Profile, type Slot } from '../game/types.ts';
+import { HITTER_SLOTS, type HitterSlot, type Profile, type Slot } from '../game/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 import { compareEntries, rankGroups, warValue, type CandidateEntry } from './candidate-ranking.ts';
 
 function entry(id: string, slots: Slot[] = ['DH'], playerId = id): CandidateEntry {
+ const primaryHitterSlot = slots.find(slot => HITTER_SLOTS.includes(slot as HitterSlot)) as HitterSlot | undefined;
  const profile: Profile = {
   seasonId: id, playerId, displayName: 'Synthetic athlete', franchiseId: 'T', teamId: 'T', year: 2000, league: 'AL', historicalTeam: 'Synthetic club', teamGames: 162,
-  bats: 'R', throws: 'R', eligibleSlots: slots, appearances: {}, fielding: {}, errorRates: Object.fromEntries(POSITIONS.map(position => [position, 0.01])) as Profile['errorRates'],
-  catcherCS: 0.3, speed: 0.5, stealAttempt: 0, stealSuccess: 0.7, doublePlay: 0, estimatedFields: [],
+  bats: 'R', throws: 'R', eligibleSlots: slots, primaryHitterSlot: primaryHitterSlot ?? null, appearances: {}, fielding: {}, defense: { positions: {} },
+  speed: 0.5, stealAttempt: 0, stealSuccess: 0.7, doublePlay: 0, estimatedFields: [],
   batting: { AB: 200, H: 60, doubles: 10, triples: 2, HR: 8, BB: 20, HBP: 0, SO: 40, SH: 0, SF: 0, SB: 0, CS: 0, GIDP: 0, PA: 220 },
   pitching: { G: 20, GS: 20, IPouts: 300, H: 80, HR: 10, BB: 20, HBP: 0, SO: 90, BFP: 400, ER: 30, SV: 0 }
  };
