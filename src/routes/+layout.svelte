@@ -27,7 +27,12 @@
 </div>
 
 <style>
-	.site { max-width: 80rem; margin-inline: auto; padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right)); }
+	.site {
+		max-width: 80rem;
+		margin-inline: auto;
+		padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right));
+	}
+	.site:has(:global(.draft-board)) { max-width: 90rem; }
 	.site-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); min-height: 4rem; border-bottom: 1px solid var(--border); }
 	.site-header > a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: var(--text-sm); }
 	.wordmark { color: var(--text); text-decoration: none; font-size: var(--text-xl) !important; font-weight: 850; letter-spacing: -.04em; gap: var(--space-3); }
@@ -37,5 +42,11 @@
 	footer { border-top: 1px solid var(--border); padding: var(--space-6) 0 max(var(--space-6), env(safe-area-inset-bottom)); margin-top: var(--space-12); color: var(--muted); font-size: var(--text-xs); }
 	footer p { margin: var(--space-1) 0; }
 	footer a { display: inline-block; padding-block: var(--space-1); }
-	@media (min-width: 48rem) { .edition { display: block; } .site { padding-inline: var(--space-8); } footer { display: flex; justify-content: space-between; gap: var(--space-12); } }
+	@media (min-width: 48rem) {
+		.edition { display: block; }
+		footer { display: flex; justify-content: space-between; gap: var(--space-12); }
+	}
+	@media (min-width: 1100px), (min-width: 1024px) and (orientation: landscape) {
+		.site { padding-inline: max(var(--space-8), env(safe-area-inset-left)) max(var(--space-8), env(safe-area-inset-right)); }
+	}
 </style>

@@ -1,12 +1,26 @@
 <script lang="ts">
- import { onMount } from 'svelte';
+ import { type LegalReassignment } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
- import type { Draft, HitterSlot, Manifest, Profile } from '../game/types.ts';
- import { loadMedia } from '../media/client.ts';
+ import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../game/types.ts';
+ import type { CardMediaStatus } from '../cards/view-model.ts';
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import RosterItem from './RosterItem.svelte';
- import RosterAssignment from './RosterAssignment.svelte';
+
+ type Preview = { profile: Profile; slot: Slot };
+
+ const coordinates = {
+  C: [50, 82.377],
+  '1B': [76.818, 59.836],
+  '2B': [61.818, 42.008],
+  SS: [38.182, 42.008],
+  '3B': [23.182, 59.836],
+  LF: [19.091, 24.18],
+  CF: [50, 13.525],
+  RF: [80.909, 24.18],
+  DH: [90.455, 86.885]
+ } as const satisfies Record<HitterSlot, readonly [number, number]>;
+
  let {
   draft,
   manifest,
@@ -15,7 +29,13 @@
   rankings = null,
   rankingLoading = false,
   rankingError = false,
-  onReassign
+  media = null,
+  mediaStatus = 'loading',
+  preview = null,
+  legalSlots = [],
+  movingSeasonId = null,
+  moveTargets = [],
+  onSlot
  }: {
   draft: Draft;
   manifest: Manifest;
@@ -24,104 +44,189 @@
   rankings?: WarRankings | null;
   rankingLoading?: boolean;
   rankingError?: boolean;
-  onReassign: (seasonId: string, destination: HitterSlot) => void;
+  media?: MediaManifest | null;
+  mediaStatus?: CardMediaStatus;
+  preview?: Preview | null;
+  legalSlots?: readonly Slot[];
+  movingSeasonId?: string | null;
+  moveTargets?: readonly LegalReassignment[];
+  onSlot: (slot: Slot, trigger: HTMLButtonElement) => void;
  } = $props();
- let expanded = $state(false);
- let summary = $state<HTMLElement>();
- let media = $state.raw<MediaManifest | null>(null);
- let mediaStatus = $state<'loading' | 'ready' | 'unavailable'>('loading');
+
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
  const bySlot = $derived(new Map(draft.picks.map(pick => [pick.slot, pick])));
  const slots = $derived(draftRules(draft.schemaVersion).slots);
- const sections = $derived([
-  { label: 'Position players', slots: slots.slice(0, 9) },
-  { label: 'Pitching staff', slots: slots.slice(9) }
- ]);
- onMount(() => {
-  const desktop = window.matchMedia('(min-width: 64rem)');
-  const adapt = () => { expanded = desktop.matches; };
-  let disposed = false;
-  void loadMedia()
-   .then(value => {
-    if (disposed) return;
-    media = value;
-    mediaStatus = 'ready';
-   })
-   .catch(() => {
-    if (!disposed) mediaStatus = 'unavailable';
-   });
-  adapt();
-  desktop.addEventListener('change', adapt);
-  return () => {
-   disposed = true;
-   desktop.removeEventListener('change', adapt);
+ const pitcherSlots = $derived(slots.filter(slot => !HITTER_SLOTS.includes(slot as HitterSlot)));
+ const targetsBySlot = $derived(new Map(moveTargets.map(target => [target.slot, target])));
+ const pickedCount = $derived(draft.picks.length);
+
+ function profileLabel(profile: Profile): string {
+  return `${profile.displayName}, ${profile.year}, ${profile.historicalTeam}`;
+ }
+
+ function slotState(slot: Slot): {
+  slot: Slot;
+  profile: Profile | undefined;
+  unavailable: boolean;
+  preview: boolean;
+  highlighted: boolean;
+  source: boolean;
+  action: string;
+  actionShort: string;
+  enabled: boolean;
+  x?: number;
+  y?: number;
+ } {
+  const pick = bySlot.get(slot);
+  const isPreview = !movingSeasonId && preview?.slot === slot;
+  const profile = isPreview ? preview.profile : pick ? bySeason.get(pick.seasonId) : undefined;
+  const unavailable = Boolean(pick && !profile);
+  const source = pick?.seasonId === movingSeasonId;
+  const target = HITTER_SLOTS.includes(slot as HitterSlot) ? targetsBySlot.get(slot as HitterSlot) : undefined;
+  const legalPlacement = !movingSeasonId && legalSlots.includes(slot);
+  const occupied = Boolean(pick);
+  const hitter = HITTER_SLOTS.includes(slot as HitterSlot);
+  const inspectable = occupied && (!movingSeasonId || !hitter);
+  const highlighted = source || Boolean(target) || legalPlacement;
+  const targetName = target?.swapWith ? bySeason.get(target.swapWith)?.displayName ?? 'unavailable selected season' : null;
+
+  let action = 'Unavailable';
+  if (isPreview) action = `Preview, confirm ${slot}`;
+  else if (source) action = 'Cancel move';
+  else if (target) action = targetName ? `Swap with ${targetName}` : `Move to open ${slot}`;
+  else if (legalPlacement) action = `Place at open ${slot}`;
+  else if (unavailable) action = 'Unavailable selected season';
+  else if (occupied && hitter) action = 'Move or swap';
+  else if (occupied) action = 'Inspect card';
+  else action = 'Open, unavailable';
+
+  const actionShort = isPreview ? 'Preview'
+   : source ? 'Moving'
+   : target ? target.swapWith ? 'Swap' : 'Move'
+   : legalPlacement ? 'Place'
+   : '';
+
+  return {
+   slot,
+   profile,
+   unavailable,
+   preview: isPreview,
+   highlighted,
+   source,
+   action,
+   actionShort,
+   enabled: !busy && (source || Boolean(target) || legalPlacement || inspectable),
+   ...(HITTER_SLOTS.includes(slot as HitterSlot) ? { x: coordinates[slot as HitterSlot][0], y: coordinates[slot as HitterSlot][1] } : {})
   };
- });
+ }
+
+ const field = $derived.by(() => HITTER_SLOTS.map(slot => slotState(slot)));
+ const staff = $derived.by(() => pitcherSlots.map(slot => slotState(slot)));
 </script>
 
-<aside class="roster" aria-label="Your drafted roster">
- <details bind:open={expanded}>
-  <summary bind:this={summary}><span>Your roster</span> <span class="count">{draft.picks.length} / {slots.length} picked</span></summary>
-  <div class="pick-track" aria-hidden="true">{#each slots as slot}<span class:locked={bySlot.has(slot)}></span>{/each}</div>
-  {#if expanded}
-  <div class="roster-content">
-   {#each sections as section}
-    <section aria-label={section.label}>
-     <h3 class="eyebrow">{section.label}</h3>
-     {#if section.label === 'Position players' && draft.schemaVersion === 3}
-      <p class="assignment-note">Exact seasons stay on your roster. Fielding and DH assignments can move or swap.</p>
+<aside class="roster" aria-label={`Your field, ${pickedCount} of ${slots.length} roster slots filled`}>
+ <div class="pick-track" aria-label={`${pickedCount} of ${slots.length} roster slots filled`}>
+  {#each slots as slot}<span class:locked={bySlot.has(slot)}></span>{/each}
+ </div>
+
+ <section class="diamond" aria-label="Field positions">
+  <svg class="field-art" viewBox="0 0 440 488" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+   <path class="outfield-line" d="M26 312C58 142 127 34 220 34s162 108 194 278"></path>
+   <path class="infield-shape" d="m142 256 78-78 78 78-78 78z"></path>
+  </svg>
+  {#each field as state}
+   <button
+    type="button"
+    class="field-slot"
+    class:highlighted={state.highlighted}
+    class:preview={state.preview}
+    class:source={state.source}
+    class:unavailable={state.unavailable}
+    style={`--x:${state.x}%;--y:${state.y}%`}
+    data-slot={state.slot}
+    data-preview={state.preview ? 'true' : undefined}
+    aria-label={`${state.slot}, ${state.profile ? profileLabel(state.profile) : state.unavailable ? 'unavailable selected season' : 'open'}. ${state.action}.`}
+    disabled={!state.enabled}
+    onclick={event => onSlot(state.slot, event.currentTarget as HTMLButtonElement)}
+   >
+    <span class="card-frame" aria-hidden="true">
+     {#if state.profile}
+      <RosterItem profile={state.profile} assignedSlot={state.slot} {manifest} {rankings} {rankingLoading} {rankingError} {media} {mediaStatus} />
+     {:else}
+      <span class="slot-placeholder">{state.unavailable ? 'Unavailable' : 'Open'}</span>
      {/if}
-     <ul>
-      {#each section.slots as slot}
-       {@const pick = bySlot.get(slot)}
-       {@const profile = pick ? bySeason.get(pick.seasonId) : undefined}
-       <li class:filled={!!pick}>
-        <div class="pick-row">
-         <span class="slot">{slot}</span>
-         {#if pick}
-          {#if profile}
-           <div class="collected-identity"><RosterItem {profile} assignedSlot={pick.slot} {manifest} {rankings} {rankingLoading} {rankingError} {media} {mediaStatus} inspectionReturnFocus={summary} /></div>
-          {:else}
-           <span class="name">Loading selected season…</span>
-          {/if}
-         {:else}
-          <span class="open-slot">Open slot</span>
-         {/if}
-        </div>
-        {#if pick && section.label === 'Position players'}
-         <RosterAssignment seasonId={pick.seasonId} {draft} {manifest} {profiles} {busy} {onReassign} />
-        {/if}
-       </li>
-      {/each}
-     </ul>
-     {#if section.label === 'Pitching staff'}
-      <p class="workload">Three starters, 54 starts each. {draft.schemaVersion === 3 ? 'Your independently drafted team-season bullpen remainder supports your closer.' : 'Your closer is backed by league-average 2025 support relief.'}</p>
-      <p class="muted workload">An arcade workload, not a real-world pitching schedule.</p>
-     {/if}
-    </section>
+    </span>
+    <span class="slot-label"><b>{state.slot}</b>{#if state.actionShort}<span>{state.actionShort}</span>{/if}</span>
+   </button>
+  {/each}
+ </section>
+
+ <section class="pitching-staff" aria-labelledby="pitching-heading">
+  <h3 id="pitching-heading">Pitching staff</h3>
+  <div class="staff-slots">
+   {#each staff as state}
+    <button
+     type="button"
+     class="staff-slot"
+     class:highlighted={state.highlighted}
+     class:preview={state.preview}
+     class:source={state.source}
+     class:unavailable={state.unavailable}
+     data-slot={state.slot}
+     data-preview={state.preview ? 'true' : undefined}
+     aria-label={`${state.slot}, ${state.profile ? profileLabel(state.profile) : state.unavailable ? 'unavailable selected season' : 'open'}. ${state.action}.`}
+     disabled={!state.enabled}
+     onclick={event => onSlot(state.slot, event.currentTarget as HTMLButtonElement)}
+    >
+     <span class="card-frame" aria-hidden="true">
+      {#if state.profile}
+       <RosterItem profile={state.profile} assignedSlot={state.slot} {manifest} {rankings} {rankingLoading} {rankingError} {media} {mediaStatus} />
+      {:else}
+       <span class="slot-placeholder">{state.unavailable ? 'Unavailable' : 'Open'}</span>
+      {/if}
+     </span>
+     <span class="slot-label"><b>{state.slot}</b>{#if state.actionShort}<span>{state.actionShort}</span>{/if}</span>
+    </button>
    {/each}
   </div>
-  {/if}
- </details>
+  <p class="workload">Three starters, 54 starts each. {draft.schemaVersion === 3 ? 'Your independently drafted team-season bullpen remainder supports your closer.' : 'Your closer is backed by league-average 2025 support relief.'}</p>
+  <p class="workload muted">An arcade workload, not a real-world pitching schedule.</p>
+ </section>
 </aside>
 
 <style>
- .roster { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
- summary { padding: var(--space-4); cursor: pointer; font-weight: 750; }
- .count { margin-left: var(--space-2); color: var(--muted); font-weight: 500; font-size: var(--text-xs); white-space: nowrap; }
- .pick-track { display: flex; gap: var(--space-1); padding: 0 var(--space-4) var(--space-4); }
- .pick-track span { height: var(--space-1); flex: 1; background: var(--border); }
+ .roster { min-width: 0; color: var(--text); }
+ .pick-track { display: flex; gap: .25rem; margin-bottom: var(--space-4); }
+ .pick-track span { flex: 1; height: .25rem; background: var(--border); }
  .pick-track .locked { background: var(--text); }
- .roster-content { padding: 0 var(--space-4) var(--space-4); }
- h3 { margin: var(--space-4) 0 var(--space-2); }
- .assignment-note { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
- ul { padding: 0; margin: 0; list-style: none; }
- li { display: grid; gap: var(--space-2); padding-block: var(--space-2); border-bottom: 1px solid var(--border); }
- .pick-row { display: flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; }
- .slot { flex: 0 0 2rem; color: var(--muted); font-size: var(--text-xs); font-weight: 750; }
- .filled .slot { color: var(--text); }
- .collected-identity { min-width: 0; flex: 1; }
- .name { font-size: var(--text-sm); font-weight: 650; overflow-wrap: anywhere; }
- .open-slot { color: var(--muted); font-size: var(--text-xs); }
- .workload { margin: var(--space-4) 0 0; font-size: var(--text-xs); line-height: 1.5; }
+ .diamond { container-type: inline-size; position: relative; width: min(100%, 27.5rem); aspect-ratio: 440 / 488; margin: 0 auto var(--space-8); overflow: visible; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+ .field-art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+ .outfield-line { fill: none; stroke: var(--border); stroke-width: 1.5; }
+ .infield-shape { fill: color-mix(in oklch, var(--surface-raised) 72%, transparent); stroke: color-mix(in oklch, var(--border) 70%, transparent); stroke-width: 1.5; }
+ .field-slot, .staff-slot { --roster-mini-width: clamp(2.75rem, 14.1cqi, 3.875rem); --roster-mini-half: clamp(1.925rem, 9.87cqi, 2.7125rem); position: absolute; z-index: 1; display: grid; justify-items: center; align-content: start; gap: .2rem; width: clamp(2.75rem, 19cqi, 5.25rem); min-width: 2.75rem; min-height: 2.75rem; padding: 0; border: 0; border-radius: var(--radius); color: var(--text); background: transparent; font: inherit; text-align: center; transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
+ .field-slot { left: var(--x); top: calc(var(--y) - var(--roster-mini-half)); transform: translateX(-50%); }
+ .field-slot:hover:not(:disabled), .staff-slot:hover:not(:disabled) { background: transparent; }
+ .field-slot:active:not(:disabled) { transform: translate( -50%, 1px); }
+ .staff-slot:active:not(:disabled) { transform: translateY(1px); }
+ .card-frame { display: grid; place-items: start center; width: var(--roster-mini-width); border-radius: var(--radius); outline: 2px solid transparent; outline-offset: 3px; }
+ .slot-placeholder { display: grid; place-items: center; width: var(--roster-mini-width); aspect-ratio: 5 / 7; padding: .2rem; border: 1.5px dashed var(--muted); border-radius: var(--radius); color: var(--muted); background: color-mix(in oklch, var(--surface) 72%, transparent); font-family: 'Barlow Condensed', sans-serif; font-size: .7rem; font-weight: 800; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
+ .slot-label { display: grid; gap: .05rem; max-width: 100%; font-size: .625rem; line-height: 1.1; overflow-wrap: anywhere; }
+ .slot-label b { color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: .875rem; font-style: italic; letter-spacing: .04em; }
+ .slot-label span { color: var(--muted); }
+ .highlighted .card-frame { outline-color: var(--accent); }
+ .highlighted .slot-placeholder { border-color: var(--accent); color: var(--accent); background: color-mix(in oklch, var(--accent) 14%, transparent); }
+ .highlighted .slot-label b, .highlighted .slot-label span { color: var(--accent); }
+ .preview .card-frame { outline-style: dashed; }
+ .preview .slot-label span { color: var(--text); }
+ .source { opacity: .82; }
+ .unavailable .slot-placeholder { border-color: var(--error); color: var(--error); }
+ .unavailable .slot-label span { color: var(--error); }
+ .pitching-staff { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+ h3 { margin: 0 0 var(--space-3); color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: var(--text-base); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+ .staff-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
+ .staff-slot { --roster-mini-width: min(3.875rem, 100%); position: relative; width: 100%; min-width: 2.75rem; min-height: 2.75rem; }
+ .workload { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.45; }
+ @container (max-width: 21rem) {
+  .slot-label { font-size: .5625rem; }
+ }
 </style>

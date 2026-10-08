@@ -1,9 +1,7 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
  import { Session } from '#lib/game/session.svelte.ts';
- import Reveal from '#lib/components/Reveal.svelte';
- import CandidateList from '#lib/components/CandidateList.svelte';
- import Roster from '#lib/components/Roster.svelte';
+ import DraftBoard from '#lib/components/DraftBoard.svelte';
  import Lineup from '#lib/components/Lineup.svelte';
  import Progress from '#lib/components/Progress.svelte';
  import Results from '#lib/components/Results.svelte';
@@ -105,19 +103,7 @@
  {:else if session.draft && session.manifest}
   {#if session.phase === 'ready' || session.phase === 'revealing' || session.phase === 'choosing'}
    <div class="draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <div class="draft-layout">
-    <aside><Roster draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} /></aside>
-    <section class="draft-main" aria-label="Make your next pick">
-     <Reveal roll={session.draft.currentRoll} manifest={session.manifest} revealing={session.phase === 'revealing'} pickNumber={session.draft.picks.length + 1} schemaVersion={session.draft.schemaVersion} />
-     {#if session.phase === 'ready'}
-      <div class="next-roll"><p class="muted">{session.draft.picks.length ? "Pick locked in. Who's next?" : 'Your roster starts with one roll.'}</p><button id="roll-next" class="primary" disabled={session.busy} onclick={() => void session.roll()}>Roll next franchise <span aria-hidden="true">↗</span></button></div>
-     {:else if session.loading || session.phase === 'revealing'}
-      <div class="stack" role="status" aria-label="Loading available player seasons"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><span class="muted">Finding eligible seasons…</span></div>
-     {:else if session.pool.length > 0}
-      <CandidateList profiles={session.pool} draft={session.draft} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} busy={session.busy} onDraft={(id, slot) => session.commit(id, slot)} />
-     {/if}
-    </section>
-   </div>
+   <DraftBoard draft={session.draft} manifest={session.manifest} pool={session.pool} profiles={session.profiles} phase={session.phase} loading={session.loading} busy={session.busy} error={session.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void session.roll()} onDraft={(id, slot) => session.commit(id, slot)} onReassign={(id, slot) => session.reassign(id, slot)} />
   {:else if session.phase === 'lineup'}
    <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <Lineup draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
@@ -155,10 +141,7 @@
  .franchise-preview p { color: var(--muted); font-size: var(--text-xs); margin: var(--space-4) 0 0; }
  .draft-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
  .stage-divider { padding-inline: var(--space-2); color: var(--border); }
- .draft-layout { display: grid; gap: var(--space-6); min-width: 0; }
- aside, .draft-main { min-width: 0; }
- .next-roll { margin-block: var(--space-8); }
- .next-roll p { margin-bottom: var(--space-4); }
+ aside { min-width: 0; }
  .confirmation { border: 1px solid var(--accent); background: var(--surface); padding: var(--space-5); border-radius: var(--radius); margin-bottom: var(--space-6); }
  .confirmation h2 { font-size: var(--text-xl); }
  .error p { margin: 0 0 var(--space-3); }
@@ -170,9 +153,6 @@
   h1 { font-size: var(--text-3xl); }
   h1 strong { font-size: 7rem; }
   .intro { font-size: var(--text-lg); }
-  .draft-layout { grid-template-columns: minmax(0, 1fr) 20rem; align-items: start; gap: var(--space-8); }
-  .draft-layout > aside { grid-column: 2; grid-row: 1; position: sticky; top: var(--space-6); }
-  .draft-main { grid-column: 1; grid-row: 1; }
  }
  @media (max-width: 24rem) { h1 strong { font-size: var(--text-score); } .welcome-lineup { padding: var(--space-4); } .draft-top .eyebrow { max-width: 10rem; } }
 </style>

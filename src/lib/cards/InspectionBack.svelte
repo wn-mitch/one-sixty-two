@@ -17,7 +17,7 @@
  });
 </script>
 
-<section class="inspection-back" data-face="back" data-era={s.era} aria-label="Historical season card back" style:--back-ground={colors.ground} style:--back-ink={colors.ink}>
+<section class="inspection-back" data-era={s.era} aria-label="Historical season text version" style:--back-ground={colors.ground} style:--back-ink={colors.ink}>
  <header>
   <p class="era">{s.era} · {s.fin.label}</p>
   <h3 data-layer="name.full">{s.b.name}</h3>

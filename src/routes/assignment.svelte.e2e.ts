@@ -10,12 +10,13 @@ import {
 	type LegalReassignment
 } from '../lib/game/draft.ts';
 import { HITTER_SLOTS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Profile } from '../lib/game/types.ts';
+import { currentManifest, openSavedDraft, STORAGE_KEY } from './draft-test-fixtures.ts';
 
-const STORAGE_KEY = '162-zero:v1';
 const FIXTURE_SEED = 2;
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(180000);
+
 
 interface AssignmentScenario {
 	draft: Draft;
@@ -26,14 +27,6 @@ interface AssignmentScenario {
 	swap: { seasonId: string; origin: HitterSlot; destination: HitterSlot; swapWith: string };
 }
 
-async function currentManifest(request: APIRequestContext): Promise<Manifest> {
-	const pointerResponse = await request.get('/data/current.json');
-	expect(pointerResponse.ok()).toBe(true);
-	const pointer = await pointerResponse.json() as { manifestUrl: string };
-	const manifestResponse = await request.get(pointer.manifestUrl);
-	expect(manifestResponse.ok()).toBe(true);
-	return manifestResponse.json() as Promise<Manifest>;
-}
 
 function displayedCandidates(draft: Draft, manifest: Manifest): Candidate[] {
 	if (!draft.currentRoll) return [];
@@ -103,18 +96,25 @@ async function targetProfile(request: APIRequestContext, manifest: Manifest, sce
 	return profile;
 }
 
-async function openSavedDraft(page: Page, draft: Draft): Promise<void> {
-	const saved = JSON.stringify({ ...draft, phase: 'draft' });
-	await page.addInitScript(({ key, value }) => {
-		if (!localStorage.getItem(key)) localStorage.setItem(key, value);
-	}, { key: STORAGE_KEY, value: saved });
-	await page.goto('/');
-	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
-	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+async function selectExactTarget(page: Page, profile: Profile, seasonId: string) {
+	const search = page.getByRole('searchbox', { name: 'Find your pick' });
+	await search.fill(profile.displayName);
+	const group = page.locator('.candidate-card').filter({ has: page.getByText(profile.displayName, { exact: true }).first() });
+	await expect(group).toHaveCount(1);
+	const select = group.getByRole('button', { name: /^Select / }).first();
+	await select.click();
+	const sheet = page.locator('dialog.draft-sheet[open]');
+	await expect(sheet).toBeVisible();
+	await sheet.getByRole('combobox', { name: `Exact season for ${profile.displayName}`, exact: true }).selectOption(seasonId);
+	return { group, select, sheet };
 }
 
-function assignment(page: Page, seasonId: string) {
-	return page.locator(`[data-roster-assignment="${seasonId}"]`);
+function fieldSlot(page: Page, slot: string) {
+	return page.locator(`dialog.draft-sheet[open] [data-slot="${slot}"]`);
+}
+
+async function savedDraft(page: Page): Promise<Draft> {
+	return page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Promise<Draft>;
 }
 
 test('keeps a blocked season selected through moves and swaps, then restores the pending roll', async ({ page, request }) => {
@@ -123,110 +123,99 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	const profile = await targetProfile(request, manifest, scenario);
 	const pendingRoll = scenario.draft.currentRoll;
 	const pickCount = scenario.draft.picks.length;
+	const origin = scenario.draft.picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot;
+	if (!origin || !HITTER_SLOTS.includes(origin as HitterSlot)) throw new Error('Assignment fixture occupant is not a hitter');
 	await openSavedDraft(page, scenario.draft);
 
-	const search = page.getByRole('searchbox', { name: 'Find your pick' });
-	await page.locator('.filters').getByRole('button', { name: scenario.targetSlot, exact: true }).click();
-	await search.fill(profile.displayName);
-	const season = page.locator(`[data-candidate-group="${scenario.target.playerId}"]`);
-	const seasonSelector = season.getByRole('combobox', { name: `Exact season for ${profile.displayName}`, exact: true });
-	await expect(seasonSelector).toBeVisible();
-	await seasonSelector.selectOption(scenario.target.seasonId);
-	const card = season.locator(`.player-card[data-season-id="${scenario.target.seasonId}"]`);
-	await expect(card).toBeVisible();
-	await card.getByRole('button', { name: 'Inspect card', exact: true }).click();
-	const dialog = page.locator('dialog.card-inspection[open]');
-	await expect(dialog).toBeVisible();
-	await expect(dialog.getByRole('button', { name: 'Turn over', exact: true })).toBeFocused();
+	let selected = await selectExactTarget(page, profile, scenario.target.seasonId);
+	const confirmation = selected.sheet.locator('.pick-confirmation');
+	await expect(confirmation).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await expect(confirmation).toHaveAttribute('data-pending-slot', '');
+	await expect(confirmation).toContainText('Reassign your roster to make room.');
+	await expect(confirmation.getByRole('button', { name: 'Draft player', exact: true })).toBeDisabled();
+
+	await confirmation.getByRole('button', { name: 'Cancel selection', exact: true }).click();
+	await expect(page.locator('dialog.draft-sheet[open]')).toHaveCount(0);
+	await expect(selected.select).toBeFocused();
+	selected = await selectExactTarget(page, profile, scenario.target.seasonId);
 	await page.keyboard.press('Escape');
-	await expect(dialog).toHaveCount(0);
+	await expect(page.locator('dialog.draft-sheet[open]')).toHaveCount(0);
+	await expect(selected.select).toBeFocused();
+	selected = await selectExactTarget(page, profile, scenario.target.seasonId);
+	await selected.sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
+	const disclosures = selected.sheet.locator('[role="tabpanel"]:not([hidden]) .disclosure-controls');
+	await disclosures.getByRole('button', { name: 'Text version', exact: true }).click();
+	await disclosures.getByRole('button', { name: 'Details', exact: true }).click();
+	await selected.sheet.getByRole('tab', { name: 'Field', exact: true }).click();
 
-	const choose = card.locator(`[data-choose-season="${scenario.target.seasonId}"]`);
-	await expect(choose).toHaveAccessibleName(`Choose ${profile.year}`);
-	await choose.click();
-	const dock = page.locator('.assignment-dock');
-	await expect(dock).toBeVisible();
-	await expect(dock).toBeFocused();
-	const clear = dock.getByRole('button', { name: 'Clear selection', exact: true });
-	await expect(clear).toBeVisible();
-	await expect(dock.getByRole('button', { name: 'Draft player', exact: true })).toBeDisabled();
-	await expect(dock).toContainText('Reassign your roster to make room.');
-	const dockBox = await dock.boundingBox();
-	expect(dockBox).not.toBeNull();
-	expect(dockBox!.y + dockBox!.height).toBeLessThanOrEqual(844);
-
-	await clear.click();
-	await expect(dock).toHaveCount(0);
-	await expect(choose).toBeFocused();
-	await choose.click();
-	await expect(dock).toBeFocused();
-	await page.keyboard.press('Escape');
-	await expect(dock).toHaveCount(0);
-	await expect(choose).toBeFocused();
-	await choose.click();
-	await page.locator('.roster > details > summary').click();
-
-	const occupant = assignment(page, scenario.occupantSeasonId);
-	await occupant.locator('[data-assignment-select]').selectOption(scenario.move.slot);
-	await expect(occupant.locator('[data-assignment-action]')).toHaveText('Move');
-	await occupant.locator('[data-assignment-action]').click();
-
-	await expect(card.getByRole('button', { name: `Clear selection`, exact: true })).toHaveAttribute('aria-pressed', 'true');
-	await expect(card.locator('[data-card][data-face="front"]').first()).toBeVisible();
-	await expect(dock.locator(`input[value="${scenario.targetSlot}"]`)).toBeVisible();
-	let saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	await fieldSlot(page, origin).click();
+	await expect(selected.sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
+	await expect(selected.sheet.getByRole('button', { name: 'Inspect card', exact: true })).toBeVisible();
+	await selected.sheet.getByRole('button', { name: 'Inspect card', exact: true }).click();
+	await selected.sheet.getByRole('button', { name: 'Back to field', exact: true }).click();
+	await selected.sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
+	await expect(selected.sheet.locator('[role="tabpanel"]:not([hidden]) .inspection-back')).toBeVisible();
+	await expect(selected.sheet.locator('[role="tabpanel"]:not([hidden]) .details')).toBeVisible();
+	await selected.sheet.getByRole('tab', { name: 'Field', exact: true }).click();
+	await selected.sheet.getByRole('button', { name: 'Cancel move', exact: true }).click();
+	await expect(selected.sheet.getByRole('heading', { name: /^Your field/ })).toBeFocused();
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await fieldSlot(page, origin).click();
+	await fieldSlot(page, scenario.move.slot).click();
+	await expect.poll(async () => (await savedDraft(page)).picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot).toBe(scenario.move.slot);
+	let saved = await savedDraft(page);
 	expect(saved.currentRoll).toEqual(pendingRoll);
 	expect(saved.picks).toHaveLength(pickCount);
-	expect(saved.picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot).toBe(scenario.move.slot);
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', '');
 
-	await dock.locator(`input[value="${scenario.targetSlot}"]`).check();
-	await occupant.locator('[data-assignment-select]').selectOption(scenario.targetSlot);
-	await occupant.locator('[data-assignment-action]').click();
-	await expect(dock.locator('input:checked')).toHaveCount(0);
-	await expect(card.locator('[data-card][data-face="front"]').first()).toBeVisible();
-	await occupant.locator('[data-assignment-select]').selectOption(scenario.move.slot);
-	await occupant.locator('[data-assignment-action]').click();
-	await dock.locator(`input[value="${scenario.targetSlot}"]`).check();
+	await fieldSlot(page, scenario.targetSlot).click();
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', scenario.targetSlot);
+	await fieldSlot(page, scenario.move.slot).click();
+	await expect(selected.sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
+	await fieldSlot(page, scenario.targetSlot).click();
+	await expect.poll(async () => (await savedDraft(page)).picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot).toBe(scenario.targetSlot);
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', '');
 
-	const swap = assignment(page, scenario.swap.seasonId);
-	await swap.locator('[data-assignment-select]').selectOption(scenario.swap.destination);
-	await expect(swap.locator('[data-assignment-action]')).toHaveText('Swap');
-	await swap.locator('[data-assignment-action]').click();
-	await expect(card.getByRole('button', { name: 'Clear selection', exact: true })).toHaveAttribute('aria-pressed', 'true');
-	await expect(dock.locator(`input[value="${scenario.targetSlot}"]`)).toBeChecked();
+	await fieldSlot(page, scenario.targetSlot).click();
+	await fieldSlot(page, scenario.move.slot).click();
+	await expect.poll(async () => (await savedDraft(page)).picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot).toBe(scenario.move.slot);
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', '');
 
-	saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	await fieldSlot(page, scenario.targetSlot).click();
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', scenario.targetSlot);
+	await fieldSlot(page, scenario.swap.origin).click();
+	await expect(selected.sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
+	await fieldSlot(page, scenario.swap.destination).click();
+	await expect.poll(async () => (await savedDraft(page)).picks.find(pick => pick.seasonId === scenario.swap.seasonId)?.slot).toBe(scenario.swap.destination);
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await expect(selected.sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', scenario.targetSlot);
+
+	saved = await savedDraft(page);
 	expect(saved.currentRoll).toEqual(pendingRoll);
 	expect(saved.picks).toHaveLength(pickCount);
-	expect(saved.picks.find(pick => pick.seasonId === scenario.swap.seasonId)?.slot).toBe(scenario.swap.destination);
 	expect(saved.picks.find(pick => pick.seasonId === scenario.swap.swapWith)?.slot).toBe(scenario.swap.origin);
 
 	await page.reload();
 	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
 	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
-	const restored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	const restored = await savedDraft(page);
 	expect(restored.currentRoll).toEqual(pendingRoll);
 	expect(restored.picks).toEqual(saved.picks);
-	await page.locator('.roster > details > summary').click();
-	await expect(assignment(page, scenario.occupantSeasonId).locator('[data-assignment-select]')).toHaveValue(scenario.move.slot);
-	await expect(assignment(page, scenario.swap.seasonId).locator('[data-assignment-select]')).toHaveValue(scenario.swap.destination);
-	await page.locator('.roster > details > summary').click();
-	await search.fill(profile.displayName);
-	const restoredSelector = season.getByRole('combobox', { name: `Exact season for ${profile.displayName}`, exact: true });
-	await restoredSelector.selectOption(scenario.target.seasonId);
-	const restoredCard = season.locator(`.player-card[data-season-id="${scenario.target.seasonId}"]`);
-	await expect(restoredCard).toBeVisible();
-	await restoredCard.getByRole('button', { name: 'Inspect card', exact: true }).click();
-	const restoredDialog = page.locator('dialog.card-inspection[open]');
-	await expect(restoredDialog).toBeVisible();
-	await page.keyboard.press('Escape');
-	await expect(restoredDialog).toHaveCount(0);
-	await restoredCard.getByRole('button', { name: `Choose ${profile.year}`, exact: true }).click();
-	await page.locator(`.assignment-dock input[value="${scenario.targetSlot}"]`).check();
-	await page.getByRole('button', { name: `Draft player at ${scenario.targetSlot}`, exact: true }).click();
-	const completed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	await page.getByRole('button', { name: /^Open your field/ }).click();
+	const restoredSheet = page.locator('dialog.draft-sheet[open]');
+	await expect(restoredSheet).toBeVisible();
+	await expect(fieldSlot(page, scenario.move.slot)).toBeVisible();
+	await expect(fieldSlot(page, scenario.targetSlot)).toHaveAttribute('aria-label', expect.stringContaining('open'));
+	await restoredSheet.getByRole('button', { name: 'Close field', exact: true }).click();
+	selected = await selectExactTarget(page, profile, scenario.target.seasonId);
+	await fieldSlot(page, scenario.targetSlot).click();
+	await expect(selected.sheet.getByRole('button', { name: `Draft at ${scenario.targetSlot}`, exact: true })).toBeEnabled();
+	await selected.sheet.getByRole('button', { name: `Draft at ${scenario.targetSlot}`, exact: true }).click();
+	await expect.poll(async () => (await savedDraft(page)).actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
+	const completed = await savedDraft(page);
 	expect(completed.picks.at(-1)?.seasonId).toBe(scenario.target.seasonId);
 	expect(completed.schemaVersion).toBe(3);
-	if (completed.schemaVersion !== 3) throw new Error('Expected a current replay after drafting the exact card season');
-	expect(completed.actions.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
+	expect(completed.actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
 });

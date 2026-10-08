@@ -1,5 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
-import { SLOTS, type Slot } from '../lib/game/types.ts';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { availableCandidates, legalSlots } from '../lib/game/draft.ts';
+import { type Draft, type Slot } from '../lib/game/types.ts';
+import { currentManifest, STORAGE_KEY } from './draft-test-fixtures.ts';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(180000);
@@ -11,65 +13,76 @@ async function settlePool(page: Page) {
 	await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
 }
 
-async function pickFirstSeason(page: Page) {
-	await settlePool(page);
-	const occupied = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).picks.map((pick: { slot: Slot }) => pick.slot)) as Slot[];
-	for (const slot of SLOTS.filter(slot => !occupied.includes(slot))) {
-		const filter = page.locator('.filters').getByRole('button', { name: slot, exact: true });
-		if (!await filter.count()) continue;
-		await filter.click();
-		while (true) {
-			const card = page.locator('.candidate-card').filter({ hasNot: page.getByRole('group', { name: 'Available now', exact: true }).getByText('None', { exact: true }) }).first();
-			if (await card.count()) {
-				await card.getByRole('button', { name: /^Choose \d{4}$/ }).click();
-				await page.locator('.slot-choice input[type="radio"]').first().check();
-				await page.getByRole('button', { name: /^Draft player at / }).click();
-				return;
-			}
-			const next = page.getByRole('navigation', { name: 'Player card pages' }).getByRole('button', { name: 'Next', exact: true });
-			if (!await next.count() || !await next.isEnabled()) break;
-			await next.click();
-		}
-	}
-	throw new Error('The roll had no visible legal exact season under an open-position filter');
+async function firstLegalSeason(page: Page, request: APIRequestContext): Promise<{ seasonId: string; playerId: string; displayName: string; slot: Slot }> {
+	const manifest = await currentManifest(request);
+	const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	const candidate = availableCandidates(saved, manifest).find(item => legalSlots(saved, item, manifest).length > 0);
+	if (!candidate) throw new Error('The roll had no legal candidate in the current live manifest');
+	const response = await request.get(manifest.chunks[`${candidate.franchiseId}-${candidate.decade}`]);
+	expect(response.ok()).toBe(true);
+	const profiles = await response.json() as Array<{ seasonId: string; playerId: string; displayName: string }>;
+	const profile = profiles.find(item => item.seasonId === candidate.seasonId);
+	if (!profile) throw new Error('The legal live candidate is absent from its current-roll chunk');
+	return { ...profile, slot: legalSlots(saved, candidate, manifest)[0] };
 }
 
-async function finishRoster(page: Page) {
+async function selectExactSeason(page: Page, request: APIRequestContext) {
+	await settlePool(page);
+	const target = await firstLegalSeason(page, request);
+	const search = page.getByRole('searchbox', { name: 'Find your pick' });
+	await search.fill(target.displayName);
+	const group = page.locator(`.candidate-card[data-candidate-group="${target.playerId}"]`);
+	await expect(group).toHaveCount(1);
+	await group.getByRole('button', { name: /^Select / }).first().click();
+	const sheet = page.locator('dialog.draft-sheet[open]');
+	await expect(sheet).toBeVisible();
+	await sheet.getByRole('combobox', { name: `Exact season for ${target.displayName}`, exact: true }).selectOption(target.seasonId);
+	return { target, sheet };
+}
+
+async function pickFirstSeason(page: Page, request: APIRequestContext) {
+	const { target, sheet } = await selectExactSeason(page, request);
+	const destination = sheet.locator(`[data-slot="${target.slot}"]`);
+	await expect(destination).toBeEnabled();
+	await destination.click();
+	const confirmation = sheet.locator('.pick-confirmation');
+	await expect(confirmation).toHaveAttribute('data-selected-season', target.seasonId);
+	await expect(confirmation).toHaveAttribute('data-pending-slot', target.slot);
+	await sheet.getByRole('button', { name: `Draft at ${target.slot}`, exact: true }).click();
+}
+
+
+async function finishRoster(page: Page, request: APIRequestContext) {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	for (let index = 0; index < 14; index++) {
-		await pickFirstSeason(page);
+		await pickFirstSeason(page, request);
 		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();
 	}
 }
 
-test('keeps the slot choice and draft action reachable after choosing a season', async ({ page }) => {
+test('keeps the slot choice and draft action reachable after choosing a season', async ({ page, request }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
-	await settlePool(page);
-	const card = page.locator('.candidate-card').filter({ hasNot: page.getByRole('group', { name: 'Available now', exact: true }).getByText('None', { exact: true }) }).first();
-	await card.getByRole('button', { name: /^Choose \d{4}$/ }).click();
-	// The selected season must not push its own slot radios and Draft button below the fold.
-	const visibleWithoutScroll = await page.evaluate(() => {
-		const choice = document.querySelector('.assignment-dock .slot-choice') ?? document.querySelector('.slot-choice');
-		const draft = document.querySelector('.assignment-dock button[class*="primary"]') ?? Array.from(document.querySelectorAll('button')).find(button => /^Draft player at /.test(button.textContent ?? ''));
-		if (!choice || !draft) return { found: false };
-		const choiceBox = choice.getBoundingClientRect();
-		const draftBox = draft.getBoundingClientRect();
-		return {
-			found: true,
-			choiceVisible: choiceBox.top >= 0 && choiceBox.bottom <= innerHeight,
-			draftVisible: draftBox.top >= 0 && draftBox.bottom <= innerHeight
-		};
+	const { target, sheet } = await selectExactSeason(page, request);
+	await sheet.locator(`[data-slot="${target.slot}"]`).click();
+	const confirmation = sheet.locator('.pick-confirmation');
+	const draftButton = confirmation.getByRole('button', { name: `Draft at ${target.slot}`, exact: true });
+	await expect(confirmation).toBeVisible();
+	await expect(draftButton).toBeVisible();
+	const reachability = await draftButton.evaluate(button => {
+		const box = button.getBoundingClientRect();
+		return { bottom: box.bottom, viewport: innerHeight, visible: box.top >= 0 && box.bottom <= innerHeight };
 	});
-	expect(visibleWithoutScroll).toEqual({ found: true, choiceVisible: true, draftVisible: true });
-	await page.locator('.slot-choice input[type="radio"]').first().check();
-	await page.getByRole('button', { name: /^Draft player at / }).click();
+	expect(reachability.visible).toBe(true);
+	expect(reachability.bottom).toBeLessThanOrEqual(reachability.viewport);
+	await draftButton.click();
 	await expect(page.getByRole('button', { name: /Roll next franchise/ })).toBeVisible();
 });
 
-test('resumes its exact roll, finishes a roster, and recomputes every shared score', async ({ page, context }) => {
+
+test('resumes its exact roll, finishes a roster, and recomputes every shared score', async ({ page, context, request }) => {
 	const errors: string[] = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.goto('/');
@@ -82,7 +95,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll)).toEqual(savedRoll);
 	for (let index = 0; index < 14; index++) {
-		await pickFirstSeason(page);
+		await pickFirstSeason(page, request);
 		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();
 	}
 	// One franchise can be drafted only once per roster.
@@ -94,6 +107,10 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).battingOrder);
 	expect(after[0]).toBe(before[1]);
 	expect(after[1]).toBe(before[0]);
+	const startersBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).starterOrder);
+	await page.getByRole('button', { name: /down in starting rotation/ }).first().click();
+	const startersAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).starterOrder);
+	expect(startersAfter).toEqual([startersBefore[1], startersBefore[0], startersBefore[2]]);
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	const games = page.getByRole('region', { name: 'All 162 games', exact: true });
 	await expect(games.locator('details')).toHaveCount(162);
@@ -147,8 +164,8 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await replay.close();
 });
 
-test('starts a clean draft from a replay link without touching the local save', async ({ page }) => {
-	await finishRoster(page);
+test('starts a clean draft from a replay link without touching the local save', async ({ page, request }) => {
+	await finishRoster(page, request);
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('details')).toHaveCount(162);
 	const local = await page.evaluate(() => localStorage.getItem('162-zero:v1'));
@@ -255,11 +272,11 @@ for (const invalid of ['empty', 'wrong-roll']) {
 	});
 }
 
-test('route teardown cancels resumed hydration without overwriting a completed save', async ({ page }) => {
+test('route teardown cancels resumed hydration without overwriting a completed save', async ({ page, request }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
 	for (let index = 0; index < 14; index++) {
-		await pickFirstSeason(page);
+		await pickFirstSeason(page, request);
 		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();
 	}
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();

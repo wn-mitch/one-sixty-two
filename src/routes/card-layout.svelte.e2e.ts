@@ -10,7 +10,7 @@ import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 import { isHitter } from '../lib/components/candidate-ranking.ts';
 
 const ERAS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'] as const;
-const WIDTHS = [240, 320] as const;
+const WIDTHS = [240, 320, 330, 410] as const;
 
 test.setTimeout(180000);
 
@@ -110,6 +110,7 @@ async function buildHarness(): Promise<HarnessAssets> {
 	await writeFile(entry, `
 import { mount, tick, unmount } from 'svelte';
 import Card from ${JSON.stringify(cardPath)};
+import CardFlip from ${JSON.stringify(resolve('src/lib/cards/CardFlip.svelte'))};
 import { createCardViewModel } from ${JSON.stringify(modelPath)};
 import { contrast, mix } from ${JSON.stringify(tokensPath)};
 
@@ -205,6 +206,22 @@ export async function inspect({ eras, widths }) {
 			await unmount(instance);
 			host.replaceChildren();
 		}
+		for (const era of eras) for (const { label, model } of models) for (const width of [330, 410]) {
+			host.style.width = width + 'px';
+			const instance = mount(CardFlip, { target: host, props: { s: { ...model, era }, turned: true, onDetails: () => {} } });
+			await afterLayout();
+			const back = host.querySelector('.back [data-card]');
+			const front = host.querySelector('.front');
+			const rect = { width: back.offsetWidth, height: back.offsetHeight };
+			const problems = problemsFor(back);
+			if (back.dataset.card !== era || back.dataset.face !== 'back' || !front.inert || front.getAttribute('aria-hidden') !== 'true'
+				|| Math.abs(rect.width - width) > 1 || Math.abs(rect.width / rect.height - 5 / 7) > .01) {
+				problems.push({ kind: 'designed-flip-geometry', width: rect.width, height: rect.height });
+			}
+			reports.push({ era, label, width, face: 'flipped-back', problems });
+			await unmount(instance);
+			host.replaceChildren();
+		}
 		const cards = models.slice(0, 2).map(({ model }) => mount(Card, { target: host, props: { s: { ...model, era: '1970s' }, face: 'front', onDetails: () => {} } }));
 		await afterLayout();
 		const paths = [...host.querySelectorAll('svg path[id]')].map(path => path.id);
@@ -278,7 +295,7 @@ test('keeps every era composition within its live card geometry', async ({ page,
 		brokenArcRefs: string[];
 	};
 
-	expect(result.cases).toBe(ERAS.length * specimens.length * WIDTHS.length * 2);
+	expect(result.cases).toBe(ERAS.length * specimens.length * (WIDTHS.length * 2 + 2));
 	expect(result.failures).toEqual([]);
 	expect(result.duplicateArcIds).toEqual([]);
 	expect(result.brokenArcRefs).toEqual([]);

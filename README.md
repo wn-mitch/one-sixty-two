@@ -4,6 +4,8 @@ A browser baseball challenge: draft fourteen exact historical selections (nine h
 
 Draft progress, fielding/DH assignments, and lineup order are saved locally. Exact season selections are permanent; qualifying position players can move into an empty slot or swap reciprocally before simulation. Moves preserve a pending roll and must leave the roster completable. Only saves compatible with the current schema, model, and dataset resume. Sharing uploads versioned inputs and an authoritative roll/pick/reassignment action history; the recipient recomputes the same season without replacing the local draft. Inputs live in the `REPLAYS` R2 bucket bound in `wrangler.jsonc`; no results, names, accounts, or request metadata are stored. Oversized histories fail explicitly rather than losing chronology.
 
+Draft cards select a candidate without saving a pick. Choose a highlighted field destination, review the exact season preview, then confirm with Draft. Desktop cards turn in place; phones and portrait tablets open a field sheet with Field/Card back tabs and pinned confirmation. Text version and Details expose the complete historical facts and provenance separately from the eight designed card backs. Dismissal discards only the preview; qualifying roster moves and swaps apply immediately.
+
 ## Run
 
 Use Node >=24.12 and npm. Install with `npm ci`, then `npx playwright install chromium` for headless browser tests.
@@ -14,6 +16,8 @@ just test
 just smoke --seed 162 --policy best
 just calibrate --seed 162 --games 10000
 ```
+
+Browser tests start their own local Worker/R2 surface on port 4162. If another process owns it, use `PLAYWRIGHT_PORT=4172 just test` (or another free port); the suite never reuses an existing server.
 
 Development and builds prepare the statistical, ranking, and image assets automatically. The first preparation needs network access and ImageMagick's `magick` executable for image conversion. Raw statistics and ranking exports are checksum-verified and cached under ignored `.cache/lahman/` and `.cache/rankings/`; source metadata and thumbnails are cached under ignored `.cache/media/`. Generated data and imagery belong under ignored `static/data/`, `static/rankings/`, and `static/media/`, never in source control. Synthetic test identities contain no public athlete names.
 

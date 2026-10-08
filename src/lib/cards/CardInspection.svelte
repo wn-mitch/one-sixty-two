@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
 	import CardFlip from './CardFlip.svelte';
-	import Supplemental from './Supplemental.svelte';
+	import CardDetails from './CardDetails.svelte';
 	import type { CardViewModel } from './view-model.ts';
 
-	let { s, returnFocus = null }: { s: CardViewModel; returnFocus?: HTMLElement | null } = $props();
+	let { s, returnFocus = null, onClose }: { s: CardViewModel; returnFocus?: HTMLElement | null; onClose?: () => void } = $props();
 	const uid = $props.id();
 	const titleId = `${uid}-inspection-title`;
 	let opened = $state(false);
@@ -13,14 +13,13 @@
 	let trigger: HTMLElement | null = null;
 	let focusFallback: HTMLElement | null = null;
 	let session = $state(0);
-	let detailsOpen = $state(false);
-	let details = $state<HTMLElement>();
+	let cardDetails = $state<CardDetails>();
+	let destroying = false;
 
 	export async function open(nextTrigger: HTMLElement): Promise<void> {
 		trigger = nextTrigger;
 		focusFallback = returnFocus;
 		opened = true;
-		detailsOpen = false;
 		session += 1;
 		if (!dialog?.open) dialog?.showModal();
 		await tick();
@@ -29,7 +28,6 @@
 
 	function restoreFocus(): void {
 		opened = false;
-		detailsOpen = false;
 		const previousTrigger = trigger;
 		const previousFallback = focusFallback;
 		trigger = null;
@@ -46,21 +44,23 @@
 	}
 
 	async function showDetails(): Promise<void> {
-		detailsOpen = true;
-		await tick();
-		if (!opened) return;
-		details?.focus({ preventScroll: true });
-		details?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+		await cardDetails?.showDetails();
+	}
+
+	function handleClose(): void {
+		restoreFocus();
+		if (!destroying) onClose?.();
 	}
 
 	onDestroy(() => {
+		destroying = true;
 		if (!opened) return;
 		dialog?.close();
 		restoreFocus();
 	});
 </script>
 
-<dialog bind:this={dialog} class="card-inspection" aria-labelledby={titleId} onclose={restoreFocus}>
+<dialog bind:this={dialog} class="card-inspection" aria-labelledby={titleId} onclose={handleClose}>
 	<div class="dialog-shell">
 		<header class="dialog-header">
 			<div>
@@ -77,11 +77,7 @@
 					<CardFlip bind:this={cardFlip} {s} onDetails={showDetails} />
 				{/key}
 			{/if}
-			{#if detailsOpen}
-				<div bind:this={details} class="details" tabindex="-1">
-					<Supplemental details={s.details} />
-				</div>
-			{/if}
+			<CardDetails bind:this={cardDetails} {s} />
 		</div>
 	</div>
 </dialog>
@@ -107,8 +103,6 @@
 	.dialog-header p:not(.eyebrow) { margin: .3rem 0 0; color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
 	.close { flex: 0 0 auto; min-height: 2.75rem; }
 	.inspection-content { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 1rem clamp(.75rem, 3vw, 1.5rem) 1.5rem; }
-	.details { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); outline: none; }
-	.details :global(.supplemental) { color: var(--text); }
 	@media (max-width: 30rem) {
 		.card-inspection { width: calc(100vw - .75rem); max-height: 96dvh; border-radius: .4rem; }
 		.dialog-header { gap: .75rem; padding: .75rem; }
