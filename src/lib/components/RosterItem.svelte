@@ -48,7 +48,8 @@
 
 <style>
  .roster-item { display: grid; justify-items: center; gap: .15rem; min-width: 0; width: 100%; color: inherit; }
- .miniature { display: block; width: max(4.5rem, 72px); }
+ .miniature { display: block; width: var(--roster-mini-width, max(4.5rem, 72px)); }
+ .miniature :global(.card) { min-width: 0; }
  .identity { display: grid; min-width: 0; width: 100%; gap: 0; text-align: center; }
  .identity strong { overflow-wrap: anywhere; font-size: .5625rem; line-height: 1.08; }
  .identity span { color: var(--muted); font-size: .5625rem; line-height: 1.08; overflow-wrap: anywhere; }

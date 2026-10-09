@@ -3,7 +3,7 @@
 	import type { ExampleCardFinish } from './fixtures.ts';
 
 	export type CardWorkshopRole = 'hitter' | 'starter' | 'closer' | 'two-way' | 'bullpen';
-	export type CardWorkshopMode = 'interactive' | 'idle' | 'wall' | 'flip' | 'gallery';
+	export type CardWorkshopMode = 'interactive' | 'idle' | 'wall' | 'flip' | 'gallery' | 'compact';
 
 	export interface CardWorkshopProps {
 		era?: CardEra;
@@ -131,6 +131,19 @@
 			manifest
 		});
 	}));
+	const compactCards = $derived(eras.map((compactEra, index) => {
+		const compactProfile = profileFor(previewRole, compactEra, longIdentity);
+		const sourcePlayerId = compactProfile.playerId;
+		compactProfile.playerId = `storybook-compact-${index + 1}`;
+		return createCardViewModel({
+			profile: compactProfile,
+			slot: slotFor(previewRole),
+			ranking: getExampleFinishRanking(rankingRole(previewRole), previewFinish),
+			media: mediaFor(compactProfile, sourcePlayerId),
+			mediaStatus: 'ready',
+			manifest
+		});
+	}));
 
 	function mediaFor(profile: Profile, sourcePlayerId: string) {
 		if (!media) return null;
@@ -216,9 +229,22 @@
 	}
 </script>
 
-<StoryFrame onReset={reset} onReplay={mode === 'flip' ? replay : undefined}>
+{#snippet compactSample(compactCard: CardViewModel, size: 56 | 72, usage: string)}
+	<figure class="compact-sample" data-compact-sample data-compact-size={size} style:width={`${size}px`}>
+		<div class={`compact-card-shell${size === 56 ? ' field-miniature' : ''}`}>
+			<Card s={compactCard} face="front" compact thumbnail interactive={false} capture={false} onDetails={() => {}} />
+		</div>
+		<figcaption class="compact-identity" data-compact-identity>
+			<span class="compact-usage">{usage}</span>
+			<strong>{compactCard.full}</strong>
+			<span>{compactCard.year} · {compactCard.pos}</span>
+		</figcaption>
+	</figure>
+{/snippet}
+
+<StoryFrame onReset={reset} onReplay={mode === 'flip' ? replay : undefined} wide={mode === 'compact'}>
 	{#key instance}
-		<section class="card-workshop" data-card-workshop data-mode={mode} style={`--card-front-width:${cardWidth}px;--card-back-width:${cardWidth}px`}>
+		<section class="card-workshop" data-card-workshop data-mode={mode} data-compact-role={mode === 'compact' ? previewRole : undefined} style={`--card-front-width:${cardWidth}px;--card-back-width:${cardWidth}px`}>
 			{#if mode === 'wall'}
 				<div class="wall" aria-label="Card finish wall">
 					{#each wallCards as wallCard (wallCard.full)}
@@ -231,6 +257,24 @@
 					{/each}
 				</div>
 				{#if selectedWall}<CardReview bind:this={wallDetails} s={selectedWall} turned={true} />{/if}
+			{:else if mode === 'compact'}
+				<section class="compact-review" aria-labelledby="compact-review-heading" data-compact-review>
+					<header class="compact-review-heading">
+						<h2 id="compact-review-heading">Compact card review</h2>
+						<p>Field miniatures at 56px and collection cards at the 72px baseline.</p>
+					</header>
+					<div class="compact-grid">
+						{#each compactCards as compactCard (compactCard.era)}
+							<article class="compact-entry" data-compact-era={compactCard.era}>
+								<h3>{compactCard.era}</h3>
+								<div class="compact-sizes">
+									{@render compactSample(compactCard, 56, 'Field · 56px')}
+									{@render compactSample(compactCard, 72, 'Collection · 72px')}
+								</div>
+							</article>
+						{/each}
+					</div>
+				</section>
 			{:else if mode === 'gallery'}
 				<div class="gallery" aria-label="Card era gallery">
 					{#each galleryCards as galleryCard (galleryCard.era)}
@@ -276,4 +320,19 @@
 	.wall-entry, .gallery-entry { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--space-3); min-width: 0; }
 	.wall-entry button { max-width: 100%; }
 	.gallery-entry h2 { margin: 0; font-size: var(--text-sm); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+	.compact-review { display: grid; gap: var(--space-5); min-width: 0; }
+	.compact-review-heading { display: grid; gap: var(--space-1); }
+	.compact-review-heading h2, .compact-review-heading p { margin: 0; }
+	.compact-review-heading h2 { font-size: var(--text-lg); }
+	.compact-review-heading p { max-width: 65ch; color: var(--muted); font-size: var(--text-sm); }
+	.compact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); gap: var(--space-5) clamp(1rem, 3vw, 2rem); min-width: 0; }
+	.compact-entry { display: grid; align-content: start; justify-items: center; gap: var(--space-3); min-width: 0; border-top: 1px solid var(--border); padding-top: var(--space-3); }
+	.compact-entry h3 { margin: 0; color: var(--muted); font-size: var(--text-xs); letter-spacing: .06em; text-transform: uppercase; }
+	.compact-sizes { display: grid; grid-template-columns: 56px 72px; align-items: start; justify-content: center; gap: var(--space-4); min-width: 0; }
+	.compact-sample { display: grid; align-content: start; gap: var(--space-2); min-width: 0; margin: 0; }
+	.compact-card-shell { width: 100%; aspect-ratio: 5 / 7; }
+	.field-miniature :global(.card) { min-width: 0; }
+	.compact-identity { display: grid; gap: .1rem; min-width: 0; width: 100%; color: var(--muted); font-size: .625rem; line-height: 1.12; text-align: center; overflow-wrap: anywhere; hyphens: auto; }
+	.compact-identity strong { min-width: 0; color: var(--text); font-size: .6875rem; line-height: 1.08; overflow-wrap: anywhere; }
+	.compact-usage { color: var(--subtle, var(--muted)); font-size: .5625rem; font-weight: 750; letter-spacing: .025em; text-transform: uppercase; }
 </style>

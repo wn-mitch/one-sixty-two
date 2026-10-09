@@ -14,17 +14,23 @@ test.describe('Cards workshop', () => {
 		const interactive = card(page);
 		await interactive.hover({ position: { x: 250, y: 320 } });
 		await expect.poll(() => inlineTransform(page)).not.toBe('');
-		await page.getByRole('switch', { name: 'Motion', exact: true }).click();
-		await expect(page.getByRole('switch', { name: 'Motion', exact: true })).toHaveAttribute('aria-checked', 'false');
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		let settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+		await settings.getByRole('switch', { name: 'Motion', exact: true }).click();
+		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
 		await expect.poll(() => inlineTransform(page)).toBe('');
-		await page.getByRole('switch', { name: 'Motion', exact: true }).click();
-		await expect(page.getByRole('switch', { name: 'Motion', exact: true })).toHaveAttribute('aria-checked', 'true');
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+		await settings.getByRole('switch', { name: 'Motion', exact: true }).click();
+		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
 
 		await openStory(page, 'cards-motion--idle-drift');
 		const firstFrame = await inlineTransform(page);
 		await page.waitForTimeout(180);
 		await expect.poll(() => inlineTransform(page)).not.toBe(firstFrame);
-		await page.getByRole('switch', { name: 'Motion', exact: true }).click();
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('switch', { name: 'Motion', exact: true }).click();
+		await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'Close settings', exact: true }).click();
 		await expect.poll(() => inlineTransform(page)).toBe('');
 	});
 
@@ -83,6 +89,8 @@ test.describe('Cards workshop', () => {
 
 	test('keeps flip faces semantically exclusive across replay and reset', async ({ page }) => {
 		await openStory(page, 'interactions-cards--flip');
+		// Isolate the card's flight from the separate pointer-tilt effect.
+		await page.addStyleTag({ content: '.front > .card { transform: none !important; }' });
 		const flip = page.locator('[data-cardbox]');
 		const front = flip.locator('.front');
 		const back = flip.locator('.back');
@@ -90,12 +98,39 @@ test.describe('Cards workshop', () => {
 		await expect(flip).toHaveAttribute('data-face', 'front');
 		await expect(front).toHaveAttribute('aria-hidden', 'false');
 		await expect(back).toHaveAttribute('aria-hidden', 'true');
-		await flip.getByRole('button', { name: 'Turn over', exact: true }).click();
+		const turn = flip.getByRole('button', { name: 'Turn over', exact: true });
+		await turn.scrollIntoViewIfNeeded();
+		const sourceRect = await flip.locator('.front .card').evaluate(node => {
+			const rect = node.getBoundingClientRect();
+			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+		});
+		const firstFrame = await turn.evaluate(async button => {
+			button.focus({ preventScroll: true });
+			button.click();
+			const frame = Promise.withResolvers<number>();
+			requestAnimationFrame(frame.resolve);
+			await frame.promise;
+			const rect = button.closest('[data-cardbox]')!.querySelector('.front .card')!.getBoundingClientRect();
+			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+		});
+		for (const dimension of ['x', 'y', 'width', 'height'] as const) {
+			expect(Math.abs(firstFrame[dimension] - sourceRect[dimension])).toBeLessThan(3);
+		}
 		await expect(flip).toHaveAttribute('data-face', 'back');
 		await expect(front).toHaveAttribute('inert', '');
 		await expect(back).not.toHaveAttribute('inert', '');
+		await expect(flip.getByRole('button', { name: 'Show front', exact: true })).toBeFocused();
 
 		await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).toMatch(/rotateY\(180(?:\.00)?deg\)/);
+		const readerRect = await flip.locator('[data-flip]').evaluate(node => {
+			const rect = node.getBoundingClientRect();
+			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, viewportWidth: innerWidth, viewportHeight: innerHeight };
+		});
+		expect(Math.abs(readerRect.x + readerRect.width / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
+		expect(Math.abs(readerRect.y + readerRect.height / 2 - readerRect.viewportHeight / 2)).toBeLessThan(3);
+		const returnRect = await flip.getByRole('button', { name: 'Show front', exact: true }).boundingBox();
+		expect(Math.abs(returnRect!.x + returnRect!.width / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
+		expect(returnRect!.y).toBeGreaterThan(readerRect.y + readerRect.height);
 		const settledPose = await flip.locator('[data-flip]').evaluate(node => node.style.transform);
 		for (let replay = 0; replay < 2; replay += 1) {
 			await page.getByRole('button', { name: 'Replay animation', exact: true }).click();
@@ -103,6 +138,17 @@ test.describe('Cards workshop', () => {
 			await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).not.toBe(settledPose);
 			await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).toBe(settledPose);
 		}
+		await page.getByRole('button', { name: 'Show front', exact: true }).click();
+		await expect(flip).toHaveAttribute('data-face', 'front');
+		await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).toMatch(/rotateY\(0(?:\.00)?deg\)/);
+		const returnedRect = await flip.locator('.front .card').evaluate(node => {
+			const rect = node.getBoundingClientRect();
+			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+		});
+		for (const dimension of ['x', 'y', 'width', 'height'] as const) {
+			expect(Math.abs(returnedRect[dimension] - sourceRect[dimension])).toBeLessThan(1);
+		}
+		await expect(turn).toBeFocused();
 		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
 		await expect(flip).toHaveAttribute('data-face', 'front');
 	});
@@ -117,6 +163,7 @@ test.describe('Cards workshop', () => {
 		await expect(review.getByRole('button', { name: 'Text version', exact: true })).toBeFocused();
 		await expect(text.getByRole('heading', { name: 'Statistics source', exact: true })).toBeVisible();
 		await expect(text.getByRole('link', { name: 'CC0 1.0', exact: true }).first()).toHaveAttribute('href', 'https://creativecommons.org/publicdomain/zero/1.0/');
+		await expect(text.getByRole('region', { name: 'Pre-season estimates', exact: true })).toHaveCount(0);
 		await expect(review.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
 		await review.getByRole('button', { name: 'Text version', exact: true }).click();
 		await expect(review.locator('.back .card[data-face="back"]')).toBeVisible();
@@ -129,11 +176,10 @@ test.describe('Cards workshop', () => {
 			const review = page.locator('.card-review');
 			const flip = review.locator('[data-cardbox]');
 			await review.getByRole('button', { name: 'Turn over', exact: true }).click();
-			const toggle = review.getByRole('button', { name: 'Text version', exact: true });
-			await toggle.scrollIntoViewIfNeeded();
-			const backId = await toggle.getAttribute('aria-controls');
+			const backId = await flip.locator('.back').getAttribute('id');
 			const scrollBefore = await page.evaluate(() => window.scrollY);
-			await toggle.click();
+			await review.getByRole('button', { name: /^Show text version for / }).click();
+			const toggle = review.getByRole('button', { name: 'Text version', exact: true });
 			await expect(toggle).toBeFocused();
 			await expect(toggle).toHaveAttribute('aria-pressed', 'true');
 			await expect(flip.locator('.back')).toHaveAttribute('id', backId!);
@@ -144,7 +190,7 @@ test.describe('Cards workshop', () => {
 			await expect(flip.locator('.front')).toHaveAttribute('inert', '');
 			expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
 			await toggle.click();
-			await expect(toggle).toBeFocused();
+			await expect(review.getByRole('button', { name: /^Show text version for / })).toBeFocused();
 			await expect(flip.locator('.back .inspection-back')).toHaveCount(0);
 			await expect(flip.locator('.back .card[data-face="back"]')).toBeVisible();
 			await review.getByRole('button', { name: 'Show front', exact: true }).click();
@@ -176,8 +222,11 @@ test.describe('Cards workshop with system reduced motion', () => {
 
 	test('honors the system override while still exposing the flip back without 3D motion', async ({ page }) => {
 		await openStory(page, 'cards-motion--idle-drift');
-		await expect(page.locator('.workshop-controls > p[role="status"]').filter({ hasText: /system.*motion/i })).toBeVisible();
-		await expect(page.getByRole('switch', { name: 'Motion', exact: true })).toBeDisabled();
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+		await expect(settings.getByRole('status')).toContainText('system preference reduces motion');
+		await expect(settings.getByRole('switch', { name: 'Motion', exact: true })).toBeDisabled();
+		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
 		await expect.poll(() => inlineTransform(page)).toBe('');
 
 		await openStory(page, 'interactions-cards--flip');
@@ -187,5 +236,11 @@ test.describe('Cards workshop with system reduced motion', () => {
 		await expect(flip.locator('.front')).toHaveAttribute('inert', '');
 		await expect(flip.locator('.back')).not.toHaveAttribute('inert', '');
 		await expect(flip.locator('[data-flip]')).toHaveCSS('transform', 'none');
+		const readerRect = await flip.locator('[data-flip]').evaluate(node => {
+			const rect = node.getBoundingClientRect();
+			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, viewportWidth: innerWidth, viewportHeight: innerHeight };
+		});
+		expect(Math.abs(readerRect.x + readerRect.width / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
+		expect(Math.abs(readerRect.y + readerRect.height / 2 - readerRect.viewportHeight / 2)).toBeLessThan(3);
 	});
 });

@@ -65,23 +65,23 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await review.getByRole('button', { name: '162-0 season', exact: true }).click();
 	await expect(review.getByRole('region', { name: /^162-0 season statistics for / }).locator('tbody tr')).toHaveText(simulatedRows);
 
-	await review.getByRole('button', { name: 'Text version', exact: true }).first().click();
-	await expect(review.getByRole('region', { name: '162-0 season value details', exact: true })).toBeVisible();
-	await expect(review.getByRole('heading', { name: 'Estimated WAR breakdown', exact: true })).toBeVisible();
+	await review.getByRole('button', { name: /^Show text version for / }).click();
+	await expect(simulatedBack.locator('tbody tr')).toHaveText(simulatedRows);
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('details')).toHaveCount(162);
 
 	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	const firstSeasonId = await review.getAttribute('data-season-id');
+	await review.getByRole('button', { name: 'Show front', exact: true }).click();
 	const nextTrigger = page.locator('.hand-card').last();
 	await nextTrigger.click();
 	await expect(review).not.toHaveAttribute('data-season-id', firstSeasonId!);
 	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
-	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'false');
+	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	await expect(review.locator('.results-back.simplified')).toHaveCount(0);
 
 	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
-	await review.getByRole('button', { name: 'Text version', exact: true }).click();
+	await review.getByRole('button', { name: /^Show text version for / }).click();
 	await page.keyboard.press('Escape');
 	await expect(review).toBeVisible();
 	await review.getByRole('button', { name: 'Hide card', exact: true }).click();
@@ -90,7 +90,7 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 
 	await nextTrigger.click();
 	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
-	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'false');
+	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	await expect(review.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
 	await review.getByRole('button', { name: 'Hide card', exact: true }).click();
 	await expect(nextTrigger).toBeFocused();

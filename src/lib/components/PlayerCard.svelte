@@ -302,6 +302,7 @@
 	.draft-mode .art-frame { order: 0; }
 	.draft-mode .controller { order: 1; }
 	.draft-turn { grid-column: 2; grid-row: 1; min-width: 2.75rem; min-height: 2.75rem; box-sizing: border-box; padding: 0 .6rem; color: var(--card-ink); background: var(--surface-raised, var(--surface)); border: 1px solid var(--border); border-radius: .25rem; font-size: 1.1rem; }
+	.draft-turn[aria-pressed='true'] { visibility: hidden; pointer-events: none; }
 	.draft-mode:not(.wide) .ranking-status { display: none; }
 	.draft-mode.wide .ranking-status { display: none; }
 	.player-card.draft-mode.selected .art-frame { transform: translateY(-.2rem); }

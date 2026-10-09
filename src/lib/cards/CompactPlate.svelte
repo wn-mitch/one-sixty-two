@@ -4,47 +4,51 @@
 	let { s }: { s: CardViewModel } = $props();
 </script>
 
+{#snippet printedName()}
+	<span class="name" data-fit data-max="18" data-min="18" data-wrap-min="8" data-lines="2">{s.family}</span>
+{/snippet}
+
 <div class="compact-plate" data-compact-era={s.era} aria-hidden="true">
 	<div class="fade"></div>
 
 	{#if s.era === '1950s'}
 		<div class="plate plate-1950s" style={`--ground:${s.k.stock};--ink:${s.k.fieldOnStock};--team:${s.k.field};--on-team:${s.k.onField}`}>
-			<div class="nameplate"><span class="name">{s.family}</span></div>
+			<div class="nameplate">{@render printedName()}</div>
 			<div class="meta"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{:else if s.era === '1960s'}
 		<div class="plate plate-1960s" style={`--ground:${s.k.field};--ink:${s.k.onField}`}>
-			<span class="name">{s.family}</span>
-			<div class="meta"><span class="position-pill">{s.pos}</span><span>{s.st2.v}</span></div>
+			{@render printedName()}
+			<div class="meta"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{:else if s.era === '1970s'}
-		<div class="plate plate-1970s" style={`--ground:${s.k.field};--ink:${s.k.onField};--stock:${s.k.stock};--on-stock:${s.k.fieldOnStock}`}>
-			<span class="roundel">{s.pos}</span>
-			<div class="plate-copy"><span class="name">{s.family}</span><span class="stat">{s.st2.v}</span></div>
+		<div class="plate plate-1970s" style={`--ground:${s.k.field};--ink:${s.k.onField}`}>
+			{@render printedName()}
+			<div class="meta"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{:else if s.era === '1980s'}
 		<div class="plate plate-1980s" style={`--ground:${s.k.stock};--ink:${s.k.fieldOnStock};--team:${s.k.field};--on-team:${s.k.onField};--stripe:${s.k.stripe}`}>
-			<span class="name">{s.family}</span>
-			<div class="meta"><span class="position-tag">{s.pos}</span><span>{s.st2.v}</span></div>
+			{@render printedName()}
+			<div class="meta"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{:else if s.era === '1990s'}
 		<div class="plate plate-1990s" style={`--ground:${s.k.field};--ink:${s.k.onField};--edge:${s.k.stock}`}>
-			<span class="name">{s.family}</span>
+			{@render printedName()}
 			<div class="meta"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{:else if s.era === '2000s'}
-		<div class="plate-2000s" style={`--ground:${s.k.stock};--ink:${s.k.fieldOnStock};--team:${s.k.field};--on-team:${s.k.onField}`}>
-			<div class="position-rail"><span>{s.pos}</span></div>
-			<div class="plate plate-copy-2000s"><span class="name">{s.family}</span><span class="stat">{s.st2.v}</span></div>
+		<div class="plate plate-2000s" style={`--ground:${s.k.stock};--ink:${s.k.fieldOnStock};--team:${s.k.field}`}>
+			{@render printedName()}
+			<div class="meta"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{:else if s.era === '2010s'}
 		<div class="plate plate-2010s" style={`--ground:${s.k.field};--ink:${s.k.onField};--dark:${s.k.dark};--on-dark:${s.k.paper};--tint:${s.k.tintOnDark}`}>
-			<span class="name">{s.family}</span>
+			{@render printedName()}
 			<div class="meta dark-strip"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{:else}
 		<div class="plate plate-2020s" style={`--ground:${s.k.dark};--ink:${s.k.paper};--tint:${s.k.tintOnDark}`}>
-			<span class="name">{s.family}</span>
+			{@render printedName()}
 			<div class="meta"><span>{s.pos}</span><span>{s.st2.v}</span></div>
 		</div>
 	{/if}
@@ -90,10 +94,7 @@
 		overflow-wrap: anywhere;
 		hyphens: auto;
 	}
-	.meta,
-	.stat,
-	.roundel,
-	.position-rail {
+	.meta {
 		font-size: max(16cqw, 11px);
 		font-weight: 800;
 		font-variant-numeric: tabular-nums;
@@ -105,6 +106,7 @@
 		justify-content: space-between;
 		gap: 3cqw;
 	}
+	.meta > span:last-child { margin-left: auto; text-align: right; }
 	.plate-1950s {
 		padding: 3cqw 4cqw 4cqw;
 		border-radius: 0 0 1.8cqw 1.8cqw;
@@ -124,31 +126,13 @@
 		padding: 4cqw 6cqw 5cqw;
 		border-radius: 0 0 1.8cqw 1.8cqw;
 	}
-	.position-pill {
-		padding: .6cqw 3.2cqw;
-		border-radius: 99cqw;
-		color: var(--ground);
-		background: var(--ink);
-	}
 	.plate-1970s {
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		align-items: center;
-		gap: 3cqw;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 2cqw;
 		padding: 3.5cqw 5cqw 4.5cqw;
 		border-radius: 0 0 1.8cqw 1.8cqw;
 	}
-	.roundel {
-		display: grid;
-		place-items: center;
-		width: 27cqw;
-		height: 27cqw;
-		border-radius: 50%;
-		color: var(--on-stock);
-		background: var(--stock);
-		box-shadow: 0 0 0 1.1cqw var(--ground), 0 0 0 1.8cqw var(--stock);
-	}
-	.plate-copy { display: grid; gap: 1.2cqw; min-width: 0; }
 	.plate-1980s {
 		display: grid;
 		gap: 2cqw;
@@ -165,7 +149,6 @@
 		padding: .8cqw 1.6cqw;
 		background: var(--ground);
 	}
-	.position-tag { padding: .8cqw 2.6cqw; color: var(--on-team); background: var(--team); }
 	.plate-1990s {
 		display: grid;
 		gap: 2cqw;
@@ -175,33 +158,7 @@
 	}
 	.plate-1990s .name { font-style: italic; font-weight: 900; }
 	.plate-2000s {
-		position: absolute;
-		inset: 0;
-		color: var(--ink);
-	}
-	.position-rail {
-		position: absolute;
 		left: 0;
-		top: 0;
-		bottom: 0;
-		box-sizing: border-box;
-		display: flex;
-		align-items: flex-end;
-		justify-content: center;
-		width: 22cqw;
-		padding: 0 2cqw 4.5cqw;
-		border-radius: 1.8cqw 0 0 1.8cqw;
-		color: var(--on-team);
-		background: var(--team);
-	}
-	.position-rail span {
-		display: block;
-		white-space: nowrap;
-		writing-mode: vertical-rl;
-		transform: rotate(180deg);
-	}
-	.plate-copy-2000s {
-		left: 22cqw;
 		display: grid;
 		gap: 1.6cqw;
 		padding: 3cqw 4cqw 4.5cqw;
@@ -221,6 +178,6 @@
 		border-radius: 0 0 0 1.8cqw;
 		clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8cqw), calc(100% - 11cqw) 100%, 0 100%);
 	}
-	.plate-2020s .meta { justify-content: flex-start; gap: 4cqw; }
+	.plate-2020s .meta { padding-right: 7cqw; }
 	.plate-2020s .meta span:first-child { color: var(--tint); }
 </style>

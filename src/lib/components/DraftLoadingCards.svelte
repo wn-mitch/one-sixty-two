@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { motionSettings, type MotionSettingsSnapshot } from '../cards/motion-settings.svelte.ts';
+	import { appSettings, type AppSettingsSnapshot } from '../game/settings.svelte.ts';
 
 	const ERAS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'] as const;
 	let root = $state<HTMLElement>();
@@ -8,7 +8,7 @@
 	let flying = $state(false);
 	let intersecting = true;
 	let documentVisible = true;
-	let motion = $state<MotionSettingsSnapshot>(motionSettings.snapshot);
+	let motion = $state<AppSettingsSnapshot>(appSettings.snapshot);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let release: (() => void) | undefined;
 	let unsubscribe: (() => void) | undefined;
@@ -33,8 +33,8 @@
 
 	onMount(() => {
 		documentVisible = document.visibilityState === 'visible';
-		release = motionSettings.retain();
-		unsubscribe = motionSettings.subscribe(value => {
+		release = appSettings.retain();
+		unsubscribe = appSettings.subscribe(value => {
 			motion = value;
 			schedule();
 		});

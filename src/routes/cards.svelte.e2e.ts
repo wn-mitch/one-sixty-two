@@ -94,7 +94,7 @@ async function openWideBack(card: Locator, era: string): Promise<void> {
 }
 
 async function openTextVersion(root: Locator): Promise<Locator> {
-	await root.getByRole('button', { name: 'Text version', exact: true }).click();
+	await root.getByRole('button', { name: /^Show text version for / }).click();
 	const text = root.locator('.inspection-back');
 	await expect(text).toBeVisible();
 	await expect(text).toHaveAccessibleName('Historical season text version');
@@ -148,15 +148,13 @@ test('keeps a changed exact season in the narrow designed-back sheet through ran
 		await expect(details.getByText('Licence', { exact: true }).first()).toBeVisible();
 		const hrefs = await details.getByRole('link').evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href));
 		expect(hrefs).toEqual(expect.arrayContaining([photo!.sourceUrl, photo!.licenseUrl, manifest.attribution.sourceUrl]));
-		const scrolls = await sheet.locator('.sheet-content').evaluate(content => {
+		const sourcesReachable = await sheet.locator('.card-review .back').evaluate(content => {
 			content.scrollTop = content.scrollHeight;
 			const bottom = content.lastElementChild?.getBoundingClientRect().bottom ?? Infinity;
-			return {
-				scrollable: content.scrollHeight > content.clientHeight,
-				bottomInside: bottom <= content.getBoundingClientRect().bottom + 1
-			};
+			return bottom <= content.getBoundingClientRect().bottom + 1;
 		});
-		expect(scrolls).toEqual({ scrollable: true, bottomInside: true });
+		expect(sourcesReachable).toBe(true);
+		await sheet.getByRole('button', { name: 'Show front', exact: true }).click();
 		await sheet.getByRole('tab', { name: 'Field', exact: true }).click();
 		await expect(sheet.locator('[role="tabpanel"][aria-labelledby$="-tab-field"]')).toBeVisible();
 		await expect(sheet.locator('[role="tabpanel"][aria-labelledby$="-tab-back"]')).toBeHidden();
@@ -185,13 +183,12 @@ test('keeps a no-photo card draftable through the wide in-place flip when rankin
 	await expect(card.getByText('No verified photo', { exact: true })).toBeVisible();
 	await expect(page.getByText('Composite WAR/162 is unavailable.')).toBeVisible();
 	await expect(card).toContainText(/WAR\/162.*Unavailable/i);
-	await expect(card.getByRole('button', { name: 'Inspect card', exact: true })).toHaveCount(0);
 	await expect(card.getByRole('button', { name: `Select ${scenario.profile.year} ${scenario.profile.displayName}`, exact: true })).toBeVisible();
 	await openWideBack(card, era);
 	await expect(card.locator('[data-flip]')).toHaveCSS('transform', 'none');
 	await expect(card.locator('.back')).toHaveCSS('transform', 'none');
 	await openTextVersion(card);
-	await card.getByRole('button', { name: 'Turn over', exact: true }).click();
+	await card.getByRole('button', { name: 'Show front', exact: true }).click();
 	await card.getByRole('button', { name: `Select ${scenario.profile.year} ${scenario.profile.displayName}`, exact: true }).click();
 	const field = page.locator('.field-panel');
 	await field.locator(`[data-slot="${scenario.slot}"]`).click();
@@ -285,10 +282,11 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 	const era = await roster.getAttribute('data-card-era');
 	expect(era).not.toBeNull();
 	await field.locator(`[data-slot="${hitterSlot}"]`).click();
-	await field.getByRole('button', { name: 'Inspect card', exact: true }).click();
-	const review = field.locator('.card-review');
-	await expect(review).toBeVisible();
-	await expect(review.getByRole('heading').first()).toBeFocused();
+	await roster.click();
+	const review = field.locator('.card-review.raised-only');
+	await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+	await expect(review.getByRole('button', { name: 'Turn over', exact: true })).toBeFocused();
+	await review.getByRole('button', { name: 'Turn over', exact: true }).click();
 	await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'back');
 	const designedBack = review.locator('.back [data-card][data-face="back"]').first();
 	await expect(designedBack).toBeVisible();
@@ -302,9 +300,6 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 	await expect(field).toHaveCount(0);
 	const sheet = draftSheet(page);
 	await expect(sheet).toBeVisible();
-	await expect(sheet.getByRole('button', { name: 'Back to field', exact: true })).toBeVisible();
-	await expect(sheet.locator('.active-player')).toContainText(scenario.profile.displayName);
-	await expect(sheet.locator('.active-player')).toContainText(String(scenario.profile.year));
 	text = sheet.locator('.card-review .back .inspection-back');
 	await expect(text).toBeVisible();
 	await expect(sheet.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -312,9 +307,8 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 	await expect(text.locator('[data-layer="season.line"]')).toContainText(String(scenario.profile.year));
 	await expect(text.getByRole('heading', { name: 'Batting', exact: true })).toBeVisible();
 	await expect(text.getByRole('heading', { name: 'Pitching', exact: true })).toBeVisible();
-	await sheet.getByRole('button', { name: 'Back to field', exact: true }).click();
-	await expect(sheet.locator('.active-player')).toContainText(scenario.profile.displayName);
-	await expect(sheet.getByText('Choose a highlighted position to move or swap.')).toBeVisible();
+	await sheet.getByRole('button', { name: 'Show front', exact: true }).click();
+	await expect(sheet.locator('.card-review.raised-only')).toHaveCount(0);
 	await expect(sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
 	await sheet.getByRole('button', { name: 'Cancel move', exact: true }).click();
 });

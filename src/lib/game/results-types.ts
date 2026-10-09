@@ -37,26 +37,12 @@ export interface InspectionSeasonView {
 	awardChips: readonly AwardChip[];
 }
 
-export interface InspectionDetailRow {
-	key: string;
-	label: string;
-	value: number | null;
-	formattedValue: string;
-}
-
-export interface InspectionDetailSection {
-	key: 'estimated-war' | 'realized-defense';
-	label: string;
-	rows: readonly InspectionDetailRow[];
-	note: string;
-}
 
 export interface ResultsInspection {
 	seasonId: string;
 	slot: Slot;
 	simulated: InspectionSeasonView;
 	actual: InspectionSeasonView;
-	details: readonly InspectionDetailSection[];
 }
 
 export interface ResultsCard {

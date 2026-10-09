@@ -175,7 +175,6 @@
 							<span>{entry.profile.displayName}</span>
 							<span>{entry.profile.year} · {entry.profile.seasonId}</span>
 						</div>
-						<button bind:this={textToggles[entry.profile.seasonId]} class="text-toggle" type="button" aria-pressed={isTextBack(entry.profile.seasonId)} aria-controls={`historical-${entry.franchise.id}-back`} onclick={() => toggleTextBack(entry.profile.seasonId)}>Text version</button>
 						<div class="card-pair" style={`--gallery-card-width:${dialWidth}px`}>
 							<figure class="card-face" data-face-label="Front">
 								<Card s={card} face="front" onDetails={() => showTextVersion(entry.profile.seasonId)} />
@@ -189,15 +188,30 @@
 										<Card s={card} face="back" onDetails={() => showTextVersion(entry.profile.seasonId)} />
 									{/if}
 								</div>
+								<button bind:this={textToggles[entry.profile.seasonId]} class="text-toggle" type="button" aria-pressed={isTextBack(entry.profile.seasonId)} aria-controls={`historical-${entry.franchise.id}-back`} onclick={() => toggleTextBack(entry.profile.seasonId)}>Text version</button>
 								<figcaption>Back · {entry.profile.seasonId}</figcaption>
+							</figure>
+							<figure class="card-face compact-face" data-face-label="Compact">
+								<Card s={card} face="front" compact thumbnail interactive={false} onDetails={() => {}} />
+								<figcaption>Compact · 72px</figcaption>
 							</figure>
 						</div>
 					{:else}
 						<div class="status-pair" style={`--gallery-card-width:${dialWidth}px`}>
-							<div class="status-panel"><strong>{entry.state === 'absent' ? 'No eligible historical season' : 'Historical card error'}</strong><span>{entry.state === 'absent' ? `No eligible historical season in ${era}` : entry.message}</span></div>
-							<div class="status-panel secondary" aria-hidden="true"><span>{entry.state === 'absent' ? 'No card rendered' : 'Retry the era to reload this prepared card.'}</span></div>
+							<div class="card-face">
+								<div class="status-panel">
+									{#if entry.state === 'absent'}
+										<strong>No eligible historical season in {era}</strong>
+									{:else}
+										<strong>Historical card error</strong>
+										<span>{entry.message}</span>
+									{/if}
+								</div>
+								{#if entry.state === 'error'}<button class="retry-season" type="button" aria-label="Retry historical season" onclick={retry}>Retry season</button>{/if}
+							</div>
+							<div class="card-face" aria-hidden="true"><div class="status-panel"></div></div>
+							<div class="card-face compact-face" aria-hidden="true"><div class="status-panel"></div></div>
 						</div>
-						{#if entry.state === 'error'}<button type="button" onclick={retry}>Retry historical season</button>{/if}
 					{/if}
 				</article>
 			{/each}
@@ -220,26 +234,25 @@
 	.failure { padding: 1rem; border: 1px solid var(--border); background: var(--surface); }
 	.failure h3 { margin: 0 0 .5rem; }
 	.failure p { margin: 0 0 1rem; overflow-wrap: anywhere; }
-	.gallery-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-7, 3rem) var(--space-5, 1.5rem); min-width: 0; }
-	.gallery-entry { min-width: 0; }
-	.gallery-entry > h3 { margin: 0 0 .35rem; font-size: 1.2rem; overflow-wrap: anywhere; }
-	.identity { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .75rem; margin-bottom: .8rem; color: var(--muted); font-size: .82rem; }
+	.gallery-grid { display: grid; grid-template-columns: 1fr; grid-auto-rows: auto minmax(calc(var(--text-sm) * 1.5), auto) auto; gap: var(--space-1) var(--space-6); min-width: 0; }
+	.gallery-entry { display: grid; grid-row: span 3; grid-template-rows: subgrid; min-width: 0; margin-bottom: var(--space-12); }
+	.gallery-entry > h3 { margin: 0; font-size: var(--text-lg); overflow-wrap: anywhere; }
+	.identity { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-1) var(--space-3); color: var(--muted); font-size: var(--text-sm); }
 	.identity span:last-child { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-	.card-pair, .status-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3, .75rem); min-width: 0; }
-	.card-face { display: grid; grid-template-rows: auto auto; align-content: start; gap: .5rem; min-width: 0; margin: 0; }
-	.card-face > :global(.card), .reverse-viewport { width: min(100%, var(--gallery-card-width)); margin-inline: auto; }
-	.card-face figcaption { color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
-	.text-toggle { margin-bottom: .75rem; }
-	.status-panel { display: grid; align-content: center; gap: .75rem; min-width: 0; min-height: calc(var(--gallery-card-width) * 1.4); padding: 1rem; border: 1px dashed var(--border); background: var(--surface); color: var(--muted); overflow-wrap: anywhere; }
+	.card-pair, .status-pair { grid-row: 3; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 72px; align-items: start; gap: var(--space-3); min-width: 0; margin-top: var(--space-2); }
+	.card-face { display: grid; grid-template-rows: auto minmax(2.75rem, auto) minmax(calc(var(--text-xs) * 1.5), auto); align-content: start; gap: var(--space-2); width: min(100%, var(--gallery-card-width)); min-width: 0; margin: 0 auto; }
+	.card-face > :global(.card), .reverse-viewport, .status-panel { grid-row: 1; width: 100%; min-width: 0; }
+	.card-face figcaption { grid-row: 3; color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+	.compact-face { width: 72px; grid-template-rows: auto auto; }
+	.compact-face figcaption { grid-row: 2; }
+	.text-toggle, .retry-season { grid-row: 2; justify-self: start; }
+	.status-panel { display: grid; align-content: safe center; gap: var(--space-3); aspect-ratio: 5 / 7; min-height: 0; padding: var(--space-4); border: 1px dashed var(--border); background: var(--surface); color: var(--muted); overflow: auto; overflow-wrap: anywhere; }
 	.status-panel strong { color: var(--text); }
-	.status-panel.secondary { opacity: .75; }
 	@container (min-width: 1024px) {
 		.gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	}
 	@container (max-width: 559px) {
 		.gallery-header { display: grid; align-items: start; }
 		.card-pair, .status-pair { grid-template-columns: 1fr; }
-		.card-face { width: min(100%, var(--gallery-card-width)); margin-inline: auto; }
-		.status-panel { min-height: calc(var(--gallery-card-width) * 1.4); }
 	}
 </style>

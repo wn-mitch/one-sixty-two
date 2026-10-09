@@ -179,6 +179,17 @@ test.describe('draft interaction boundaries', () => {
 		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
 		await expectNoPersistenceChange(page, before);
 
+		const settingsTrigger = page.getByRole('button', { name: 'Settings', exact: true });
+		await expect(settingsTrigger).toHaveCount(1);
+		await settingsTrigger.click();
+		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+		await expect(settings).toBeVisible();
+		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
+		await expect(settings).not.toBeVisible();
+		await expect(confirmation).toHaveAttribute('data-selected-season', scenario.profile.seasonId);
+		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
+		await expectNoPersistenceChange(page, before);
+
 		const group = page.locator(`[data-candidate-group="${scenario.profile.playerId}"]`);
 		await group.getByRole('button', { name: 'Turn over', exact: true }).click();
 		await expect(group.locator('.cardbox')).toHaveAttribute('data-face', 'back');
@@ -347,7 +358,7 @@ test.describe('draft sheet interaction boundaries', () => {
 		await expect(tabs.getByRole('tab', { name: 'Card back', exact: true })).toHaveAttribute('aria-selected', 'true');
 		await expect(sheet.locator('[role="tabpanel"]:not([hidden]) .card-review .back [data-card][data-face="back"]')).toBeVisible();
 
-		await sheet.getByRole('button', { name: 'Text version', exact: true }).click();
+		await sheet.getByRole('button', { name: /^Show text version for / }).click();
 		await expect(sheet.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
 		await expect(sheet.getByRole('heading', { name: 'Statistics source', exact: true })).toBeVisible();
 		await expectNoPersistenceChange(page, before);

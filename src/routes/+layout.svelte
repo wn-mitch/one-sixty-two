@@ -3,7 +3,7 @@
 	import './layout.css';
 	import '../lib/cards/fonts.css';
 	import favicon from '#lib/assets/favicon.svg';
-	import MotionSettings from '#lib/components/MotionSettings.svelte';
+	import Settings from '#lib/components/Settings.svelte';
 	import { page } from '$app/state';
 	import type { LayoutProps } from './$types';
 
@@ -57,7 +57,7 @@
 		<header class="site-header">
 			<a class="wordmark" href="/" aria-label="162-0 home"><span aria-hidden="true" class="mark"></span>162-0</a>
 			<nav class="site-actions" aria-label="Site controls">
-				<MotionSettings />
+				<Settings />
 				<a class="rules-link" href="/about">Rules &amp; model</a>
 			</nav>
 		</header>

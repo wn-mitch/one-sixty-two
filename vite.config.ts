@@ -8,7 +8,10 @@ export default defineConfig(async ({ command }) => ({
 	server: {
 		// Generated datasets and acquisition caches are runtime inputs, not browser source modules.
 		watch: {
-			ignored: ['**/.cache/**', '**/static/data/**', '**/static/media/**', '**/static/rankings/**']
+			ignored: [
+				/(?:^|[/\\])\.cache(?:[/\\]|$)/,
+				/(?:^|[/\\])static[/\\](?:data|media|rankings)(?:[/\\]|$)/
+			]
 		}
 	},
 	plugins: [

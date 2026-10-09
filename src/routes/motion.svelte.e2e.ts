@@ -1,56 +1,76 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-async function expectStationaryPosition(track: Locator): Promise<number> {
-	const positions = await track.evaluate(async node => {
-		const values: number[] = [];
-		for (let frame = 0; frame < 8; frame++) {
-			await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-			values.push(node.getBoundingClientRect().x);
-		}
-		return values;
-	});
-	expect(positions.every(position => position === positions[0])).toBe(true);
-	return positions[0];
+async function openSettings(page: Page) {
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'Settings' });
+	await expect(dialog).toBeVisible();
+	return dialog;
 }
 
-test('keeps the motion toggle persistent and subordinate to reduced motion', async ({ page }) => {
+test('opens the native Settings dialog and persists all preferences', async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
-	let releaseScripts!: () => void;
-	const scripts = new Promise<void>(resolve => { releaseScripts = resolve; });
-	await page.route('**/_app/immutable/**/*.js', async route => {
-		await scripts;
-		await route.continue();
-	});
-	await page.goto('/', { waitUntil: 'commit' });
-	const toggle = page.getByRole('switch', { name: 'Motion', exact: true });
-	try {
-		await expect(toggle).toBeDisabled();
-	} finally {
-		releaseScripts();
-	}
-	await expect(toggle).toBeEnabled();
-	await page.unroute('**/_app/immutable/**/*.js');
-	await toggle.focus();
-	await page.keyboard.press('Space');
-	await expect(toggle).toHaveAttribute('aria-checked', 'false');
+	await page.goto('/');
+
+	const dialog = await openSettings(page);
+	const motion = dialog.getByRole('switch', { name: 'Motion', exact: true });
+	const cards = dialog.getByRole('switch', { name: 'Card review animation', exact: true });
+	const speed = dialog.getByRole('slider', { name: 'Card speed', exact: true });
+	await expect(motion).toHaveAttribute('aria-checked', 'true');
+	await expect(cards).toHaveAttribute('aria-checked', 'true');
+	await expect(speed).toHaveValue('1');
+	await speed.fill('1.6');
+	await expect(speed).toHaveValue('1.6');
+	await expect(dialog.locator('output')).toHaveText('1.6×');
+	await dialog.getByRole('button', { name: 'Review first', exact: true }).click();
+	await motion.click();
+	await cards.click();
+	await dialog.getByRole('button', { name: 'Close settings', exact: true }).click();
+	await expect(dialog).toBeHidden();
+	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
 
 	await page.reload();
-	await expect(toggle).toBeEnabled();
-	await expect(toggle).toHaveAttribute('aria-checked', 'false');
-	const track = page.locator('.wall-track').first();
-	await expect(track).toBeAttached();
-	const restingPosition = await expectStationaryPosition(track);
+	const restored = await openSettings(page);
+	await expect(restored.getByRole('switch', { name: 'Motion', exact: true })).toHaveAttribute('aria-checked', 'false');
+	await expect(restored.getByRole('switch', { name: 'Card review animation', exact: true })).toHaveAttribute('aria-checked', 'false');
+	await expect(restored.getByRole('button', { name: 'Review first', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	const restoredSpeed = restored.getByRole('slider', { name: 'Card speed', exact: true });
+	await expect(restoredSpeed).toHaveValue('1.6');
+	await expect(restoredSpeed).toBeDisabled();
+	await page.keyboard.press('Escape');
+	await expect(restored).toBeHidden();
+	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+	await openSettings(page);
+	await page.mouse.click(12, 12);
+	await expect(restored).toBeHidden();
+	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+});
 
-	await toggle.click();
-	await expect(toggle).toHaveAttribute('aria-checked', 'true');
-	await expect.poll(() => track.evaluate(node => node.getBoundingClientRect().x)).not.toBe(restingPosition);
-	await page.emulateMedia({ reducedMotion: 'reduce' });
-	await expect(toggle).toBeDisabled();
-	await expect(toggle).toHaveAttribute('aria-checked', 'false');
-	await expect(toggle).toHaveAccessibleDescription('Your system preference reduces motion.');
-	const reducedPosition = await expectStationaryPosition(track);
+test('keeps the saved preference under a live reduced-motion override', async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
-	await expect(toggle).toBeEnabled();
-	await expect(toggle).toHaveAttribute('aria-checked', 'true');
-	await expect.poll(() => track.evaluate(node => node.getBoundingClientRect().x)).not.toBe(reducedPosition);
+	await page.goto('/');
+	let dialog = await openSettings(page);
+	const motion = dialog.getByRole('switch', { name: 'Motion', exact: true });
+	await expect(motion).toHaveAttribute('aria-checked', 'true');
+	const speed = dialog.getByRole('slider', { name: 'Card speed', exact: true });
+	await speed.fill('1.5');
+	await expect(speed).toHaveValue('1.5');
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	dialog = await openSettings(page);
+	await expect(dialog.getByRole('switch', { name: 'Motion', exact: true })).toBeDisabled();
+	await expect(dialog.getByRole('switch', { name: 'Motion', exact: true })).toHaveAccessibleDescription('Your system preference reduces motion. Motion stays off until that preference changes.');
+	await expect(dialog.getByRole('switch', { name: 'Card review animation', exact: true })).toBeDisabled();
+	const reducedSpeed = dialog.getByRole('slider', { name: 'Card speed', exact: true });
+	await expect(reducedSpeed).toBeDisabled();
+	await expect(reducedSpeed).toHaveValue('1.5');
+	await dialog.getByRole('button', { name: 'Close settings', exact: true }).click();
+
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	dialog = await openSettings(page);
+	await expect(dialog.getByRole('switch', { name: 'Motion', exact: true })).toHaveAttribute('aria-checked', 'true');
+	const restoredSpeed = dialog.getByRole('slider', { name: 'Card speed', exact: true });
+	await expect(restoredSpeed).toBeEnabled();
+	await expect(restoredSpeed).toHaveValue('1.5');
 });

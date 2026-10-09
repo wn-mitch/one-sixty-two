@@ -64,7 +64,6 @@
  let showBlocked = $state(false);
  let browseRevision = $state(0);
  let sort = $state<RankingSort>('war');
- let results = $state<HTMLElement>();
  const manifestBySeason = $derived(new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])));
  const usedPlayerIds = $derived(new Set(draft.picks.map(pick => manifestBySeason.get(pick.seasonId)?.playerId).filter((id): id is string => !!id)));
  const usedFranchises = $derived(new Set(draft.picks.map(pick => pick.franchiseId)));
@@ -170,11 +169,14 @@
   flippedPlayerId = null;
   onPlace?.(seasonId, group.entries.map(item => item.profile), slot, trigger);
  }
- function changePage(next: number) {
+ async function changePage(next: number) {
   page = next;
   flippedPlayerId = null;
   onResetBrowse();
-  document.getElementById(`${uid}-results`)?.focus();
+  await tick();
+  const results = document.getElementById(`${uid}-results`);
+  results?.focus({ preventScroll: true });
+  results?.scrollIntoView({ block: 'start' });
  }
  function playerCardFromTarget(target: EventTarget | null): Element | null {
   return target instanceof Element ? target.closest('[data-candidate-card]') : null;
@@ -257,10 +259,9 @@
   <div class="ranking-controls">
    <label for="{uid}-sort">Rank players &amp; seasons</label>
    <select id="{uid}-sort" bind:value={sort} disabled={busy} onchange={resetBrowse}>
-    <option value="war">Composite WAR / 162</option>
-    <option value="metrics">Historical OPS / ERA</option>
+    <option value="war">WAR / 162</option>
+    <option value="metrics">OPS / ERA</option>
    </select>
-   <a href="/about#rankings">Ranking source &amp; method</a>
   </div>
   {#if rankingLoading}
    <p class="ranking-status muted" role="status">Loading composite WAR/162.{sort === 'war' ? ' Cards are in stable ID order until it arrives. Choose Historical OPS / ERA to sort by those stats now.' : ''} Drafting is available.</p>
@@ -276,12 +277,8 @@
     <span class="muted">{blockedGroupCount} unavailable</span>
    </div>
   {/if}
-  <div class="list-meta" id="{uid}-results" bind:this={results} tabindex="-1">
-   <p role="status">{groups.length} {groups.length === 1 ? 'player' : 'players'}{groups.length > 20 ? ` · Page ${currentPage + 1} of ${pageCount}` : ''}</p>
-   <p class="muted">Distinct players · exact historical seasons.</p>
-  </div>
  </div>
- <div class="candidate-content">
+ <div class="candidate-content" id="{uid}-results" tabindex="-1">
   {#if !draft.currentRoll}
    <p class="notice">Roll a franchise and era to open your next player pool.</p>
   {:else if groups.length === 0 && wide && !showBlocked && blockedGroupCount > 0}
@@ -344,7 +341,10 @@
    {#if pageCount > 1}
     <nav class="pagination" aria-label="Player card pages">
      <button type="button" class="page-button" disabled={busy || currentPage === 0} onclick={() => changePage(currentPage - 1)}><span class="page-arrow" aria-hidden="true">←</span> Previous</button>
-     <span class="page-counter" aria-label={`Page ${currentPage + 1} of ${pageCount}`}><strong>{currentPage + 1}</strong> / {pageCount}</span>
+     <span class="page-counter" role="status" aria-label={`${groups.length} players, page ${currentPage + 1} of ${pageCount}`}>
+      <span><strong>{currentPage + 1}</strong> / {pageCount}</span>
+      <small>{groups.length} {groups.length === 1 ? 'player' : 'players'}</small>
+     </span>
      <button type="button" class="page-button" disabled={busy || currentPage === pageCount - 1} onclick={() => changePage(currentPage + 1)}>Next <span class="page-arrow" aria-hidden="true">→</span></button>
     </nav>
    {/if}
@@ -354,6 +354,7 @@
 
 <style>
  .candidates { min-width: 0; }
+ .candidate-content { min-width: 0; scroll-margin-top: 72px; }
  .filter-rail { min-width: 0; }
  .search-row { display: grid; gap: var(--space-2); margin-block: var(--space-6) var(--space-4); }
  .search-row label, legend { font-size: var(--text-sm); font-weight: 650; }
@@ -366,29 +367,26 @@
  .filter-count { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
  .filter[aria-pressed='true'] { color: var(--background); border-color: var(--text); background: var(--text); }
  .filter[aria-pressed='true'] .filter-count { color: inherit; }
- .list-meta { margin-block: var(--space-4); font-size: var(--text-xs); }
- .list-meta p { margin: var(--space-1) 0; }
  .section-heading { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: baseline; justify-content: space-between; margin-block: var(--space-6) var(--space-3); }
  .section-heading h3 { font-size: var(--text-lg); }
  .section-heading span { font-size: var(--text-xs); }
  .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; align-items: start; }
  .candidate-card { display: grid; gap: var(--space-2); width: 100%; max-width: 24rem; min-width: 0; margin-inline: auto; }
- .candidate-card[data-flipped='true'] { grid-column: span 2; max-width: 410px; }
  .candidates:has(.candidate-card[data-selected='true']) .candidate-card:not([data-selected='true']) :global(.art-frame) { opacity: .56; }
  .empty { padding-block: var(--space-4) var(--space-8); }
  .ranking-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-4); font-size: var(--text-sm); }
  .ranking-controls label { font-weight: 650; }
- .ranking-controls select { width: 100%; min-height: 2.75rem; }
- .ranking-controls a { display: inline-flex; align-items: center; min-height: 2.75rem; font-size: var(--text-xs); }
+ .ranking-controls select { width: 100%; min-width: 0; min-height: 2.75rem; padding-inline: .5rem 1.5rem; }
  .ranking-status { font-size: var(--text-sm); }
  .blocked-toggle { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .6rem; margin-top: var(--space-4); font-size: var(--text-xs); }
  .blocked-toggle button { min-height: 2.75rem; padding-inline: 0; text-decoration: underline; text-underline-offset: .2em; }
- .pagination { display: inline-flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: min(100%, 17.25rem); box-sizing: border-box; margin-top: var(--space-6); padding: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+ .pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: min(100%, 17.25rem); box-sizing: border-box; margin: var(--space-6) auto 0; padding: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
  .page-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-3); border: 0; background: transparent; font-size: var(--text-sm); font-weight: 650; }
  .page-button:not(:disabled):hover { background: var(--surface-hover); }
  .page-button:disabled { opacity: .4; }
  .page-arrow { font-size: 1.125rem; line-height: 1; }
- .page-counter { min-width: 3.5rem; color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
+ .page-counter { display: grid; gap: 2px; min-width: 3.5rem; color: var(--muted); font-size: var(--text-sm); line-height: 1.1; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
+ .page-counter small { font-size: var(--text-xs); }
  .page-counter strong { color: var(--text); }
  @media (min-width: 48rem) {
   .candidates-wide { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 28px; align-items: start; }

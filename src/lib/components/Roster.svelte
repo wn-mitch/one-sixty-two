@@ -2,6 +2,7 @@
  import { type LegalReassignment } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
  import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../game/types.ts';
+ import type { RosterClickBehavior } from '../game/settings.svelte.ts';
  import type { CardMediaStatus } from '../cards/view-model.ts';
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
@@ -10,16 +11,16 @@
  type Preview = { profile: Profile; slot: Slot };
 
 const fieldCoordinates = {
- C: { x: 50, narrowY: 636, wideY: 631 },
- '1B': { x: 85, narrowY: 492, wideY: 487 },
- '2B': { x: 67, narrowY: 348, wideY: 343 },
- SS: { x: 33, narrowY: 348, wideY: 343 },
- '3B': { x: 15, narrowY: 492, wideY: 487 },
- LF: { x: 18, narrowY: 204, wideY: 199 },
- CF: { x: 50, narrowY: 60, wideY: 55 },
- RF: { x: 82, narrowY: 204, wideY: 199 },
- DH: { x: 85, narrowY: 636, wideY: 631 }
-} as const satisfies Record<HitterSlot, { x: number; narrowY: number; wideY: number }>;
+ C: { x: 50, narrowY: 636, wideY: 631, compactY: 285 },
+ '1B': { x: 85, narrowY: 492, wideY: 487, compactY: 170 },
+ '2B': { x: 67, narrowY: 348, wideY: 343, compactY: 160 },
+ SS: { x: 33, narrowY: 348, wideY: 343, compactY: 160 },
+ '3B': { x: 15, narrowY: 492, wideY: 487, compactY: 170 },
+ LF: { x: 18, narrowY: 204, wideY: 199, compactY: 45 },
+ CF: { x: 50, narrowY: 60, wideY: 55, compactY: 45 },
+ RF: { x: 82, narrowY: 204, wideY: 199, compactY: 45 },
+ DH: { x: 85, narrowY: 636, wideY: 631, compactY: 285 }
+} as const satisfies Record<HitterSlot, { x: number; narrowY: number; wideY: number; compactY: number }>;
 
  let {
   draft,
@@ -36,6 +37,7 @@ const fieldCoordinates = {
   movingSeasonId = null,
   moveTargets = [],
   inspectedSeasonId = null,
+  rosterFirstClick = 'move',
   inspectionId,
   compact = false,
   onSlot
@@ -54,6 +56,7 @@ const fieldCoordinates = {
   movingSeasonId?: string | null;
   moveTargets?: readonly LegalReassignment[];
   inspectedSeasonId?: string | null;
+  rosterFirstClick?: RosterClickBehavior;
   inspectionId?: string;
   compact?: boolean;
   onSlot: (slot: Slot, trigger: HTMLButtonElement) => void;
@@ -65,15 +68,15 @@ const fieldCoordinates = {
  const pitcherSlots = $derived(slots.filter(slot => !HITTER_SLOTS.includes(slot as HitterSlot)));
  const targetsBySlot = $derived(new Map(moveTargets.map(target => [target.slot, target])));
  const pickedCount = $derived(draft.picks.length);
- const workloadSupport = 'Your independently drafted BP supports your closer.';
 
 
  function profileLabel(profile: Profile): string {
   return `${profile.displayName}, ${profile.year}, ${profile.historicalTeam}`;
  }
 
- function isInspectionTarget(state: { profile: Profile | undefined; slot: Slot; action?: string }): boolean {
-  return !!state.profile && (state.action === 'Inspect card' || state.profile.seasonId === inspectedSeasonId);
+ function isInspectionTrigger(state: { profile: Profile | undefined; slot: Slot; source: boolean }): boolean {
+  if (!state.profile) return false;
+  return !HITTER_SLOTS.includes(state.slot as HitterSlot) || state.source || rosterFirstClick === 'review';
  }
 
  function slotState(slot: Slot): {
@@ -89,6 +92,7 @@ const fieldCoordinates = {
   x?: number;
   narrowY?: number;
   wideY?: number;
+  compactY?: number;
  } {
   const pick = bySlot.get(slot);
   const isPreview = !movingSeasonId && preview?.slot === slot;
@@ -106,12 +110,12 @@ const fieldCoordinates = {
 
   let action = 'Unavailable';
   if (isPreview) action = `Preview, confirm ${slot}`;
-  else if (source) action = 'Cancel move';
+  else if (source) action = 'Review card';
   else if (target) action = targetName ? `Swap with ${targetName}` : `Move to open ${slot}`;
   else if (legalPlacement) action = `Place at open ${slot}`;
   else if (unavailable) action = 'Unavailable selected season';
-  else if (occupied && hitter) action = 'Move or swap';
-  else if (occupied) action = 'Inspect card';
+  else if (occupied && hitter) action = rosterFirstClick === 'review' ? 'Review card' : 'Move or swap';
+  else if (occupied) action = 'Review card';
   else action = 'Open, unavailable';
 
   const actionShort = isPreview ? 'Preview'
@@ -130,7 +134,7 @@ const fieldCoordinates = {
    action,
    actionShort,
    enabled: !busy && (source || Boolean(target) || legalPlacement || inspectable),
-   ...(fieldPosition ? { x: fieldPosition.x, narrowY: fieldPosition.narrowY, wideY: fieldPosition.wideY } : {})
+   ...(fieldPosition ? { x: fieldPosition.x, narrowY: fieldPosition.narrowY, wideY: fieldPosition.wideY, compactY: fieldPosition.compactY } : {})
   };
  }
 
@@ -147,10 +151,10 @@ const fieldCoordinates = {
 
  <section class="diamond" aria-label="Field positions">
   {#if compact}
-   <svg class="field-art compact-field-art" viewBox="0 0 404 565" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-    <rect class="field-ground" width="404" height="565"></rect>
-    <path class="outfield-line" d="M12 170C90 10 314 10 392 170"></path>
-    <path class="infield-shape" d="m140 350 62-62 62 62-62 62z"></path>
+   <svg class="field-art compact-field-art" viewBox="0 0 404 368" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <rect class="field-ground" width="404" height="368"></rect>
+    <path class="outfield-line" d="M12 150C90 10 314 10 392 150"></path>
+    <path class="infield-shape" d="m140 205 62-50 62 50-62 50z"></path>
    </svg>
   {:else}
    <svg class="field-art" viewBox="0 0 440 640" preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -166,12 +170,12 @@ const fieldCoordinates = {
     class:preview={state.preview}
     class:source={state.source}
     class:unavailable={state.unavailable}
-    style={`--x:${state.x}%;--y-narrow:${state.narrowY}px;--y-wide:${state.wideY}px`}
+    style={`--x:${state.x}%;--y-narrow:${state.narrowY}px;--y-wide:${state.wideY}px;--y-compact:${state.compactY}px`}
     data-slot={state.slot}
     data-preview={state.preview ? 'true' : undefined}
     aria-label={`${state.slot}, ${state.profile ? profileLabel(state.profile) : state.unavailable ? 'unavailable selected season' : 'open'}. ${state.action}.`}
-    aria-expanded={isInspectionTarget(state) ? state.profile?.seasonId === inspectedSeasonId : undefined}
-    aria-controls={isInspectionTarget(state) && inspectionId ? inspectionId : undefined}
+    aria-expanded={isInspectionTrigger(state) ? state.profile?.seasonId === inspectedSeasonId : undefined}
+    aria-controls={isInspectionTrigger(state) && inspectionId ? inspectionId : undefined}
     disabled={!state.enabled}
     onclick={event => onSlot(state.slot, event.currentTarget as HTMLButtonElement)}
    >
@@ -204,8 +208,8 @@ const fieldCoordinates = {
      data-slot={state.slot}
      data-preview={state.preview ? 'true' : undefined}
      aria-label={`${state.slot}, ${state.profile ? profileLabel(state.profile) : state.unavailable ? 'unavailable selected season' : 'open'}. ${state.action}.`}
-     aria-expanded={isInspectionTarget(state) ? state.profile?.seasonId === inspectedSeasonId : undefined}
-     aria-controls={isInspectionTarget(state) && inspectionId ? inspectionId : undefined}
+     aria-expanded={isInspectionTrigger(state) ? state.profile?.seasonId === inspectedSeasonId : undefined}
+     aria-controls={isInspectionTrigger(state) && inspectionId ? inspectionId : undefined}
      disabled={!state.enabled}
      onclick={event => onSlot(state.slot, event.currentTarget as HTMLButtonElement)}
     >
@@ -223,16 +227,6 @@ const fieldCoordinates = {
     </button>
    {/each}
   </div>
-  {#if compact}
-   <details class="workload-details">
-    <summary>Pitching workload</summary>
-    <p>Three starters, 54 starts each. {workloadSupport}</p>
-    <p class="muted">An arcade workload, not a real-world pitching schedule.</p>
-   </details>
-  {:else}
-   <p class="workload">Three starters, 54 starts each. {workloadSupport}</p>
-   <p class="workload muted">An arcade workload, not a real-world pitching schedule.</p>
-  {/if}
  </section>
 </aside>
 
@@ -323,11 +317,9 @@ const fieldCoordinates = {
  h3 { margin: 0 0 var(--space-3); color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: var(--text-base); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
  .staff-slots { display: grid; grid-template-columns: repeat(5, minmax(72px, 1fr)); gap: var(--space-1); }
  .staff-slot { --roster-slot-width: min(5rem, 100%); position: relative; width: var(--roster-slot-width); justify-self: center; }
- .workload { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.45; }
- .workload-details { margin-top: var(--space-3); font-size: var(--text-xs); line-height: 1.45; }
- .workload-details summary { display: flex; align-items: center; min-height: 2.75rem; cursor: pointer; color: var(--muted); font-weight: 700; }
- .workload-details p { margin: var(--space-2) 0 0; }
- .compact .diamond { width: min(100%, 25.25rem); margin-bottom: var(--space-6); }
+ .compact .diamond { width: min(100%, 25.25rem); height: 368px; margin-bottom: var(--space-3); }
+ .compact .field-slot, .compact .staff-slot { --roster-mini-width: 3.5rem; --roster-slot-width: 4rem; --roster-mini-half: 2.45rem; }
+ .compact .field-slot { top: calc(var(--y-compact) - var(--roster-mini-half)); }
  .compact .staff-slots { gap: var(--space-1); }
  .compact .pitching-staff { margin-top: var(--space-3); padding-top: var(--space-2); }
  .compact .pitching-staff h3 { margin-bottom: var(--space-2); }

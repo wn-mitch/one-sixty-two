@@ -99,9 +99,9 @@
 		.status { font-size: .75rem; }
 	}
 	.reveal.compact { padding: 0; gap: .625rem; border: 0; border-radius: var(--radius); background: transparent; color: var(--text); }
-	.compact .team-mark { display: flex; align-items: center; padding: .25rem; background: var(--reveal-ground, var(--surface)); border-radius: var(--radius) 0 0 var(--radius); }
+	.compact .team-mark { display: flex; align-items: center; padding: .375rem; background: var(--reveal-ground, var(--surface)); border-radius: var(--radius) 0 0 var(--radius); }
 	.compact .reveal-copy { display: flex; align-items: center; gap: .875rem; }
-	.compact .roll-copy { order: -1; justify-content: start; gap: .75rem; padding: .5rem .75rem .5rem 0; color: var(--reveal-ink, var(--text)); background: var(--reveal-ground, var(--surface)); border-radius: 0 var(--radius) var(--radius) 0; }
+	.compact .roll-copy { order: -1; align-items: center; justify-content: start; gap: .75rem; min-height: 44px; box-sizing: border-box; padding: .5rem .75rem .5rem 0; color: var(--reveal-ink, var(--text)); background: var(--reveal-ground, var(--surface)); border-radius: 0 var(--radius) var(--radius) 0; }
 	.compact .team-mark + .reveal-copy { margin-left: -.625rem; }
 	.compact h2 { font-size: 1.375rem; text-wrap: nowrap; }
 	.compact .era { font-size: 1.25rem; }

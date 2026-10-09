@@ -105,13 +105,14 @@
 			: canvasElement.querySelector<HTMLElement>('.field-panel');
 		if (!owner) throw new Error('The roster field is unavailable.');
 
-		const committed = within(owner).getAllByRole('button', { name: /\. Move or swap\.$/ })[0];
+		const committed = within(owner).getByRole('button', { name: /^2B,/ });
 		await userEvent.click(committed);
-		await userEvent.click(within(owner).getByRole('button', { name: 'Inspect card' }));
+		// Move-first uses the first click to enter move mode; Review-first opens the reader immediately.
+		if (!owner.querySelector('[data-card-reader]:popover-open')) await userEvent.click(committed);
 
 		const review = await within(owner).findByRole('region', { name: /.+ · \d{4}/ });
-		await expect(review.querySelector('[data-cardbox]')).toHaveAttribute('data-face', 'back');
-		await expect(within(review).getByRole('button', { name: 'Text version' })).toHaveAttribute('aria-pressed', 'false');
+		await expect(review.querySelector('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+		expect(canvasElement.ownerDocument.activeElement).toBe(within(review).getByRole('button', { name: 'Turn over' }));
 		if (openField) await expect(owner).toBeVisible();
 	};
 </script>

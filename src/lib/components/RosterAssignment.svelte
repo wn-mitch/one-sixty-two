@@ -97,7 +97,7 @@
    aria-label={selectedOption?.available && destination !== origin ? `${actionLabel} ${selectedName} to ${destination}` : undefined}
    onclick={submit}
   >{actionLabel}</button>
-  <p id="{uid}-assignment-status" class="status">{actionDescription}</p>
+  <p id="{uid}-assignment-status" class="status" hidden={destination === origin}>{actionDescription}</p>
  </div>
 {/if}
 

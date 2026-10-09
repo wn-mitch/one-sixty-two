@@ -1,5 +1,5 @@
 import { animate, type JSAnimation } from 'animejs';
-import { motionSettings } from './motion-settings.svelte.ts';
+import { appSettings } from '../game/settings.svelte.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
 
 const LIGHT = { x: -0.45, y: -0.75 } as const;
@@ -11,7 +11,7 @@ const MOTION_PROPERTIES = ['--mx', '--my', '--lx', '--ly', '--ang', '--lift', '-
 
 export type CardFinish = 'base' | 'silver' | 'gold' | 'gem';
 type MotionProperty = (typeof MOTION_PROPERTIES)[number];
-type FlipState = { angle: number };
+type FlipState = { angle: number; x: number; y: number; scale: number };
 type StyleSnapshot = { transform: string; properties: Record<MotionProperty, string> };
 type VisualState = {
 	rx: number;
@@ -35,6 +35,16 @@ export interface TiltOptions {
 
 export interface FlipOptions {
 	turned?: boolean;
+	opened?: boolean;
+	sourceElement?: HTMLElement | null;
+	onReturned?: () => void;
+}
+
+interface FlipRect {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
 }
 
 
@@ -390,65 +400,211 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 }
 
 export function flip(node: HTMLElement, options: FlipOptions = {}) {
-	const releaseSettings = motionSettings.retain();
+	const releaseSettings = appSettings.retain();
 	const snapshot = node.style.transform;
-	const state: FlipState = { angle: options.turned ? 180 : 0 };
-	let target = state.angle;
-	let settings = motionSettings.snapshot;
+	let settings = appSettings.snapshot;
+	let turned = options.turned ?? false;
+	let opened = options.opened ?? turned;
 	let animation: JSAnimation | undefined;
+	let state: FlipState = { angle: turned ? 180 : 0, x: 0, y: 0, scale: 1 };
+	const reader = node.parentElement!;
+	const slot = reader.previousElementSibling as HTMLElement;
+	const dialog = reader.closest('dialog');
+	const fullFront = node.querySelector<HTMLElement>('.front .card');
+	const frontOpacity = fullFront?.style.opacity ?? '';
+	const frontTransition = fullFront?.style.transition ?? '';
+	let hiddenSource: HTMLElement | null = null;
+	let sourceVisibility = '';
+	let clone: HTMLElement | null = null;
+	let cloneWidth = 0;
 
+	const restoreSource = () => {
+		if (hiddenSource) hiddenSource.style.visibility = sourceVisibility;
+		hiddenSource = null;
+	};
+	const captureSource = () => {
+		const source = options.sourceElement;
+		if (!source || hiddenSource === source) return;
+		restoreSource();
+		clone?.remove();
+		const rect = source.getBoundingClientRect();
+		if (!rect.width || !rect.height) return;
+		// Preserve fitted compact typography and era geometry during the flight.
+		cloneWidth = rect.width;
+		clone = source.cloneNode(true) as HTMLElement;
+		clone.setAttribute('aria-hidden', 'true');
+		clone.setAttribute('inert', '');
+		for (const element of [clone, ...clone.querySelectorAll('[id]')]) {
+			if (!(element instanceof SVGElement)) element.removeAttribute('id');
+		}
+		Object.assign(clone.style, {
+			opacity: '1',
+			position: 'absolute', left: '0', top: '0', width: `${rect.width}px`,
+			height: `${rect.height}px`, minWidth: '0', maxWidth: 'none', margin: '0',
+			transformOrigin: 'top left', pointerEvents: 'none'
+		});
+		node.querySelector('.front')!.append(clone);
+		clone.classList.add('flight-clone');
+		hiddenSource = source;
+		sourceVisibility = source.style.visibility;
+		source.style.visibility = 'hidden';
+	};
+	const showReader = () => {
+		if (dialog && !dialog.open) return;
+		if (!reader.matches(':popover-open')) reader.showPopover();
+	};
+	const hideReader = () => {
+		if (reader.matches(':popover-open')) reader.hidePopover();
+	};
+	const syncModalLayer = () => {
+		if (!dialog?.open) {
+			hideReader();
+			restoreSource();
+			return;
+		}
+		if (!opened) return;
+		const focused = reader.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+		hideReader();
+		showReader();
+		focused?.focus({ preventScroll: true });
+	};
+	dialog?.addEventListener('toggle', syncModalLayer);
+	const offsetFrom = (source: FlipRect, destination: FlipRect): Pick<FlipState, 'x' | 'y' | 'scale'> => ({
+		x: source.left + source.width / 2 - destination.left - destination.width / 2,
+		y: source.top + source.height / 2 - destination.top - destination.height / 2,
+		scale: destination.width ? source.width / destination.width : 1
+	});
+	const readerPose = (): FlipRect => {
+		const rect = reader.getBoundingClientRect();
+		if (clone && cloneWidth) clone.style.transform = `scale(${node.offsetWidth / cloneWidth})`;
+		return { left: rect.left + node.offsetLeft, top: rect.top + node.offsetTop, width: node.offsetWidth, height: node.offsetHeight };
+	};
+	const clipFlight = (source: FlipRect, destination: FlipRect) => {
+		const header = reader.closest('.draft-board')?.querySelector<HTMLElement>('.draft-header');
+		if (!header || getComputedStyle(header).position !== 'sticky') return;
+		const bottom = header.getBoundingClientRect().bottom;
+		reader.style.clipPath = source.top < bottom ? `inset(${bottom - destination.top}px -100vmax -100vmax)` : '';
+	};
 	const stop = () => {
 		animation?.cancel();
 		animation = undefined;
 	};
-
 	const apply = () => {
-		if (settings.reducedMotion) {
+		if (!settings.animateCards) {
 			node.style.transform = '';
 			return;
 		}
 		const lift = Math.sin((Math.PI * state.angle) / 180) * 40;
-		node.style.transform = `perspective(1100px) rotateY(${state.angle.toFixed(2)}deg) translateZ(${lift.toFixed(1)}px)`;
+		node.style.transform = `translate3d(${state.x.toFixed(2)}px, ${state.y.toFixed(2)}px, ${lift.toFixed(1)}px) scale(${state.scale.toFixed(4)}) perspective(1100px) rotateY(${state.angle.toFixed(2)}deg)`;
 	};
-
-	const setTarget = (turned: boolean) => {
-		const nextTarget = turned ? 180 : 0;
-		if (nextTarget === target) return;
-		target = nextTarget;
-		stop();
-		if (settings.reducedMotion) {
-			state.angle = target;
-			apply();
-			return;
-		}
-		animation = animate(state, {
-			angle: target,
-			duration: 780,
-			ease: 'inOutCubic',
-			onUpdate: apply
+	const showFullFront = (full: boolean, immediate = false) => {
+		if (!clone || !fullFront) return;
+		fullFront.style.transition = immediate ? 'none' : frontTransition;
+		clone.style.opacity = full ? '0' : '1';
+		fullFront.style.opacity = full ? frontOpacity : '0';
+	};
+	const settleFront = () => {
+		hideReader();
+		restoreSource();
+		reader.style.clipPath = '';
+		state = { angle: 0, x: 0, y: 0, scale: 1 };
+		apply();
+		queueMicrotask(() => {
+			if (!opened && node.isConnected) options.onReturned?.();
 		});
 	};
-
-	const unsubscribe = motionSettings.subscribe(next => {
-		const changed = next.reducedMotion !== settings.reducedMotion;
+	const setTarget = (nextOpened: boolean, nextTurned: boolean) => {
+		if (nextOpened === opened && nextTurned === turned) return;
+		stop();
+		const sourceRect = (options.sourceElement ?? slot).getBoundingClientRect();
+		const alreadyRaised = reader.matches(':popover-open');
+		const wasOpened = opened;
+		opened = nextOpened;
+		turned = nextTurned;
+		if (opened && !alreadyRaised) {
+			captureSource();
+			showReader();
+		}
+		const pose = readerPose();
+		if (opened && !alreadyRaised) state = { angle: state.angle, ...offsetFrom(sourceRect, pose) };
+		const flying = !opened || !wasOpened;
+		showFullFront(!flying, !wasOpened);
+		if (flying) clipFlight(sourceRect, pose);
+		const destination: FlipState = opened
+			? { angle: turned ? 180 : 0, x: 0, y: 0, scale: 1 }
+			: { angle: 0, ...offsetFrom(sourceRect, pose) };
+		const finish = () => {
+			animation = undefined;
+			reader.style.clipPath = '';
+			if (opened) showFullFront(true);
+			else settleFront();
+		};
+		if (!settings.animateCards) {
+			state = destination;
+			apply();
+			finish();
+			return;
+		}
+		apply();
+		animation = animate(state, {
+			...destination,
+			duration: 780 / settings.cardSpeed,
+			ease: 'outQuint',
+			onUpdate: apply,
+			onComplete: finish
+		});
+	};
+	if (opened) {
+		captureSource();
+		showReader();
+		readerPose();
+		showFullFront(true);
+	}
+	apply();
+	const unsubscribe = appSettings.subscribe(next => {
+		const changed = next.animateCards !== settings.animateCards;
 		settings = next;
 		if (!changed) return;
 		stop();
-		state.angle = target;
+		reader.style.clipPath = '';
+		state = { angle: turned ? 180 : 0, x: 0, y: 0, scale: 1 };
 		apply();
+		if (opened) showFullFront(true);
+		else if (reader.matches(':popover-open')) settleFront();
 	});
-
-	apply();
-
 	return {
 		update(next: FlipOptions = {}) {
-			setTarget(next.turned ?? false);
+			const sourceChanged = next.sourceElement !== options.sourceElement;
+			options = next;
+			if (sourceChanged) {
+				restoreSource();
+				clone?.remove();
+				clone = null;
+				if (fullFront) fullFront.style.opacity = frontOpacity;
+				if (opened) {
+					captureSource();
+					showReader();
+					readerPose();
+					showFullFront(true);
+					apply();
+				}
+			}
+			setTarget(next.opened ?? next.turned ?? false, next.turned ?? false);
 		},
 		destroy() {
 			stop();
 			unsubscribe();
+			dialog?.removeEventListener('toggle', syncModalLayer);
 			releaseSettings();
+			hideReader();
+			restoreSource();
+			clone?.remove();
+			if (fullFront) {
+				fullFront.style.opacity = frontOpacity;
+				fullFront.style.transition = frontTransition;
+			}
 			node.style.transform = snapshot;
+			reader.style.clipPath = '';
 		}
 	};
 }

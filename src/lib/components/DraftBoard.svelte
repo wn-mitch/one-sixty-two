@@ -8,11 +8,13 @@
  import type { WarRankings } from '../rankings/types.ts';
  import CardReview from '../cards/CardReview.svelte';
  import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
+ import { appSettings } from '../game/settings.svelte.ts';
  import CandidateList from './CandidateList.svelte';
  import Roster from './Roster.svelte';
  import Reveal from './Reveal.svelte';
  import DraftSheet from './DraftSheet.svelte';
  import DraftLoadingCards from './DraftLoadingCards.svelte';
+ import Settings from './Settings.svelte';
  let { draft, manifest, pool, profiles, phase, loading, busy, error, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onDraft, onReassign, onNew }: {
   draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
   phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean; error: string;
@@ -33,13 +35,21 @@
  let sheetTab = $state<'field' | 'back'>('field');
  let trigger = $state<HTMLElement | null>(null);
  let selectionTrigger: HTMLElement | null = null;
- let inspectionTrigger: HTMLElement | null = null;
+ let inspectionTrigger = $state<HTMLElement | null>(null);
+ let inspectionSourceElement = $state<HTMLElement | null>(null);
+ let inspectionOffersMove = $state(false);
+ let inspectionMoveRequested = $state(false);
+ let preserveInspectionClick = false;
+ let returningSourceClick = false;
+ let preserveSheetCancel = false;
+ let draftBoard = $state<HTMLElement>();
  let fieldHeading = $state<HTMLHeadingElement>();
  let candidateReview = $state<CardReview>();
- let inspectedReview = $state<CardReview>();
  let candidateTurned = $state(true);
  let candidateTextBack = $state(false);
- let inspectedTurned = $state(true);
+ let inspectedTurned = $state(false);
+ let inspectedOpened = $state(false);
+ let inspectionOpening = false;
  let inspectedTextBack = $state(false);
  let requestedMove = $state<{ seasonId: string; slot: HitterSlot } | null>(null);
  let media = $state.raw<MediaManifest | null>(null);
@@ -53,7 +63,6 @@
  const moveTargets = $derived(movingSeasonId ? legalReassignments(draft, manifest, movingSeasonId) : []);
  const movingProfile = $derived(movingSeasonId ? rosterBySeason.get(movingSeasonId) : undefined);
  const inspectedProfile = $derived(inspectedSeasonId ? rosterBySeason.get(inspectedSeasonId) : undefined);
- const activeProfile = $derived(inspectedProfile ?? movingProfile ?? selectedProfile);
  const seasonChoices = $derived([...selectionChoices].sort((a, b) => a.year - b.year || compareId(a.seasonId, b.seasonId)));
  const preview = $derived(selectedProfile && pendingSlot && !movingSeasonId ? { profile: selectedProfile, slot: pendingSlot } : null);
  const selectedCard = $derived(selectedProfile ? createCardViewModel({ profile: selectedProfile, manifest, media, mediaStatus, rankings }) : null);
@@ -72,11 +81,17 @@
   movingSeasonId = null;
   requestedMove = null;
   inspectedSeasonId = null;
+  inspectionTrigger = null;
+  inspectionSourceElement = null;
+  inspectionOffersMove = false;
+  inspectionMoveRequested = false;
+  inspectedOpened = false;
   sheetTab = 'field';
   candidateTurned = true;
   candidateTextBack = false;
-  inspectedTurned = true;
+  inspectedTurned = false;
   inspectedTextBack = false;
+  inspectionOpening = false;
  }
  function resetBrowse(): void { clearTransient(); }
  function restoreCandidateFocus(seasonId: string | null, preferred: HTMLElement | null): void {
@@ -99,6 +114,49 @@
   sheetOpen = false;
   restoreCandidateFocus(seasonId, selectionTrigger);
  }
+ function trackInspectionPointer(event: PointerEvent): void {
+  const reviewing = !!inspectedSeasonId;
+  preserveInspectionClick = reviewing && !event.composedPath().some(node =>
+   node instanceof Element && node.matches('.card-review'));
+  returningSourceClick = reviewing && event.target instanceof Element &&
+   event.target.closest<HTMLElement>('[data-slot]')?.dataset.seasonId === inspectedSeasonId;
+  if (reviewing && event.target instanceof HTMLDialogElement && event.target.matches('.draft-sheet')) {
+   event.preventDefault();
+   event.stopPropagation();
+   inspectedOpened = false;
+   inspectedTurned = false;
+  }
+ }
+ function closeInspectionOnEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !inspectedSeasonId) return;
+  if (document.activeElement?.closest('.settings-dialog[open]')) return;
+  preserveSheetCancel = true;
+  event.preventDefault();
+  event.stopPropagation();
+  inspectedOpened = false;
+  inspectedTurned = false;
+ }
+ function guardInspectionCancel(event: Event): void {
+  if (!preserveSheetCancel || !(event.target instanceof HTMLDialogElement) || !event.target.matches('.draft-sheet')) return;
+  preserveSheetCancel = false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+ }
+ function clearInspectionEscape(): void {
+  preserveSheetCancel = false;
+ }
+ function deselectOutsideCard(event: MouseEvent): void {
+  if (preserveInspectionClick) {
+   preserveInspectionClick = false;
+   returningSourceClick = false;
+   return;
+  }
+  if (!selectedProfile || busy) return;
+  if (event.composedPath().some(node => node instanceof Element &&
+   node.matches('[data-app-settings], [data-candidate-card], [data-slot], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
+  clearTransient();
+  sheetOpen = false;
+ }
  function rememberSeason(playerId: string, seasonId: string): void {
   selectedSeasons = new Map(selectedSeasons).set(playerId, seasonId);
  }
@@ -115,10 +173,16 @@
   movingSeasonId = null;
   requestedMove = null;
   inspectedSeasonId = null;
+  inspectionTrigger = null;
+  inspectionSourceElement = null;
+  inspectionOffersMove = false;
+  inspectionMoveRequested = false;
   candidateTurned = true;
   candidateTextBack = false;
-  inspectedTurned = true;
+  inspectedOpened = false;
+  inspectedTurned = false;
   inspectedTextBack = false;
+  inspectionOpening = false;
   sheetTab = 'field';
   const candidate = manifestBySeason.get(seasonId);
   const slots = candidate ? legalSlots(draft, candidate, manifest) : [];
@@ -133,6 +197,14 @@
   movingSeasonId = null;
   requestedMove = null;
   inspectedSeasonId = null;
+  inspectionTrigger = null;
+  inspectionSourceElement = null;
+  inspectionOffersMove = false;
+  inspectionMoveRequested = false;
+  inspectedOpened = false;
+  inspectedTurned = false;
+  inspectedTextBack = false;
+  inspectionOpening = false;
   pendingSlot = slot;
  }
  function changeSeason(playerId: string, seasonId: string): void {
@@ -155,13 +227,38 @@
   // Session catches errors. Only the ensuing draft identity change closes the preview.
   onDraft(selectedSeasonId, pendingSlot);
  }
+ function beginMove(seasonId: string, nextTrigger: HTMLElement): void {
+  movingSeasonId = seasonId;
+  requestedMove = null;
+  inspectedSeasonId = null;
+  inspectionTrigger = null;
+  inspectionSourceElement = null;
+  inspectionOffersMove = false;
+  inspectionMoveRequested = false;
+  inspectedOpened = false;
+  inspectedTurned = false;
+  inspectedTextBack = false;
+  inspectionOpening = false;
+  trigger = nextTrigger;
+  sheetTab = 'field';
+  if (!wide) sheetOpen = true;
+ }
  function slotAction(slot: Slot, nextTrigger: HTMLButtonElement): void {
   if (busy) return;
   const occupant = draft.picks.find(pick => pick.slot === slot);
+  if (returningSourceClick || occupant?.seasonId === inspectedSeasonId) {
+   returningSourceClick = false;
+   inspectedOpened = false;
+   inspectedTurned = false;
+   return;
+  }
   if (movingSeasonId) {
-   if (occupant?.seasonId === movingSeasonId) { movingSeasonId = null; requestedMove = null; return; }
+   if (occupant?.seasonId === movingSeasonId) {
+    inspectRoster(occupant.seasonId, nextTrigger, false);
+    return;
+   }
    if (occupant && !HITTER_SLOTS.includes(slot as HitterSlot)) {
-    inspectRoster(occupant.seasonId, nextTrigger);
+    inspectRoster(occupant.seasonId, nextTrigger, false);
     return;
    }
    const destination = moveTargets.find(target => target.slot === slot);
@@ -171,19 +268,12 @@
    return;
   }
   if (occupant) {
-   trigger = nextTrigger;
-   if (HITTER_SLOTS.includes(slot as HitterSlot)) {
-    movingSeasonId = occupant.seasonId;
-    inspectedSeasonId = null;
-    sheetTab = 'field';
-    if (!wide) sheetOpen = true;
-   } else inspectRoster(occupant.seasonId, nextTrigger);
+   const hitter = HITTER_SLOTS.includes(slot as HitterSlot);
+   if (hitter && appSettings.rosterFirstClick === 'move') beginMove(occupant.seasonId, nextTrigger);
+   else inspectRoster(occupant.seasonId, nextTrigger, hitter);
    return;
   }
   if (phase === 'choosing' && selectedProfile && destinations.includes(slot)) pendingSlot = slot;
- }
- function focusReview(): void {
-  void tick().then(() => inspectedReview?.focusHeading());
  }
  function restoreInspectionFocus(preferred: HTMLElement | null): void {
   void tick().then(() => {
@@ -191,21 +281,78 @@
    (visible ?? fieldHeading)?.focus({ preventScroll: true });
   });
  }
- function inspectRoster(seasonId: string, nextTrigger: HTMLElement): void {
-  inspectedSeasonId = seasonId;
+ function cardSource(trigger: HTMLElement): HTMLElement | null {
+  return trigger.querySelector<HTMLElement>('.miniature .card')
+   ?? trigger.querySelector<HTMLElement>('.card-frame');
+ }
+ async function refreshInspectionSource(seasonId: string): Promise<void> {
+  const pick = draft.picks.find(item => item.seasonId === seasonId);
+  if (!pick) return;
+  await tick();
+  let nextTrigger = draftBoard?.querySelector<HTMLButtonElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} [data-slot="${CSS.escape(pick.slot)}"]`);
+  if (!nextTrigger && !wide) {
+   await tick();
+   nextTrigger = draftBoard?.querySelector<HTMLButtonElement>(`dialog.draft-sheet[open] [data-slot="${CSS.escape(pick.slot)}"]`);
+  }
+  if (inspectedSeasonId !== seasonId || !nextTrigger) return;
   inspectionTrigger = nextTrigger;
-  inspectedTurned = true;
+  inspectionSourceElement = cardSource(nextTrigger);
+ }
+ async function refreshInspectionAfterLayout(seasonId: string): Promise<void> {
+  await refreshInspectionSource(seasonId);
+  if (inspectedSeasonId === seasonId && !inspectionOpening && !inspectedOpened) {
+   if (inspectionMoveRequested) moveFromInspection();
+   else returnToField();
+  }
+ }
+ async function inspectRoster(seasonId: string, nextTrigger: HTMLElement, offerMove = false): Promise<void> {
+  inspectionOpening = true;
+  inspectionMoveRequested = false;
+  inspectedOpened = false;
+  inspectedTurned = false;
   inspectedTextBack = false;
+  inspectionTrigger = nextTrigger;
+  inspectionSourceElement = cardSource(nextTrigger);
+  inspectionOffersMove = offerMove;
+  inspectedSeasonId = seasonId;
+  sheetTab = 'field';
   if (!wide) {
    trigger = nextTrigger;
    sheetOpen = true;
   }
-  focusReview();
+  await tick();
+  if (inspectedSeasonId !== seasonId) {
+   inspectionOpening = false;
+   return;
+  }
+  inspectedOpened = true;
+  inspectionOpening = false;
  }
  function returnToField(): void {
   const previousTrigger = inspectionTrigger;
   inspectionTrigger = null;
+  inspectionSourceElement = null;
+  inspectionOffersMove = false;
+  inspectionMoveRequested = false;
+  inspectedOpened = false;
   inspectedSeasonId = null;
+  inspectedTurned = false;
+  inspectedTextBack = false;
+  inspectionOpening = false;
+  restoreInspectionFocus(previousTrigger);
+ }
+ function moveFromInspection(): void {
+  const seasonId = inspectedSeasonId;
+  const previousTrigger = inspectionTrigger;
+  const pick = seasonId ? draft.picks.find(item => item.seasonId === seasonId) : undefined;
+  if (!seasonId || !previousTrigger || !pick || !HITTER_SLOTS.includes(pick.slot as HitterSlot)) {
+   returnToField();
+   return;
+  }
+  beginMove(seasonId, previousTrigger);
+  inspectedTurned = false;
+  inspectedTextBack = false;
+  inspectionOpening = false;
   restoreInspectionFocus(previousTrigger);
  }
  function cancelMove(): void {
@@ -217,6 +364,7 @@
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault();
   sheetTab = event.key === 'Home' ? 'field' : event.key === 'End' ? 'back' : sheetTab === 'field' ? 'back' : 'field';
+  if (sheetTab === 'back') candidateTurned = true;
   void tick().then(() => document.getElementById(`${uid}-tab-${sheetTab}`)?.focus());
  }
  $effect(() => {
@@ -241,10 +389,18 @@
   if (inspectedSeasonId && !inspectedProfile) {
    inspectedSeasonId = null;
    inspectionTrigger = null;
+   inspectionSourceElement = null;
+   inspectionOffersMove = false;
+   inspectionMoveRequested = false;
+   inspectedOpened = false;
+   inspectedTurned = false;
+   inspectedTextBack = false;
+   inspectionOpening = false;
   }
  });
  onMount(() => {
   let disposed = false;
+  const releaseSettings = appSettings.retain();
   void loadMedia().then(value => {
    if (!disposed) { media = value; mediaStatus = 'ready'; }
   }).catch(() => { if (!disposed) mediaStatus = 'unavailable'; });
@@ -252,22 +408,29 @@
   wide = query.matches;
   const adapt = () => {
    const focusedInPanel = document.activeElement instanceof HTMLElement && !!document.activeElement.closest('.field-panel, .draft-sheet');
+   const inspected = inspectedSeasonId;
+   if (inspected) inspectionSourceElement = null;
    wide = query.matches;
    if (wide) {
     sheetOpen = false;
-    void tick().then(() => {
-     if (inspectedSeasonId) inspectedReview?.focusHeading();
-     else if (focusedInPanel) fieldHeading?.focus({ preventScroll: true });
-    });
-   } else if (selectedSeasonId || movingSeasonId || inspectedSeasonId) {
+    if (focusedInPanel && !inspected) void tick().then(() => fieldHeading?.focus({ preventScroll: true }));
+   } else if (selectedSeasonId || movingSeasonId || inspected) {
     sheetOpen = true;
-    if (inspectedSeasonId) focusReview();
    }
+   if (inspected) void refreshInspectionAfterLayout(inspected);
   };
   query.addEventListener('change', adapt);
-  return () => { disposed = true; query.removeEventListener('change', adapt); };
+  window.addEventListener('cancel', guardInspectionCancel, true);
+  return () => {
+   disposed = true;
+   releaseSettings();
+   query.removeEventListener('change', adapt);
+   window.removeEventListener('cancel', guardInspectionCancel, true);
+  };
  });
 </script>
+
+<svelte:window onpointerdowncapture={trackInspectionPointer} onkeydowncapture={closeInspectionOnEscape} onkeyup={clearInspectionEscape} onclick={deselectOutsideCard} />
 
 {#snippet fieldHeader()}
  <div class="field-header">
@@ -276,11 +439,10 @@
     {#if wide}<div class="pick-track" aria-hidden="true">{#each rosterSlots as slot}<span class:locked={occupiedSlots.has(slot)}></span>{/each}</div>{/if}
     <span class="picked-count" aria-hidden="true">{draft.picks.length} / {rosterSlots.length}</span>
    </div>
-   {#if activeProfile}<p class="active-player"><strong>{activeProfile.displayName}</strong> · {activeProfile.year}{movingSeasonId && !inspectedSeasonId ? ' · Moving' : ''}</p>{/if}
   </div>
   {#if !wide}<button type="button" class="quiet" onclick={dismissSheet}>Close field</button>{/if}
  </div>
- {#if !wide && selectedProfile && !inspectedSeasonId}
+ {#if !wide && selectedProfile}
   <label class="sheet-season">Exact season for {selectedProfile.displayName}
    <select aria-label="Exact season for {selectedProfile.displayName}" value={selectedSeasonId ?? ''} disabled={busy} onchange={event => changeSeason(selectedProfile!.playerId, event.currentTarget.value)}>
     {#each seasonChoices as season (season.seasonId)}<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>{/each}
@@ -289,15 +451,15 @@
   {#if !wide}
    <div class="tabs" role="tablist" aria-label="Selected player view" tabindex="-1" onkeydown={tabKey}>
     <button type="button" role="tab" id="{uid}-tab-field" aria-selected={sheetTab === 'field'} aria-controls="{uid}-panel-field" tabindex={sheetTab === 'field' ? 0 : -1} onclick={() => sheetTab = 'field'}>Field</button>
-    <button type="button" role="tab" id="{uid}-tab-back" aria-selected={sheetTab === 'back'} aria-controls="{uid}-panel-back" tabindex={sheetTab === 'back' ? 0 : -1} onclick={() => sheetTab = 'back'}>Card back</button>
+    <button type="button" role="tab" id="{uid}-tab-back" aria-selected={sheetTab === 'back'} aria-controls="{uid}-panel-back" tabindex={sheetTab === 'back' ? 0 : -1} onclick={() => { candidateTurned = true; sheetTab = 'back'; }}>Card back</button>
    </div>
   {/if}
  {/if}
 {/snippet}
 
 {#snippet fieldContent()}
- {#if !wide && selectedCard}
-  <div hidden={sheetTab !== 'back' || !!inspectedCard} role="tabpanel" id="{uid}-panel-back" aria-labelledby={inspectedCard ? undefined : `${uid}-tab-back`}>
+ {#if !wide && selectedCard && sheetTab === 'back' && !inspectedCard}
+  <div role="tabpanel" id="{uid}-panel-back" aria-labelledby={`${uid}-tab-back`}>
    <CardReview
     bind:this={candidateReview}
     id={`${uid}-candidate-review`}
@@ -307,38 +469,44 @@
    />
   </div>
  {/if}
- {#if inspectedCard}
-  <button type="button" class="secondary back-to-field" aria-controls={`${uid}-roster-review`} onclick={returnToField}>Back to field</button>
-  <CardReview
-   bind:this={inspectedReview}
-   id={`${uid}-roster-review`}
-   s={inspectedCard}
-   bind:turned={inspectedTurned}
-   bind:textBack={inspectedTextBack}
-   onClose={returnToField}
+ <div hidden={!wide && !!selectedCard && sheetTab !== 'field'} role={selectedProfile && !wide ? 'tabpanel' : undefined} id="{uid}-panel-field" aria-labelledby={selectedProfile && !wide ? `${uid}-tab-field` : undefined}>
+  <Roster
+   {draft}
+   {manifest}
+   {profiles}
+   {rankings}
+   {rankingLoading}
+   {rankingError}
+   {busy}
+   {media}
+   {mediaStatus}
+   {preview}
+   compact={wide}
+   legalSlots={movingSeasonId ? [] : destinations}
+   {movingSeasonId}
+   {moveTargets}
+   {inspectedSeasonId}
+   rosterFirstClick={appSettings.rosterFirstClick}
+   inspectionId={`${uid}-roster-review`}
+   onSlot={slotAction}
   />
- {:else}
-  <div hidden={!wide && !!selectedCard && sheetTab !== 'field'} role={selectedProfile && !wide ? 'tabpanel' : undefined} id="{uid}-panel-field" aria-labelledby={selectedProfile && !wide ? `${uid}-tab-field` : undefined}>
-   <Roster
-    {draft}
-    {manifest}
-    {profiles}
-    {rankings}
-    {rankingLoading}
-    {rankingError}
-    {busy}
-    {media}
-    {mediaStatus}
-    {preview}
-    compact={wide}
-    legalSlots={movingSeasonId ? [] : destinations}
-    {movingSeasonId}
-    {moveTargets}
-    {inspectedSeasonId}
-    inspectionId={`${uid}-roster-review`}
-    onSlot={slotAction}
+ </div>
+ {#if inspectedCard}
+  {#key inspectedSeasonId}
+   <CardReview
+    id={`${uid}-roster-review`}
+    s={inspectedCard}
+    bind:opened={inspectedOpened}
+    bind:turned={inspectedTurned}
+    bind:textBack={inspectedTextBack}
+    bind:moveRequested={inspectionMoveRequested}
+    showControl={false}
+    sourceElement={inspectionSourceElement}
+    raisedOnly
+    onMove={inspectionOffersMove ? moveFromInspection : undefined}
+    onClose={returnToField}
    />
-  </div>
+  {/key}
  {/if}
 {/snippet}
 
@@ -346,9 +514,8 @@
  {#if error && !wide}<p class="sheet-error" role="alert">{error}</p>{/if}
  {#if movingSeasonId}
   <div class="move-controls">
-   <p>{#if wide && movingProfile}<strong>Moving {movingProfile.displayName} · {movingProfile.year}</strong><br />{/if}Choose a highlighted position to move or swap. Your exact season stays drafted.</p>
+   {#if wide && movingProfile}<p><strong>Moving {movingProfile.displayName} · {movingProfile.year}</strong></p>{/if}
    <button type="button" class="secondary" onclick={cancelMove}>Cancel move</button>
-   <button type="button" class="secondary" disabled={!movingProfile} onclick={event => inspectRoster(movingSeasonId!, event.currentTarget)}>Inspect card</button>
   </div>
  {:else if selectedProfile}
   <div class="pick-confirmation" data-pending-slot={pendingSlot ?? ''} data-selected-season={selectedSeasonId}>
@@ -359,15 +526,16 @@
     <button type="button" class="quiet" onclick={cancelSelection}>Cancel selection</button>
    </div>
   </div>
- {:else}<p class="field-hint">Select a card to preview a pick. Select a drafted hitter to move or swap.</p>{/if}
+ {/if}
 {/snippet}
 
-<div class="draft-board" class:wide>
+<div bind:this={draftBoard} class="draft-board" class:wide>
  <header class="draft-header">
   {#if wide}<a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>{/if}
   <Reveal roll={draft.currentRoll} {manifest} compact={wide} revealing={phase === 'revealing'} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={draft.currentRoll ? media?.teams[draft.currentRoll.franchiseId]?.color : undefined} />
   {#if wide}
    <a class="rules-link" href="/about">Rules &amp; model</a>
+   <Settings />
    <button class="secondary new-draft" disabled={loading} onclick={onNew}>New draft</button>
   {/if}
  </header>
@@ -392,9 +560,15 @@
     <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
-  {#if wide}<aside class="field-panel" aria-label="Your field"><div class="panel-header">{@render fieldHeader()}</div><div class="field-scroll">{@render fieldContent()}</div><div class="field-footer">{@render fieldFooter()}</div></aside>{/if}
+  {#if wide}
+   <aside class="field-panel" aria-label="Your field">
+    <div class="panel-header">{@render fieldHeader()}</div>
+    <div class="field-scroll">{@render fieldContent()}</div>
+    {#if movingSeasonId || selectedProfile}<div class="field-footer">{@render fieldFooter()}</div>{/if}
+   </aside>
+  {/if}
  </div>
- <DraftSheet open={!wide && sheetOpen} {trigger} onClose={dismissSheet} header={fieldHeader} children={fieldContent} footer={fieldFooter} />
+ <DraftSheet open={!wide && sheetOpen} {trigger} onClose={dismissSheet} header={fieldHeader} children={fieldContent} footer={movingSeasonId || selectedProfile || error ? fieldFooter : undefined} />
 </div>
 
 <style>
@@ -408,7 +582,7 @@
  .wide .draft-toolbar { display: none; }
  .field-panel { position: sticky; top: 72px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: calc(100dvh - 88px); min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
  .panel-header { padding-inline: 1rem; }
- .field-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-inline: 1rem; }
+ .field-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 0 1rem 1rem; }
  .field-footer { padding: .75rem 1rem; border-top: 1px solid var(--border); background: var(--background); }
  .field-header { display: flex; align-items: start; justify-content: space-between; gap: .75rem; padding-block: 1rem .5rem; }
  .field-header > div { min-width: 0; width: 100%; }
@@ -419,32 +593,27 @@
  .pick-track { display: flex; flex: 1; gap: 3px; }
  .pick-track span { flex: 1; height: 4px; background: var(--border); }
  .pick-track .locked { background: var(--text); }
- .active-player { overflow-wrap: anywhere; margin: .4rem 0 0; font-size: .9rem; }
  .sheet-season { display: grid; gap: .3rem; font-size: .8rem; margin-bottom: .75rem; }
  select { min-height: 44px; width: 100%; min-width: 0; }
  .tabs { display: flex; gap: .5rem; }
  .tabs button { flex: 1; min-height: 44px; }
  .tabs [aria-selected='true'] { background: var(--text); color: var(--background); }
  .confirmation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
- .confirmation-actions button, .move-controls button, .field-header button, .back-to-field { min-height: 44px; }
- .pick-confirmation p, .move-controls p, .field-hint { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
+ .confirmation-actions button, .move-controls button, .field-header button { min-height: 44px; }
+ .pick-confirmation p, .move-controls p { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
  .preview-label { color: var(--accent); font-weight: 750; }
- .move-controls button + button { margin-left: .5rem; }
  .sheet-error { color: var(--error); margin: 0 0 .75rem; }
  .next-roll { padding-block: 2rem; }
  .last-pick { overflow-wrap: anywhere; }
- .back-to-field { margin-bottom: .75rem; }
  .placement-hint { display: block; color: var(--muted); margin-top: .25rem; font-size: .75rem; }
- .wide .active-player { display: none; }
  .wide .move-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
  .wide .move-controls p { flex-basis: 100%; }
- .wide .move-controls button + button { margin-left: 0; }
  .wide .confirmation-actions { gap: .4rem; }
  .wide .confirmation-actions button { padding-inline: .65rem; font-size: .8125rem; }
  .wide .confirmation-actions .primary { margin-left: auto; order: 3; }
  .wide .pick-confirmation p { margin-bottom: .5rem; }
  .draft-header { min-width: 0; }
- .wide .draft-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 20px; min-height: 56px; padding-block: 6px; border-bottom: 1px solid var(--border); background: var(--background); }
+ .wide .draft-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 20px; min-height: 64px; box-sizing: border-box; padding-block: 10px; border-bottom: 1px solid var(--border); background: var(--background); }
  .wordmark { flex: none; display: inline-flex; align-items: center; gap: .625rem; min-height: 44px; color: var(--text); text-decoration: none; font-size: 1.25rem; font-weight: 850; letter-spacing: -.04em; }
  .mark { width: .625rem; height: .625rem; border: 2px solid var(--text); transform: rotate(45deg); }
  .rules-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; min-height: 44px; font-size: .875rem; color: var(--muted); text-decoration: none; }

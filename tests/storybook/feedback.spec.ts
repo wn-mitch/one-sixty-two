@@ -87,7 +87,7 @@ test.describe('Agentation feedback integration', () => {
 		}
 	});
 
-	test('keeps Agentation and a live dial inside DraftSheet while preserving state across relocation', async ({ page }) => {
+	test('keeps feedback tools inside the field sheet across relocation', async ({ page }) => {
 		const mcp = await connectAgentationMcp();
 		const comment = `Review anonymous roster card ${crypto.randomUUID()}`;
 		try {
@@ -103,15 +103,11 @@ test.describe('Agentation feedback integration', () => {
 			await expect(sheet.locator('[data-feedback-dial-host="inline"]')).toHaveCount(1);
 			await expect(page.locator('.dialkit-root')).toHaveCount(1);
 
-			const slider = sheet.getByRole('slider', { name: 'Motion Padding', exact: true });
-			await expect(slider).toBeVisible();
-			await slider.press('End');
-			const motion = page.locator('button.motion-settings');
-			await expect.poll(() => motion.evaluate(element =>
-				Number.parseFloat(getComputedStyle(element).paddingInlineStart)
-			)).toBe(24);
-			expect(await sheet.evaluate(dialog => dialog.contains(document.activeElement))).toBe(true);
 
+			const raisedReview = sheet.locator('.card-review.raised-only');
+			await raisedReview.getByRole('button', { name: 'Turn over', exact: true }).click();
+			await expect(raisedReview.locator('[data-cardbox]')).toHaveAttribute('data-face', 'back');
+			await sheet.getByRole('button', { name: /^Show text version for / }).click();
 			const textBack = sheet.getByRole('button', { name: 'Text version', exact: true });
 			await addAnnotation(page, textBack, comment);
 			expect(await sheet.evaluate(dialog => dialog.contains(document.activeElement))).toBe(true);
@@ -131,7 +127,6 @@ test.describe('Agentation feedback integration', () => {
 			await expect(sheet.locator('agentation-toolbar')).toHaveCount(1);
 			await expect(page.locator('agentation-toolbar')).toHaveCount(1);
 			await expect(sheet.locator('[data-feedback-dial-host="inline"]')).toHaveCount(1);
-			await expect(sheet.getByRole('slider', { name: 'Motion Padding', exact: true })).toHaveAttribute('aria-valuenow', '24');
 			await expect(page.locator('.dialkit-root')).toHaveCount(1);
 			expect(new URL(page.url()).hash).toBe(storyHash);
 			expect((await mcp.getAllPending()).annotations.some(entry => entry.id === synced.id)).toBe(true);
@@ -168,7 +163,7 @@ test.describe('Agentation feedback integration', () => {
 		await copy.click();
 		await expect(copy).toBeEnabled();
 
-		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		await page.locator('agentation-toolbar').getByRole('button', { name: 'Settings', exact: true }).click();
 		await page.getByRole('button', { name: 'Manage MCP & Webhooks', exact: true }).click();
 		await expect(page.locator('[title="Disconnected"]')).toHaveCount(1, { timeout: 15000 });
 		await page.reload({ waitUntil: 'domcontentloaded' });

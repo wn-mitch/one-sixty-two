@@ -115,11 +115,14 @@ test.describe('application workshop stories', () => {
 		await expect(page.locator('.announcement')).toHaveText('');
 
 		await left.getByLabel(/position for example batter 06/i).selectOption('CF');
+		await expect(left.locator('.status')).toBeVisible();
+		await expect(left.locator('.status')).toContainText(/Example Batter 07.*LF/);
 		await left.getByRole('button', { name: /swap example batter 06 to cf/i }).click();
 		await expect(left).toHaveAttribute('data-roster-assignment', leftId!);
 		await expect(center).toHaveAttribute('data-roster-assignment', centerId!);
 		await expect(left.getByLabel(/position for example batter 06/i)).toHaveValue('CF');
 		await expect(center.getByLabel(/position for example batter 07/i)).toHaveValue('LF');
+		await expect(left.locator('.status')).toBeHidden();
 	});
 
 	test('reveals a real partial record and keeps replay output stable across resets', async ({ page }) => {

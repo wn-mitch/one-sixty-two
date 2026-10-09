@@ -99,3 +99,4 @@ th:first-child, td:first-child { text-align: left; }
 .skeleton { background: var(--surface-raised); border-radius: var(--radius); min-height: 4rem; animation: breathe 1s var(--ease-out) infinite alternate; }
 @keyframes breathe { from { opacity: .4; } to { opacity: .8; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: 0s !important; scroll-behavior: auto !important; } }
+:root[data-motion='off'] *, :root[data-motion='off'] *::before, :root[data-motion='off'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

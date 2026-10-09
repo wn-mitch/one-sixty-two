@@ -266,22 +266,6 @@ describe('createResultsModel inspection', () => {
 		expect(cardFor(model, 'C').inspection.actual.awardChips).toEqual([]);
 	});
 
-	it('publishes realized value and defensive component breakdowns without rounding the underlying values', () => {
-		const source = fixture();
-		const catcher = lineForSlot(source, 'C') as BatterLine;
-		catcher.battingRuns = 1.2345;
-		catcher.stealRuns = -0.25;
-		catcher.defensiveRuns = 0.75;
-		catcher.defensiveComponents.hitPrevention = 0.625;
-		catcher.caughtAdvancing = 2;
-		const model = createResultsModel(source);
-		const inspection = cardFor(model, 'C').inspection;
-		const war = inspection.details.find(section => section.key === 'estimated-war')!;
-		const defense = inspection.details.find(section => section.key === 'realized-defense')!;
-		expect(war.rows.find(row => row.key === 'batting-runs')).toMatchObject({ value: 1.2345, formattedValue: '+1.23' });
-		expect(defense.rows.find(row => row.key === 'hit-prevention')).toMatchObject({ value: 0.625, formattedValue: '+0.63' });
-		expect(defense.rows.find(row => row.key === 'caught-advancing')).toBeUndefined();
-	});
 });
 
 function cardProfile(source: Fixture, slot: Slot): Profile {

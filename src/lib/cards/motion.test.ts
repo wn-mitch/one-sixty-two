@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AutonomousMotionScheduler, type MotionSchedulerEnvironment } from './motion-runtime.ts';
-import { browserEnvironment, MOTION_STORAGE_KEY, MotionSettingsState } from './motion-settings.svelte.ts';
+import { APP_SETTINGS_STORAGE_KEY, AppSettingsState, browserEnvironment } from '../game/settings.svelte.ts';
 
 class FakeMediaPreference {
 	matches = false;
@@ -115,35 +115,44 @@ class FakeSchedulerEnvironment {
 function createSchedulerFixture() {
 	const media = new FakeMediaPreference();
 	const storage = new MemoryStorage();
-	const settings = new MotionSettingsState(() => ({ storage, reducedMotion: media }));
+	const settings = new AppSettingsState(() => ({ storage, reducedMotion: media }));
 	const environment = new FakeSchedulerEnvironment();
 	const scheduler = new AutonomousMotionScheduler(() => environment.environment, settings);
 	return { environment, media, scheduler, settings, storage };
 }
 
-describe('motion settings', () => {
-	it('persists the toggle and live-overrides it for reduced motion', () => {
+describe('app settings', () => {
+	it('persists all preferences and live-overrides motion for reduced motion', () => {
 		const media = new FakeMediaPreference();
 		const storage = new MemoryStorage();
-		storage.values.set(MOTION_STORAGE_KEY, JSON.stringify({ enabled: true, amount: 1.25, speed: 1.75 }));
-		const settings = new MotionSettingsState(() => ({ storage, reducedMotion: media }));
+		storage.values.set(APP_SETTINGS_STORAGE_KEY, JSON.stringify({ motionEnabled: true, cardAnimation: false, cardSpeed: 1.4, rosterFirstClick: 'review' }));
+		const settings = new AppSettingsState(() => ({ storage, reducedMotion: media }));
 		const snapshots: boolean[] = [];
 		const unsubscribe = settings.subscribe(value => snapshots.push(value.effectiveEnabled));
 		const release = settings.retain();
 
-		expect(settings.snapshot).toMatchObject({ enabled: true, effectiveEnabled: true });
-		settings.setEnabled(false);
-		const restored = new MotionSettingsState(() => ({ storage, reducedMotion: media }));
+		expect(settings.snapshot).toMatchObject({ motionEnabled: true, cardAnimation: false, cardSpeed: 1.4, rosterFirstClick: 'review', effectiveEnabled: true, animateCards: false });
+		settings.setMotionEnabled(false);
+		expect(settings.snapshot).toMatchObject({ motionEnabled: false, cardAnimation: false, rosterFirstClick: 'review', effectiveEnabled: false, animateCards: false });
+		const restored = new AppSettingsState(() => ({ storage, reducedMotion: media }));
 		const releaseRestored = restored.retain();
-		expect(restored.effectiveEnabled).toBe(false);
+		expect(restored.snapshot).toMatchObject({ motionEnabled: false, cardAnimation: false, rosterFirstClick: 'review', effectiveEnabled: false, animateCards: false });
 		releaseRestored();
-		settings.setEnabled(true);
-
+		settings.setMotionEnabled(true);
+		settings.setCardAnimation(true);
+		settings.setRosterFirstClick('move');
+		settings.setCardSpeed(1.7);
+		const persisted = JSON.parse(storage.values.get(APP_SETTINGS_STORAGE_KEY) ?? '{}') as Record<string, unknown>;
+		expect(persisted).toMatchObject({ motionEnabled: true, cardAnimation: true, cardSpeed: 1.7, rosterFirstClick: 'move' });
+		const speedRestored = new AppSettingsState(() => ({ storage, reducedMotion: media }));
+		const releaseSpeedRestored = speedRestored.retain();
+		expect(speedRestored.snapshot.cardSpeed).toBe(1.7);
+		releaseSpeedRestored();
 		media.set(true);
-		expect(settings.snapshot).toMatchObject({ reducedMotion: true, effectiveEnabled: false });
-		settings.setEnabled(false);
+		expect(settings.snapshot).toMatchObject({ reducedMotion: true, effectiveEnabled: false, animateCards: false });
+		settings.setMotionEnabled(false);
 		media.set(false);
-		expect(settings.snapshot).toMatchObject({ reducedMotion: false, effectiveEnabled: false });
+		expect(settings.snapshot).toMatchObject({ reducedMotion: false, effectiveEnabled: false, animateCards: false });
 		expect(snapshots).toContain(false);
 
 		unsubscribe();
@@ -151,15 +160,31 @@ describe('motion settings', () => {
 		expect(media.listeners.size).toBe(0);
 	});
 
+
+	it('ignores card speeds outside the supported API bounds', () => {
+		const media = new FakeMediaPreference();
+		const storage = new MemoryStorage();
+		const settings = new AppSettingsState(() => ({ storage, reducedMotion: media }));
+		const release = settings.retain();
+
+		settings.setCardSpeed(0.49);
+		settings.setCardSpeed(2.01);
+		settings.setCardSpeed(Number.NaN);
+		settings.setCardSpeed(Number.POSITIVE_INFINITY);
+
+		expect(settings.snapshot.cardSpeed).toBe(1);
+		release();
+	});
+
 	it('keeps session controls usable when storage is denied', () => {
 		const media = new FakeMediaPreference();
 		const storage = new MemoryStorage();
 		storage.blocked = true;
-		const settings = new MotionSettingsState(() => ({ storage, reducedMotion: media }));
+		const settings = new AppSettingsState(() => ({ storage, reducedMotion: media }));
 		const release = settings.retain();
-		settings.setEnabled(false);
+		settings.setMotionEnabled(false);
 
-		expect(settings.snapshot).toMatchObject({ enabled: false, effectiveEnabled: false, storageAvailable: false });
+		expect(settings.snapshot).toMatchObject({ motionEnabled: false, effectiveEnabled: false, storageAvailable: false });
 		release();
 	});
 
@@ -173,7 +198,7 @@ describe('motion settings', () => {
 			matchMedia: () => media
 		} as unknown as Pick<Window, 'localStorage' | 'matchMedia'>;
 		const environment = browserEnvironment(source);
-		const settings = new MotionSettingsState(() => environment);
+		const settings = new AppSettingsState(() => environment);
 		const release = settings.retain();
 
 		expect(settings.snapshot).toMatchObject({
@@ -183,10 +208,10 @@ describe('motion settings', () => {
 		});
 		expect(media.listeners.size).toBe(1);
 
-		settings.setEnabled(false);
+		settings.setMotionEnabled(false);
 		media.set(false);
 		expect(settings.snapshot).toMatchObject({
-			enabled: false,
+			motionEnabled: false,
 			reducedMotion: false,
 			effectiveEnabled: false
 		});

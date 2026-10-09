@@ -1,6 +1,6 @@
 import { animate, type JSAnimation } from 'animejs';
 import { autonomousMotion } from './motion-runtime.ts';
-import { motionSettings } from './motion-settings.svelte.ts';
+import { appSettings } from '../game/settings.svelte.ts';
 
 interface Snapshot {
 	clone: HTMLElement;
@@ -47,7 +47,7 @@ function ghostOf(node: HTMLElement, rect: DOMRect): HTMLElement {
 
 export function createCandidateGridMotion(): CandidateGridMotion {
 	let root: HTMLElement | null = null;
-	let reduced = false;
+	let motionEnabled = false;
 	let releaseSettings: (() => void) | null = null;
 	let unsubscribeSettings: (() => void) | null = null;
 	let revision = 0;
@@ -72,10 +72,10 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 		ghosts.clear();
 	};
 
-	const onReducedMotionChange = (next: boolean) => {
-		const changed = next !== reduced;
-		reduced = next;
-		if (changed && reduced) {
+	const onMotionChange = (enabled: boolean) => {
+		const changed = enabled !== motionEnabled;
+		motionEnabled = enabled;
+		if (changed && !motionEnabled) {
 			revision++;
 			snapshots.clear();
 			clear();
@@ -107,9 +107,9 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 	return {
 		attach(node) {
 			root = node;
-			releaseSettings = motionSettings.retain();
-			unsubscribeSettings = motionSettings.subscribe(settings => {
-				onReducedMotionChange(settings.reducedMotion);
+			releaseSettings = appSettings.retain();
+			unsubscribeSettings = appSettings.subscribe(settings => {
+				onMotionChange(settings.effectiveEnabled);
 			});
 		},
 		detach(node) {
@@ -120,7 +120,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			revision++;
 			clear();
 			snapshots.clear();
-			if (!root || reduced) return revision;
+			if (!root || !motionEnabled) return revision;
 			for (const [key, node] of after()) {
 				const rect = measured(node);
 				if (rect) snapshots.set(key, { rect, clone: ghostOf(node, rect) });
@@ -128,7 +128,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			return revision;
 		},
 		play(nextRevision) {
-			if (nextRevision !== revision || !root || reduced) return;
+			if (nextRevision !== revision || !root || !motionEnabled) return;
 			const nodes = after();
 			const departures: HTMLElement[] = [];
 			const survivors: { node: HTMLElement; x: number; y: number }[] = [];
@@ -165,7 +165,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			const stage = <T>(
 				items: T[], start: (item: T, complete: () => void) => void, complete: () => void
 			) => {
-				if (nextRevision !== revision || reduced) return;
+				if (nextRevision !== revision || !motionEnabled) return;
 				if (!items.length) { complete(); return; }
 				let remaining = items.length;
 				for (const item of items) start(item, () => {
@@ -201,7 +201,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			releaseSettings?.();
 			unsubscribeSettings = null;
 			releaseSettings = null;
-			reduced = false;
+			motionEnabled = false;
 			root = null;
 		}
 	};

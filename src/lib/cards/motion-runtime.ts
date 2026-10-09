@@ -1,4 +1,4 @@
-import { motionSettings, type MotionSettingsSnapshot, type MotionSettingsState } from './motion-settings.svelte.ts';
+import { appSettings, type AppSettingsSnapshot, type AppSettingsState } from '../game/settings.svelte.ts';
 
 const FRAME_INTERVAL = 30;
 
@@ -29,15 +29,15 @@ export interface MotionSchedulerEnvironment {
 export interface MotionFrame {
 	time: number;
 	delta: number;
-	settings: MotionSettingsSnapshot;
+	settings: AppSettingsSnapshot;
 }
 
 interface Subscriber {
 	node: Element;
 	visible: boolean;
-	active(settings: MotionSettingsSnapshot): boolean;
+	active(settings: AppSettingsSnapshot): boolean;
 	frame(frame: MotionFrame): void;
-	state(settings: MotionSettingsSnapshot, visible: boolean): void;
+	state(settings: AppSettingsSnapshot, visible: boolean): void;
 }
 
 export interface MotionRegistration {
@@ -74,8 +74,8 @@ export class AutonomousMotionScheduler {
 	#resizeCallbacks = new Map<Element, Set<() => void>>();
 	#intersectionObserver: ObserverLike | null = null;
 	#resizeObserver: ObserverLike | null = null;
-	#settingsState: MotionSettingsState;
-	#settings: MotionSettingsSnapshot;
+	#settingsState: AppSettingsState;
+	#settings: AppSettingsSnapshot;
 	#releaseSettings: (() => void) | null = null;
 	#unsubscribeSettings: (() => void) | null = null;
 	#frameHandle = 0;
@@ -85,7 +85,7 @@ export class AutonomousMotionScheduler {
 
 	constructor(
 		environmentFactory: () => MotionSchedulerEnvironment = browserSchedulerEnvironment,
-		settingsState: MotionSettingsState = motionSettings
+		settingsState: AppSettingsState = appSettings
 	) {
 		this.#environmentFactory = environmentFactory;
 		this.#settingsState = settingsState;

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount, untrack } from 'svelte';
-	import { motionSettings } from '#lib/cards/motion-settings.svelte.ts';
+	import { appSettings } from '#lib/game/settings.svelte.ts';
 	import Results from '#lib/components/Results.svelte';
 	import Progress from '#lib/components/Progress.svelte';
 	import type { Draft, Manifest, Profile } from '#lib/game/types.ts';
@@ -55,9 +55,7 @@
 	}
 
 	function reducedMotion(): boolean {
-		return motionSettings.reducedMotion || (
-			typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-		);
+		return !appSettings.effectiveEnabled;
 	}
 
 	export function replay(): void {
@@ -95,7 +93,7 @@
 	}
 
 	$effect(() => {
-		if (result && motionSettings.reducedMotion && timer !== null) {
+		if (result && !appSettings.effectiveEnabled && timer !== null) {
 			clearTimer();
 			revealed = result.games.length;
 		}

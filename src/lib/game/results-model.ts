@@ -7,7 +7,6 @@ import type {
 	AwardMetric,
 	AwardTone,
 	CreateResultsModelInput,
-	InspectionDetailSection,
 	InspectionSeasonView,
 	ResultsCard,
 	ResultsModel,
@@ -23,8 +22,6 @@ export type {
 	AwardTone,
 	CreateResultsModelInput,
 	FeaturedResult,
-	InspectionDetailRow,
-	InspectionDetailSection,
 	InspectionSeasonView,
 	InspectionStat,
 	ResultsCard,
@@ -94,12 +91,6 @@ function formatRate(value: number | null): string {
 	return value === null ? EM_DASH : average(value);
 }
 
-function formatRuns(value: number | null): string {
-	if (value === null) return EM_DASH;
-	const rounded = Number(value.toFixed(2));
-	const normalized = Object.is(rounded, -0) ? 0 : rounded;
-	return `${normalized > 0 ? '+' : ''}${normalized.toFixed(2)}`;
-}
 
 function simulatedStats(card: InternalCard): RawStat[] {
 	if (card.role === 'hitter') {
@@ -237,58 +228,7 @@ function awardMetric(award: AwardResult): AwardMetric {
 	};
 }
 
-function details(card: InternalCard): InspectionDetailSection[] {
-	const sections: InspectionDetailSection[] = [];
-	if (card.role === 'hitter') {
-		const line = card.batter!;
-		const replacement = 20 * line.PA / 600;
-		sections.push({
-			key: 'estimated-war',
-			label: 'Estimated WAR breakdown',
-			rows: [
-				detail('batting-runs', 'Batting value', line.battingRuns, formatRuns(line.battingRuns)),
-				detail('steal-runs', 'Running value', line.stealRuns, formatRuns(line.stealRuns)),
-				detail('defensive-runs', 'Defensive value', line.defensiveRuns, formatRuns(line.defensiveRuns)),
-				detail('replacement-runs', 'Replacement value', replacement, formatRuns(replacement)),
-				detail('estimated-war', 'Estimated WAR', card.estimatedWar, formatNumber(card.estimatedWar, 2))
-			],
-			note: 'sim-war-v1 is an app-specific estimate: total realized batting, running, defense and replacement value divided by ten runs per win. It is not historical fWAR or bWAR.'
-		});
-		sections.push({
-			key: 'realized-defense',
-			label: 'Realized defensive value',
-			rows: [
-				detail('fielding-outs', 'Fielding workload (outs)', line.fieldingOuts, String(line.fieldingOuts)),
-				detail('hit-prevention', 'Hit prevention', line.defensiveComponents.hitPrevention, formatRuns(line.defensiveComponents.hitPrevention)),
-				detail('error-avoidance', 'Error avoidance', line.defensiveComponents.errorAvoidance, formatRuns(line.defensiveComponents.errorAvoidance)),
-				detail('double-play', 'Double plays', line.defensiveComponents.doublePlay, formatRuns(line.defensiveComponents.doublePlay)),
-				detail('outfield-throwing', 'Outfield throwing', line.defensiveComponents.outfieldThrowing, formatRuns(line.defensiveComponents.outfieldThrowing)),
-				detail('catcher-throwing', 'Catcher throwing', line.defensiveComponents.catcherThrowing, formatRuns(line.defensiveComponents.catcherThrowing)),
-			],
-			note: 'defense-v1 reports realized above-average run contributions from the simulated season. Its component order is an accounting convention, not historical causal evidence.'
-		});
-	} else {
-		const line = card.pitcher!;
-		const replacement = card.role === 'bullpen' ? null : 20 * line.outs / 600;
-		sections.push({
-			key: 'estimated-war',
-			label: 'Estimated WAR breakdown',
-			rows: [
-				detail('pitching-runs', 'Pitching value', line.pitchingRunsAboveNeutral, formatRuns(line.pitchingRunsAboveNeutral)),
-				detail('replacement-runs', 'Replacement value', replacement, formatRuns(replacement)),
-				detail('estimated-war', 'Estimated WAR', card.estimatedWar, formatNumber(card.estimatedWar, 2))
-			],
-			note: card.role === 'bullpen'
-				? 'The drafted bullpen is a pooled team unit. It participates in team value accounting but has no individual estimated WAR.'
-				: 'sim-war-v1 is an app-specific estimate: realized pitching value plus replacement value, divided by ten runs per win. It is not historical fWAR or bWAR.'
-		});
-	}
-	return sections;
-}
 
-function detail(key: string, label: string, value: number | null, formattedValue: string) {
-	return { key, label, value, formattedValue };
-}
 
 export function createResultsModel(input: CreateResultsModelInput): ResultsModel {
 	const { result, draft, profiles, manifest, rankings } = input;
@@ -369,8 +309,7 @@ export function createResultsModel(input: CreateResultsModelInput): ResultsModel
 				seasonId: card.seasonId,
 				slot: card.slot,
 				simulated: { ...simulatedViews[index], awardChips: awardsForCard },
-				actual: actualViews[index],
-				details: details(card)
+				actual: actualViews[index]
 			}
 		};
 	});

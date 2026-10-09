@@ -1,6 +1,6 @@
 import { expect, openStoryByName, test } from './workshop-test.ts';
 
-const storageKeys = ['162-zero:v1', '162-zero:motion:v1'];
+const storageKeys = ['162-zero:v1', '162-zero:settings:v1'];
 
 test('previews card width, finish, and reverse text without changing game or motion storage', async ({ page }) => {
  await openStoryByName(page, 'Cards/States', 'Interactive');

@@ -125,6 +125,8 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	const pickCount = scenario.draft.picks.length;
 	const origin = scenario.draft.picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot;
 	if (!origin || !HITTER_SLOTS.includes(origin as HitterSlot)) throw new Error('Assignment fixture occupant is not a hitter');
+	const pitcherSlot = scenario.draft.picks.find(pick => !HITTER_SLOTS.includes(pick.slot as HitterSlot))?.slot;
+	if (!pitcherSlot) throw new Error('Assignment fixture does not include a pitcher');
 	await openSavedDraft(page, scenario.draft);
 
 	let selected = await selectExactTarget(page, profile, scenario.target.seasonId);
@@ -144,16 +146,57 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	selected = await selectExactTarget(page, profile, scenario.target.seasonId);
 	await selected.sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
 	const disclosures = selected.sheet.locator('[role="tabpanel"]:not([hidden]) .card-review');
-	await disclosures.getByRole('button', { name: 'Text version', exact: true }).click();
+	await disclosures.getByRole('button', { name: /^Show text version for / }).click();
+	await selected.sheet.getByRole('button', { name: 'Show front', exact: true }).click();
 	await selected.sheet.getByRole('tab', { name: 'Field', exact: true }).click();
 
-	await fieldSlot(page, origin).click();
+	const pitcher = fieldSlot(page, pitcherSlot);
+	await pitcher.click();
+	let rosterReview = selected.sheet.locator('.card-review.raised-only');
+	await expect(rosterReview.locator('[data-card-reader]')).toBeVisible();
+	await expect(rosterReview.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+	await expect(rosterReview.getByRole('button', { name: 'Turn over', exact: true })).toBeFocused();
+	await expect(pitcher).toHaveAttribute('aria-expanded', 'true');
+	await page.keyboard.press('Escape');
+	await expect(rosterReview).toHaveCount(0);
+	await expect(confirmation).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+
+	const source = fieldSlot(page, origin);
+	await source.click();
 	await expect(selected.sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
-	await expect(selected.sheet.getByRole('button', { name: 'Inspect card', exact: true })).toBeVisible();
-	await selected.sheet.getByRole('button', { name: 'Inspect card', exact: true }).click();
-	await selected.sheet.getByRole('button', { name: 'Back to field', exact: true }).click();
+	const sourceBox = await source.boundingBox();
+	const scrollTop = await selected.sheet.locator('.sheet-content').evaluate(element => element.scrollTop);
+	const footerBox = await selected.sheet.locator('.sheet-footer').boundingBox();
+	await source.click();
+	rosterReview = selected.sheet.locator('.card-review.raised-only');
+	await expect(rosterReview.locator('[data-card-reader]')).toBeVisible();
+	await expect(rosterReview.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+	await expect(rosterReview.getByRole('button', { name: 'Turn over', exact: true })).toBeFocused();
+	await expect(source).toHaveAttribute('aria-expanded', 'true');
+	expect(await source.boundingBox()).toEqual(sourceBox);
+	expect(await selected.sheet.locator('.sheet-content').evaluate(element => element.scrollTop)).toBe(scrollTop);
+	expect(await selected.sheet.locator('.sheet-footer').boundingBox()).toEqual(footerBox);
+	await rosterReview.getByRole('button', { name: 'Turn over', exact: true }).click();
+	await rosterReview.getByRole('button', { name: /^Show text version for / }).click();
+	await expect(rosterReview.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await expect(selected.sheet).not.toBeVisible();
+	rosterReview = page.locator('.field-panel .card-review.raised-only');
+	await expect(rosterReview.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
+	await expect(page.locator('.field-panel .pick-confirmation')).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await expect(page.locator(`.field-panel [data-slot="${origin}"]`)).toHaveAttribute('aria-expanded', 'true');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(selected.sheet).toBeVisible();
+	rosterReview = selected.sheet.locator('.card-review.raised-only');
+	await expect(rosterReview.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
+	await expect(confirmation).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await expect(source).toHaveAttribute('aria-expanded', 'true');
+	await selected.sheet.locator('.sheet-content').click({ position: { x: 1, y: 1 } });
+	await expect(rosterReview).toHaveCount(0);
+	await expect(selected.sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
 	await selected.sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
 	await expect(selected.sheet.locator('[role="tabpanel"]:not([hidden]) .inspection-back')).toBeVisible();
+	await selected.sheet.getByRole('button', { name: 'Show front', exact: true }).click();
 	await selected.sheet.getByRole('tab', { name: 'Field', exact: true }).click();
 	await selected.sheet.getByRole('button', { name: 'Cancel move', exact: true }).click();
 	await expect(selected.sheet.getByRole('heading', { name: /^Your field/ })).toBeFocused();
@@ -216,4 +259,56 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	expect(completed.picks.at(-1)?.seasonId).toBe(scenario.target.seasonId);
 	expect(completed.schemaVersion).toBe(4);
 	expect(completed.actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
+});
+
+test('reviews a hitter before moving when Review first is selected', async ({ page, request }) => {
+	const manifest = await currentManifest(request);
+	const scenario = pendingAssignmentScenario(manifest);
+	const origin = scenario.draft.picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot;
+	if (!origin || !HITTER_SLOTS.includes(origin as HitterSlot)) throw new Error('Assignment fixture occupant is not a hitter');
+	await openSavedDraft(page, scenario.draft);
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+	await settings.getByRole('button', { name: 'Review first', exact: true }).click();
+	await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
+	await page.getByRole('button', { name: /^Open your field/ }).click();
+
+	const sheet = page.locator('dialog.draft-sheet[open]');
+	const source = fieldSlot(page, origin);
+	await source.scrollIntoViewIfNeeded();
+	const sourceBox = await source.boundingBox();
+	const headerBox = await sheet.locator('.sheet-header').boundingBox();
+	const scrollTop = await sheet.locator('.sheet-content').evaluate(element => element.scrollTop);
+	await source.click();
+
+	let review = sheet.locator('.card-review.raised-only');
+	await expect(review.locator('[data-card-reader]')).toBeVisible();
+	await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+	await expect(sheet.locator('.roster')).toBeVisible();
+	await expect(sheet.locator('.move-controls')).toHaveCount(0);
+	await expect(source).toHaveAttribute('aria-expanded', 'true');
+	expect(await source.boundingBox()).toEqual(sourceBox);
+	expect(await sheet.locator('.sheet-header').boundingBox()).toEqual(headerBox);
+	expect(await sheet.locator('.sheet-content').evaluate(element => element.scrollTop)).toBe(scrollTop);
+	await expect(review.getByRole('button', { name: 'Turn over', exact: true })).toBeFocused();
+	await expect(review.getByRole('button', { name: 'Move card', exact: true })).toHaveCount(0);
+
+	await page.keyboard.press('Escape');
+	await expect(review).toHaveCount(0);
+	await expect(source).toBeFocused();
+	await expect(source).toHaveAttribute('aria-expanded', 'false');
+	await expect(sheet.locator('.move-controls')).toHaveCount(0);
+
+	await source.click();
+	review = sheet.locator('.card-review.raised-only');
+	await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+	await review.getByRole('button', { name: 'Turn over', exact: true }).click();
+	await expect(review.getByRole('button', { name: 'Move card', exact: true })).toBeVisible();
+	await review.getByRole('button', { name: 'Move card', exact: true }).click();
+	await expect(review).toHaveCount(0);
+	await expect(source).toBeFocused();
+	await expect(sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
+
+	await fieldSlot(page, scenario.move.slot).click();
+	await expect.poll(async () => (await savedDraft(page)).picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot).toBe(scenario.move.slot);
 });

@@ -1,6 +1,7 @@
 import type { Preview } from '@storybook/sveltekit';
 import { mount, unmount } from 'svelte';
 import { configureMediaLoader, type MediaFixtureMode } from '../src/lib/storybook/media-fixtures.ts';
+import FeedbackTools from '../src/lib/dev/FeedbackTools.svelte';
 import '../src/routes/layout.css';
 import '../src/lib/cards/fonts.css';
 
@@ -12,8 +13,6 @@ const preview: Preview = {
 
 		try {
 			location.hash = `story=${encodeURIComponent(id)}`;
-			// Storybook owns this development-only runtime boundary; application bundles load it independently.
-			const { default: FeedbackTools } = await import('../src/lib/dev/FeedbackTools.svelte');
 			feedbackHost = document.createElement('div');
 			feedbackHost.dataset.storybookFeedbackHost = '';
 			document.body.append(feedbackHost);

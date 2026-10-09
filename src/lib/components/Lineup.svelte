@@ -1,6 +1,6 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
- import type { Draft, HitterSlot, Manifest, Profile, Slot } from '../game/types.ts';
+ import type { Draft, HitterSlot, Manifest, Profile } from '../game/types.ts';
  import { draftRules } from '../game/rules.ts';
  import Card from '../cards/Card.svelte';
  import CardReview from '../cards/CardReview.svelte';
@@ -214,7 +214,7 @@
    <div class="closer">
     <h3>Closer</h3>
     {#if closer}
-     {@render compactCard(closer, 'CL')}
+     {@render fixedPlayer(closer)}
     {:else}
      <p class="muted">Loading selected closer…</p>
     {/if}
@@ -222,7 +222,7 @@
    </div>
    <div class="support">
     <h3>Drafted bullpen remainder</h3>
-    {#if bullpen}{@render compactCard(bullpen, 'BP')}{/if}
+    {#if bullpen}{@render fixedPlayer(bullpen)}{/if}
     <p class="workload muted">Pooled relief-dominant pitcher-seasons, excluding this team-season’s saves leader, handle the remaining innings with unlimited support workload. Composition stays fixed independently of your closer. This is a pitching abstraction, not a full 26-player roster.</p>
    </div>
   </section>
@@ -233,7 +233,6 @@
   {/key}
  {/if}
  <footer class="simulate">
-  <p>No second chances inside the season. Every game counts.</p>
   <button type="button" class="primary" disabled={busy || !complete} onclick={onsimulate}>{busy ? 'Preparing your season…' : 'Simulate 162 games'}</button>
   {#if !complete && !busy}<p class="notice">All {draftRules(draft.schemaVersion).slots.length} selected seasons must finish loading before the season can start.</p>{/if}
  </footer>
@@ -244,18 +243,18 @@
  {#if card}
   <button type="button" class="card-trigger" aria-label={`Inspect ${profile.year} ${profile.displayName} card`} aria-expanded={inspectedSeasonId === profile.seasonId} aria-controls="lineup-card-review" onclick={event => inspect(profile.seasonId, event.currentTarget)}>
    <span class="miniature" aria-hidden="true" inert>
-    <Card s={card} face="front" compact thumbnail interactive={false} onDetails={() => {}} />
+    <Card s={card} face="front" thumbnail interactive={false} onDetails={() => {}} />
    </span>
   </button>
  {/if}
 {/snippet}
 
-{#snippet compactCard(profile: Profile, slot: Slot)}
+{#snippet fixedPlayer(profile: Profile)}
  <div class="fixed-player" data-season-id={profile.seasonId}>
   {@render artwork(profile)}
   <div class="identity">
    <strong class="name">{profile.displayName}</strong>
-   <span class="season">{profile.year} · {slot}</span>
+   <span class="season">{profile.year}</span>
   </div>
  </div>
 {/snippet}
@@ -272,7 +271,7 @@
      <span class="order-number" aria-label="Position {index + 1}">{index + 1}</span>
      <div class="identity">
       <strong class="name">{profile?.displayName ?? 'Loading selected season…'}</strong>
-      {#if profile && pick}<span class="season">{profile.year} · {pick.slot}</span>{/if}
+      {#if profile}<span class="season">{profile.year}</span>{/if}
      </div>
     </div>
     <div class="move-controls">
@@ -301,7 +300,8 @@
  h3 { font-size: var(--text-lg); }
  .section-heading > span { font-size: var(--text-xs); }
  .order { list-style: none; padding: 0; margin: 0; }
- .order li { position: relative; display: grid; grid-template-columns: max(4.5rem, 72px) minmax(0, 1fr); align-items: start; gap: var(--space-2) var(--space-3); padding-block: var(--space-4); min-width: 0; border-bottom: 1px solid var(--border); }
+ .order li { position: relative; display: grid; grid-template-columns: max(5.5rem, 88px) minmax(0, 1fr); align-items: start; gap: var(--space-2) var(--space-3); padding-block: var(--space-4); min-width: 0; border-bottom: 1px solid var(--border); }
+ .order li:last-child { border-bottom: 0; }
  .order li > .card-trigger { grid-row: 1 / 3; }
  .order-heading { grid-column: 2; display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
  .order-number { flex: 0 0 1rem; color: var(--muted); font-size: var(--text-base); font-weight: 750; }
@@ -317,14 +317,13 @@
  .insert-before::before { top: 0; }
  .insert-after::after { bottom: 0; }
  .assignment-control { grid-column: 1 / -1; min-width: 0; }
- .fixed-player { display: grid; grid-template-columns: max(4.5rem, 72px) minmax(0, 1fr); gap: var(--space-3); align-items: center; margin-block: var(--space-3); }
- .card-trigger { display: block; width: max(4.5rem, 72px); min-width: 72px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
+ .fixed-player { display: grid; grid-template-columns: max(5.5rem, 88px) minmax(0, 1fr); gap: var(--space-3); align-items: center; margin-block: var(--space-3); }
+ .card-trigger { display: block; width: max(5.5rem, 88px); min-width: 88px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
  .card-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
  .miniature { display: block; width: 100%; pointer-events: none; }
  .closer, .support { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
  .workload { font-size: var(--text-xs); line-height: 1.5; max-width: 60ch; }
  .simulate { margin-top: var(--space-8); padding-block: var(--space-6); border-top: 1px solid var(--border); }
- .simulate > p:first-child { margin: 0 0 var(--space-4); }
  .simulate .primary { width: 100%; }
  .announcement { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
  @media (min-width: 64rem) { .lineup-columns { grid-template-columns: 1.25fr 1fr; gap: var(--space-12); } .simulate .primary { width: auto; min-width: 16rem; } }

@@ -17,14 +17,10 @@ async function dragTo(page: Page, handle: Locator, target: Locator, after = true
 	await page.mouse.move(end!.x + end!.width / 2, end!.y + end!.height * (after ? .8 : .2), { steps: 8 });
 }
 
-test.describe('compact lineup editor', () => {
-	test('renders all fourteen compact cards at 320px and restores focus after inline review', async ({ page }) => {
+test.describe('lineup editor', () => {
+	test('keeps the editor within a 320px viewport and restores focus after inline review', async ({ page }) => {
 		await page.setViewportSize({ width: 320, height: 800 });
 		await openStory(page, 'lineup-editor--complete');
-		const cards = page.locator('.lineup .miniature [data-compact="true"]');
-		await expect(cards).toHaveCount(14);
-		const widths = await cards.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
-		expect(widths.every(width => width >= 72)).toBe(true);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 		const trigger = page.getByRole('button', { name: /^Inspect .* card$/ }).first();
 		await expect(trigger).toHaveAttribute('aria-expanded', 'false');

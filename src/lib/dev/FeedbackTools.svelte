@@ -84,7 +84,7 @@
 		}
 
 		function synchronizeTools(): void {
-			const sheet = document.querySelector<HTMLDialogElement>('.draft-sheet[open]');
+			const sheet = document.querySelector<HTMLDialogElement>('.settings-dialog[open]') ?? document.querySelector<HTMLDialogElement>('.draft-sheet[open]');
 			if (portalContainer !== sheet) {
 				for (const panel of DialStore.getPanels('panel')) {
 					const previous = panelOpenBeforeSheet.get(panel.id);

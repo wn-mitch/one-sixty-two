@@ -15,7 +15,7 @@
 		onClose: () => void;
 		header: Snippet;
 		children: Snippet;
-		footer: Snippet;
+		footer?: Snippet;
 	} = $props();
 
 	let dialog = $state<HTMLDialogElement>();
@@ -146,9 +146,11 @@
 			<div class="sheet-content">
 				{@render children()}
 			</div>
-			<footer class="sheet-footer">
-				{@render footer()}
-			</footer>
+			{#if footer}
+				<footer class="sheet-footer">
+					{@render footer()}
+				</footer>
+			{/if}
 		</div>
 	{/if}
 </dialog>

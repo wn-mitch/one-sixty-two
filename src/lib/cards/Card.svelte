@@ -83,6 +83,11 @@
  .card { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 5 / 7; transform-style: preserve-3d; --mx: 23%; --my: 5%; --lx: -.45; --ly: -.75; --ang: 200deg; --lift: 0; --glare: 0; --g1: .85; --g2: .12; --g3: .12; --k: 1; }
  .face { position: relative; transform-style: preserve-3d; width: 100%; height: 100%; }
  .card[data-compact='true'] { min-width: 72px; }
+ .card[data-compact='true'] :global([data-layer='season.year']) { font-size: max(11cqw, 8px) !important; line-height: 1; }
+ .card[data-compact='true'] :global([data-layer='season.year'] ~ span) { display: none; }
+ .card[data-compact='true'] :global([data-layer='season.roundel']) { top: 32cqw !important; width: max(35cqw, 22px) !important; height: max(35cqw, 22px) !important; }
+ .card[data-compact='true'][data-card='2000s'] :global([data-layer='season.rail']) { top: 4cqw; bottom: auto !important; left: 14cqw !important; right: auto !important; z-index: 2; padding: 1cqw 2cqw; background: var(--stock); color: var(--fieldOnStock); }
+ .card[data-compact='true'][data-card='2000s'] :global([data-layer='season.rail'] > div) { writing-mode: horizontal-tb !important; transform: none !important; }
  .card :global([data-card]) { box-sizing: border-box; }
  .card :global(img) { max-width: none; }
  .card :global([data-layer]) { box-sizing: border-box; }
