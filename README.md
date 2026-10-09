@@ -33,6 +33,16 @@ The manager's Controls update primitive story inputs live, including card era, r
 
 Storybook does not prepare or download statistical, ranking, or media assets. Its build serves the existing `static/` directory and writes ignored `storybook-static/`; retained local asset archives increase that build's size. Browser verification uses a separate Playwright configuration and requires its own free port (6006 by default). It waits for rendered canvases within a separate 120-second startup budget before the 45-second interaction tests begin. It does not replace the application's Worker/R2 suite.
 
+## Visual feedback
+
+`just dev` enables [Agentation](https://agentation.com/) on ordinary application routes. Use the bottom-right toolbar or Cmd+Shift+F / Ctrl+Shift+F to enter feedback mode, click an element, and add a specific note. Pause animations from the toolbar when inspecting moving cards. Copy feedback and paste the structured output into the coding conversation; it includes the page, viewport, element path, and comment.
+
+Annotations stay in browser-local storage. This setup does not send them automatically to an agent or run an Agentation MCP server. The toolbar's Exit action returns to normal browsing.
+
+[DialKit](https://github.com/joshpuckett/dialkit) uses its native Svelte adapter. Its root is mounted at the top right, initially collapsed, and appears when a component registers controls with `createDialKit` from `dialkit/svelte`. Controls are added for specific feedback targets rather than changing shared design values speculatively. Dial adjustments preview values; approved values must be applied to source.
+
+The feedback components are lazy-loaded only in the development browser. Production builds and authenticated share-image capture routes do not mount either tool.
+
 ## Run
 
 Use Node >=24.12 and npm. Install with `npm ci`, then `npx playwright install chromium` for headless browser tests. Browser tests run the built app on local workerd with file watching disabled; `PLAYWRIGHT_PORT` selects an isolated port.

@@ -42,6 +42,13 @@
 	</div>
 {/if}
 
+{#if import.meta.env.DEV && !import.meta.env.SSR && !captureRoute}
+	<!-- Load browser-only tooling here so production and SSR omit its dependency graph. -->
+	{#await import('#lib/dev/FeedbackTools.svelte') then { default: FeedbackTools }}
+		<FeedbackTools />
+	{/await}
+{/if}
+
 <style>
 	.site {
 		max-width: 80rem;
