@@ -13,7 +13,7 @@ async function expectStationaryPosition(track: Locator): Promise<number> {
 	return positions[0];
 }
 
-test('keeps motion controls named, persistent, and subordinate to reduced motion', async ({ page }) => {
+test('keeps the motion toggle persistent and subordinate to reduced motion', async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	let releaseScripts!: () => void;
 	const scripts = new Promise<void>(resolve => { releaseScripts = resolve; });
@@ -22,43 +22,35 @@ test('keeps motion controls named, persistent, and subordinate to reduced motion
 		await route.continue();
 	});
 	await page.goto('/', { waitUntil: 'commit' });
-	await page.locator('.motion-settings summary').click();
-	const settings = page.locator('.motion-settings');
-	const amount = settings.getByRole('slider', { name: /^Amount/ });
-	const speed = settings.getByRole('slider', { name: /^Speed/ });
-	const enabled = settings.getByRole('checkbox', { name: /^Enabled/ });
+	const toggle = page.getByRole('switch', { name: 'Motion', exact: true });
 	try {
-		await expect(amount).toBeDisabled();
-		await expect(speed).toBeDisabled();
-		await expect(enabled).toBeDisabled();
+		await expect(toggle).toBeDisabled();
 	} finally {
 		releaseScripts();
 	}
-	await expect(amount).toBeEnabled();
+	await expect(toggle).toBeEnabled();
 	await page.unroute('**/_app/immutable/**/*.js');
-	await amount.focus();
-	await page.keyboard.press('End');
-	await page.keyboard.press('ArrowLeft');
-	await speed.focus();
-	await page.keyboard.press('Home');
-	await page.keyboard.press('ArrowRight');
-	await enabled.uncheck();
+	await toggle.focus();
+	await page.keyboard.press('Space');
+	await expect(toggle).toHaveAttribute('aria-checked', 'false');
 
 	await page.reload();
-	await page.locator('.motion-settings summary').click();
-	await expect(amount).toHaveValue('2.75');
-	await expect(speed).toHaveValue('0.5');
-	await expect(enabled).not.toBeChecked();
+	await expect(toggle).toBeEnabled();
+	await expect(toggle).toHaveAttribute('aria-checked', 'false');
 	const track = page.locator('.wall-track').first();
 	await expect(track).toBeAttached();
 	const restingPosition = await expectStationaryPosition(track);
 
-	await enabled.check();
+	await toggle.click();
+	await expect(toggle).toHaveAttribute('aria-checked', 'true');
 	await expect.poll(() => track.evaluate(node => node.getBoundingClientRect().x)).not.toBe(restingPosition);
 	await page.emulateMedia({ reducedMotion: 'reduce' });
-	await expect(settings.locator('.notice[role="status"]')).toBeVisible();
-	await expect(enabled).toBeChecked();
+	await expect(toggle).toBeDisabled();
+	await expect(toggle).toHaveAttribute('aria-checked', 'false');
+	await expect(toggle).toHaveAccessibleDescription('Your system preference reduces motion.');
 	const reducedPosition = await expectStationaryPosition(track);
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await expect(toggle).toBeEnabled();
+	await expect(toggle).toHaveAttribute('aria-checked', 'true');
 	await expect.poll(() => track.evaluate(node => node.getBoundingClientRect().x)).not.toBe(reducedPosition);
 });

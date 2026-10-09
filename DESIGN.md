@@ -35,6 +35,8 @@ Team colours identify the current roll and opponent, not every control. Resolve 
 
 ## Typography and Composition
 
+Home leads directly with the challenge and draft instructions. Keep the shared wordmark unaccompanied by a tagline; omit decorative eyebrow slogans and motivational captions. Small labels identify actual controls, eras, statistics, or game state.
+
 System sans for interface labels, body, controls, and scoreboard-style results. Exact-season card artwork follows the supplied eight decade-specific fronts and backs at 5:7, using self-hosted Barlow Condensed and Roboto Serif. The selected season determines the clamped decade, never the photograph year. Card dimensions and text fitting scale with width; names may wrap but never truncate, ellipsize, or stretch horizontally. Team marks remain labelled historical or current-franchise identity. Hitter fronts show historical WAR/162, OPS, and position-specific `DEF est.`; assigned DH keeps HR. Pitcher and bullpen fronts retain WAR/162 · ERA · SO, with BP WAR unavailable. Inspection backs disclose full historical facts, position games, defensive evidence and limits, model notes, source, and licence. Counts flagged as estimated or incomplete render — rather than impersonating measurements.
 
 The shared type scale is 12, 14, 16, 20, 24, 32, 48, and 64px (`--text-xs` through `--text-score`). Body copy uses 16px with 1.5 line height and a 68ch maximum paragraph width. Labels and dense table data use 12–14px. Tabular numerals align seasons, scores, and statistical columns. Interface controls remain system sans; Barlow Condensed italic 900 is reserved for compact broadcast headings and team identity. Roboto Serif and the card type treatments belong to the decade templates.
@@ -61,6 +63,8 @@ Native card dialogs and the field sheet use an ambient shadow at `oklch(8% .01 2
 ## Imagery
 
 Use free reusable sources first, retaining per-file source, credit, licence, and verified capture-year metadata. Prefer photos from the selected year; otherwise choose the nearest verified photo from the player's playing career and show its actual year. No current-photo-as-historical claim. No fabricated faces. Missing images receive an intentional no-photo treatment. Current franchise marks must not be presented as verified historical marks. Copyright status and trademark restrictions are distinct.
+
+Team marks fit wholly inside their padded tiles, preserving aspect ratio without cropping or intrinsic image dimensions expanding the layout. Missing verified marks retain labelled abbreviation fallbacks.
 
 ## Interaction and Responsive Behaviour
 
@@ -98,9 +102,11 @@ Draft and historical-inspection reverses use the selected season's original deca
 
 ### Motion and feedback
 
-Mouse and pen tilt cards under a fixed directional light; touch does not tilt. Home wall cards and Results award cards opt into autonomous drift/finish lighting, and the Home wall adds sweeps, gem twinkles, spotlights, and measured marquees. One roughly 30fps scheduler serves all autonomous effects, pauses hidden/offscreen subscribers through shared visibility and intersection observation, and freezes logical time while the document is hidden. The Home and Results Motion disclosure persists enabled (default on), amount (0–3, default 2.5×), and speed (.25–2, default 1×); storage denial leaves session controls usable. A live reduced-motion preference overrides those choices, removes autonomous drift/twinkle/tilt, and restores a fixed readable light pose. Explicit turns and candidate-grid changes retain their bounded interaction transitions. Animate transforms and opacity, never width or grid layout.
+Mouse and pen tilt cards under a fixed directional light; touch does not tilt. Home wall cards and Results award cards opt into autonomous drift/finish lighting, and the Home wall adds sweeps, gem twinkles, spotlights, and measured marquees. One roughly 30fps scheduler serves all autonomous effects, pauses hidden/offscreen subscribers through shared visibility and intersection observation, and freezes logical time while the document is hidden. The Home and Results Motion toggle persists enabled (default on), with fixed amount 2.5× and speed 1×. Storage denial leaves the toggle usable for the session. A live reduced-motion preference disables the toggle, removes autonomous drift/twinkle/tilt, and restores a fixed readable light pose. Explicit turns and candidate-grid changes retain their bounded interaction transitions. Animate transforms and opacity, never width or grid layout.
 
 Home’s decorative wall is independently clipped and rotated −7°. Desktop renders four duplicated 176px rows with 22px gaps; phone renders three 96px rows with 12px gaps in a 300px top band, so copy starts below rather than competing with the cards. A left-to-right and top/bottom scrim protects text, and the masked logo strip uses all thirty real franchise states. The wall is inert to pointer and assistive technology. Results award fronts alone use continuous idle motion; compact hand cards remain still and lift only for hover/focus.
+
+Neighboring wall rows use disjoint era palettes, and each row separates matching eras through its repeat seam. Each showcase player belongs to one row and appears once per base cycle, even when several seasons are available. Full cycles repeat to cover the viewport; a finite showcase can repeat players within a row on wide screens.
 
 ### Lineup, season, and results
 

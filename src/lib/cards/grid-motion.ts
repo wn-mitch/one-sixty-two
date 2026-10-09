@@ -276,8 +276,8 @@ export function marquee(node: HTMLElement, initialOptions: MarqueeOptions) {
 		active(settings) {
 			return settings.effectiveEnabled && !hovered && !focused && distance > 0 && options.speed > 0;
 		},
-		frame({ ambientDelta }) {
-			offset = (offset + options.speed * ambientDelta / 1000) % distance;
+		frame({ delta }) {
+			offset = (offset + options.speed * delta / 1000) % distance;
 			render();
 		},
 		state(settings, visible) {

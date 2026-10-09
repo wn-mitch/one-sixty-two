@@ -335,6 +335,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	expect(stored.status()).toBe(200);
 	const replay = await context.newPage();
 	await replay.goto(url);
+	await expect(replay.locator('#results-heading')).toBeVisible({ timeout: 30_000 });
 	const replayGames = replay.getByRole('region', { name: 'All 162 games', exact: true });
 	await expect(replayGames.locator('details')).toHaveCount(162);
 	const replayMoments = replay.getByRole('region', { name: 'Season turning points', exact: true });
@@ -348,6 +349,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 		await expect(replay.locator(`#${id}`)).toBeFocused();
 	}
 	await replay.reload();
+	await expect(replay.locator('#results-heading')).toBeVisible({ timeout: 30_000 });
 	await expect(replayGames.locator('details')).toHaveCount(162);
 	expect(await replayGames.locator('details > summary .score').allTextContents()).toEqual(scores);
 	expect(errors).toEqual([]);

@@ -5,9 +5,11 @@
 	import type { CardViewModel } from '../cards/view-model.ts';
 	import type { Franchise } from '../game/types.ts';
 	import TeamLogo from './TeamLogo.svelte';
+	import { arrangeHomeWall } from './home-wall.ts';
 
 	interface HomeWallCard {
 		seasonId: string;
+		playerId: string;
 		model: CardViewModel;
 	}
 
@@ -27,20 +29,26 @@
 
 	const rows = $derived.by(() => {
 		const speeds = phone ? phoneSpeeds : desktopSpeeds;
+		const arranged = arrangeHomeWall(cards, phone ? 3 : 4);
 		const cardStep = phone ? 108 : 198;
 		const minimum = phone ? 7 : 10;
 		const overscan = phone ? 1.6 : 1.5;
 		const count = cards.length
 			? Math.max(minimum, Math.ceil(wallWidth * overscan / cardStep) + 1)
 			: 0;
-		return speeds.map((speed, rowIndex) => ({
-			speed,
-			direction: (rowIndex % 2 === 0 ? 1 : -1) as 1 | -1,
-			cards: Array.from({ length: count }, (_, cardIndex) => {
-				const card = cards[(rowIndex * (phone ? 7 : 8) + cardIndex) % cards.length]!;
-				return { card, key: `${rowIndex}-${cardIndex}-${card.seasonId}` };
-			})
-		}));
+		return speeds.map((speed, rowIndex) => {
+			const sequence = arranged[rowIndex]!;
+			// Repeat complete cycles: truncating a row can join matching eras at its seam.
+			const length = sequence.length ? Math.ceil(count / sequence.length) * sequence.length : 0;
+			return {
+				speed,
+				direction: (rowIndex % 2 === 0 ? 1 : -1) as 1 | -1,
+				cards: Array.from({ length }, (_, cardIndex) => {
+					const card = sequence[cardIndex % sequence.length]!;
+					return { card, key: `${rowIndex}-${cardIndex}-${card.seasonId}` };
+				})
+			};
+		});
 	});
 	const noDetails = () => {};
 
@@ -70,12 +78,12 @@
 					<div class="wall-track" use:marquee={{ speed: row.speed, direction: row.direction }}>
 						<div class="wall-copy" data-marquee-copy>
 							{#each row.cards as entry (`first-${entry.key}`)}
-								<div class="wall-card"><Card s={entry.card.model} wall onDetails={noDetails} /></div>
+								<div class="wall-card" data-player={entry.card.playerId}><Card s={entry.card.model} wall onDetails={noDetails} /></div>
 							{/each}
 						</div>
 						<div class="wall-copy">
 							{#each row.cards as entry (`repeat-${entry.key}`)}
-								<div class="wall-card"><Card s={entry.card.model} wall onDetails={noDetails} /></div>
+								<div class="wall-card" data-player={entry.card.playerId}><Card s={entry.card.model} wall onDetails={noDetails} /></div>
 							{/each}
 						</div>
 					</div>

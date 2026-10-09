@@ -39,4 +39,4 @@ Sharing publishes scorecard, diamond, and wide PNGs only after a trusted server 
 
 ## Accessibility & Inclusion
 
-WCAG AA text and control contrast, visible keyboard focus, labelled scrolling tables, at least 44px primary touch targets, textual win/loss indicators, and reduced-motion support. Motion controls persist enabled/amount/speed preferences when storage is available, remain usable for the session when it is not, and never override a live reduced-motion preference. No audio or external analytics.
+WCAG AA text and control contrast, visible keyboard focus, labelled scrolling tables, at least 44px primary touch targets, textual win/loss indicators, and reduced-motion support. A single Motion toggle persists the on/off preference when storage is available and remains usable for the session when it is not. Motion amount and speed are fixed; the operating system's reduced-motion preference always overrides the toggle. No audio or external analytics.

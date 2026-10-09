@@ -25,7 +25,6 @@
 	<div class="site">
 		<header class="site-header">
 			<a class="wordmark" href="/" aria-label="162-0 home"><span aria-hidden="true" class="mark"></span>162-0</a>
-			<span class="edition">The undefeated challenge</span>
 			<nav class="site-actions" aria-label="Site controls">
 				<MotionSettings />
 				<a class="rules-link" href="/about">Rules &amp; model</a>
@@ -70,17 +69,7 @@
 	.site-header > a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: var(--text-sm); }
 	.wordmark { flex: none; color: var(--text); text-decoration: none; font-size: var(--text-xl) !important; font-weight: 850; letter-spacing: -.04em; gap: var(--space-3); }
 	.mark { width: .75rem; height: .75rem; border: 2px solid var(--text); transform: rotate(45deg); }
-	.edition { display: none; margin-right: auto; color: var(--muted); font-size: var(--text-xs); font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
 	.site-actions { position: relative; display: flex; align-items: center; gap: var(--space-4); margin-left: auto; }
-	.site-actions :global(.motion-settings) { position: static; }
-	.site-actions :global(.motion-settings fieldset) {
-		position: absolute;
-		top: calc(100% + .25rem);
-		right: 0;
-		z-index: 10;
-		width: min(20rem, calc(100vw - 2rem));
-		box-shadow: 0 1rem 2.5rem oklch(5% .01 255 / .45);
-	}
 	.rules-link { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--muted); font-size: var(--text-sm); text-decoration: none; white-space: nowrap; }
 	footer {
 		position: relative;
@@ -106,7 +95,6 @@
 	}
 	.studio-link span:first-child { color: var(--muted); font-weight: 500; }
 	@media (min-width: 48rem) {
-		.edition { display: block; }
 		footer { display: flex; justify-content: space-between; align-items: center; gap: var(--space-12); }
 	}
 	@media (min-width: 68rem) {

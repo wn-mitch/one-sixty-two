@@ -3,10 +3,14 @@
 	import { motionSettings } from '../cards/motion-settings.svelte.ts';
 
 	const uid = $props.id();
-	const amountId = `${uid}-amount`;
-	const speedId = `${uid}-speed`;
-
+	const noticeId = `${uid}-notice`;
 	let ready = $state(false);
+	const notice = $derived(motionSettings.reducedMotion
+		? 'Your system preference reduces motion.'
+		: !motionSettings.storageAvailable
+			? 'Motion changes apply to this session; this browser blocked saving them.'
+			: '');
+
 	onMount(() => {
 		const release = motionSettings.retain();
 		ready = true;
@@ -14,135 +18,39 @@
 	});
 </script>
 
-<details class="motion-settings">
-	<summary>Motion</summary>
-	<fieldset disabled={!ready}>
-		<legend>Ambient motion</legend>
-		<label class="toggle">
-			<span>
-				<strong>Enabled</strong>
-				<small>Card drift, finish lighting, and moving rows</small>
-			</span>
-			<input
-				type="checkbox"
-				checked={motionSettings.enabled}
-				onchange={event => motionSettings.setEnabled(event.currentTarget.checked)}
-			/>
-		</label>
-
-		<label for={amountId}>
-			<span>Amount <output for={amountId}>{motionSettings.amount.toFixed(2)}×</output></span>
-			<input
-				id={amountId}
-				type="range"
-				min="0"
-				max="3"
-				step="0.25"
-				value={motionSettings.amount}
-				oninput={event => motionSettings.setAmount(event.currentTarget.valueAsNumber)}
-			/>
-		</label>
-
-		<label for={speedId}>
-			<span>Speed <output for={speedId}>{motionSettings.speed.toFixed(2)}×</output></span>
-			<input
-				id={speedId}
-				type="range"
-				min="0.25"
-				max="2"
-				step="0.25"
-				value={motionSettings.speed}
-				oninput={event => motionSettings.setSpeed(event.currentTarget.valueAsNumber)}
-			/>
-		</label>
-
-		{#if motionSettings.reducedMotion}
-			<p class="notice" role="status">Your system preference currently reduces motion and overrides these controls.</p>
-		{/if}
-		{#if !motionSettings.storageAvailable}
-			<p class="notice" role="status">Motion choices work for this session, but this browser blocked saving them.</p>
-		{/if}
-	</fieldset>
-</details>
+<button
+	type="button"
+	class="motion-settings"
+	role="switch"
+	aria-label="Motion"
+	aria-checked={motionSettings.effectiveEnabled}
+	aria-describedby={notice ? noticeId : undefined}
+	title={notice || undefined}
+	disabled={!ready || motionSettings.reducedMotion}
+	onclick={() => motionSettings.setEnabled(!motionSettings.enabled)}
+>
+	<span>Motion</span>
+	<span class="switch-track" aria-hidden="true"></span>
+</button>
+{#if notice}<span id={noticeId} class="motion-notice" role="status">{notice}</span>{/if}
 
 <style>
 	.motion-settings {
-		font-size: var(--text-sm);
-	}
-
-	summary {
 		display: inline-flex;
 		align-items: center;
-		min-height: 2.75rem;
-		color: var(--muted);
-		font-weight: 700;
-		cursor: pointer;
-	}
-
-	fieldset {
-		display: grid;
-		gap: var(--space-4);
-		min-width: min(18rem, 100%);
-		margin: var(--space-2) 0 0;
-		padding: var(--space-4);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--surface);
-	}
-
-	legend {
-		padding-inline: var(--space-1);
-		font-weight: 750;
-	}
-
-	label {
-		display: grid;
 		gap: var(--space-2);
-	}
-
-	label > span {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: var(--space-4);
-	}
-
-	.toggle {
-		grid-template-columns: minmax(0, 1fr) auto;
-		align-items: center;
-	}
-
-	.toggle > span {
-		display: grid;
-		gap: var(--space-1);
-	}
-
-	small,
-	.notice {
-		color: var(--muted);
-		line-height: 1.4;
-	}
-
-	output {
-		font-variant-numeric: tabular-nums;
-		font-weight: 750;
-	}
-
-	input[type='checkbox'] {
-		width: 1.35rem;
-		height: 1.35rem;
-		accent-color: var(--accent);
-	}
-
-	input[type='range'] {
-		width: 100%;
 		min-height: 2.75rem;
-		margin: 0;
-		accent-color: var(--accent);
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: var(--muted);
+		font-size: var(--text-sm);
+		font-weight: 700;
 	}
-
-	.notice {
-		max-width: 32rem;
-		margin: 0;
-	}
+	.motion-settings:not(:disabled):hover { color: var(--text); }
+	.switch-track { width: 26px; height: 16px; padding: 2px; border: 1px solid currentColor; border-radius: 999px; }
+	.switch-track::after { content: ''; display: block; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+	[aria-checked='true'] .switch-track { background: var(--accent); border-color: var(--accent); }
+	[aria-checked='true'] .switch-track::after { margin-left: 10px; background: var(--background); }
+	.motion-notice { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>

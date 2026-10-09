@@ -31,6 +31,7 @@
  const rankingVersion = $derived(session.draft?.dataVersion ?? session.manifest?.dataVersion ?? null);
  const showcaseCards = $derived(showcase.map(({ profile, slot }) => ({
   seasonId: profile.seasonId,
+  playerId: profile.playerId,
   model: createCardViewModel({ profile, slot, manifest: session.manifest, media, mediaStatus, rankings })
  })));
  const eraCards = $derived.by(() => ERAS.flatMap(decade => {
@@ -118,7 +119,6 @@
  {#if session.phase === 'start'}
   <section class="welcome" aria-labelledby="home-heading">
    <div class="welcome-copy">
-    <p class="eyebrow">Baseball history. One undefeated season.</p>
     <h1 id="home-heading">Can you go <strong>162-0?</strong></h1>
     <p class="intro">Roll a franchise and decade. Draft nine hitters, three starters, a closer, and a team-season bullpen remainder. One pick per franchise; each athlete only once. Take your team through all 162 games.</p>
     <div class="actions">
@@ -144,7 +144,6 @@
       {/each}
      </div>
     {/if}
-    <p class="start-note">Great teams still lose. That's the challenge.</p>
    </div>
    <HomeWall cards={showcaseCards} franchises={session.manifest?.franchises ?? []} />
   </section>
@@ -190,7 +189,6 @@
   width: min(100%, 41.5rem);
   padding: clamp(4rem, 9vh, 7rem) 2rem 2rem;
  }
- .welcome .eyebrow { margin: 0 0 var(--space-4); }
  h1 { font-size: 3rem; }
  h1 strong {
   display: block;
@@ -220,10 +218,7 @@
   font-size: var(--text-base);
  }
  .resume { min-height: 3.5rem; white-space: nowrap; }
- .start-status,
- .start-note { color: var(--muted); font-size: var(--text-xs); }
- .start-status { margin: var(--space-3) 0 0; }
- .start-note { margin: var(--space-4) 0 0; }
+ .start-status { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); }
  .era-strip {
   display: flex;
   gap: 10px;
@@ -264,7 +259,6 @@
    width: 100%;
    padding: 0 max(var(--space-4), env(safe-area-inset-left)) var(--space-6) max(var(--space-4), env(safe-area-inset-right));
   }
-  .welcome .eyebrow { margin-bottom: var(--space-3); }
   h1 { font-size: var(--text-2xl); }
   h1 strong { margin-top: 6px; font-size: 5rem; }
   .intro { margin: var(--space-4) 0 var(--space-5); font-size: var(--text-base); }
@@ -274,7 +268,6 @@
   .era-strip { margin-top: var(--space-6); }
   .era-strip figure { gap: 4px; }
   .era-strip figcaption { font-size: var(--text-xs); letter-spacing: 0; }
-  .start-note { display: none; }
  }
  @media (min-width: 68rem) {
   .welcome-copy { margin-left: max(0px, calc((100vw - 90rem) / 2 - 2rem)); }

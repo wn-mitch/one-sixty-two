@@ -12,7 +12,7 @@ Home uses a bounded set of real canonical profiles for its drifting card wall an
 
 Results preserve the complete batting and pitching totals and all 162 game boxes. The awards spread considers every participating individual and features MVP, batting title, fewest runs allowed (RA9), strikeout leader, and LVP; the pooled BP remains in team accounting but is not an individual award candidate. Exact unrounded ties receive chips, one stable winner is featured per category, and multiple awards merge onto one card. Inspection switches between the simulated 162-0 season and the recorded actual season, with hitter and pitcher cohorts ranked separately; missing or invalid source values are unavailable, not zero.
 
-One Motion disclosure appears on Home and Results. Ambient motion defaults to enabled, amount 2.5×, and speed 1×, persists in `162-zero:motion:v1`, and remains session-usable when storage is denied. One visibility-aware scheduler drives wall rows, card drift/finish lighting, spotlights, and marquees only while subscribers are visible. The live reduced-motion preference overrides the controls, stops autonomous motion, and restores a fixed readable card-light pose.
+One Motion toggle appears on Home and Results. Ambient motion uses a fixed amount of 2.5× and speed of 1×. Only the on/off preference persists in `162-zero:motion:v1`; storage denial leaves the toggle usable for the session. One visibility-aware scheduler drives wall rows, card drift/finish lighting, spotlights, and marquees only while subscribers are visible. The live reduced-motion preference disables the toggle, stops autonomous motion, and restores a fixed readable card-light pose.
 
 ## Run
 

@@ -29,7 +29,6 @@ export interface MotionSchedulerEnvironment {
 export interface MotionFrame {
 	time: number;
 	delta: number;
-	ambientDelta: number;
 	settings: MotionSettingsSnapshot;
 }
 
@@ -172,9 +171,8 @@ export class AutonomousMotionScheduler {
 		const delta = this.#lastTimestamp === null ? 0 : Math.max(0, Math.min(100, timestamp - this.#lastTimestamp));
 		this.#lastTimestamp = timestamp;
 		this.#lastPaint = timestamp;
-		const ambientDelta = delta * this.#settings.speed;
-		this.#logicalTime += ambientDelta;
-		const frame = { time: this.#logicalTime, delta, ambientDelta, settings: this.#settings };
+		this.#logicalTime += delta;
+		const frame = { time: this.#logicalTime, delta, settings: this.#settings };
 		for (const subscriber of this.#subscribers) {
 			if (subscriber.visible && subscriber.active(this.#settings)) subscriber.frame(frame);
 		}

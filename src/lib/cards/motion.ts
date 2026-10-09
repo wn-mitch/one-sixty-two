@@ -3,6 +3,7 @@ import { motionSettings } from './motion-settings.svelte.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
 
 const LIGHT = { x: -0.45, y: -0.75 } as const;
+const IDLE_AMOUNT = 2.5;
 const MAX_TILT = 9;
 const SPOTLIGHT_INTERVAL = 1800;
 const SPOTLIGHT_DURATION = 2200;
@@ -272,11 +273,10 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 		active(settings) {
 			if (!settings.effectiveEnabled) return false;
 			const desiredBlend = interrupted() ? 1 : 0;
-			const amountScale = settings.amount / 2.5;
 			const pointerActive = hovering && (options.enabled ?? true);
 			const directInteraction = pointerActive || focused;
-			const targetX = pointerActive ? -pointerY * MAX_TILT * amountScale : 0;
-			const targetY = pointerActive ? pointerX * MAX_TILT * amountScale : 0;
+			const targetX = pointerActive ? -pointerY * MAX_TILT : 0;
+			const targetY = pointerActive ? pointerX * MAX_TILT : 0;
 			const targetLift = directInteraction ? 1 : 0;
 			const canRender = (options.enabled ?? true) || autonomousEnabled() || focused;
 			return (dirty && canRender) ||
@@ -284,8 +284,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				Math.abs(currentX - targetX) > 0.01 || Math.abs(currentY - targetY) > 0.01 ||
 				Math.abs(currentLift - targetLift) > 0.001;
 		},
-		frame({ time, delta, settings }) {
-			const amountScale = settings.amount / 2.5;
+		frame({ time, delta }) {
 			const desiredBlend = interrupted() ? 1 : 0;
 			const blendStep = delta / 1000;
 			hoverBlend = desiredBlend > hoverBlend
@@ -293,8 +292,8 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				: Math.max(desiredBlend, hoverBlend - blendStep);
 			const pointerActive = hovering && (options.enabled ?? true);
 			const directInteraction = pointerActive || focused;
-			const targetX = pointerActive ? -pointerY * MAX_TILT * amountScale : 0;
-			const targetY = pointerActive ? pointerX * MAX_TILT * amountScale : 0;
+			const targetX = pointerActive ? -pointerY * MAX_TILT : 0;
+			const targetY = pointerActive ? pointerX * MAX_TILT : 0;
 			const targetLift = directInteraction ? 1 : 0;
 			const response = 1 - Math.exp(-Math.max(delta, 1) / (interrupted() ? 72 : 220));
 			currentX += (targetX - currentX) * response;
@@ -315,15 +314,15 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			const autonomousWeight = 1 - hoverBlend;
 			if (options.idle && autonomousWeight > 0) {
 				const seconds = time / 1000;
-				rx += 2.4 * settings.amount * autonomousWeight * (
+				rx += 2.4 * IDLE_AMOUNT * autonomousWeight * (
 					0.62 * Math.sin(seconds * frequencyX1 * Math.PI * 2 + phaseX1) +
 					0.38 * Math.sin(seconds * frequencyX2 * Math.PI * 2 + phaseX2)
 				);
-				ry += 3.4 * settings.amount * autonomousWeight * (
+				ry += 3.4 * IDLE_AMOUNT * autonomousWeight * (
 					0.62 * Math.sin(seconds * frequencyY1 * Math.PI * 2 + phaseY1) +
 					0.38 * Math.sin(seconds * frequencyY2 * Math.PI * 2 + phaseY2)
 				);
-				lift = Math.max(lift, 0.12 * amountScale * autonomousWeight);
+				lift = Math.max(lift, 0.12 * autonomousWeight);
 			} else if (options.wall && (options.finish ?? 'base') !== 'base' && autonomousWeight > 0) {
 				const phase = ((time + wallOffset) % 7000) / 7000;
 				const sweep = 0.5 - 0.5 * Math.cos(phase * Math.PI * 2);
@@ -331,8 +330,8 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				const spotlightWeight = spotlight * autonomousWeight;
 				hotspotX = 0.08 + sweep * 0.84;
 				hotspotY = 0.18 + Math.sin(phase * Math.PI * 2) * 0.08;
-				rx += Math.sin(spotlightAngle) * 0.7 * amountScale * spotlightWeight;
-				ry += Math.cos(spotlightAngle) * 1.05 * amountScale * spotlightWeight;
+				rx += Math.sin(spotlightAngle) * 0.7 * spotlightWeight;
+				ry += Math.cos(spotlightAngle) * 1.05 * spotlightWeight;
 				lift = Math.max(lift, spotlightWeight * 0.55);
 				if (options.finish === 'gem') {
 					const seconds = time / 1000;

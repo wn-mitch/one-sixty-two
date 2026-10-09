@@ -2,8 +2,6 @@ export const MOTION_STORAGE_KEY = '162-zero:motion:v1';
 
 export interface MotionPreferences {
 	enabled: boolean;
-	amount: number;
-	speed: number;
 }
 
 export interface MotionSettingsSnapshot extends MotionPreferences {
@@ -23,27 +21,12 @@ export interface MotionSettingsEnvironment {
 	reducedMotion: MediaPreference;
 }
 
-const DEFAULTS: MotionPreferences = { enabled: true, amount: 2.5, speed: 1 };
-const AMOUNT_STEP = 0.25;
-const SPEED_STEP = 0.25;
-
 type Listener = (settings: MotionSettingsSnapshot) => void;
-
-function stepped(value: number, minimum: number, maximum: number, step: number): number {
-	if (!Number.isFinite(value)) return minimum;
-	const bounded = Math.max(minimum, Math.min(maximum, value));
-	return Math.round(bounded / step) * step;
-}
 
 function validStored(value: unknown): MotionPreferences | null {
 	if (!value || typeof value !== 'object') return null;
 	const candidate = value as Partial<MotionPreferences>;
-	if (typeof candidate.enabled !== 'boolean' || typeof candidate.amount !== 'number' || typeof candidate.speed !== 'number') return null;
-	return {
-		enabled: candidate.enabled,
-		amount: stepped(candidate.amount, 0, 3, AMOUNT_STEP),
-		speed: stepped(candidate.speed, 0.25, 2, SPEED_STEP)
-	};
+	return typeof candidate.enabled === 'boolean' ? { enabled: candidate.enabled } : null;
 }
 
 export function browserEnvironment(
@@ -62,9 +45,7 @@ export function browserEnvironment(
 }
 
 export class MotionSettingsState {
-	enabled = $state(DEFAULTS.enabled);
-	amount = $state(DEFAULTS.amount);
-	speed = $state(DEFAULTS.speed);
+	enabled = $state(true);
 	reducedMotion = $state(false);
 	storageAvailable = $state(true);
 
@@ -85,8 +66,6 @@ export class MotionSettingsState {
 	get snapshot(): MotionSettingsSnapshot {
 		return {
 			enabled: this.enabled,
-			amount: this.amount,
-			speed: this.speed,
 			reducedMotion: this.reducedMotion,
 			effectiveEnabled: this.effectiveEnabled,
 			storageAvailable: this.storageAvailable
@@ -110,8 +89,6 @@ export class MotionSettingsState {
 			const stored = raw ? validStored(JSON.parse(raw)) : null;
 			if (stored) {
 				this.enabled = stored.enabled;
-				this.amount = stored.amount;
-				this.speed = stored.speed;
 			}
 		} catch {
 			this.storageAvailable = false;
@@ -162,9 +139,7 @@ export class MotionSettingsState {
 		if (!storage || !this.storageAvailable) return;
 		try {
 			storage.setItem(MOTION_STORAGE_KEY, JSON.stringify({
-				enabled: this.enabled,
-				amount: this.amount,
-				speed: this.speed
+				enabled: this.enabled
 			} satisfies MotionPreferences));
 		} catch {
 			this.storageAvailable = false;
@@ -174,22 +149,6 @@ export class MotionSettingsState {
 	setEnabled(enabled: boolean): void {
 		if (enabled === this.enabled) return;
 		this.enabled = enabled;
-		this.#persist();
-		this.#notify();
-	}
-
-	setAmount(amount: number): void {
-		const next = stepped(amount, 0, 3, AMOUNT_STEP);
-		if (next === this.amount) return;
-		this.amount = next;
-		this.#persist();
-		this.#notify();
-	}
-
-	setSpeed(speed: number): void {
-		const next = stepped(speed, 0.25, 2, SPEED_STEP);
-		if (next === this.speed) return;
-		this.speed = next;
 		this.#persist();
 		this.#notify();
 	}

@@ -29,7 +29,7 @@
 </span>
 
 <style>
- .team-mark { display: inline-grid; place-items: center; flex: 0 0 3.5rem; width: 3.5rem; height: 3.5rem; padding: .45rem; background: oklch(from var(--team-color) 96% .008 h); border-radius: .3rem; vertical-align: middle; }
+ .team-mark { display: inline-grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; flex: 0 0 3.5rem; width: 3.5rem; height: 3.5rem; padding: .45rem; background: oklch(from var(--team-color) 96% .008 h); border-radius: .3rem; vertical-align: middle; }
  img { display: block; width: 100%; height: 100%; object-fit: contain; }
  .abbreviation { color: oklch(25% .01 240); font-weight: 800; font-size: .85rem; letter-spacing: -.04em; }
  .small { width: 2rem; height: 2rem; flex-basis: 2rem; padding: .2rem; }

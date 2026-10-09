@@ -122,7 +122,7 @@ function createSchedulerFixture() {
 }
 
 describe('motion settings', () => {
-	it('loads, bounds, persists, and live-overrides preferences for reduced motion', () => {
+	it('persists the toggle and live-overrides it for reduced motion', () => {
 		const media = new FakeMediaPreference();
 		const storage = new MemoryStorage();
 		storage.values.set(MOTION_STORAGE_KEY, JSON.stringify({ enabled: true, amount: 1.25, speed: 1.75 }));
@@ -131,11 +131,13 @@ describe('motion settings', () => {
 		const unsubscribe = settings.subscribe(value => snapshots.push(value.effectiveEnabled));
 		const release = settings.retain();
 
-		expect(settings.snapshot).toMatchObject({ enabled: true, amount: 1.25, speed: 1.75, effectiveEnabled: true });
-		settings.setAmount(8);
-		settings.setSpeed(0);
-		expect(settings.snapshot).toMatchObject({ amount: 3, speed: 0.25 });
-		expect(JSON.parse(storage.values.get(MOTION_STORAGE_KEY)!)).toEqual({ enabled: true, amount: 3, speed: 0.25 });
+		expect(settings.snapshot).toMatchObject({ enabled: true, effectiveEnabled: true });
+		settings.setEnabled(false);
+		const restored = new MotionSettingsState(() => ({ storage, reducedMotion: media }));
+		const releaseRestored = restored.retain();
+		expect(restored.effectiveEnabled).toBe(false);
+		releaseRestored();
+		settings.setEnabled(true);
 
 		media.set(true);
 		expect(settings.snapshot).toMatchObject({ reducedMotion: true, effectiveEnabled: false });
@@ -155,11 +157,9 @@ describe('motion settings', () => {
 		storage.blocked = true;
 		const settings = new MotionSettingsState(() => ({ storage, reducedMotion: media }));
 		const release = settings.retain();
-		settings.setAmount(0.5);
-		settings.setSpeed(2);
 		settings.setEnabled(false);
 
-		expect(settings.snapshot).toMatchObject({ enabled: false, amount: 0.5, speed: 2, storageAvailable: false });
+		expect(settings.snapshot).toMatchObject({ enabled: false, effectiveEnabled: false, storageAvailable: false });
 		release();
 	});
 
