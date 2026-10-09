@@ -343,9 +343,9 @@
    {/each}
    {#if pageCount > 1}
     <nav class="pagination" aria-label="Player card pages">
-     <button type="button" class="secondary" disabled={busy || currentPage === 0} onclick={() => changePage(currentPage - 1)}>Previous</button>
-     <span>{currentPage + 1} / {pageCount}</span>
-     <button type="button" class="secondary" disabled={busy || currentPage === pageCount - 1} onclick={() => changePage(currentPage + 1)}>Next</button>
+     <button type="button" class="page-button" disabled={busy || currentPage === 0} onclick={() => changePage(currentPage - 1)}><span class="page-arrow" aria-hidden="true">←</span> Previous</button>
+     <span class="page-counter" aria-label={`Page ${currentPage + 1} of ${pageCount}`}><strong>{currentPage + 1}</strong> / {pageCount}</span>
+     <button type="button" class="page-button" disabled={busy || currentPage === pageCount - 1} onclick={() => changePage(currentPage + 1)}>Next <span class="page-arrow" aria-hidden="true">→</span></button>
     </nav>
    {/if}
   {/if}
@@ -383,6 +383,13 @@
  .ranking-status { font-size: var(--text-sm); }
  .blocked-toggle { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .6rem; margin-top: var(--space-4); font-size: var(--text-xs); }
  .blocked-toggle button { min-height: 2.75rem; padding-inline: 0; text-decoration: underline; text-underline-offset: .2em; }
+ .pagination { display: inline-flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: min(100%, 17.25rem); box-sizing: border-box; margin-top: var(--space-6); padding: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+ .page-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-3); border: 0; background: transparent; font-size: var(--text-sm); font-weight: 650; }
+ .page-button:not(:disabled):hover { background: var(--surface-hover); }
+ .page-button:disabled { opacity: .4; }
+ .page-arrow { font-size: 1.125rem; line-height: 1; }
+ .page-counter { min-width: 3.5rem; color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
+ .page-counter strong { color: var(--text); }
  @media (min-width: 48rem) {
   .candidates-wide { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 28px; align-items: start; }
   .candidates-wide .filter-rail { position: sticky; top: 72px; max-height: calc(100dvh - 88px); overflow-y: auto; overscroll-behavior: contain; padding: 0 .25rem .25rem; }

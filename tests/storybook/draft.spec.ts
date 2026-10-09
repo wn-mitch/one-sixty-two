@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, openStory, openStoryByName } from './workshop-test';
 
 async function candidateGroups(page: Page): Promise<string[]> {
-	return page.locator('.candidate-card').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-candidate-group') ?? ''));
+	return page.locator('.candidate-card[data-candidate-group]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-candidate-group')!));
 }
 
 function candidate(page: Page, number: string) {
@@ -43,7 +43,7 @@ test.describe('Draft board browsing', () => {
 	test('keeps desktop actions on one row and retains exact seasons across ranking pages', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openChoosing(page);
-		for (const width of [1100, 1440]) {
+		for (const width of [1100, 1212, 1440]) {
 			await page.setViewportSize({ width, height: 900 });
 			await expect(page.locator('.wide-controls').first()).toBeVisible();
 			const rows = await page.locator('.wide-controls').evaluateAll(nodes => nodes.map(row => {
@@ -54,6 +54,13 @@ test.describe('Draft board browsing', () => {
 			}));
 			expect(rows.every(row => row.aligned && row.touchSafe && row.labels.every(label => /^\d{4}$/.test(label ?? '')))).toBe(true);
 			expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+			const layout = await page.locator('.candidate-card').first().evaluate(candidate => {
+				const artwork = candidate.querySelector('.front .card')!.getBoundingClientRect();
+				const bounds = candidate.getBoundingClientRect();
+				return { startsWithArtwork: Math.abs(artwork.top - bounds.top) < 1, extraHeight: bounds.height - artwork.height };
+			});
+			expect(layout.startsWithArtwork).toBe(true);
+			expect(layout.extraHeight).toBeLessThanOrEqual(64);
 		}
 		const group = page.locator('.candidate-card:has(select option:nth-child(2))').first();
 		const playerId = await group.getAttribute('data-candidate-group');
@@ -69,6 +76,10 @@ test.describe('Draft board browsing', () => {
 		await expect(selectedGroup.locator('.player-card')).toHaveAttribute('data-season-id', seasonId);
 		await selectedGroup.getByRole('button', { name: 'Turn over', exact: true }).click();
 		await expect(selectedGroup.getByRole('button', { name: 'Turn over', exact: true })).toHaveAttribute('aria-pressed', 'true');
+		await selectedGroup.getByRole('button', { name: 'Text version', exact: true }).click();
+		await expect(selectedGroup.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
+		await selectedGroup.getByRole('button', { name: 'Turn over', exact: true }).click();
+		await expect(selectedGroup.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	});
 
 	test('filters qualified candidates, reorders through real sort and ranking states, and pages results', async ({ page }) => {
@@ -89,6 +100,21 @@ test.describe('Draft board browsing', () => {
 		await page.getByRole('button', { name: 'Next', exact: true }).click();
 		await expect.poll(() => candidateGroups(page)).not.toEqual(firstPage);
 		await expect(page.getByRole('button', { name: 'Previous', exact: true })).toBeEnabled();
+		await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+		const pagination = page.getByRole('navigation', { name: 'Player card pages' });
+		for (const width of [320, 402, 1212]) {
+			await page.setViewportSize({ width, height: 788 });
+			const bounds = await pagination.evaluate(nav => ({
+				width: nav.getBoundingClientRect().width,
+				available: nav.parentElement!.getBoundingClientRect().width,
+				touchSafe: [...nav.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= 44)
+			}));
+			expect(bounds.width).toBeLessThanOrEqual(bounds.available);
+			expect(bounds.touchSafe).toBe(true);
+		}
+		await pagination.getByRole('button', { name: 'Previous', exact: true }).click();
+		await expect(pagination.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
+		await expect.poll(() => candidateGroups(page)).toEqual(firstPage);
 
 		await openStory(page, 'draft-board--rankings-loading');
 		await expect(page.getByRole('status').filter({ hasText: /Example rankings are loading/ })).toBeVisible();

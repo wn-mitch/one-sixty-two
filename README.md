@@ -8,7 +8,7 @@ Draft progress, fielding/DH assignments, and lineup order are saved locally. Exa
 
 Draft cards select a candidate without saving a pick. Choose a highlighted field destination, review the exact season preview, then confirm with Draft. Desktop cards turn in place; phones and portrait tablets open a field sheet with Field/Card back tabs and pinned confirmation. Text version switches the same reverse face to readable facts, season-specific evidence, and source credits; switching it off restores the styled back. Simulated Results text includes the realized value breakdown. Shared rules and model assumptions live on Rules & model, not in a second card-details section. Dismissal discards only the preview; qualifying roster moves and swaps apply immediately.
 
-Candidate ordering follows each displayed exact season: batting or pitching WAR/162 by default, OPS or ERA under Metrics. Changing a season reorders the cards without committing a pick. Season controls and position buttons stay within each card, and complete names refit when card widths or fonts change.
+Candidate ordering follows each displayed exact season: batting or pitching WAR/162 by default, OPS or ERA under Metrics. Changing a season reorders the cards without committing a pick. Desktop candidate fronts lead with artwork and one season/placement/turn control row, without repeated identity headings. Text version is available on the turned candidate. Pagination uses one compact previous/count/next control with explicit disabled boundaries. Season controls and position buttons stay within each card, and complete names refit when card widths or fonts change.
 
 ## Interface and results
 
