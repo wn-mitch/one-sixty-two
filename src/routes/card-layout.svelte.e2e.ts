@@ -262,6 +262,53 @@ export async function preview() {
 	await afterLayout();
 	await Promise.all([...host.querySelectorAll('img')].map(image => image.decode().catch(() => {})));
 }
+export async function inspectLifecycle({ eras }) {
+	const host = document.createElement('div');
+	host.style.cssText = 'position:fixed;left:0;top:0;z-index:10000;display:grid;grid-template-columns:repeat(8,240px);gap:8px;';
+	document.body.append(host);
+	const specimen = models.find(entry => entry.label === 'long-name') ?? models[0];
+	const frames = eras.map(() => {
+		const frame = document.createElement('div');
+		frame.style.width = '240px';
+		host.append(frame);
+		return frame;
+	});
+	const instances = frames.map((frame, index) => mount(Card, {
+		target: frame,
+		props: { s: { ...specimen.model, era: eras[index] }, face: 'front', onDetails: () => {} }
+	}));
+	try {
+		await afterLayout();
+		const before = frames.map(frame => frame.querySelector('[data-card]')?.getBoundingClientRect().width ?? 0);
+		for (const frame of frames) frame.style.width = '320px';
+		await afterLayout();
+		const resized = frames.map(frame => {
+			const card = frame.querySelector('[data-card]');
+			const arc = card?.querySelector('[data-fit-arc]');
+			return {
+				width: card?.getBoundingClientRect().width ?? 0,
+				state: card?.getAttribute('data-fit-state'),
+				problems: problemsFor(card),
+				arcLength: arc instanceof SVGTextElement ? arc.getComputedTextLength() : null,
+				arcTarget: arc?.getAttribute('data-fit-arc')
+			};
+		});
+		frames[0].style.width = '330px';
+		frames[1].style.width = '330px';
+		frames[0].querySelector('[data-fit]').textContent = 'Example queued mutation';
+		frames[1].querySelector('[data-layer="name.full"]').textContent = 'Fictional Example Extended Identity';
+		await Promise.resolve();
+		const queuedState = frames[1].querySelector('[data-card]')?.getAttribute('data-fit-state');
+		await unmount(instances[0]);
+		frames[0].remove();
+		await afterLayout();
+		const survivor = frames[1].querySelector('[data-card]');
+		return { before, resized, queuedState, survivorState: survivor?.getAttribute('data-fit-state'), survivorWidth: survivor?.getBoundingClientRect().width ?? 0, survivorProblems: problemsFor(survivor) };
+	} finally {
+		await Promise.all(instances.slice(1).map(unmount));
+		host.remove();
+	}
+}
 `, 'utf8');
 	const output = join(directory, 'dist');
 	await build({
@@ -410,4 +457,44 @@ test('keeps compact text readable above every era finish at its minimum width', 
 			CardLayoutHarness: { disposeCompact(): Promise<void> };
 		}).CardLayoutHarness.disposeCompact());
 	}
+});
+
+test('refits mounted long identities after resize and preserves sibling scheduling on unmount', async ({ page, request }) => {
+	const [manifest, media, rankings] = await Promise.all([
+		currentManifest(request), currentMedia(request), currentRankings(request)
+	]);
+	const specimens = await selectSpecimens(request, manifest, media);
+	await installHarness(page);
+	const result = await page.evaluate(async input => {
+		const harness = (window as typeof window & {
+			CardLayoutHarness: {
+				prepare(input: unknown): void;
+				inspectLifecycle(input: unknown): Promise<{
+					before: number[];
+					resized: Array<{ width: number; state: string | null; problems: unknown[]; arcLength: number | null; arcTarget: string | null }>;
+					queuedState: string | null;
+					survivorState: string | null;
+					survivorWidth: number;
+					survivorProblems: unknown[];
+				}>;
+			};
+		}).CardLayoutHarness;
+		harness.prepare(input);
+		return harness.inspectLifecycle({ eras: input.eras });
+	}, { specimens, media, manifest, rankings, eras: ERAS });
+	expect(result.before).toEqual(ERAS.map(() => 240));
+	expect(result.resized).toHaveLength(ERAS.length);
+	for (const card of result.resized) {
+		expect(card.width).toBeCloseTo(320, 0);
+		expect(card.state).toBe('settled');
+		expect(card.problems).toEqual([]);
+		if (card.arcLength !== null && card.arcTarget !== null) {
+			expect(card.arcLength).toBeLessThanOrEqual(Number(card.arcTarget) + 0.5);
+		}
+	}
+	expect(result.resized.some(card => card.arcLength !== null)).toBe(true);
+	expect(result.queuedState).toBe('unsettled');
+	expect(result.survivorState).toBe('settled');
+	expect(result.survivorWidth).toBeCloseTo(330, 0);
+	expect(result.survivorProblems).toEqual([]);
 });

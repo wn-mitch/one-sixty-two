@@ -25,3 +25,12 @@ calibrate *args:
 deploy:
     npm run build
     npx wrangler deploy
+
+storybook *args:
+    npm run storybook -- {{args}}
+
+storybook-build:
+    npm run build-storybook
+
+storybook-test *args:
+    npm run test:storybook -- {{args}}

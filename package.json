@@ -27,16 +27,22 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test:unit": "vitest run",
 		"test": "npm run test:unit && npm run test:e2e",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"storybook": "storybook dev --host 127.0.0.1 --port 6006 --exact-port --no-open --disable-telemetry --no-version-updates",
+		"build-storybook": "storybook build --disable-telemetry",
+		"test:storybook": "playwright test --config playwright.storybook.config.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
+		"@storybook/addon-svelte-csf": "5.1.5",
+		"@storybook/sveltekit": "10.6.1",
 		"@sveltejs/adapter-cloudflare": "^8.0.0",
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@tailwindcss/vite": "^4.3.0",
 		"@types/node": "^24.19.1",
 		"csv-parse": "^7.0.3",
+		"storybook": "10.6.1",
 		"svelte": "^5.57.1",
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.0",

@@ -14,6 +14,23 @@ Results preserve the complete batting and pitching totals and all 162 game boxes
 
 One Motion toggle appears on Home and Results. Ambient motion uses a fixed amount of 2.5× and speed of 1×. Only the on/off preference persists in `162-zero:motion:v1`; storage denial leaves the toggle usable for the session. One visibility-aware scheduler drives wall rows, card drift/finish lighting, spotlights, and marquees only while subscribers are visible. The live reduced-motion preference disables the toggle, stops autonomous motion, and restores a fixed readable card-light pose.
 
+Card text fitting batches font writes and layout reads across unique labels, including SVG arcs. Resize and text changes use geometry keys; font loading and option changes force fresh measurement.
+
+## Component workshop
+
+Storybook runs the production cards, Welcome, draft board, lineup editor, season replay, results, game boxes, and media credits on a separate localhost origin with anonymous synthetic fixtures. Start/Resume/New draft stay inside the workshop; nothing initializes Session, saves a game, or uploads share images. Media illustrations are inline geometric SVGs, not historical photography or club artwork.
+
+```sh
+just storybook
+just storybook --port 6016
+just storybook-build
+STORYBOOK_TEST_PORT=6017 just storybook-test
+```
+
+The manager's Controls update primitive story inputs live, including card era, role, WAR-derived finish, and width. Reset story restores local selections, dialogs, counters, and fixture state without resetting the real Motion preference. Replay animation restarts the selected flip or locked season reveal. The operating-system reduced-motion preference remains authoritative.
+
+Storybook does not prepare or download statistical, ranking, or media assets. Its build serves the existing `static/` directory and writes ignored `storybook-static/`; retained local asset archives increase that build's size. Browser verification uses a separate Playwright configuration and requires its own free port (6006 by default). It waits for rendered canvases within a separate 120-second startup budget before the 45-second interaction tests begin. It does not replace the application's Worker/R2 suite.
+
 ## Run
 
 Use Node >=24.12 and npm. Install with `npm ci`, then `npx playwright install chromium` for headless browser tests. Browser tests run the built app on local workerd with file watching disabled; `PLAYWRIGHT_PORT` selects an isolated port.
