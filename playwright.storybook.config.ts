@@ -18,10 +18,21 @@ export default defineConfig({
 		trace: 'retain-on-failure'
 	},
 	projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
-	webServer: {
-		command: `npm run storybook -- --ci --port ${port}`,
-		port,
-		reuseExistingServer: false,
-		timeout: 120000
-	}
+	webServer: [
+		{
+			command: 'AGENTATION_STORE=memory npx --no-install agentation-mcp server --host 127.0.0.1 --port 4748',
+			url: 'http://127.0.0.1:4748/health',
+			reuseExistingServer: false,
+			timeout: 120000
+		},
+		{
+			command: `npm run storybook -- --ci --port ${port}`,
+			port,
+			reuseExistingServer: false,
+			timeout: 120000,
+			env: {
+				VITE_AGENTATION_ENDPOINT: 'http://127.0.0.1:4748'
+			}
+		}
+	]
 });

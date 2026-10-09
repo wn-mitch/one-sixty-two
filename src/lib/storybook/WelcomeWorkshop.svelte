@@ -6,6 +6,7 @@
 
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { createDialKitController } from 'dialkit/svelte';
 	import Welcome from '#lib/components/Welcome.svelte';
 	import { createCardViewModel } from '#lib/cards/view-model.ts';
 	import type { CardEra } from '#lib/cards/view-model.ts';
@@ -16,6 +17,7 @@
 
 	let { initial = 'start' }: WelcomeWorkshopProps = $props();
 	const fixtures = createExampleFixtures();
+	const dials = createDialKitController('Home showcase', { eraWidth: [128, 96, 160, 1] });
 	const media = createExampleMedia();
 	const eras: CardEra[] = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'];
 	const slots = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
@@ -34,6 +36,7 @@
 	let observedInitial = untrack(() => initial);
 
 	function reset(): void {
+		dials.setValue('eraWidth', 128);
 		screen = 'welcome';
 		instance += 1;
 	}
@@ -46,6 +49,7 @@
 </script>
 
 <StoryFrame onReset={reset} wide>
+	<div style={`--home-era-card-width:${dials.values.eraWidth}px`}>
 	{#key instance}
 		{#if screen === 'welcome'}
 			<Welcome manifest={fixtures.manifest} loading={initial === 'loading'} hasSavedDraft={initial === 'resume'} {cards}
@@ -54,4 +58,5 @@
 			<DraftWorkshop initial={screen} embedded />
 		{/if}
 	{/key}
+	</div>
 </StoryFrame>

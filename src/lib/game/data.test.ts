@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { neutralDefensivePosition } from '../sim/defense.ts';
 import { syntheticProfile } from '../sim/fixtures.ts';
 import { testSeason } from '../sim/test-fixtures.ts';
-import { loadChunk, loadManifest, loadShowcase, loadSimulation } from './data.ts';
+import { loadChunk, loadGalleryCard, loadManifest, loadShowcase, loadSimulation } from './data.ts';
 import type { HitterSlot, Manifest, Profile, ShowcaseCard, SimulationData } from './types.ts';
 
 function profile(id: string, decade: number, slot: HitterSlot = 'DH'): Profile {
@@ -112,6 +112,28 @@ describe('canonical profile loading', () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json(data)));
 
   await expect(loadSimulation(manifest(version))).rejects.toThrow();
+ });
+});
+
+describe('prepared gallery card loading', () => {
+ it('loads the exact smallest canonical season and retries after a corrupt card without fetching a chunk', async () => {
+  const version = '6'.repeat(64);
+  const first = profile('gallery-z', 2020);
+  const smallest = profile('gallery-a', 2020, '2B');
+  const dataManifest = manifest(version, [first, smallest]);
+  const card: ShowcaseCard = { profile: smallest, slot: '2B' };
+  const requests: string[] = [];
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+   requests.push(String(input));
+   return Response.json(++reads === 1 ? { ...card, profile: { ...smallest, playerId: 'wrong' } } : card);
+  }));
+  await expect(loadGalleryCard(dataManifest, { franchiseId: smallest.franchiseId, decade: 2020 })).rejects.toThrow();
+  await expect(loadGalleryCard(dataManifest, { franchiseId: smallest.franchiseId, decade: 2020 })).resolves.toEqual(card);
+  expect(requests).toEqual([
+   `/data/${version}/gallery-${smallest.franchiseId}-2020.json`,
+   `/data/${version}/gallery-${smallest.franchiseId}-2020.json`
+  ]);
  });
 });
 

@@ -1,17 +1,49 @@
 import type { Preview } from '@storybook/sveltekit';
-import { sb } from 'storybook/test';
+import { mount, unmount } from 'svelte';
 import { configureMediaLoader, type MediaFixtureMode } from '../src/lib/storybook/media-fixtures.ts';
 import '../src/routes/layout.css';
 import '../src/lib/cards/fonts.css';
 
-sb.mock(import('../src/lib/media/client.ts'), { spy: true });
-
 const preview: Preview = {
-	beforeEach({ parameters }) {
-		const controller = configureMediaLoader((parameters.mediaState ?? 'ready') as MediaFixtureMode);
-		return controller.dispose;
+	async beforeEach({ id, parameters }) {
+		const mediaController = configureMediaLoader((parameters.mediaState ?? 'ready') as MediaFixtureMode);
+		let feedbackHost: HTMLDivElement | null = null;
+		let feedbackTools: Record<string, unknown> | null = null;
+
+		try {
+			location.hash = `story=${encodeURIComponent(id)}`;
+			// Storybook owns this development-only runtime boundary; application bundles load it independently.
+			const { default: FeedbackTools } = await import('../src/lib/dev/FeedbackTools.svelte');
+			feedbackHost = document.createElement('div');
+			feedbackHost.dataset.storybookFeedbackHost = '';
+			document.body.append(feedbackHost);
+			feedbackTools = mount(FeedbackTools, {
+				target: feedbackHost,
+				props: {
+					useHashLocation: true,
+					dialProductionEnabled: true,
+					appName: '162-0 Storybook'
+				}
+			});
+		} catch (error) {
+			mediaController.dispose();
+			feedbackHost?.remove();
+			throw error;
+		}
+
+		return async () => {
+			try {
+				if (feedbackTools) await unmount(feedbackTools);
+			} finally {
+				feedbackHost?.remove();
+				mediaController.dispose();
+			}
+		};
 	},
 	parameters: {
+		options: {
+			storySort: { order: ['Application', 'Cards', ['Eras', 'States', 'Motion'], 'Interactions', 'Draft', 'Lineup', 'Simulation', 'Results', 'Media'] }
+		},
 		layout: 'fullscreen',
 		viewport: {
 			options: {

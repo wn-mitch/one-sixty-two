@@ -15,18 +15,24 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	}
 
 	const trigger = page.locator('.award-card').first();
+	await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+	await expect(trigger).toHaveAttribute('aria-controls', 'results-card-review');
 	await trigger.click();
-	const dialog = page.locator('dialog.card-inspection[open]');
-	await expect(dialog).toBeVisible();
-	await expect(dialog.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
-	await expect(dialog.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
-	await expect.poll(async () => dialog.locator('.scaled-viewport').evaluate(card => {
-		const bounds = card.getBoundingClientRect();
-		return bounds.width > 0 && bounds.height > 0 && bounds.left >= 0 && bounds.top >= 0 &&
-			bounds.right <= innerWidth && bounds.bottom <= innerHeight;
-	})).toBe(true);
+	const review = page.locator('#results-card-review');
+	await expect(review).toBeVisible();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+	await expect(review.getByRole('heading').first()).toBeFocused();
+	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(review.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
+	const simulatedBack = review.getByRole('region', { name: /^162-0 season statistics for / });
+	await expect(simulatedBack).toBeVisible();
+	await expect(simulatedBack.getByRole('table')).toContainText('Team rank');
+	await expect(simulatedBack.getByRole('list', { name: 'Season awards', exact: true })).toBeVisible();
+	const simulatedRows = await simulatedBack.locator('tbody tr').allTextContents();
+	expect(simulatedRows.length).toBeGreaterThan(0);
 
-	const contrasts = await dialog.locator('.results-back').evaluate(back => {
+	const contrasts = await simulatedBack.evaluate(back => {
 		const canvas = document.createElement('canvas');
 		canvas.width = canvas.height = 1;
 		const context = canvas.getContext('2d', { willReadFrequently: true })!;
@@ -49,13 +55,45 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	});
 	for (const ratio of contrasts) expect(ratio).toBeGreaterThanOrEqual(4.5);
 
-	await dialog.getByRole('button', { name: 'Actual season', exact: true }).click();
-	await expect(dialog.getByRole('button', { name: 'Actual season', exact: true })).toHaveAttribute('aria-pressed', 'true');
-	await expect(dialog.getByRole('list', { name: 'Season awards', exact: true })).toHaveCount(0);
-	await dialog.getByRole('button', { name: 'Show front', exact: true }).click();
-	await expect(dialog.getByRole('button', { name: 'Turn over', exact: true })).toBeVisible();
+	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
+	await expect(review.getByRole('button', { name: 'Actual season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	const actualBack = review.getByRole('region', { name: /^Actual season statistics for / });
+	await expect(actualBack).toBeVisible();
+	await expect(actualBack.getByRole('list', { name: 'Season awards', exact: true })).toHaveCount(0);
+	await expect(actualBack.locator('tbody tr')).toHaveCount(simulatedRows.length);
+	await expect(actualBack.locator('.rank [aria-label]')).toHaveCount(simulatedRows.length);
+	await review.getByRole('button', { name: '162-0 season', exact: true }).click();
+	await expect(review.getByRole('region', { name: /^162-0 season statistics for / }).locator('tbody tr')).toHaveText(simulatedRows);
+
+	await review.locator('.disclosure-controls').getByRole('button', { name: 'Value details', exact: true }).click();
+	await expect(review.getByRole('region', { name: '162-0 season value details', exact: true })).toBeVisible();
+	await expect(review.getByRole('heading', { name: 'Estimated WAR breakdown', exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('details')).toHaveCount(162);
+
+	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
+	await review.getByRole('button', { name: 'Text version', exact: true }).click();
+	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	const firstSeasonId = await review.getAttribute('data-season-id');
+	const nextTrigger = page.locator('.hand-card').last();
+	await nextTrigger.click();
+	await expect(review).not.toHaveAttribute('data-season-id', firstSeasonId!);
+	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'false');
+	await expect(review.locator('.results-back.simplified')).toHaveCount(0);
+
+	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
+	await review.getByRole('button', { name: 'Text version', exact: true }).click();
 	await page.keyboard.press('Escape');
-	await expect(dialog).toHaveCount(0);
-	await expect(trigger).toBeFocused();
+	await expect(review).toBeVisible();
+	await review.getByRole('button', { name: 'Hide card', exact: true }).click();
+	await expect(review).toHaveCount(0);
+	await expect(nextTrigger).toBeFocused();
+
+	await nextTrigger.click();
+	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'false');
+	await expect(review.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
+	await review.getByRole('button', { name: 'Hide card', exact: true }).click();
+	await expect(nextTrigger).toBeFocused();
 	if (originalViewport) await page.setViewportSize(originalViewport);
 }

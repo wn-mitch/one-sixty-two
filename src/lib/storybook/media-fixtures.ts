@@ -1,8 +1,8 @@
-import { mocked } from 'storybook/test';
+import { setMediaLoader } from '../media/__mocks__/client.ts';
 import { loadMedia } from '#lib/media/client.ts';
 import type { AtmospherePhoto, MediaAsset, MediaManifest, PlayerMedia, TeamMedia } from '#lib/media/types.ts';
 
-export type MediaFixtureMode = 'ready' | 'missing' | 'loading' | 'unavailable' | 'brokenImage';
+export type MediaFixtureMode = 'ready' | 'missing' | 'loading' | 'unavailable' | 'brokenImage' | 'runtime';
 
 export interface MediaLoaderController {
 	load: () => Promise<MediaManifest>;
@@ -175,6 +175,7 @@ export function configureMediaLoader(initialMode: MediaFixtureMode): MediaLoader
 		: mode === 'brokenImage' ? createBrokenImageMedia() : createExampleMedia();
 	const load = (): Promise<MediaManifest> => {
 		if (!ownsLoader()) return Promise.reject(new Error('Story media loader is no longer active'));
+		if (mode === 'runtime') return loadMedia();
 		if (mode === 'unavailable') return Promise.reject(new Error('Example image sources unavailable'));
 		if (mode === 'loading') {
 			pending ??= deferred<MediaManifest>();
@@ -195,11 +196,11 @@ export function configureMediaLoader(initialMode: MediaFixtureMode): MediaLoader
 		disposed = true;
 		activeController = null;
 		pending?.reject(new Error('Story media loader was reset'));
-		mocked(loadMedia).mockReset();
+		setMediaLoader();
 	};
 	controller = { load, resolve, recover, dispose };
 
 	activeController = controller;
-	mocked(loadMedia).mockImplementation(load);
+	setMediaLoader(mode === 'runtime' ? undefined : load);
 	return controller;
 }

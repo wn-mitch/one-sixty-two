@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import Card from '../cards/Card.svelte';
-	import CardDetails from '../cards/CardDetails.svelte';
-	import CardFlip from '../cards/CardFlip.svelte';
-	import CardInspection from '../cards/CardInspection.svelte';
+	import CardReview from '../cards/CardReview.svelte';
 	import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
 	import { compareId } from '../game/types.ts';
 	import type { Manifest, Profile, Slot } from '../game/types.ts';
@@ -53,11 +51,16 @@
 		inspectionReturnFocus?: HTMLElement | null;
 	} = $props();
 
+	const uid = $props.id();
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaStatus = $state<CardMediaStatus>('loading');
 	let artTrigger = $state<HTMLButtonElement>();
-	let inspection = $state<CardInspection>();
-	let details = $state<CardDetails>();
+	let review = $state<CardReview>();
+	let reviewOpen = $state(false);
+	let reviewTurned = $state(false);
+	let reviewTextBack = $state(false);
+	let reviewTrigger = $state<HTMLElement | null>(null);
+	let reviewSeasonId = $state<string | null>(null);
 
 	const seasonChoices = $derived.by(() => {
 		const unique = new Map<string, Profile>();
@@ -84,7 +87,23 @@
 	});
 
 	function inspect(trigger: HTMLElement | undefined): void {
-		if (trigger) void inspection?.open(trigger);
+		if (!trigger || draftMode) return;
+		reviewTrigger = trigger;
+		reviewTurned = false;
+		reviewTextBack = false;
+		reviewOpen = true;
+		void tick().then(() => review?.focusHeading());
+	}
+
+	function closeReview(): void {
+		const previousTrigger = reviewTrigger;
+		reviewTrigger = null;
+		reviewOpen = false;
+		void tick().then(() => {
+			const visible = previousTrigger?.isConnected && previousTrigger.getClientRects().length ? previousTrigger : null;
+			const fallback = inspectionReturnFocus?.isConnected && inspectionReturnFocus.getClientRects().length ? inspectionReturnFocus : null;
+			(visible ?? fallback ?? artTrigger)?.focus({ preventScroll: true });
+		});
 	}
 
 	function select(trigger: HTMLButtonElement): void {
@@ -95,6 +114,14 @@
 		if (!available.includes(slot)) return;
 		onPlace?.(slot, trigger);
 	}
+	$effect(() => {
+		const nextSeasonId = profile.seasonId;
+		if (reviewSeasonId !== null && reviewSeasonId !== nextSeasonId) {
+			reviewTurned = false;
+			reviewTextBack = false;
+		}
+		reviewSeasonId = nextSeasonId;
+	});
 
 	onMount(() => {
 		let disposed = false;
@@ -200,11 +227,10 @@
 	<div class="art-frame">
 		{#if draftMode}
 			{#if wide}
-				<CardFlip
+				<CardReview
 					bind:turned
 					s={card}
 					showControl={false}
-					onDetails={() => void details?.showDetails()}
 					onFrontSelect={select}
 				/>
 			{:else}
@@ -224,13 +250,24 @@
 				type="button"
 				class="art-trigger"
 				aria-label={`Inspect ${profile.year} ${profile.displayName} card`}
+				aria-expanded={reviewOpen}
+				aria-controls={`${uid}-review`}
 				onclick={event => inspect(event.currentTarget)}
 			>
 				<Card s={card} {compact} interactive={!compact} thumbnail={compact} onDetails={() => inspect(artTrigger)} />
 			</button>
 		{/if}
 	</div>
-	{#if draftMode && wide}<div class="draft-disclosures" hidden={!turned}><CardDetails bind:this={details} s={card} /></div>{/if}
+	{#if !draftMode && reviewOpen}
+			<CardReview
+				bind:this={review}
+				id={`${uid}-review`}
+				s={card}
+				bind:turned={reviewTurned}
+				bind:textBack={reviewTextBack}
+				onClose={closeReview}
+			/>
+		{/if}
 
 	{#if compact}
 		<p class="compact-identity"><strong>{profile.displayName}</strong><span>{profile.year} · {assignedSlot ?? card.pos}</span></p>
@@ -238,12 +275,16 @@
 
 	{#if !draftMode}
 		<div class="card-actions">
-			<button type="button" class="inspect" onclick={event => inspect(event.currentTarget)}>Inspect card</button>
+			<button
+				type="button"
+				class="inspect"
+				aria-expanded={reviewOpen}
+				aria-controls={`${uid}-review`}
+				onclick={event => inspect(event.currentTarget)}
+			>Inspect card</button>
 		</div>
 	{/if}
 </article>
-
-{#if !draftMode}<CardInspection bind:this={inspection} s={card} returnFocus={inspectionReturnFocus} />{/if}
 
 <style>
 	.player-card {
@@ -261,7 +302,6 @@
 	.draft-mode .art-frame { order: 0; }
 	.draft-mode .controller { order: 1; }
 	.draft-turn { grid-column: 2; grid-row: 1; min-width: 2.75rem; min-height: 2.75rem; box-sizing: border-box; padding: 0 .6rem; color: var(--card-ink); background: var(--surface-raised, var(--surface)); border: 1px solid var(--border); border-radius: .25rem; font-size: 1.1rem; }
-	.draft-disclosures { order: 3; }
 	.draft-mode:not(.wide) .ranking-status { display: none; }
 	.draft-mode.wide .ranking-status { display: none; }
 	.player-card.draft-mode.selected .art-frame { transform: translateY(-.2rem); }
@@ -296,7 +336,6 @@
 	.art-frame { width: min(100%, 20rem); margin-inline: auto; }
 	.draft-mode.wide { --card-front-width: 100%; --card-back-width: 410px; }
 	.draft-mode.wide .art-frame { width: 100%; }
-	.draft-mode.wide :global(.card-details) { width: min(100%, 410px); margin-inline: auto; }
 	.art-trigger { all: unset; display: block; width: 100%; cursor: pointer; }
 	.art-trigger:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
 	.draft-turn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }

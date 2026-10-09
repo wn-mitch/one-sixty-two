@@ -3,7 +3,7 @@
 	import type { ExampleCardFinish } from './fixtures.ts';
 
 	export type CardWorkshopRole = 'hitter' | 'starter' | 'closer' | 'two-way' | 'bullpen';
-	export type CardWorkshopMode = 'interactive' | 'idle' | 'wall' | 'flip' | 'inspection' | 'gallery';
+	export type CardWorkshopMode = 'interactive' | 'idle' | 'wall' | 'flip' | 'gallery';
 
 	export interface CardWorkshopProps {
 		era?: CardEra;
@@ -13,15 +13,17 @@
 		mode?: CardWorkshopMode;
 		missingPhoto?: boolean;
 		longIdentity?: boolean;
+		initialTurned?: boolean;
+		initialTextBack?: boolean;
+		initialDetailsOpen?: boolean;
 	}
 </script>
 
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
+	import { createDialKitController } from 'dialkit/svelte';
 	import Card from '#lib/cards/Card.svelte';
-	import CardDetails from '#lib/cards/CardDetails.svelte';
-	import CardFlip from '#lib/cards/CardFlip.svelte';
-	import CardInspection from '#lib/cards/CardInspection.svelte';
+	import CardReview from '#lib/cards/CardReview.svelte';
 	import { createCardViewModel, type CardViewModel } from '#lib/cards/view-model.ts';
 	import type { Profile, Slot } from '#lib/game/types.ts';
 	import { createExampleMedia } from './media-fixtures.ts';
@@ -35,7 +37,10 @@
 		width = 280,
 		mode = 'interactive',
 		missingPhoto = false,
-		longIdentity = false
+		longIdentity = false,
+		initialTurned = false,
+		initialTextBack = false,
+		initialDetailsOpen = false
 	}: CardWorkshopProps = $props();
 
 	const eraYear: Record<CardEra, number> = {
@@ -50,6 +55,23 @@
 	};
 	const eras = Object.keys(eraYear) as CardEra[];
 	const finishes = ['base', 'foil', 'emboss', 'gem'] as const;
+	const dials = createDialKitController('Card preview', untrack(() => ({
+		width: [width, 160, 410, 1] as [number, number, number, number],
+		era: { type: 'select' as const, options: eras, default: era },
+		role: { type: 'select' as const, options: ['hitter', 'starter', 'closer', 'two-way', 'bullpen'], default: role },
+		finish: { type: 'select' as const, options: [...finishes], default: finish },
+		textBack: initialTextBack
+	})));
+	let observedArgs = untrack(() => ({ width, era, role, finish, textBack: initialTextBack }));
+	$effect(() => {
+		const next = { width, era, role, finish, textBack: initialTextBack };
+		const changes = Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== observedArgs[key as keyof typeof next]));
+		observedArgs = next;
+		untrack(() => dials.setValues(changes));
+	});
+	const previewEra = $derived(dials.values.era as CardEra);
+	const previewRole = $derived(dials.values.role as CardWorkshopRole);
+	const previewFinish = $derived(dials.values.finish as ExampleCardFinish);
 
 	const fixtures = createExampleFixtures();
 	const manifest = fixtures.manifest;
@@ -62,20 +84,18 @@
 	let instance = $state(0);
 	let flipKey = $state(0);
 	let replayToken = 0;
-	let turned = $state(false);
-	let details = $state<CardDetails>();
-	let wallDetails = $state<CardDetails>();
-	let inspection = $state<CardInspection>();
-	let inspectionTrigger = $state<HTMLButtonElement>();
+	let turned = $state(untrack(() => initialTurned));
+	let details = $state<CardReview>();
+	let wallDetails = $state<CardReview>();
 	let selectedWall = $state<CardViewModel | null>(null);
 
-	const cardWidth = $derived(Math.max(160, Math.min(410, Math.round(width))));
+	const cardWidth = $derived(Math.max(160, Math.min(410, Math.round(dials.values.width))));
 	const media = $derived(missingPhoto ? null : createExampleMedia());
-	const profile = $derived(profileFor(role, era, longIdentity));
+	const profile = $derived(profileFor(previewRole, previewEra, longIdentity));
 	const card = $derived(createCardViewModel({
 		profile,
-		slot: slotFor(role),
-		ranking: getExampleFinishRanking(rankingRole(role), finish),
+		slot: slotFor(previewRole),
+		ranking: getExampleFinishRanking(rankingRole(previewRole), previewFinish),
 		media,
 		mediaStatus: 'ready',
 		manifest
@@ -108,7 +128,7 @@
 		return createCardViewModel({
 			profile: galleryProfile,
 			slot: '2B',
-			ranking: getExampleFinishRanking('hitter', finish),
+			ranking: getExampleFinishRanking('hitter', previewFinish),
 			media: mediaFor(galleryProfile, sourcePlayerId),
 			mediaStatus: 'ready',
 			manifest
@@ -182,13 +202,13 @@
 		await wallDetails?.showDetails();
 	}
 
-	function openInspection(trigger: HTMLButtonElement): void {
-		void inspection?.open(trigger);
-	}
-
-	function showInspection(): void {
-		if (inspectionTrigger) openInspection(inspectionTrigger);
-	}
+	$effect(() => {
+		instance;
+		if (initialDetailsOpen) void tick().then(() => details?.showDetails());
+	});
+	$effect(() => {
+		if (dials.values.textBack) untrack(() => turned = true);
+	});
 
 	async function replay(): Promise<void> {
 		const token = ++replayToken;
@@ -200,7 +220,8 @@
 
 	function reset(): void {
 		replayToken += 1;
-		turned = false;
+		turned = initialTurned;
+		dials.setValues({ width, era, role, finish, textBack: initialTextBack });
 		selectedWall = null;
 		instance += 1;
 	}
@@ -208,7 +229,7 @@
 
 <StoryFrame onReset={reset} onReplay={mode === 'flip' ? replay : undefined}>
 	{#key instance}
-		<section class="card-workshop" data-card-workshop data-mode={mode}>
+		<section class="card-workshop" data-card-workshop data-mode={mode} style={`--card-front-width:${cardWidth}px;--card-back-width:${cardWidth}px`}>
 			{#if mode === 'wall'}
 				<div class="wall" aria-label="Card finish wall">
 					{#each wallCards as wallCard (wallCard.full)}
@@ -220,45 +241,38 @@
 						</article>
 					{/each}
 				</div>
-				{#if selectedWall}<CardDetails bind:this={wallDetails} s={selectedWall} />{/if}
+				{#if selectedWall}<CardReview bind:this={wallDetails} s={selectedWall} turned={true} />{/if}
 			{:else if mode === 'gallery'}
 				<div class="gallery" aria-label="Card era gallery">
 					{#each galleryCards as galleryCard (galleryCard.era)}
 						<article class="gallery-entry">
 							<h2>{galleryCard.era}</h2>
 							<div class="card-shell" style:width={`${Math.min(cardWidth, 230)}px`}>
-								<Card s={galleryCard} capture={false} onDetails={showDetails} />
+								<Card s={galleryCard} capture={false} onDetails={() => void showWallDetails(galleryCard)} />
 							</div>
 						</article>
 					{/each}
 				</div>
-				<CardDetails bind:this={details} s={card} />
+				{#if selectedWall}<CardReview bind:this={wallDetails} s={selectedWall} turned={true} />{/if}
 			{:else if mode === 'flip'}
 				<div class="single-card">
 					{#key flipKey}
 						<div class="card-shell" style:width={`${cardWidth}px`}>
-							<CardFlip s={card} bind:turned onDetails={showDetails} />
+							<CardReview bind:this={details} s={card} bind:turned bind:textBack={() => dials.values.textBack, value => dials.setValue('textBack', value)} />
 						</div>
 					{/key}
-					<CardDetails bind:this={details} s={card} />
 				</div>
-			{:else if mode === 'inspection'}
-				<div class="single-card">
-					<button bind:this={inspectionTrigger} class="inspection-trigger" type="button" aria-label={`Inspect ${card.full}`} onclick={event => openInspection(event.currentTarget)}>
-						<div class="card-shell" style:width={`${cardWidth}px`}>
-							<Card s={card} interactive capture={false} onDetails={showInspection} />
-						</div>
-					</button>
-					<p>Open the real inspection dialog to turn the card, read its text version, and reveal value details.</p>
-					<CardInspection bind:this={inspection} s={card} />
+			{:else if mode === 'interactive'}
+				<div class="single-card" style={`--card-front-width:${cardWidth}px;--card-back-width:${cardWidth}px`}>
+					<CardReview bind:this={details} s={card} bind:turned bind:textBack={() => dials.values.textBack, value => dials.setValue('textBack', value)} />
 				</div>
 			{:else}
 				<div class="single-card">
 					<div class="card-shell" style:width={`${cardWidth}px`}>
-						<Card s={card} interactive={mode === 'interactive' || mode === 'idle'} idle={mode === 'idle'} capture={false} onDetails={showDetails} />
+						<Card s={card} interactive idle={mode === 'idle'} capture={false} onDetails={() => void showWallDetails(card)} />
 					</div>
-					<button type="button" onclick={() => void showDetails()}>Show card details</button>
-					<CardDetails bind:this={details} s={card} />
+					<button type="button" onclick={() => void showWallDetails(card)}>Show card details</button>
+					{#if selectedWall}<CardReview bind:this={wallDetails} s={selectedWall} turned={true} />{/if}
 				</div>
 			{/if}
 		</section>
@@ -269,9 +283,6 @@
 	.card-workshop { min-width: 0; }
 	.single-card { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--space-4); }
 	.card-shell { max-width: 100%; }
-	.single-card > p { max-width: 42rem; margin: 0; color: var(--muted); text-align: center; }
-	.inspection-trigger { max-width: 100%; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
-	.inspection-trigger:focus-visible { outline: 3px solid var(--focus, var(--accent)); outline-offset: .4rem; }
 	.wall, .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: clamp(1rem, 3vw, 2rem); align-items: start; }
 	.wall-entry, .gallery-entry { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--space-3); min-width: 0; }
 	.wall-entry button { max-width: 100%; }

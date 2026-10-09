@@ -6,9 +6,10 @@
   s: CardViewModel;
   onDetails: () => void;
   view?: InspectionSeasonView;
+  simplified?: boolean;
  }
 
- let { s, onDetails, view }: Props = $props();
+ let { s, onDetails, view, simplified = false }: Props = $props();
  const colors = $derived.by(function (): { ground: string; ink: string } {
   switch (s.era) {
    case '2020s':
@@ -46,6 +47,7 @@
 {#if view}
  <section
   class="inspection-back results-back"
+  class:simplified
   aria-label="{view.label} statistics for {s.full}"
   style:--team-ground={s.k.field}
   style:--team-ink={s.k.onField}
@@ -84,7 +86,7 @@
   </footer>
  </section>
 {:else}
- <section class="inspection-back historical-back" data-era={s.era} aria-label="Historical season text version" style:--back-ground={colors.ground} style:--back-ink={colors.ink}>
+ <section class="inspection-back historical-back" class:simplified data-era={s.era} aria-label="Historical season text version" style:--back-ground={colors.ground} style:--back-ink={colors.ink}>
   <header>
    <p class="era">{s.era} · {s.fin.label}</p>
    <h3 data-layer="name.full">{s.b.name}</h3>
@@ -130,7 +132,8 @@
  dd { font: 700 1.625rem/1.1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; margin: .25rem 0 0; overflow-wrap: anywhere; }
  .counts dd { font-size: 1.25rem; }
  button { min-height: 2.75rem; color: var(--back-ink); background: var(--back-ground); border: 1px solid currentColor; }
- .results-back { display: flex; flex-direction: column; width: 360px; height: 504px; overflow: hidden; border-radius: .5rem; }
+ .results-back { display: flex; flex-direction: column; width: 100%; min-height: 0; aspect-ratio: auto; border-radius: .5rem; }
+ .results-back:not(.simplified) { min-height: 140cqw; }
  .results-header { padding: 1rem 1.1rem .9rem; background: var(--team-ground); color: var(--team-ink); }
  .results-header p { margin: 0 0 .25rem; font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
  .results-header h3 { margin: 0; font-size: 1.8rem; line-height: .95; }
@@ -150,7 +153,15 @@
  .best .rank span { background: oklch(84% .12 85); color: oklch(28% .07 75); font-weight: 850; }
  .worst .rank span { background: oklch(75% .12 25); color: oklch(25% .09 25); font-weight: 850; }
  .results-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: auto; padding: .55rem 1rem .7rem; font-size: .7rem; font-weight: 750; }
- .results-footer button { min-height: 2.25rem; padding: .35rem .65rem; font-size: .72rem; }
+ .results-footer button { min-height: 44px; padding: .35rem .65rem; font-size: .875rem; }
+ .simplified { --back-ground: var(--surface) !important; --back-ink: var(--text) !important; padding: 1rem; color: var(--text); background: var(--surface); font: 1rem/1.5 system-ui, sans-serif; }
+ .simplified h3, .simplified dd { font: inherit; font-weight: 700; }
+ .simplified .keys, .simplified .counts { grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr)); }
+ .simplified .results-header { padding: 0; color: var(--text); background: transparent; }
+ .simplified table { width: 100%; margin-inline: 0; font-size: 1rem; }
+ .simplified th, .simplified td { height: auto; padding: .5rem .25rem; overflow-wrap: anywhere; }
+ .simplified thead th { font-size: .875rem; letter-spacing: normal; text-transform: none; }
+ .simplified .results-footer { padding-inline: 0; font-size: .875rem; }
  @media (max-width: 25rem) {
   .historical-back { padding: 1rem; }
   .counts { grid-template-columns: repeat(3, minmax(0, 1fr)); }

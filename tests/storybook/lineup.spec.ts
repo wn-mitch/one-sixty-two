@@ -18,7 +18,7 @@ async function dragTo(page: Page, handle: Locator, target: Locator, after = true
 }
 
 test.describe('compact lineup editor', () => {
-	test('renders all fourteen compact cards at 320px and retains native inspection', async ({ page }) => {
+	test('renders all fourteen compact cards at 320px and restores focus after inline review', async ({ page }) => {
 		await page.setViewportSize({ width: 320, height: 800 });
 		await openStory(page, 'lineup-editor--complete');
 		const cards = page.locator('.lineup .miniature [data-compact="true"]');
@@ -27,10 +27,18 @@ test.describe('compact lineup editor', () => {
 		expect(widths.every(width => width >= 72)).toBe(true);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 		const trigger = page.getByRole('button', { name: /^Inspect .* card$/ }).first();
+		await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+		await expect(trigger).toHaveAttribute('aria-controls', 'lineup-card-review');
 		await trigger.click();
-		await expect(page.getByRole('dialog')).toBeVisible();
-		await page.keyboard.press('Escape');
+		const review = page.locator('#lineup-card-review');
+		await expect(review).toBeVisible();
+		await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+		await expect(review.getByRole('heading').first()).toBeFocused();
 		await expect(page.getByRole('dialog')).toHaveCount(0);
+		await page.keyboard.press('Escape');
+		await expect(review).toBeVisible();
+		await review.getByRole('button', { name: 'Hide card', exact: true }).click();
+		await expect(review).toHaveCount(0);
 		await expect(trigger).toBeFocused();
 	});
 
@@ -46,7 +54,7 @@ test.describe('compact lineup editor', () => {
 		await page.mouse.up();
 		await expect.poll(() => identities(list)).toEqual([...before.slice(1, 4), before[0], ...before.slice(4)]);
 		await expect(page.locator('.announcement')).toContainText('moved to batting position 4');
-		await expect(page.getByRole('dialog')).toHaveCount(0);
+		await expect(page.locator('#lineup-card-review')).toHaveCount(0);
 		const afterAssignments = await list.locator('select').evaluateAll(nodes => nodes.map(node => [node.closest('[data-roster-assignment]')!.getAttribute('data-roster-assignment'), node.value]));
 		expect(afterAssignments.sort()).toEqual(assignments.sort());
 		const up = list.locator('li').nth(3).getByRole('button', { name: /up in batting order/ });
@@ -126,7 +134,7 @@ test.describe('compact lineup editor', () => {
 		await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [to] });
 		await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 		await expect.poll(() => identities(list)).toEqual([before[1], before[0], ...before.slice(2)]);
-		await expect(page.getByRole('dialog')).toHaveCount(0);
+		await expect(page.locator('#lineup-card-review')).toHaveCount(0);
 		const scrollBefore = await page.evaluate(() => window.scrollY);
 		await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 20, y: 850 }] });
 		for (const y of [750, 650, 550, 450]) await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 20, y }] });

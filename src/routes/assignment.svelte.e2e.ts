@@ -143,7 +143,7 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await expect(selected.select).toBeFocused();
 	selected = await selectExactTarget(page, profile, scenario.target.seasonId);
 	await selected.sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
-	const disclosures = selected.sheet.locator('[role="tabpanel"]:not([hidden]) .disclosure-controls');
+	const disclosures = selected.sheet.locator('[role="tabpanel"]:not([hidden]) .card-review');
 	await disclosures.getByRole('button', { name: 'Text version', exact: true }).click();
 	await disclosures.getByRole('button', { name: 'Details', exact: true }).click();
 	await selected.sheet.getByRole('tab', { name: 'Field', exact: true }).click();

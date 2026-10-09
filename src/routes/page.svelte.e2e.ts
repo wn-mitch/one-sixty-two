@@ -523,6 +523,7 @@ test('keeps the Home copy width when centering on ultrawide screens', async ({ p
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.goto('/');
 	const intro = page.locator('.welcome-copy .intro');
+	await expect(page.getByRole('button', { name: 'Start draft', exact: true })).toBeEnabled();
 	await expect(intro).toBeVisible();
 	await page.evaluate(() => document.fonts.ready.then(() => undefined));
 	const readableWidth = await intro.evaluate(node => node.getBoundingClientRect().width);

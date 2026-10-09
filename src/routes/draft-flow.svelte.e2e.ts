@@ -345,7 +345,7 @@ test.describe('draft sheet interaction boundaries', () => {
 		await page.keyboard.press('ArrowRight');
 		await expect(tabs.getByRole('tab', { name: 'Card back', exact: true })).toBeFocused();
 		await expect(tabs.getByRole('tab', { name: 'Card back', exact: true })).toHaveAttribute('aria-selected', 'true');
-		await expect(sheet.locator('[role="tabpanel"]:not([hidden]) .designed-back [data-card][data-face="back"]')).toBeVisible();
+		await expect(sheet.locator('[role="tabpanel"]:not([hidden]) .card-review .back [data-card][data-face="back"]')).toBeVisible();
 
 		await sheet.getByRole('button', { name: 'Text version', exact: true }).click();
 		await expect(sheet.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();

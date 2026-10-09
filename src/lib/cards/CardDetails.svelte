@@ -1,30 +1,25 @@
 <script lang="ts">
  import { tick } from 'svelte';
- import type { InspectionSeasonView, ResultsInspection } from '../game/results-types.ts';
- import InspectionBack from './InspectionBack.svelte';
+ import type { ResultsInspection } from '../game/results-types.ts';
  import Supplemental from './Supplemental.svelte';
  import type { CardViewModel } from './view-model.ts';
 
  let {
   s,
-  inspection,
-  view
+  inspection
  }: {
   s: CardViewModel;
   inspection?: ResultsInspection;
-  view?: InspectionSeasonView;
  } = $props();
  const uid = $props.id();
  const seasonKey = $derived(inspection?.seasonId ?? s.details.sections.flatMap(section => section.rows).find(row => row.k === 'Season ID')?.v ?? `${s.full}:${s.year}:${s.team}`);
  let inspectedKey = $state('');
- let textOpen = $state(false);
  let detailsOpen = $state(false);
  let details = $state<HTMLDivElement>();
 
  $effect(() => {
   if (inspectedKey !== seasonKey) {
    inspectedKey = seasonKey;
-   textOpen = false;
    detailsOpen = false;
   }
  });
@@ -39,10 +34,8 @@
 
 <div class="card-details">
  <div class="disclosure-controls">
-  {#if !inspection}<button type="button" aria-expanded={textOpen} aria-controls="{uid}-text" onclick={() => textOpen = !textOpen}>Text version</button>{/if}
   <button type="button" aria-expanded={detailsOpen} aria-controls="{uid}-details" onclick={showDetails}>{inspection ? 'Value details' : 'Details'}</button>
  </div>
- {#if textOpen}<div id="{uid}-text"><InspectionBack {s} {view} onDetails={showDetails} /></div>{/if}
  {#if detailsOpen}
   <div bind:this={details} id="{uid}-details" class="details" tabindex="-1">
    {#if inspection}

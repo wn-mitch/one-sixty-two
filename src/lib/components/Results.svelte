@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import CardInspection from '../cards/CardInspection.svelte';
+	import CardReview from '../cards/CardReview.svelte';
 	import type { CardViewModel } from '../cards/view-model.ts';
 	import { createResultsModel } from '../game/results-model.ts';
 	import type { Draft, Manifest, Profile } from '../game/types.ts';
@@ -52,8 +52,13 @@
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaUnavailable = $state(false);
 	let inspectedSeasonId = $state<string | null>(null);
-	let inspection = $state<CardInspection>();
+	let inspectionTrigger: HTMLButtonElement | null = null;
+	let review = $state<CardReview>();
+	let turned = $state(true);
+	let textBack = $state(false);
+	let selectedMode = $state<'simulated' | 'actual'>('simulated');
 	let resultsHeading = $state<HTMLHeadingElement>();
+	const resultsReviewId = 'results-card-review';
 
 	let profileById = $derived(new Map(profiles.map((profile) => [profile.seasonId, profile])));
 	let resultsModel = $derived(createResultsModel({ result, draft, profiles, manifest, rankings }));
@@ -80,11 +85,35 @@
 		heading?.focus({ preventScroll: true });
 		heading?.scrollIntoView({ block: 'start' });
 	}
-	function inspectCard(seasonId: string, trigger: HTMLElement): void {
+	async function inspectCard(seasonId: string, trigger: HTMLButtonElement): Promise<void> {
 		if (!resultsModel.cards.some((card) => card.seasonId === seasonId) || !cardViews.has(seasonId)) return;
+		if (inspectedSeasonId !== seasonId) {
+			turned = true;
+			textBack = false;
+			selectedMode = 'simulated';
+		}
+		inspectionTrigger = trigger;
 		inspectedSeasonId = seasonId;
-		void tick().then(() => inspection?.open(trigger));
+		await tick();
+		review?.focusHeading();
 	}
+
+	function closeInspection(): void {
+		const trigger = inspectionTrigger;
+		inspectedSeasonId = null;
+		inspectionTrigger = null;
+		void tick().then(() => {
+			if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
+			else if (resultsHeading?.isConnected) resultsHeading.focus({ preventScroll: true });
+		});
+	}
+
+	$effect(() => {
+		if (inspectedSeasonId && (!resultsModel.cards.some((card) => card.seasonId === inspectedSeasonId) || !cardViews.has(inspectedSeasonId))) {
+			inspectedSeasonId = null;
+			inspectionTrigger = null;
+		}
+	});
 	onMount(() => {
 		let disposed = false;
 		void loadMedia()
@@ -137,7 +166,7 @@
 		</dl>
 	</header>
 
-	<ResultsAwards featured={resultsModel.featured} {cardViews} onInspect={inspectCard} />
+	<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 
 	<ResultsHand
 		cards={resultsModel.rest}
@@ -145,10 +174,27 @@
 		{rankingLoading}
 		{rankingError}
 		{mediaUnavailable}
+		selectedSeasonId={inspectedSeasonId}
+		reviewId={resultsReviewId}
 		onInspect={inspectCard}
 	/>
 
-	<SeasonMoments {result} cards={resultsModel.cards} {cardViews} onInspect={inspectCard} />
+	<SeasonMoments {result} cards={resultsModel.cards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
+
+	{#if inspectedCard && inspectedView}
+		{#key inspectedSeasonId}
+			<CardReview
+				id={resultsReviewId}
+				bind:this={review}
+				s={inspectedView}
+				inspection={inspectedCard.inspection}
+				bind:turned
+				bind:textBack
+				bind:selectedMode
+				onClose={closeInspection}
+			/>
+		{/key}
+	{/if}
 
 	<ShareBlock
 		model={shareModel}
@@ -261,15 +307,6 @@
 		</div>
 	</section>
 
-	{#if inspectedCard && inspectedView}
-		<CardInspection
-			bind:this={inspection}
-			s={inspectedView}
-			inspection={inspectedCard.inspection}
-			returnFocus={resultsHeading}
-			onClose={() => inspectedSeasonId = null}
-		/>
-	{/if}
 </section>
 
 <style>

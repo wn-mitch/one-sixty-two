@@ -6,15 +6,15 @@ Planned shared simulation and Draft Mode work is organized in the [design index]
 
 Draft progress, fielding/DH assignments, and lineup order are saved locally. Exact season selections are permanent; qualifying position players can move into an empty slot or swap reciprocally before simulation. Moves preserve a pending roll and must leave the roster completable. Replay schema 4 with model `pa-v3` is the only supported gameplay contract. Sharing stores versioned inputs plus the authoritative roll/pick/reassignment action history under an opaque replay ID; both the recipient and the publication service validate and recompute that history. The `REPLAYS` R2 bucket stores replay inputs and immutable publication assets, not accounts or request metadata. Incompatible saves and links remain detectable, explain the beta cutover, and require a new draft instead of being silently reinterpreted.
 
-Draft cards select a candidate without saving a pick. Choose a highlighted field destination, review the exact season preview, then confirm with Draft. Desktop cards turn in place; phones and portrait tablets open a field sheet with Field/Card back tabs and pinned confirmation. Text version and Details expose the complete historical facts and provenance separately from the eight designed card backs. Dismissal discards only the preview; qualifying roster moves and swaps apply immediately.
+Draft cards select a candidate without saving a pick. Choose a highlighted field destination, review the exact season preview, then confirm with Draft. Desktop cards turn in place; phones and portrait tablets open a field sheet with Field/Card back tabs and pinned confirmation. Text version switches the same reverse face to readable text; switching it off restores the styled back. Details exposes source and value provenance. Dismissal discards only the preview; qualifying roster moves and swaps apply immediately.
 
 Candidate ordering follows each displayed exact season: batting or pitching WAR/162 by default, OPS or ERA under Metrics. Changing a season reorders the cards without committing a pick. Season controls and position buttons stay within each card, and complete names refit when card widths or fonts change.
 
 ## Interface and results
 
-Home uses a bounded set of real canonical profiles for its drifting card wall and era strip, plus all thirty franchise marks. Roster, staff, lineup, and Results hand cards use the canonical compact treatment: the same eight decade fronts receive era-specific plates, natural name wrapping, and a 72px minimum artwork width. The phone field grows vertically rather than scrolling sideways, and the five-person staff wraps three plus two when five 72px cards do not fit.
+Home uses real canonical profiles for its drifting card wall and eight-era showcase, plus all thirty franchise marks. Desktop era cards use four columns and two chronological rows at 128px; phones retain the compact horizontal strip. Roster, staff, lineup, and Results hand cards use the canonical compact treatment: the same eight decade fronts receive era-specific plates, natural name wrapping, and a 72px minimum artwork width. The phone field grows vertically rather than scrolling sideways, and the five-person staff wraps three plus two when five 72px cards do not fit.
 
-The lineup uses dedicated mouse/touch drag handles within batting order or starting rotation. An insertion marker previews the drop; only a completed drop saves the order. Escape or dropping outside the list cancels. Labelled up/down buttons remain available for keyboard ordering, and closer/BP stay fixed. Compact cards open the shared inspection dialog; fielding/DH changes retain qualification-aware moves and reciprocal swaps.
+The lineup uses dedicated mouse/touch drag handles within batting order or starting rotation. An insertion marker previews the drop; only a completed drop saves the order. Escape or dropping outside the list cancels. Labelled up/down buttons remain available for keyboard ordering, and closer/BP stay fixed. Compact cards open one inline review after their collection; Hide card restores the activating control without changing selections. Fielding/DH changes retain qualification-aware moves and reciprocal swaps.
 
 Draft loading uses eight era-styled TEAM placeholders, with one card plucked upward out of the board. These are not eligible-player cards or fabricated selections. The animation pauses offscreen or while the page is hidden and remains static when Motion is off or reduced motion is requested.
 
@@ -30,28 +30,38 @@ Card text fitting batches font writes and layout reads across unique labels, inc
 
 ## Component workshop
 
-Storybook runs the production cards, Welcome, draft board, lineup editor, season replay, results, game boxes, and media credits on a separate localhost origin with anonymous synthetic fixtures. Start/Resume/New draft stay inside the workshop; nothing initializes Session, saves a game, or uploads share images. Media illustrations are inline geometric SVGs, not historical photography or club artwork.
+Storybook runs the production cards and screens on a separate localhost origin. Screen, state, motion, and interaction stories use anonymous synthetic fixtures and geometric imagery. `Cards/Eras` contains eight real historical galleries with all thirty franchise entries and paired front/back artwork. The data compiler publishes one versioned, preselected card per eligible franchise-era combination; galleries load these small assets rather than full season chunks. Missing historical combinations have explicit absence states, while failed prepared cards remain retryable errors.
+
+Start/Resume/New draft and interaction plays stay inside workshop-local state; they never initialize Session, save a game, or upload share images. The sidebar groups Application, Cards (Eras/States/Motion), Interactions, Draft, Lineup, Simulation, Results, and Media. Interaction stories open exact-season selection, placement preview, roster review, ordering, and Results modes without committing a draft.
 
 ```sh
+npm run data:prepare
+npm run rankings:prepare
+npm run media:prepare
 just storybook
 just storybook --port 6016
 just storybook-build
 STORYBOOK_TEST_PORT=6017 just storybook-test
 ```
 
-The manager's Controls update primitive story inputs live, including card era, role, WAR-derived finish, and width. Reset story restores local selections, dialogs, counters, and fixture state without resetting the real Motion preference. Replay animation restarts the selected flip or locked season reveal. The operating-system reduced-motion preference remains authoritative.
+The manager's Controls and native DialKit panels update card era, role, finish, width, and reverse presentation live. Home and historical-gallery panels adjust only their real preview targets. Reset story restores current args and declared initial review state without resetting the real Motion preference or persisting dial values. Replay animation uses the current dials. The operating-system reduced-motion preference remains authoritative.
 
-Storybook does not prepare or download statistical, ranking, or media assets. Its build serves the existing `static/` directory and writes ignored `storybook-static/`; retained local asset archives increase that build's size. Browser verification uses a separate Playwright configuration and requires its own free port (6006 by default). It waits for rendered canvases within a separate 120-second startup budget before the 45-second interaction tests begin. It does not replace the application's Worker/R2 suite.
+Storybook serves already-prepared local statistical, ranking, and media assets; it does not run their preparation commands. Its build serves the existing `static/` directory and writes ignored `storybook-static/`; retained local asset archives increase that build's size. Browser verification uses a separate Playwright configuration and requires its own free port (6006 by default). It waits for rendered canvases within a separate 120-second startup budget before the 45-second interaction tests begin. It does not replace the application's Worker/R2 suite.
 
 ## Visual feedback
 
-`just dev` enables [Agentation](https://agentation.com/) on ordinary application routes. Use the bottom-right toolbar or Cmd+Shift+F / Ctrl+Shift+F to enter feedback mode, click an element, and add a specific note. Pause animations from the toolbar when inspecting moving cards. Copy feedback and paste the structured output into the coding conversation; it includes the page, viewport, element path, and comment.
+Application development routes and Storybook canvases mount [Agentation](https://agentation.com/) at the bottom right. Use its toolbar or Cmd+Shift+F / Ctrl+Shift+F to enter feedback mode, select an element, and add a note. Pause animations when inspecting moving cards. Copy remains available when the annotation service is disconnected.
 
-Annotations stay in browser-local storage. This setup does not send them automatically to an agent or run an Agentation MCP server. The toolbar's Exit action returns to normal browsing.
+```sh
+just feedback
+just feedback-doctor
+```
 
-[DialKit](https://github.com/joshpuckett/dialkit) uses its native Svelte adapter. Its root is mounted at the top right, initially collapsed, and appears when a component registers controls with `createDialKit` from `dialkit/svelte`. Controls are added for specific feedback targets rather than changing shared design values speculatively. Dial adjustments preview values; approved values must be applied to source.
+One loopback service on port 4747 persists annotations and shares them with both omp and Claude Code through project `.mcp.json`; each agent uses stdio MCP without starting another HTTP service. The official project-local Agentation skill describes connection checks. Storybook gives each canvas a story-specific URL hash: notes survive reload/return but do not leak into another story. Ordinary application notes remain pathname-based. Only feedback notes sync; game fixtures and draft actions do not.
 
-The feedback components are lazy-loaded only in the development browser, after the page loads and the browser becomes idle. Production builds and authenticated share-image capture routes do not mount either tool.
+[DialKit](https://github.com/joshpuckett/dialkit) uses its native Svelte adapter and `createDialKitController`. The top-right root starts collapsed. Preview panels control card appearance, historical reverse text/width, Home era width, and Motion button padding. When the native field sheet opens, both tools move inside its focus boundary; one inline DialKit root replaces the popover and preserves controller values. Approved preview values must be applied to source.
+
+Application feedback loads only in the development browser and excludes authenticated share-image capture routes. Built Storybook intentionally includes its workshop tools. The browser tests supervise a separate in-memory annotation service on port 4748 and never clear the persistent feedback store.
 
 ## Run
 

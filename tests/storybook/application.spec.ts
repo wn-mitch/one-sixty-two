@@ -154,10 +154,14 @@ test.describe('application workshop stories', () => {
 		await expect(finalDetails.getByRole('region', { name: /batting box score/i }).first()).toBeVisible();
 		await page.getByRole('button', { name: /batting totals/i }).click();
 		await expect(page.getByRole('heading', { name: 'Batting' })).toBeFocused();
-		await page.getByRole('button', { name: /inspect .* card/i }).first().click();
-		await expect(page.getByRole('dialog')).toBeVisible();
+		const inspect = page.getByRole('button', { name: /inspect .* card/i }).first();
+		await inspect.click();
+		await expect(page.locator('.card-review')).toBeVisible();
 		await page.keyboard.press('Escape');
-		await expect(page.getByRole('dialog')).toBeHidden();
+		await expect(page.locator('.card-review')).toBeVisible();
+		await page.getByRole('button', { name: 'Hide card', exact: true }).click();
+		await expect(page.locator('.card-review')).toHaveCount(0);
+		await expect(inspect).toBeFocused();
 		await page.getByRole('button', { name: /new draft/i }).click();
 		await expect(page.locator('.draft-board')).toBeVisible();
 	});
@@ -221,7 +225,7 @@ test.describe('application workshop stories', () => {
 		await openStory(page, 'results-details--turning-points');
 		await expect(page.getByRole('heading', { name: /season turning points/i })).toBeVisible();
 		await page.getByRole('button', { name: /inspect .*season (highlight|lowlight)/i }).first().click();
-		await expect(page.getByRole('dialog')).toBeVisible();
+		await expect(page.locator('.card-review')).toBeVisible();
 		await openStory(page, 'results-details--no-turning-points');
 		await expect(page.getByText(/no positive win-expectancy swing/i)).toBeVisible();
 		await expect(page.getByText(/no negative win-expectancy swing/i)).toBeVisible();

@@ -6,9 +6,7 @@
  import { loadMedia } from '../media/client.ts';
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
- import Card from '../cards/Card.svelte';
- import CardDetails from '../cards/CardDetails.svelte';
- import CardInspection from '../cards/CardInspection.svelte';
+ import CardReview from '../cards/CardReview.svelte';
  import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
  import CandidateList from './CandidateList.svelte';
  import Roster from './Roster.svelte';
@@ -37,9 +35,12 @@
  let selectionTrigger: HTMLElement | null = null;
  let inspectionTrigger: HTMLElement | null = null;
  let fieldHeading = $state<HTMLHeadingElement>();
- let inspection = $state<CardInspection>();
- let cardDetails = $state<CardDetails>();
- let inspectedDetails = $state<CardDetails>();
+ let candidateReview = $state<CardReview>();
+ let inspectedReview = $state<CardReview>();
+ let candidateTurned = $state(true);
+ let candidateTextBack = $state(false);
+ let inspectedTurned = $state(true);
+ let inspectedTextBack = $state(false);
  let requestedMove = $state<{ seasonId: string; slot: HitterSlot } | null>(null);
  let media = $state.raw<MediaManifest | null>(null);
  let mediaStatus = $state<CardMediaStatus>('loading');
@@ -72,6 +73,10 @@
   requestedMove = null;
   inspectedSeasonId = null;
   sheetTab = 'field';
+  candidateTurned = true;
+  candidateTextBack = false;
+  inspectedTurned = true;
+  inspectedTextBack = false;
  }
  function resetBrowse(): void { clearTransient(); }
  function restoreCandidateFocus(seasonId: string | null, preferred: HTMLElement | null): void {
@@ -110,6 +115,10 @@
   movingSeasonId = null;
   requestedMove = null;
   inspectedSeasonId = null;
+  candidateTurned = true;
+  candidateTextBack = false;
+  inspectedTurned = true;
+  inspectedTextBack = false;
   sheetTab = 'field';
   const candidate = manifestBySeason.get(seasonId);
   const slots = candidate ? legalSlots(draft, candidate, manifest) : [];
@@ -133,6 +142,8 @@
   if (selectedProfile?.playerId !== playerId) return;
   if (!selectionChoices.some(choice => choice.seasonId === seasonId)) return;
   selectedSeasonId = seasonId;
+  candidateTurned = true;
+  candidateTextBack = false;
   const candidate = manifestBySeason.get(seasonId);
   if (pendingSlot && (!candidate || !legalSlots(draft, candidate, manifest).includes(pendingSlot))) pendingSlot = null;
  }
@@ -171,18 +182,31 @@
   }
   if (phase === 'choosing' && selectedProfile && destinations.includes(slot)) pendingSlot = slot;
  }
+ function focusReview(): void {
+  void tick().then(() => inspectedReview?.focusHeading());
+ }
+ function restoreInspectionFocus(preferred: HTMLElement | null): void {
+  void tick().then(() => {
+   const visible = preferred?.isConnected && preferred.getClientRects().length ? preferred : null;
+   (visible ?? fieldHeading)?.focus({ preventScroll: true });
+  });
+ }
  function inspectRoster(seasonId: string, nextTrigger: HTMLElement): void {
   inspectedSeasonId = seasonId;
   inspectionTrigger = nextTrigger;
-  if (wide) void tick().then(() => inspection?.open(nextTrigger));
-  else {
+  inspectedTurned = true;
+  inspectedTextBack = false;
+  if (!wide) {
    trigger = nextTrigger;
    sheetOpen = true;
   }
+  focusReview();
  }
  function returnToField(): void {
+  const previousTrigger = inspectionTrigger;
+  inspectionTrigger = null;
   inspectedSeasonId = null;
-  void tick().then(() => fieldHeading?.focus({ preventScroll: true }));
+  restoreInspectionFocus(previousTrigger);
  }
  function cancelMove(): void {
   movingSeasonId = null;
@@ -213,6 +237,12 @@
  $effect(() => {
   if (pendingSlot && !destinations.includes(pendingSlot)) pendingSlot = null;
  });
+ $effect(() => {
+  if (inspectedSeasonId && !inspectedProfile) {
+   inspectedSeasonId = null;
+   inspectionTrigger = null;
+  }
+ });
  onMount(() => {
   let disposed = false;
   void loadMedia().then(value => {
@@ -226,11 +256,12 @@
    if (wide) {
     sheetOpen = false;
     void tick().then(() => {
-     if (focusedInPanel) fieldHeading?.focus({ preventScroll: true });
-     if (inspectedSeasonId && inspectedCard) void inspection?.open(fieldHeading ?? inspectionTrigger!);
+     if (inspectedSeasonId) inspectedReview?.focusHeading();
+     else if (focusedInPanel) fieldHeading?.focus({ preventScroll: true });
     });
    } else if (selectedSeasonId || movingSeasonId || inspectedSeasonId) {
     sheetOpen = true;
+    if (inspectedSeasonId) focusReview();
    }
   };
   query.addEventListener('change', adapt);
@@ -267,17 +298,46 @@
 {#snippet fieldContent()}
  {#if !wide && selectedCard}
   <div hidden={sheetTab !== 'back' || !!inspectedCard} role="tabpanel" id="{uid}-panel-back" aria-labelledby={inspectedCard ? undefined : `${uid}-tab-back`}>
-   <div class="designed-back"><Card s={selectedCard} face="back" onDetails={() => void cardDetails?.showDetails()} /></div>
-   <CardDetails bind:this={cardDetails} s={selectedCard} />
+   <CardReview
+    bind:this={candidateReview}
+    id={`${uid}-candidate-review`}
+    s={selectedCard}
+    bind:turned={candidateTurned}
+    bind:textBack={candidateTextBack}
+   />
   </div>
  {/if}
- {#if !wide && inspectedCard}
-  <button type="button" class="secondary back-to-field" onclick={returnToField}>Back to field</button>
-  <div class="designed-back"><Card s={inspectedCard} face="back" onDetails={() => void inspectedDetails?.showDetails()} /></div>
-  <CardDetails bind:this={inspectedDetails} s={inspectedCard} />
+ {#if inspectedCard}
+  <button type="button" class="secondary back-to-field" aria-controls={`${uid}-roster-review`} onclick={returnToField}>Back to field</button>
+  <CardReview
+   bind:this={inspectedReview}
+   id={`${uid}-roster-review`}
+   s={inspectedCard}
+   bind:turned={inspectedTurned}
+   bind:textBack={inspectedTextBack}
+   onClose={returnToField}
+  />
  {:else}
   <div hidden={!wide && !!selectedCard && sheetTab !== 'field'} role={selectedProfile && !wide ? 'tabpanel' : undefined} id="{uid}-panel-field" aria-labelledby={selectedProfile && !wide ? `${uid}-tab-field` : undefined}>
-   <Roster {draft} {manifest} {profiles} {rankings} {rankingLoading} {rankingError} {busy} {media} {mediaStatus} {preview} compact={wide} legalSlots={movingSeasonId ? [] : destinations} {movingSeasonId} {moveTargets} onSlot={slotAction} />
+   <Roster
+    {draft}
+    {manifest}
+    {profiles}
+    {rankings}
+    {rankingLoading}
+    {rankingError}
+    {busy}
+    {media}
+    {mediaStatus}
+    {preview}
+    compact={wide}
+    legalSlots={movingSeasonId ? [] : destinations}
+    {movingSeasonId}
+    {moveTargets}
+    {inspectedSeasonId}
+    inspectionId={`${uid}-roster-review`}
+    onSlot={slotAction}
+   />
   </div>
  {/if}
 {/snippet}
@@ -335,7 +395,6 @@
   {#if wide}<aside class="field-panel" aria-label="Your field"><div class="panel-header">{@render fieldHeader()}</div><div class="field-scroll">{@render fieldContent()}</div><div class="field-footer">{@render fieldFooter()}</div></aside>{/if}
  </div>
  <DraftSheet open={!wide && sheetOpen} {trigger} onClose={dismissSheet} header={fieldHeader} children={fieldContent} footer={fieldFooter} />
- {#if wide && inspectedCard}<CardInspection bind:this={inspection} s={inspectedCard} returnFocus={fieldHeading} onClose={() => inspectedSeasonId = null} />{/if}
 </div>
 
 <style>
@@ -366,7 +425,6 @@
  .tabs { display: flex; gap: .5rem; }
  .tabs button { flex: 1; min-height: 44px; }
  .tabs [aria-selected='true'] { background: var(--text); color: var(--background); }
- .designed-back { width: min(100%, 330px); margin-inline: auto; }
  .confirmation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
  .confirmation-actions button, .move-controls button, .field-header button, .back-to-field { min-height: 44px; }
  .pick-confirmation p, .move-controls p, .field-hint { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
@@ -392,6 +450,5 @@
  .rules-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; min-height: 44px; font-size: .875rem; color: var(--muted); text-decoration: none; }
  .new-draft { flex: none; padding-inline: .75rem; font-size: .875rem; }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
- @media (min-width: 768px) { .designed-back { width: min(100%, 410px); } }
  @media (max-width: 374px) { .draft-toolbar { align-items: start; } .draft-toolbar .eyebrow { max-width: 6rem; font-size: .65rem; } }
 </style>

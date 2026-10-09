@@ -35,6 +35,8 @@ const fieldCoordinates = {
   legalSlots = [],
   movingSeasonId = null,
   moveTargets = [],
+  inspectedSeasonId = null,
+  inspectionId,
   compact = false,
   onSlot
  }: {
@@ -51,6 +53,8 @@ const fieldCoordinates = {
   legalSlots?: readonly Slot[];
   movingSeasonId?: string | null;
   moveTargets?: readonly LegalReassignment[];
+  inspectedSeasonId?: string | null;
+  inspectionId?: string;
   compact?: boolean;
   onSlot: (slot: Slot, trigger: HTMLButtonElement) => void;
  } = $props();
@@ -66,6 +70,10 @@ const fieldCoordinates = {
 
  function profileLabel(profile: Profile): string {
   return `${profile.displayName}, ${profile.year}, ${profile.historicalTeam}`;
+ }
+
+ function isInspectionTarget(state: { profile: Profile | undefined; slot: Slot; action?: string }): boolean {
+  return !!state.profile && (state.action === 'Inspect card' || state.profile.seasonId === inspectedSeasonId);
  }
 
  function slotState(slot: Slot): {
@@ -162,6 +170,8 @@ const fieldCoordinates = {
     data-slot={state.slot}
     data-preview={state.preview ? 'true' : undefined}
     aria-label={`${state.slot}, ${state.profile ? profileLabel(state.profile) : state.unavailable ? 'unavailable selected season' : 'open'}. ${state.action}.`}
+    aria-expanded={isInspectionTarget(state) ? state.profile?.seasonId === inspectedSeasonId : undefined}
+    aria-controls={isInspectionTarget(state) && inspectionId ? inspectionId : undefined}
     disabled={!state.enabled}
     onclick={event => onSlot(state.slot, event.currentTarget as HTMLButtonElement)}
    >
@@ -194,6 +204,8 @@ const fieldCoordinates = {
      data-slot={state.slot}
      data-preview={state.preview ? 'true' : undefined}
      aria-label={`${state.slot}, ${state.profile ? profileLabel(state.profile) : state.unavailable ? 'unavailable selected season' : 'open'}. ${state.action}.`}
+     aria-expanded={isInspectionTarget(state) ? state.profile?.seasonId === inspectedSeasonId : undefined}
+     aria-controls={isInspectionTarget(state) && inspectionId ? inspectionId : undefined}
      disabled={!state.enabled}
      onclick={event => onSlot(state.slot, event.currentTarget as HTMLButtonElement)}
     >

@@ -10,10 +10,12 @@
   result: SeasonResult;
   cards: readonly ResultsCard[];
   cardViews: ReadonlyMap<string, CardViewModel>;
-  onInspect: (seasonId: string, trigger: HTMLElement) => void;
+  selectedSeasonId: string | null;
+  reviewId: string;
+  onInspect: (seasonId: string, trigger: HTMLButtonElement) => void;
  }
 
- let { result, cards, cardViews, onInspect }: Props = $props();
+ let { result, cards, cardViews, selectedSeasonId, reviewId, onInspect }: Props = $props();
  let highlight = $derived(result.highlight ? formatSeasonMoment(result.highlight, result.games.find(game => game.number === result.highlight?.gameNumber)) : null);
  let lowlight = $derived(result.lowlight ? formatSeasonMoment(result.lowlight, result.games.find(game => game.number === result.lowlight?.gameNumber)) : null);
  let highlightSeasonId = $derived(result.highlight ? (result.highlight.challengeBatting ? result.highlight.batterSeasonId : result.highlight.pitcherSeasonId) : null);
@@ -34,6 +36,8 @@
      type="button"
      class="participant-card"
      aria-label={`Inspect ${card.profile.year} ${card.profile.displayName}, ${label.toLowerCase()}`}
+     aria-expanded={selectedSeasonId === card.seasonId}
+     aria-controls={reviewId}
      onclick={event => onInspect(card.seasonId, event.currentTarget)}
     >
      <span class="participant-art" aria-hidden="true" inert>
@@ -52,7 +56,7 @@
     </div>
     {#if copy.final}<p class="final">{copy.final}</p>{/if}
     {#if card && view}
-     <button type="button" class="inspect-action" onclick={event => onInspect(card.seasonId, event.currentTarget)}>
+     <button type="button" class="inspect-action" aria-expanded={selectedSeasonId === card.seasonId} aria-controls={reviewId} onclick={event => onInspect(card.seasonId, event.currentTarget)}>
       Inspect {card.profile.displayName}
      </button>
     {/if}

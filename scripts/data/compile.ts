@@ -154,6 +154,21 @@ function buildShowcase(candidates: Profile[], source: GroupedWarRows): ShowcaseC
  return showcase;
 }
 
+export function buildGallery(chunks: Record<string, Profile[]>): Record<string, ShowcaseCard> {
+ const gallery: Record<string, ShowcaseCard> = {};
+ for (const key of Object.keys(chunks).sort(compareId)) {
+  const profiles = chunks[key]!;
+  const profile = [...profiles]
+   .sort((a, b) => compareId(a.seasonId, b.seasonId))
+   .find(candidate => SLOTS.some(slot => candidate.eligibleSlots.includes(slot)));
+  if (!profile) throw new Error(`Unable to select a canonical gallery card for ${key}`);
+  const slot = SLOTS.find(value => profile.eligibleSlots.includes(value));
+  if (!slot) throw new Error(`Unable to select a canonical gallery slot for ${key}`);
+  gallery[key] = { profile, slot };
+ }
+ return gallery;
+}
+
 
 export function compileData(tables: Tables, attribution: Attribution, sourceCommit: string, warRows: CsvRow[]): Compilation {
  if (!warRows.length) throw new Error('Pinned defensive/WAR source is required for core data compilation.');
@@ -228,7 +243,8 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  };
  const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, messages: compiled.diagnostics };
  const showcase = buildShowcase(candidates, joinedWar);
- const payload = { schemaVersion: 1, sourceCommit, chunks, showcase, simulation: simulationBase, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
+ const gallery = buildGallery(chunks);
+ const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
  const dataVersion = createHash('sha256').update(canonicalJSON(payload)).digest('hex');
  const prefix = `/data/${dataVersion}`;
  const manifest: Manifest = {
@@ -241,6 +257,7 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  const simulation: SimulationData = { ...simulationBase, dataVersion };
  const files: Record<string, unknown> = { 'manifest.json': manifest, 'simulation.json': simulation, 'showcase.json': showcase, 'attribution.json': attribution, 'defense-source.json': DEFENSE_METHOD, 'diagnostics.json': diagnostics };
  for (const [key, profiles] of Object.entries(chunks)) files[`${key}.json`] = profiles;
+ for (const [key, card] of Object.entries(gallery)) files[`gallery-${key}.json`] = card;
  return { manifest, files, payload, diagnostics: compiled.diagnostics };
 }
 

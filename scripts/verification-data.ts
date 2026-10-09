@@ -1,8 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Manifest, Profile, ShowcaseCard, SimulationData } from '../src/lib/game/types.ts';
-import { validateDefensiveEnvironment, validateProfile } from '../src/lib/sim/validation.ts';
+import { compareId, SLOTS, type Manifest, type Profile, type ShowcaseCard, type SimulationData } from '../src/lib/game/types.ts';
 
 export interface CurrentData {
 	schemaVersion: 1;
@@ -63,6 +62,19 @@ export interface VerificationData {
 	manifest: Manifest;
 	simulation: SimulationData;
 	showcase: ShowcaseCard[];
+	gallery: Record<string, ShowcaseCard>;
+}
+ 
+function validateGeneratedGallery(manifest: Manifest, key: string, card: ShowcaseCard): void {
+	if (!card || typeof card !== 'object' || !SLOTS.includes(card.slot)) throw new Error(`Generated gallery card ${key} is invalid`);
+	validateGeneratedProfile(card.profile);
+	const candidates = manifest.candidates
+		.filter(candidate => `${candidate.franchiseId}-${candidate.decade}` === key)
+		.sort((a, b) => compareId(a.seasonId, b.seasonId));
+	const expected = candidates.find(candidate => SLOTS.some(slot => candidate.eligibleSlots.includes(slot)));
+	if (!expected || !matchesCandidate(card.profile, expected) || card.slot !== SLOTS.find(slot => expected.eligibleSlots.includes(slot))) {
+		throw new Error(`Generated gallery card ${key} does not match the manifest`);
+	}
 }
 
 export async function loadVerificationData(): Promise<VerificationData> {
@@ -86,7 +98,18 @@ export async function loadVerificationData(): Promise<VerificationData> {
 		|| showcaseByEra.size !== 8 || [...showcaseByEra.values()].some(count => count !== 4)) {
 		throw new Error('Generated showcase does not contain four distinct canonical profiles for all eight eras');
 	}
-	return { current, manifest, simulation, showcase };
+	const gallery: Record<string, ShowcaseCard> = {};
+	for (const key of Object.keys(manifest.chunks).sort(compareId)) {
+		const expected = manifest.candidates
+			.filter(candidate => `${candidate.franchiseId}-${candidate.decade}` === key)
+			.sort((a, b) => compareId(a.seasonId, b.seasonId))
+			.find(candidate => SLOTS.some(slot => candidate.eligibleSlots.includes(slot)));
+		if (!expected) continue;
+		const card = await readJson<ShowcaseCard>(localAssetPath(`/data/${manifest.dataVersion}/gallery-${key}.json`));
+		validateGeneratedGallery(manifest, key, card);
+		gallery[key] = card;
+	}
+	return { current, manifest, simulation, showcase, gallery };
 }
 
 export class ProfileChunks {

@@ -3,13 +3,13 @@ import { parseCsv, type CsvRow } from '../../../scripts/data/acquire.ts';
 import { buildBaselines } from '../../../scripts/data/baselines.ts';
 import { applyDefense } from '../../../scripts/data/defense.ts';
 import { buildBullpenCandidates } from '../../../scripts/data/bullpens.ts';
-import { canonicalJSON, compileData } from '../../../scripts/data/compile.ts';
+import { buildGallery, canonicalJSON, compileData } from '../../../scripts/data/compile.ts';
 import { battingColumns, battingCounts, groupCounts, pitchingColumns, pitchingCounts, seasonKey } from '../../../scripts/data/counts.ts';
 import { buildFielding, leagueFielding } from '../../../scripts/data/fielding.ts';
 import { assignHitters } from '../../../scripts/data/opponents.ts';
 import { groupJoinedWarRows } from '../../../scripts/data/source-join.ts';
 import { compileProfiles, percentile } from '../../../scripts/data/profiles.ts';
-import { POSITIONS, type DefensiveEnvironment, type Rates, type ShowcaseCard } from '../game/types.ts';
+import { POSITIONS, SLOTS, compareId, type DefensiveEnvironment, type Rates, type ShowcaseCard } from '../game/types.ts';
 import { validateProfile } from '../sim/validation.ts';
 import { syntheticAttribution, syntheticTables } from './compiler-fixtures.ts';
 
@@ -286,6 +286,11 @@ describe('historical data compiler', () => {
   expect(showcase).toHaveLength(32);
   expect(new Set(showcase.map(card => card.profile.seasonId)).size).toBe(32);
   expect(showcase.every(card => card.profile.eligibleSlots.includes(card.slot))).toBe(true);
+  for (const key of Object.keys(first.manifest.chunks)) {
+   const card = first.files[`gallery-${key}.json`] as ShowcaseCard;
+   expect(card).toBeDefined();
+   expect(card.profile.eligibleSlots.includes(card.slot)).toBe(true);
+  }
   expect(first.manifest.coverage.slice(0, 2)).toEqual([
    { decade: 1950, firstYear: 1950, lastYear: 1950, label: '1950–1950' },
    { decade: 1960, firstYear: 1960, lastYear: 1961, label: '1960–1961' }
@@ -309,6 +314,12 @@ describe('historical data compiler', () => {
   }
   expect(first.manifest.diagnostics.excludedBatting).toBe(0);
   expect(canonicalJSON({ z: 1, a: { y: 2, b: 3 } })).toBe('{"a":{"b":3,"y":2},"z":1}');
+ });
+ it('selects the smallest validated season and first canonical slot independent of chunk order', () => {
+  const profiles = compileProfiles(syntheticTables()).profiles.filter(profile => profile.franchiseId === 'F0' && Math.floor(profile.year / 10) * 10 === 1960);
+  const expected = [...profiles].sort((a, b) => compareId(a.seasonId, b.seasonId)).find(profile => SLOTS.some(slot => profile.eligibleSlots.includes(slot)))!;
+  const gallery = buildGallery({ 'F0-1960': [...profiles].reverse() });
+  expect(gallery['F0-1960']).toMatchObject({ profile: { seasonId: expected.seasonId }, slot: SLOTS.find(slot => expected.eligibleSlots.includes(slot)) });
  });
  it('fails a missing current club instead of manufacturing opposition', () => {
   const tables = syntheticTables();

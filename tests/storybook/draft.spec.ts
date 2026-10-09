@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, openStory } from './workshop-test';
+import { test, expect, openStory, openStoryByName } from './workshop-test';
 
 async function candidateGroups(page: Page): Promise<string[]> {
 	return page.locator('.candidate-card').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-candidate-group') ?? ''));
@@ -172,5 +172,38 @@ test.describe('Draft board field sheet', () => {
 		await expect(panelConfirmation).toHaveAttribute('data-selected-season', selectedSeason ?? '');
 		await expect(panelConfirmation).toHaveAttribute('data-pending-slot', '2B');
 		await expect(page.locator('.field-panel').getByRole('heading', { name: /^Your field/ })).toBeFocused();
+	});
+
+	test('preserves candidate and roster review backs through resize without committing a preview', async ({ page }) => {
+		await page.setViewportSize({ width: 402, height: 874 });
+		await openStoryByName(page, 'Draft/Board', 'Partial roster');
+		const stored = await page.evaluate(() => ['162-zero:v1', '162-zero:motion:v1'].map(key => localStorage.getItem(key)));
+		await page.getByRole('button', { name: /Roll next franchise/ }).click();
+		await page.locator('.candidate-card').first().getByRole('button', { name: /^Select / }).click();
+		let owner = page.locator('dialog.draft-sheet[open]');
+		const selected = await owner.locator('.pick-confirmation').getAttribute('data-selected-season');
+		const destination = await owner.locator('.pick-confirmation').getAttribute('data-pending-slot');
+		expect(destination).not.toBe('');
+		await owner.getByRole('tab', { name: 'Card back', exact: true }).click();
+		await owner.getByRole('button', { name: 'Text version', exact: true }).click();
+		await owner.getByRole('tab', { name: 'Field', exact: true }).click();
+		await owner.locator('[data-slot="SP1"]').click();
+		await owner.getByRole('button', { name: 'Text version', exact: true }).click();
+		for (const width of [1440, 402, 1440, 402]) {
+			await page.setViewportSize({ width, height: 900 });
+			owner = page.locator(width === 402 ? 'dialog.draft-sheet[open]' : '.field-panel');
+			await expect(owner.locator('.card-review:visible').getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
+			await expect(owner.locator('.pick-confirmation')).toHaveAttribute('data-selected-season', selected!);
+			await expect(owner.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', destination!);
+			await expect(page.locator('.picked-count')).toHaveText('6 / 14');
+			await expect(page.locator('dialog[open]')).toHaveCount(width === 402 ? 1 : 0);
+		}
+		await owner.getByRole('button', { name: 'Back to field', exact: true }).click();
+		await owner.getByRole('tab', { name: 'Card back', exact: true }).click();
+		await expect(owner.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
+		await owner.getByRole('tab', { name: 'Field', exact: true }).click();
+		expect(await page.evaluate(() => ['162-zero:v1', '162-zero:motion:v1'].map(key => localStorage.getItem(key)))).toEqual(stored);
+		await owner.getByRole('button', { name: `Draft at ${destination}`, exact: true }).click();
+		await expect(page.getByRole('button', { name: /Open your field 7 \/ 14/ })).toBeVisible();
 	});
 });

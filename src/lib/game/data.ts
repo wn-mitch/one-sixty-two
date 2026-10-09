@@ -1,4 +1,4 @@
-import { POSITIONS, SLOTS, type Manifest, type Position, type Profile, type Roll, type ShowcaseCard, type SimulationData } from './types.ts';
+import { POSITIONS, SLOTS, compareId, type Manifest, type Position, type Profile, type Roll, type ShowcaseCard, type SimulationData } from './types.ts';
 import { validateDefensiveEnvironment, validateProfile, validateTeam } from '../sim/validation.ts';
 
 const DATA_VERSION = /^[a-f0-9]{64}$/;
@@ -70,6 +70,29 @@ export async function loadChunk(manifest: Manifest, roll: Roll): Promise<Profile
    const candidate = expected.get(profile.seasonId);
    return !candidate || !matchesCandidate(profile, candidate);
   })) throw new Error('Dataset error: the loaded seasons do not match this roll. Your draft is preserved. Please retry.');
+ });
+}
+/** Read one compiler-selected card, preserving its canonical identity and slot. */
+export async function loadGalleryCard(manifest: Manifest, roll: Roll): Promise<ShowcaseCard> {
+ const key = `${roll.franchiseId}-${roll.decade}`;
+ if (!DATA_VERSION.test(manifest.dataVersion) ||
+  manifest.chunks[key] !== versionedDataUrl(manifest, `${key}.json`)) throw new Error('Dataset gallery is incompatible');
+ let smallest: Manifest['candidates'][number] | undefined;
+ for (const candidate of manifest.candidates) {
+  if (candidate.franchiseId === roll.franchiseId && candidate.decade === roll.decade &&
+   SLOTS.some(slot => candidate.eligibleSlots.includes(slot)) &&
+   (!smallest || compareId(candidate.seasonId, smallest.seasonId) < 0)) smallest = candidate;
+ }
+ const expected = smallest;
+ if (!expected) throw new Error('Dataset error: no eligible gallery card for this roll');
+ const url = versionedDataUrl(manifest, `gallery-${key}.json`);
+ return fetchJson<ShowcaseCard>(url, card => {
+  if (!card || typeof card !== 'object' || !SLOTS.includes(card.slot)) throw new Error('Dataset gallery is incompatible');
+  validateCanonicalProfile(card.profile);
+  const expectedSlot = SLOTS.find(slot => expected.eligibleSlots.includes(slot));
+  if (!expectedSlot || card.slot !== expectedSlot || !matchesCandidate(card.profile, expected)) {
+   throw new Error('Dataset gallery is incompatible');
+  }
  });
 }
 

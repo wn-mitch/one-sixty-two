@@ -34,3 +34,9 @@ storybook-build:
 
 storybook-test *args:
     npm run test:storybook -- {{args}}
+
+feedback *args:
+    npx --no-install agentation-mcp server --host 127.0.0.1 --port 4747 {{args}}
+
+feedback-doctor:
+    npx --no-install agentation-mcp doctor --http-url http://127.0.0.1:4747

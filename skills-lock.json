@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "agentation": {
+      "source": "benjitaylor/agentation",
+      "sourceType": "github",
+      "skillPath": "skills/agentation/SKILL.md",
+      "computedHash": "52812c1707e9cc8ca68d9dba1dda4e307bfb57b2b3ab0ded89602972808cc699"
+    }
+  }
+}

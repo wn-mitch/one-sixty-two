@@ -3,7 +3,7 @@
  import type { Draft, HitterSlot, Manifest, Profile, Slot } from '../game/types.ts';
  import { draftRules } from '../game/rules.ts';
  import Card from '../cards/Card.svelte';
- import CardInspection from '../cards/CardInspection.svelte';
+ import CardReview from '../cards/CardReview.svelte';
  import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
  import { loadMedia } from '../media/client.ts';
  import type { MediaManifest } from '../media/types.ts';
@@ -34,7 +34,8 @@
  let media = $state.raw<MediaManifest | null>(null);
  let mediaStatus = $state<CardMediaStatus>('loading');
  let inspectedSeasonId = $state<string | null>(null);
- let inspection = $state<CardInspection>();
+ let inspectionTrigger: HTMLButtonElement | null = null;
+ let review = $state<CardReview>();
  let lineupHeading = $state<HTMLHeadingElement>();
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
  const bySeasonPick = $derived(new Map(draft.picks.map(pick => [pick.seasonId, pick])));
@@ -67,10 +68,21 @@
  }
 
  async function inspect(seasonId: string, trigger: HTMLButtonElement): Promise<void> {
-  if (drag?.active || performance.now() < suppressClickUntil) return;
+  if (drag?.active || performance.now() < suppressClickUntil || !cardViews.has(seasonId)) return;
+  inspectionTrigger = trigger;
   inspectedSeasonId = seasonId;
   await tick();
-  await inspection?.open(trigger);
+  review?.focusHeading();
+ }
+
+ function closeInspection(): void {
+  const trigger = inspectionTrigger;
+  inspectedSeasonId = null;
+  inspectionTrigger = null;
+  void tick().then(() => {
+   if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
+   else if (lineupHeading?.isConnected) lineupHeading.focus({ preventScroll: true });
+  });
  }
 
  function cancelDrag(): void {
@@ -160,6 +172,13 @@
   if (busy || current.length !== drag.originalOrder.length || current.some((id, index) => id !== drag!.originalOrder[index])) cancelDrag();
  });
 
+ $effect(() => {
+  if (inspectedSeasonId && !cardViews.has(inspectedSeasonId)) {
+   inspectedSeasonId = null;
+   inspectionTrigger = null;
+  }
+ });
+
  onMount(() => {
   let disposed = false;
   void loadMedia().then(value => {
@@ -208,20 +227,22 @@
    </div>
   </section>
  </div>
+ {#if inspectedCard}
+  {#key inspectedSeasonId}
+   <CardReview id="lineup-card-review" bind:this={review} s={inspectedCard} onClose={closeInspection} />
+  {/key}
+ {/if}
  <footer class="simulate">
   <p>No second chances inside the season. Every game counts.</p>
   <button type="button" class="primary" disabled={busy || !complete} onclick={onsimulate}>{busy ? 'Preparing your season…' : 'Simulate 162 games'}</button>
   {#if !complete && !busy}<p class="notice">All {draftRules(draft.schemaVersion).slots.length} selected seasons must finish loading before the season can start.</p>{/if}
  </footer>
- {#if inspectedCard}
-  <CardInspection bind:this={inspection} s={inspectedCard} returnFocus={lineupHeading} onClose={() => inspectedSeasonId = null} />
- {/if}
 </section>
 
 {#snippet artwork(profile: Profile)}
  {@const card = cardViews.get(profile.seasonId)}
  {#if card}
-  <button type="button" class="card-trigger" aria-label={`Inspect ${profile.year} ${profile.displayName} card`} onclick={event => inspect(profile.seasonId, event.currentTarget)}>
+  <button type="button" class="card-trigger" aria-label={`Inspect ${profile.year} ${profile.displayName} card`} aria-expanded={inspectedSeasonId === profile.seasonId} aria-controls="lineup-card-review" onclick={event => inspect(profile.seasonId, event.currentTarget)}>
    <span class="miniature" aria-hidden="true" inert>
     <Card s={card} face="front" compact thumbnail interactive={false} onDetails={() => {}} />
    </span>

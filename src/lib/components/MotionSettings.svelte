@@ -40,7 +40,7 @@
 		align-items: center;
 		gap: var(--space-2);
 		min-height: 2.75rem;
-		padding: 0;
+		padding: var(--space-2) var(--motion-control-pad-inline, var(--space-3));
 		border: 0;
 		background: transparent;
 		color: var(--muted);

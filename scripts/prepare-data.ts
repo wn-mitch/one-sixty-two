@@ -6,7 +6,7 @@ import { acquireAttribution, writeArchive } from './data/attribution.ts';
 import { canonicalJSON, compileData } from './data/compile.ts';
 import { acquireRankingsSource, RANKINGS_SOURCE_CHECKSUM, RANKINGS_SOURCE_COMMIT, RANKINGS_SOURCE_FILE } from './rankings/source.ts';
 
-interface PreparedCache { compilerHash: string; dataVersion: string; assets: Record<string, string> }
+interface PreparedCache { compilerHash: string; dataVersion: string; assets: Record<string, string>; gallery: string[] }
 const cacheDir = '.cache/lahman';
 const outputDir = 'static/data';
 const offline = process.argv.includes('--offline');
@@ -27,7 +27,7 @@ async function reusePrepared(compilerHash: string): Promise<boolean> {
  let cache: PreparedCache;
  try { cache = JSON.parse(bytes.toString('utf8')) as PreparedCache; }
  catch { console.warn('Invalid prepared-cache metadata; rebuilding generated data.'); return false; }
- if (cache.compilerHash !== compilerHash || !/^[a-f0-9]{64}$/.test(cache.dataVersion) || !cache.assets || typeof cache.assets !== 'object') return false;
+ if (cache.compilerHash !== compilerHash || !/^[a-f0-9]{64}$/.test(cache.dataVersion) || !cache.assets || typeof cache.assets !== 'object' || !Array.isArray(cache.gallery) || cache.gallery.length === 0) return false;
  // An offline fast path still verifies every pinned raw input, not merely a previous success flag.
  for (const [filename, checksum] of Object.entries(CHECKSUMS)) {
   const raw = await optionalBytes(join(cacheDir, filename));
@@ -35,7 +35,7 @@ async function reusePrepared(compilerHash: string): Promise<boolean> {
  }
  const warSource = await optionalBytes(join('.cache/rankings', RANKINGS_SOURCE_FILE));
  if (!warSource || createHash('sha256').update(warSource).digest('hex') !== RANKINGS_SOURCE_CHECKSUM) return false;
- if (!cache.assets['current.json'] || !cache.assets[`${cache.dataVersion}/manifest.json`] || !cache.assets[`${cache.dataVersion}/showcase.json`] || !cache.assets[`${cache.dataVersion}/defense-source.json`] || !cache.assets[`${cache.dataVersion}/transformed-data.tar.gz`]) return false;
+ if (!cache.assets['current.json'] || !cache.assets[`${cache.dataVersion}/manifest.json`] || !cache.assets[`${cache.dataVersion}/showcase.json`] || !cache.assets[`${cache.dataVersion}/defense-source.json`] || !cache.assets[`${cache.dataVersion}/transformed-data.tar.gz`] || cache.gallery.some(filename => !filename.startsWith(`${cache.dataVersion}/gallery-`) || !cache.assets[filename])) return false;
  for (const [filename, checksum] of Object.entries(cache.assets)) {
   if (!/^(current\.json|[a-f0-9]{64}\/[A-Za-z0-9_.-]+)$/.test(filename)) return false;
   const asset = await optionalBytes(join(outputDir, filename));
@@ -75,7 +75,7 @@ async function prepare(): Promise<void> {
  assets['current.json'] = createHash('sha256').update(pointer).digest('hex');
  await mkdir(cacheDir, { recursive: true });
  const temporaryCache = join(cacheDir, `.prepared-${randomUUID()}.json`);
- await writeFile(temporaryCache, canonicalJSON({ compilerHash, dataVersion, assets } satisfies PreparedCache));
+ await writeFile(temporaryCache, canonicalJSON({ compilerHash, dataVersion, assets, gallery: Object.keys(compilation.files).filter(filename => filename.startsWith('gallery-')).map(filename => `${dataVersion}/${filename}`) } satisfies PreparedCache));
  await rename(temporaryCache, join(cacheDir, 'prepared.json'));
  const diagnostics = compilation.manifest.diagnostics;
  console.log(`Prepared ${compilation.manifest.candidates.length} candidates, 30 opponents and ${Object.keys(compilation.manifest.chunks).length} franchise-decade chunks: ${dataVersion}`);

@@ -9,6 +9,8 @@
 		rankingLoading,
 		rankingError,
 		mediaUnavailable,
+		selectedSeasonId,
+		reviewId,
 		onInspect
 	}: {
 		cards: readonly ResultsCard[];
@@ -16,7 +18,9 @@
 		rankingLoading: boolean;
 		rankingError: boolean;
 		mediaUnavailable: boolean;
-		onInspect: (seasonId: string, trigger: HTMLElement) => void;
+		selectedSeasonId: string | null;
+		reviewId: string;
+		onInspect: (seasonId: string, trigger: HTMLButtonElement) => void;
 	} = $props();
 
 	function noCardDetails(): void {}
@@ -44,6 +48,8 @@
 						class="hand-card"
 						data-slot={card.slot}
 						aria-label={`Inspect ${cardLabel(card)} card`}
+						aria-expanded={selectedSeasonId === card.seasonId}
+						aria-controls={reviewId}
 						onclick={(event) => onInspect(card.seasonId, event.currentTarget)}
 					>
 						<span aria-hidden="true">

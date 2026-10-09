@@ -6,11 +6,15 @@
 	let {
 		featured,
 		cardViews,
+		selectedSeasonId,
+		reviewId,
 		onInspect
 	}: {
 		featured: readonly FeaturedResult[];
 		cardViews: ReadonlyMap<string, CardViewModel>;
-		onInspect: (seasonId: string, trigger: HTMLElement) => void;
+		selectedSeasonId: string | null;
+		reviewId: string;
+		onInspect: (seasonId: string, trigger: HTMLButtonElement) => void;
 	} = $props();
 
 	function noCardDetails(): void {}
@@ -40,6 +44,8 @@
 						type="button"
 						class="award-card"
 						aria-label={`Inspect ${cardLabel(entry.card)} award card`}
+						aria-expanded={selectedSeasonId === entry.card.seasonId}
+						aria-controls={reviewId}
 						onclick={(event) => onInspect(entry.card.seasonId, event.currentTarget)}
 					>
 						<span class="award-art" aria-hidden="true">

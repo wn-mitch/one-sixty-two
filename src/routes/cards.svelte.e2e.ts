@@ -78,7 +78,7 @@ async function selectWideCard(page: Page, scenario: CardScenario) {
 
 async function openNarrowBack(sheet: Locator, era: string): Promise<void> {
 	await sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
-	const back = sheet.locator('.designed-back [data-card][data-face="back"]').first();
+	const back = sheet.locator('.card-review .back [data-card][data-face="back"]').first();
 	await expect(back).toBeVisible();
 	await expect(back).toHaveAttribute('data-card', era);
 	await expect(sheet.locator('.inspection-back')).toHaveCount(0);
@@ -94,7 +94,7 @@ async function openWideBack(card: Locator, era: string): Promise<void> {
 }
 
 async function openTextVersion(root: Locator): Promise<Locator> {
-	await root.locator('.disclosure-controls').getByRole('button', { name: 'Text version', exact: true }).click();
+	await root.getByRole('button', { name: 'Text version', exact: true }).click();
 	const text = root.locator('.inspection-back');
 	await expect(text).toBeVisible();
 	await expect(text).toHaveAccessibleName('Historical season text version');
@@ -294,31 +294,28 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 	expect(era).not.toBeNull();
 	await field.locator(`[data-slot="${hitterSlot}"]`).click();
 	await field.getByRole('button', { name: 'Inspect card', exact: true }).click();
-	const dialog = page.locator('dialog.card-inspection[open]');
-	await expect(dialog).toBeVisible();
-	const turn = dialog.getByRole('button', { name: 'Turn over', exact: true });
-	await expect(turn).toBeFocused();
-	await turn.click();
-	await expect(dialog.locator('[data-cardbox]')).toHaveAttribute('data-face', 'back');
-	const designedBack = dialog.locator('.back [data-card][data-face="back"]').first();
+	const review = field.locator('.card-review');
+	await expect(review).toBeVisible();
+	await expect(review.getByRole('heading').first()).toBeFocused();
+	await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'back');
+	const designedBack = review.locator('.back [data-card][data-face="back"]').first();
 	await expect(designedBack).toBeVisible();
 	await expect(designedBack).toHaveAttribute('data-card', era!);
-	await expect(dialog.locator('.inspection-back')).toHaveCount(0);
-	let text = await openTextVersion(dialog);
+	await expect(review.locator('.inspection-back')).toHaveCount(0);
+	let text = await openTextVersion(review);
 	await expect(text.getByRole('heading', { name: 'Batting', exact: true })).toBeVisible();
 	await expect(text.getByRole('heading', { name: 'Pitching', exact: true })).toBeVisible();
 
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect(page.locator('dialog.card-inspection[open]')).toHaveCount(0);
+	await expect(field).toHaveCount(0);
 	const sheet = draftSheet(page);
 	await expect(sheet).toBeVisible();
 	await expect(sheet.getByRole('button', { name: 'Back to field', exact: true })).toBeVisible();
 	await expect(sheet.locator('.active-player')).toContainText(scenario.profile.displayName);
 	await expect(sheet.locator('.active-player')).toContainText(String(scenario.profile.year));
-	const transferredBack = sheet.locator('.designed-back [data-card][data-face="back"]').first();
-	await expect(transferredBack).toBeVisible();
-	await expect(transferredBack).toHaveAttribute('data-card', era!);
-	text = await openTextVersion(sheet);
+	text = sheet.locator('.card-review .back .inspection-back');
+	await expect(text).toBeVisible();
+	await expect(sheet.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(text.locator('[data-layer="name.full"]')).toContainText(scenario.profile.displayName);
 	await expect(text.locator('[data-layer="season.line"]')).toContainText(String(scenario.profile.year));
 	await expect(text.getByRole('heading', { name: 'Batting', exact: true })).toBeVisible();

@@ -127,6 +127,15 @@
   font-weight: 800;
   letter-spacing: .04em;
  }
+ @media (min-width: 48rem) {
+  .era-strip {
+   display: grid;
+   grid-template-columns: repeat(4, var(--home-era-card-width, 128px));
+   gap: var(--space-3);
+   max-width: 34.25rem;
+  }
+  .era-strip figure, .era-card { width: var(--home-era-card-width, 128px); }
+ }
  @media (max-width: 47.999rem) {
   .welcome {
    min-height: 0;
