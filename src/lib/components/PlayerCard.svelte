@@ -260,7 +260,7 @@
 	.player-card.draft-mode { max-width: none; }
 	.draft-mode .art-frame { order: 0; }
 	.draft-mode .controller { order: 1; }
-	.draft-turn { flex: 0 0 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0 .6rem; color: var(--card-ink); background: var(--surface-raised, var(--surface)); border: 1px solid var(--border); border-radius: .25rem; font-size: 1.1rem; }
+	.draft-turn { grid-column: 2; grid-row: 1; min-width: 2.75rem; min-height: 2.75rem; box-sizing: border-box; padding: 0 .6rem; color: var(--card-ink); background: var(--surface-raised, var(--surface)); border: 1px solid var(--border); border-radius: .25rem; font-size: 1.1rem; }
 	.draft-disclosures { order: 3; }
 	.draft-mode:not(.wide) .ranking-status { display: none; }
 	.draft-mode.wide .ranking-status { display: none; }
@@ -284,13 +284,16 @@
 	.ranking-status { color: var(--card-muted); font-size: .78rem; line-height: 1.4; }
 	.compact-qualification { color: var(--card-muted); font-size: .76rem; line-height: 1.35; overflow-wrap: anywhere; }
 	.compact-qualification strong { color: var(--card-ink); }
-	.placement-list { display: flex; flex-wrap: wrap; gap: .35rem; }
-	.placement { min-height: 2.75rem; min-width: 2.75rem; padding: .3rem .5rem; color: var(--card-ink); background: color-mix(in oklch, var(--surface) 72%, var(--focus)); border: 1px solid var(--focus); border-radius: .25rem; font-size: .72rem; font-weight: 750; }
-	.wide-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; width: 100%; }
-	.wide-season-picker { flex: 1 1 8rem; min-width: 7rem; }
-	.wide-season-picker select { min-height: 2.75rem; padding-block: .25rem; }
-	.wide-controls .placement-list { display: contents; }
+	.placement-list { display: flex; flex-wrap: wrap; gap: .35rem; min-width: 0; max-width: 100%; }
+	.placement { min-height: 2.75rem; min-width: 2.75rem; box-sizing: border-box; padding: .3rem .5rem; color: var(--card-ink); background: color-mix(in oklch, var(--surface) 72%, var(--focus)); border: 1px solid var(--focus); border-radius: .25rem; font-size: .72rem; font-weight: 750; }
+	.wide-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .35rem; width: 100%; min-width: 0; }
+	.wide-season-picker { grid-column: 1; width: 100%; min-width: 0; }
+	.wide-season-picker select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; min-height: 2.75rem; padding-block: .25rem; }
+	.wide-controls .fixed-season { grid-column: 1; min-width: 0; }
+	.wide-controls .placement-list { grid-column: 1 / -1; }
+	.wide-controls .draft-turn { grid-column: 2; grid-row: 1; }
 	.wide-controls .placement { flex: 0 0 2.75rem; }
+	.wide-controls .no-open-position { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
 	.placement:disabled { color: var(--card-muted); border-color: var(--border); background: var(--surface); cursor: not-allowed; opacity: .7; text-decoration: line-through; }
 	.no-open-position { color: var(--card-muted); font-size: .72rem; font-weight: 700; }
 	.art-frame { width: min(100%, 20rem); margin-inline: auto; }

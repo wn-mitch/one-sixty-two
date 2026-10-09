@@ -1,10 +1,5 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
- import { Session } from '#lib/game/session.svelte.ts';
- import DraftBoard from '#lib/components/DraftBoard.svelte';
- import Lineup from '#lib/components/Lineup.svelte';
- import Progress from '#lib/components/Progress.svelte';
- import Results from '#lib/components/Results.svelte';
  import Welcome from '#lib/components/Welcome.svelte';
  import { createCardViewModel, type CardMediaStatus } from '#lib/cards/view-model.ts';
  import { draftRules } from '#lib/game/rules.ts';
@@ -15,7 +10,15 @@
  import { loadRankings } from '#lib/rankings/client.ts';
  import type { WarRankings } from '#lib/rankings/types.ts';
 
- const session = new Session();
+ type GameSession = import('#lib/game/session.svelte.ts').Session;
+
+ let session = $state.raw<GameSession | null>(null);
+ let DraftBoard = $state<typeof import('#lib/components/DraftBoard.svelte').default | null>(null);
+ let Lineup = $state<typeof import('#lib/components/Lineup.svelte').default | null>(null);
+ let Progress = $state<typeof import('#lib/components/Progress.svelte').default | null>(null);
+ let Results = $state<typeof import('#lib/components/Results.svelte').default | null>(null);
+ let gameLoadError = $state('');
+ let phaseLoadError = $state('');
  let rankings = $state.raw<WarRankings | null>(null);
  let rankingLoading = $state(false);
  let rankingError = $state(false);
@@ -25,11 +28,11 @@
  let showcaseError = $state(false);
  let media = $state.raw<MediaManifest | null>(null);
  let mediaStatus = $state<CardMediaStatus>('loading');
- const rankingVersion = $derived(session.draft?.dataVersion ?? session.manifest?.dataVersion ?? null);
+ const rankingVersion = $derived(session?.draft?.dataVersion ?? session?.manifest?.dataVersion ?? null);
  const showcaseCards = $derived(showcase.map(({ profile, slot }) => ({
   seasonId: profile.seasonId,
   playerId: profile.playerId,
-  model: createCardViewModel({ profile, slot, manifest: session.manifest, media, mediaStatus, rankings })
+  model: createCardViewModel({ profile, slot, manifest: session?.manifest ?? null, media, mediaStatus, rankings })
  })));
 
  function retryRankings() {
@@ -37,17 +40,40 @@
  }
  onMount(() => {
   let disposed = false;
-  void session.initialize();
+  let currentSession: GameSession | null = null;
+  void import('#lib/game/session.svelte.ts')
+   .then(({ Session }) => {
+    if (disposed) return;
+    currentSession = new Session();
+    session = currentSession;
+    void currentSession.initialize();
+   })
+   .catch(() => {
+    if (!disposed) gameLoadError = 'The game could not load. Reload the page to try again.';
+   });
   void loadMedia()
    .then(value => { if (!disposed) { media = value; mediaStatus = 'ready'; } })
    .catch(() => { if (!disposed) mediaStatus = 'unavailable'; });
   return () => {
    disposed = true;
-   session.dispose();
+   currentSession?.dispose();
   };
  });
  $effect(() => {
-  const manifest = session.manifest;
+  const phase = session?.phase;
+  const failed = () => { phaseLoadError = 'This stage could not load. Reload the page to try again.'; };
+  if ((phase === 'ready' || phase === 'revealing' || phase === 'choosing') && !DraftBoard) {
+   void import('#lib/components/DraftBoard.svelte').then(({ default: component }) => { DraftBoard = component; }).catch(failed);
+  } else if (phase === 'lineup' && !Lineup) {
+   void import('#lib/components/Lineup.svelte').then(({ default: component }) => { Lineup = component; }).catch(failed);
+  } else if (phase === 'simulating' && !Progress) {
+   void import('#lib/components/Progress.svelte').then(({ default: component }) => { Progress = component; }).catch(failed);
+  } else if (phase === 'results' && !Results) {
+   void import('#lib/components/Results.svelte').then(({ default: component }) => { Results = component; }).catch(failed);
+  }
+ });
+ $effect(() => {
+  const manifest = session?.manifest ?? null;
   let disposed = false;
   showcase = [];
   showcaseLoading = !!manifest;
@@ -76,11 +102,20 @@
   return () => { disposed = true; };
  });
  $effect(() => {
-  const phase = session.phase;
-  const choosing = phase === 'choosing' && !session.loading;
+  const currentSession = session;
+  const phase = currentSession?.phase;
+  if (!currentSession || !phase) return;
+  const componentReady =
+   phase === 'ready' || phase === 'revealing' || phase === 'choosing' ? DraftBoard :
+   phase === 'lineup' ? Lineup :
+   phase === 'simulating' ? Progress :
+   phase === 'results' ? Results :
+   true;
+  if (!componentReady) return;
+  const choosing = phase === 'choosing' && !currentSession.loading;
   const target = phase === 'ready' ? '#roll-next' : choosing ? '.candidates input[type="search"]' : phase === 'lineup' ? '#lineup-heading' : phase === 'simulating' ? '#simulation-heading' : phase === 'results' ? '#results-heading' : null;
   if (target) void tick().then(() => {
-   if (session.phase !== phase || (phase === 'choosing' && session.loading)) return;
+   if (session !== currentSession || currentSession.phase !== phase || (phase === 'choosing' && currentSession.loading)) return;
    document.querySelector<HTMLElement>(target)?.focus({ preventScroll: phase === 'results' });
    if (phase === 'results') window.scrollTo(0, 0);
   });
@@ -88,41 +123,57 @@
 </script>
 
 
-<main class:home-start={session.phase === 'start'}>
- <div class="sr-only" aria-live="polite" aria-atomic="true">{session.announce}</div>
- <div class="session-feedback">
-  {#if session.storageNotice}<p class="notice">{session.storageNotice}</p>{/if}
-  {#if session.error}
-   <div class="error" role="alert">
-    <p>{session.error}</p>
-    {#if session.canRetry}<button class="secondary" disabled={session.loading} onclick={() => void session.retry()}>Retry</button>{/if}
-    {#if session.incompatible}<button class="secondary" disabled={session.loading} onclick={() => session.requestNew()}>Start new draft</button>{/if}
-   </div>
-  {/if}
-  {#if session.confirmNew}
-   <section class="confirmation" aria-label="Confirm new draft">
-    <h2>Leave this roster behind?</h2>
-    <p>Your picks are permanent. Starting a new draft replaces this saved run with a new seed.</p>
-    <div class="actions"><button class="secondary" onclick={() => session.confirmNew = false}>Keep draft</button><button class="primary" onclick={() => void session.startNew()}>Discard and start new</button></div>
-   </section>
-  {/if}
- </div>
+<main class:home-start={!session || session.phase === 'start'}>
+ {#if gameLoadError || phaseLoadError}
+  <div class="error" role="alert"><p>{gameLoadError || phaseLoadError}</p></div>
+ {/if}
+ {#if session}
+  {@const currentSession = session}
+  <div class="sr-only" aria-live="polite" aria-atomic="true">{currentSession.announce}</div>
+  <div class="session-feedback">
+   {#if currentSession.storageNotice}<p class="notice">{currentSession.storageNotice}</p>{/if}
+   {#if currentSession.error}
+    <div class="error" role="alert">
+     <p>{currentSession.error}</p>
+     {#if currentSession.canRetry}<button class="secondary" disabled={currentSession.loading} onclick={() => void currentSession.retry()}>Retry</button>{/if}
+     {#if currentSession.incompatible}<button class="secondary" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>Start new draft</button>{/if}
+    </div>
+   {/if}
+   {#if currentSession.confirmNew}
+    <section class="confirmation" aria-label="Confirm new draft">
+     <h2>Leave this roster behind?</h2>
+     <p>Your picks are permanent. Starting a new draft replaces this saved run with a new seed.</p>
+     <div class="actions"><button class="secondary" onclick={() => currentSession.confirmNew = false}>Keep draft</button><button class="primary" onclick={() => void currentSession.startNew()}>Discard and start new</button></div>
+    </section>
+   {/if}
+  </div>
 
- {#if session.phase === 'start'}
-  <Welcome manifest={session.manifest} loading={session.loading} hasSavedDraft={!!session.savedDraft} onStart={() => session.requestNew()} onResume={() => void session.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
- {:else if session.draft && session.manifest}
-  {#if session.phase === 'ready' || session.phase === 'revealing' || session.phase === 'choosing'}
-   <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <DraftBoard draft={session.draft} manifest={session.manifest} pool={session.pool} profiles={session.profiles} phase={session.phase} loading={session.loading} busy={session.busy} error={session.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void session.roll()} onDraft={(id, slot) => session.commit(id, slot)} onReassign={(id, slot) => session.reassign(id, slot)} onNew={() => session.requestNew()} />
-  {:else if session.phase === 'lineup'}
-   <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <Lineup draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
-  {:else if session.phase === 'simulating'}
-   <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <Progress completed={session.completed} revealed={session.revealed} result={session.result} onskip={() => session.skip()} />
-  {:else if session.phase === 'results' && session.result}
-   <Results result={session.result} draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => session.requestNew()} onShare={(action, format) => void session.share(action, format)} publication={session.publication} sharing={session.sharing} shareStatus={session.shareStatus} />
+  {#if currentSession.phase === 'start'}
+   <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
+  {:else if currentSession.draft && currentSession.manifest}
+   {#if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
+    <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {currentSession.draft.picks.length} of {draftRules(currentSession.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
+    {#if DraftBoard}
+     <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} error={currentSession.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
+    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the draft…</span></div>{/if}
+   {:else if currentSession.phase === 'lineup'}
+    <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
+    {#if Lineup}
+     <Lineup draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onReassign={(id, slot) => currentSession.reassign(id, slot)} onOrder={(kind, order) => currentSession.order(kind, order)} onsimulate={() => void currentSession.simulate()} />
+    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the lineup…</span></div>{/if}
+   {:else if currentSession.phase === 'simulating'}
+    <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
+    {#if Progress}
+     <Progress completed={currentSession.completed} revealed={currentSession.revealed} result={currentSession.result} onskip={() => currentSession.skip()} />
+    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the season…</span></div>{/if}
+   {:else if currentSession.phase === 'results' && currentSession.result}
+    {#if Results}
+     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format) => void currentSession.share(action, format)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} />
+    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the results…</span></div>{/if}
+   {/if}
   {/if}
+ {:else if !gameLoadError}
+  <Welcome manifest={null} loading hasSavedDraft={false} onStart={() => {}} onResume={() => {}} cards={[]} showcaseStatus="loading" {mediaStatus} />
  {/if}
 </main>
 

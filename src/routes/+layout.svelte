@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import './layout.css';
 	import '../lib/cards/fonts.css';
 	import favicon from '#lib/assets/favicon.svg';
@@ -7,7 +8,37 @@
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
 	const captureRoute = $derived(page.url.pathname.startsWith('/__share/') && page.data.capture === true);
+
+	onMount(() => {
+		if (!import.meta.env.DEV || captureRoute) return;
+		let cancelScheduled = () => {};
+		const load = () => {
+			void import('#lib/dev/FeedbackTools.svelte').then(({ default: component }) => {
+				FeedbackTools = component;
+			});
+		};
+		const schedule = () => {
+			const requestIdle = Reflect.get(window, 'requestIdleCallback') as typeof window.requestIdleCallback | undefined;
+			if (requestIdle) {
+				const idleId = requestIdle.call(window, load);
+				cancelScheduled = () => {
+					const cancelIdle = Reflect.get(window, 'cancelIdleCallback') as typeof window.cancelIdleCallback | undefined;
+					cancelIdle?.call(window, idleId);
+				};
+			} else {
+				const timeoutId = window.setTimeout(load, 0);
+				cancelScheduled = () => window.clearTimeout(timeoutId);
+			}
+		};
+		if (document.readyState === 'complete') schedule();
+		else window.addEventListener('load', schedule, { once: true });
+		return () => {
+			window.removeEventListener('load', schedule);
+			cancelScheduled();
+		};
+	});
 </script>
 
 <svelte:head>
@@ -42,11 +73,8 @@
 	</div>
 {/if}
 
-{#if import.meta.env.DEV && !import.meta.env.SSR && !captureRoute}
-	<!-- Load browser-only tooling here so production and SSR omit its dependency graph. -->
-	{#await import('#lib/dev/FeedbackTools.svelte') then { default: FeedbackTools }}
-		<FeedbackTools />
-	{/await}
+{#if FeedbackTools && !captureRoute}
+	<FeedbackTools />
 {/if}
 
 <style>

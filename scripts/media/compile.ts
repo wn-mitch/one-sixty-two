@@ -23,6 +23,7 @@ import type {
 	AtmosphereSourceRegistry,
 	CommonsMetadata,
 	DataManifest,
+	DirectTeamLogoSource,
 	ExclusionCounts,
 	MediaPayload,
 	PlayerSourceRegistry,
@@ -93,6 +94,24 @@ function semanticAsset(asset: PreparedAsset, override: { license: string; licens
 	};
 }
 
+function directLogoMetadata(franchiseId: string, source: DirectTeamLogoSource, pageId: number): CommonsMetadata {
+	return {
+		title: `direct:${franchiseId}`,
+		pageId,
+		width: 1,
+		height: 1,
+		mime: 'image/svg+xml',
+		downloadUrl: source.url,
+		sourceUrl: source.sourceUrl,
+		dateOriginal: null,
+		license: source.license,
+		licenseUrl: source.licenseUrl,
+		credit: source.credit,
+		sourceId: `direct:${franchiseId}`,
+		pinSourceChecksum: source.checksum
+	};
+}
+
 async function prepareUniqueImages(
 	metadata: CommonsMetadata[],
 	cacheDir: string,
@@ -109,7 +128,7 @@ async function prepareUniqueImages(
 	const workers = await Promise.allSettled(Array.from({ length: workerCount }, async () => {
 		while (cursor < unique.length) {
 			const item = unique[cursor++];
-			const asset = await prepareImage(item, cacheDir, assetDirectory, offline, maxDimension);
+			const asset = await prepareImage(item, cacheDir, assetDirectory, offline, maxDimension, undefined, item.pinSourceChecksum);
 			prepared.set(item.pageId, asset);
 			completed++;
 			onProgress(completed, unique.length);
@@ -214,7 +233,10 @@ export async function generateMedia(input: {
 		];
 		candidateTitlesByPlayer.set(identity.playerId, [...new Set(titles)].sort(compareText));
 	}
-	const logoTitles = Object.values(input.teamSources).flatMap((team) => [team.current?.title, ...team.historical.map((logo) => logo.title)]).filter((title): title is string => Boolean(title));
+	const logoTitles = Object.values(input.teamSources).flatMap((team) => [
+		team.current && 'title' in team.current ? team.current.title : null,
+		...team.historical.map((logo) => logo.title)
+	]).filter((title): title is string => Boolean(title));
 	const photoTitles = [...candidateTitlesByPlayer.values()].flat();
 	const allTitles = [...new Set([...photoTitles, ...logoTitles])].sort(compareText);
 	input.log(`Reading reusable-source metadata for ${allTitles.length} candidate files`);
@@ -292,6 +314,14 @@ export async function generateMedia(input: {
 	for (const [franchiseId, team] of Object.entries(input.teamSources).sort(([a], [b]) => compareText(a, b))) {
 		if (!team.current) {
 			exclusions.missingLogo++;
+		} else if ('source' in team.current) {
+			const metadata = directLogoMetadata(franchiseId, team.current, -(acceptedLogos.length + 1));
+			acceptedLogos.push({
+				franchiseId, metadata,
+				license: team.current.license,
+				licenseUrl: team.current.licenseUrl,
+				credit: team.current.credit
+			});
 		} else {
 			const metadata = commons.get(team.current.title);
 			if (!metadata) {

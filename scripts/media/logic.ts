@@ -294,8 +294,19 @@ export function validateTeamSources(
 		if (!entry.name.trim() || !/^#[0-9a-f]{6}$/i.test(entry.color)) {
 			throw new Error(`Invalid team metadata for franchise ${franchiseId}`);
 		}
-		for (const source of [entry.current, ...entry.historical].filter(Boolean)) {
-			if (!source || !source.title.trim() || source.title.startsWith('File:')) {
+		const current = entry.current;
+		if (current && 'source' in current) {
+			if (current.source !== 'direct' || !/^https:\/\/\S+$/.test(current.url)
+				|| !/^https:\/\/\S+$/.test(current.sourceUrl) || !current.license.trim()
+				|| !/^https:\/\/\S+$/.test(current.licenseUrl) || !current.credit.trim()
+				|| !/^[a-f0-9]{64}$/.test(current.checksum)) {
+				throw new Error(`Invalid direct team logo source for franchise ${franchiseId}`);
+			}
+		} else if (current && (!current.title.trim() || current.title.startsWith('File:'))) {
+			throw new Error(`Invalid Commons title for franchise ${franchiseId}`);
+		}
+		for (const source of entry.historical) {
+			if (!source.title.trim() || source.title.startsWith('File:')) {
 				throw new Error(`Invalid Commons title for franchise ${franchiseId}`);
 			}
 		}

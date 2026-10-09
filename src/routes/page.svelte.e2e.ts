@@ -7,7 +7,7 @@ import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.
 import type { Draft, Slot } from '../lib/game/types.ts';
 import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
 import type { ShareFormat, SharePublication } from '../lib/share/types.ts';
-import { currentManifest, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { currentManifest, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
 import { verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
 
@@ -205,6 +205,29 @@ async function finishRoster(page: Page, request: APIRequestContext) {
 		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();
 	}
 }
+
+test('renders complete decodable franchise marks without substituting a wordmark', async ({ page, request }) => {
+	const media = await currentMedia(request);
+	expect(Object.values(media.teams).filter(team => team.logo === null)).toEqual([]);
+	expect(media.teams.TOR.logo!.height / media.teams.TOR.logo!.width).toBeGreaterThan(.5);
+	await page.goto('/');
+	const marks = page.getByRole('region', { name: 'All 30 franchises', exact: true })
+		.locator('.logo-copy[data-marquee-copy] .team-mark img');
+	await expect(marks).toHaveCount(30);
+	for (const mark of await marks.all()) {
+		await mark.scrollIntoViewIfNeeded();
+		await expect.poll(() => mark.evaluate(async node => {
+			const image = node as HTMLImageElement;
+			await image.decode();
+			const tile = image.parentElement!;
+			const box = image.getBoundingClientRect();
+			const bounds = tile.getBoundingClientRect();
+			return image.naturalWidth > 0 && image.naturalHeight > 0 &&
+				box.left >= bounds.left && box.right <= bounds.right &&
+				box.top >= bounds.top && box.bottom <= bounds.bottom;
+		})).toBe(true);
+	}
+});
 
 test('keeps the slot choice and draft action reachable after choosing a season', async ({ page, request }) => {
 	await page.goto('/');

@@ -5,7 +5,7 @@
  import type { Draft, Manifest, Profile, Slot } from '../game/types.ts';
  import { rankingForSeason } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
- import { isHitter, rankGroups, warValue } from './candidate-ranking.ts';
+ import { compareEntries, isHitter, rankGroups, warValue } from './candidate-ranking.ts';
  import type { CandidateEntry, CandidateGroup, RankingKind, RankingSort } from './candidate-ranking.ts';
  import { candidateGridMotion, createCandidateGridMotion } from '../cards/grid-motion.ts';
  import PlayerCard from './PlayerCard.svelte';
@@ -109,14 +109,15 @@
   group.entries.some(entry => entry.profile.seasonId === selectedSeasonId)
  ));
  const groups = $derived.by(() => {
-  if (activeFilter === 'All') return visibleGroups;
-  const entries = visibleGroups.flatMap(group => group.entries
-   .filter(entry => profileMatchesFilter(entry.profile, activeFilter))
-   .map(entry => ({
-    profile: entry.profile,
-    slots: [activeFilter]
-   })));
-  return rankGroups(entries, sort, rankings);
+  let filtered = visibleGroups;
+  if (activeFilter !== 'All') {
+   const entries = visibleGroups.flatMap(group => group.entries
+    .filter(entry => profileMatchesFilter(entry.profile, activeFilter))
+    .map(entry => ({ profile: entry.profile, slots: [activeFilter] })));
+   filtered = rankGroups(entries, sort, rankings);
+  }
+  return [...filtered].sort((a, b) => sectionKinds.indexOf(a.kind) - sectionKinds.indexOf(b.kind)
+   || compareEntries(selectedEntry(a), selectedEntry(b), a.kind, sort, rankings));
  });
  const filterCounts = $derived.by(() => new Map(filterOptions
   .filter((option): option is Slot => option !== 'All')
@@ -191,8 +192,8 @@
  }
  function sectionDescription(kind: RankingKind): string {
   if (kind === 'Bullpens') return 'Lowest pooled ERA first, then workload';
-  if (sort === 'metrics') return kind === 'Hitters' ? 'Best eligible OPS first' : 'Lowest eligible ERA first';
-  if (rankings) return `Best eligible ${kind === 'Hitters' ? 'batting' : 'pitching'} WAR/162 first`;
+  if (sort === 'metrics') return kind === 'Hitters' ? 'Displayed season OPS, highest first' : 'Displayed season ERA, lowest first';
+  if (rankings) return `Displayed season ${kind === 'Hitters' ? 'batting' : 'pitching'} WAR/162, highest first`;
   return 'WAR order unavailable · stable ID order';
  }
  $effect(() => {

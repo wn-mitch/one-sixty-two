@@ -8,6 +8,8 @@ Draft progress, fielding/DH assignments, and lineup order are saved locally. Exa
 
 Draft cards select a candidate without saving a pick. Choose a highlighted field destination, review the exact season preview, then confirm with Draft. Desktop cards turn in place; phones and portrait tablets open a field sheet with Field/Card back tabs and pinned confirmation. Text version and Details expose the complete historical facts and provenance separately from the eight designed card backs. Dismissal discards only the preview; qualifying roster moves and swaps apply immediately.
 
+Candidate ordering follows each displayed exact season: batting or pitching WAR/162 by default, OPS or ERA under Metrics. Changing a season reorders the cards without committing a pick. Season controls and position buttons stay within each card, and complete names refit when card widths or fonts change.
+
 ## Interface and results
 
 Home uses a bounded set of real canonical profiles for its drifting card wall and era strip, plus all thirty franchise marks. Roster, staff, and Results hand cards use the canonical compact treatment: the same eight decade fronts receive era-specific plates, natural name wrapping, and a 72px minimum artwork width. The phone field grows vertically rather than scrolling sideways, and the five-person staff wraps three plus two when five 72px cards do not fit.
@@ -41,7 +43,7 @@ Annotations stay in browser-local storage. This setup does not send them automat
 
 [DialKit](https://github.com/joshpuckett/dialkit) uses its native Svelte adapter. Its root is mounted at the top right, initially collapsed, and appears when a component registers controls with `createDialKit` from `dialkit/svelte`. Controls are added for specific feedback targets rather than changing shared design values speculatively. Dial adjustments preview values; approved values must be applied to source.
 
-The feedback components are lazy-loaded only in the development browser. Production builds and authenticated share-image capture routes do not mount either tool.
+The feedback components are lazy-loaded only in the development browser, after the page loads and the browser becomes idle. Production builds and authenticated share-image capture routes do not mount either tool.
 
 ## Run
 
@@ -59,6 +61,8 @@ Browser tests start their own local Worker/R2 surface on port 4162. If another p
 Normal automated tests use the local Worker, local R2 surface, and local browser fixtures. They must not enable or call the paid remote `BROWSER` binding.
 
 Development and builds prepare the statistical, ranking, and image assets automatically. The first preparation needs network access and ImageMagick's `magick` executable for image conversion. Raw statistics and ranking exports are checksum-verified and cached under ignored `.cache/lahman/` and `.cache/rankings/`; source metadata and thumbnails are cached under ignored `.cache/media/`. Generated data and imagery belong under ignored `static/data/`, `static/rankings/`, and `static/media/`, never in source control. Synthetic test identities contain no public athlete names.
+
+The start page loads gameplay and phase-specific components on demand. Tailwind supplies theme and reset layers without scanning generated assets for utilities; Vite excludes generated statistical, ranking, and media directories from file watching.
 
 ```sh
 npm run data:prepare
@@ -84,7 +88,7 @@ The data compiler pins an immutable third-party transport commit and SHA-256 for
 
 ## Images
 
-Team marks use reviewed Wikimedia Commons sources. Historical marks apply only within their verified year ranges; other marks are labelled as current franchise identity. A missing reusable mark remains an explicit abbreviation fallback.
+Team marks use reviewed Wikimedia Commons sources or checksum-pinned direct team-identity sources. Historical marks apply only within their verified year ranges; other marks are labelled as current franchise identity. A missing mark remains an explicit abbreviation fallback. Direct team-identity sources retain attribution and rights metadata; their inclusion does not establish reproduction permission.
 
 Normal media compilation consumes reviewed sources. Broad discovery runs explicitly with `just media-discover`; `--providers=cached,commons,openverse,loc`, `--player=ID`, `--missing-only`, `--limit=N`, `--requests=N`, `--refresh`, and `--offline` control a resumable run. Missing players are ordered by selectable cards restored, followed by players lacking same-decade MLB photographs. Cached Wikidata identities (`P1825`), portraits (`P18`), player categories (`P373`), name aliases, Commons structured subjects, and `--collection="Commons category"` supply leads. Openverse and Library of Congress searches preserve provider pagination and source links. A blocked or interrupted search never counts as an exhausted search. TCDB is a manual research reference, not an automated image provider.
 

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { legalSlots } from '../lib/game/draft.ts';
+import { createDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
 import type { Draft, Manifest, Profile, Slot } from '../lib/game/types.ts';
 import { selectLogo, selectPhoto } from '../lib/media/client.ts';
 import { rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
@@ -330,20 +330,65 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 	await sheet.getByRole('button', { name: 'Cancel move', exact: true }).click();
 });
 
-test('filters, searches, and sorts the visible runtime pool by the same ranked groups', async ({ page, request }) => {
+test('orders displayed exact seasons after a lower-ranked season is chosen', async ({ page, request }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
 	const [manifest, rankings] = await Promise.all([currentManifest(request), currentRankings(request)]);
-	const scenario = await cardScenario(request, manifest, () => true);
-	await openSavedDraft(page, scenario.draft);
+	const draft = rollDraft(createDraft(manifest, 13), manifest);
+	const roll = draft.currentRoll!;
+	const response = await request.get(manifest.chunks[`${roll.franchiseId}-${roll.decade}`]);
+	expect(response.ok()).toBe(true);
+	const profiles = await response.json() as Profile[];
+	const bySeason = new Map(profiles.map(profile => [profile.seasonId, profile]));
+	await openSavedDraft(page, draft);
 	await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
-	expect(await visibleGroupIds(page)).toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'war', rankings));
-	const filter = scenario.profile.eligibleSlots[0];
-	await page.locator('.filters').getByRole('button', { name: filter, exact: true }).click();
-	expect(await visibleGroupIds(page)).toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'war', rankings, '', filter));
-	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(scenario.profile.displayName);
-	expect(await visibleGroupIds(page)).toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'war', rankings, scenario.profile.displayName, filter));
-	await page.getByRole('searchbox', { name: 'Find your pick' }).fill('');
-	await page.locator('.ranking-controls select').selectOption('metrics');
-	expect(await visibleGroupIds(page)).toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'metrics', rankings, '', filter));
+	const hitterCards = page.getByRole('region', { name: 'Hitters', exact: true }).locator('.player-card');
+	const shown = await hitterCards.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-season-id')!));
+	const current = shown.map(id => bySeason.get(id)!).find(profile => profiles.some(other =>
+		other.playerId === profile.playerId && other.seasonId !== profile.seasonId &&
+		typeof rankings.seasons[other.seasonId]?.battingWAR162 === 'number' &&
+		rankings.seasons[other.seasonId].battingWAR162! < rankings.seasons[profile.seasonId].battingWAR162!));
+	expect(current).toBeDefined();
+	const alternate = profiles.find(profile => profile.playerId === current!.playerId &&
+		typeof rankings.seasons[profile.seasonId]?.battingWAR162 === 'number' &&
+		rankings.seasons[profile.seasonId].battingWAR162! < rankings.seasons[current!.seasonId].battingWAR162!)!;
+	await page.getByRole('combobox', { name: `Exact season for ${current!.displayName}`, exact: true }).selectOption(alternate.seasonId);
+	const orderedWars = async () => {
+		const ids = await hitterCards.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-season-id')!));
+		return ids.map(id => rankings.seasons[id].battingWAR162!);
+	};
+	await expect.poll(orderedWars).toEqual((await orderedWars()).sort((a, b) => b - a));
+	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(current!.displayName);
+	await expect(page.locator(`[data-candidate-group="${current!.playerId}"] .player-card`)).toHaveAttribute('data-season-id', alternate.seasonId);
+	const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	expect(saved.picks).toEqual(draft.picks);
+	expect(saved.actions).toEqual(draft.actions);
+});
+
+test('fits complete candidate names after phone and desktop resizing with reduced motion', async ({ page, request }) => {
+	const manifest = await currentManifest(request);
+	await openSavedDraft(page, rollDraft(createDraft(manifest, 13), manifest));
+	await page.locator('.candidate-card').first().scrollIntoViewIfNeeded();
+	await expect(page.locator('.candidate-content [data-layer="name.family"]').first()).toBeVisible();
+	await page.evaluate(() => document.fonts.ready);
+	for (const width of [374, 320, 1280]) {
+		await page.setViewportSize({ width, height: 900 });
+		await expect.poll(() => page.locator('.candidate-content [data-layer="name.family"]').evaluateAll(nodes =>
+			nodes.filter(node => !node.closest('[inert]')).map(node => {
+				const element = node as HTMLElement;
+				const range = document.createRange();
+				range.selectNodeContents(element);
+				const text = range.getBoundingClientRect();
+				const box = element.getBoundingClientRect();
+				const card = element.closest('[data-card]') as HTMLElement;
+				const maxHeight = Number(element.dataset.maxH) * card.clientWidth / 100;
+				return {
+					overflow: element.dataset.overflow,
+					fitsWidth: text.width <= box.width + 1,
+					fitsHeight: element.scrollHeight <= maxHeight + .5
+				};
+			}).filter(result => result.overflow || !result.fitsWidth || !result.fitsHeight)
+		)).toEqual([]);
+	}
 });
 
 test.describe('normal card motion', () => {

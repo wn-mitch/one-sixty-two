@@ -6,8 +6,10 @@ import { stageBuildAssets } from './scripts/package-assets.ts';
 
 export default defineConfig(async ({ command }) => ({
 	server: {
-		// Acquisition caches are generated inputs, not browser source modules.
-		watch: { ignored: ['**/.cache/**'] }
+		// Generated datasets and acquisition caches are runtime inputs, not browser source modules.
+		watch: {
+			ignored: ['**/.cache/**', '**/static/data/**', '**/static/media/**', '**/static/rankings/**']
+		}
 	},
 	plugins: [
 		tailwindcss(),

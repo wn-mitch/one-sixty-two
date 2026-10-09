@@ -24,11 +24,11 @@
 			<LogoSlot s={s} markStyle="left:3cqw; top:3cqw; width:16cqw; height:16cqw;" fallbackStyle={`font-weight:800; font-style:italic; font-size:7.4cqw; color:${s.k.fieldOnPaper};`} />
 		</div>
 
-		<div data-layer="name.group" style="position:absolute; left:5cqw; width:66cqw; bottom:112cqw; display:flex; flex-direction:column; align-items:flex-start;">
+		<div data-layer="name.group" style="position:absolute; left:5cqw; width:66cqw; max-width:66cqw; min-width:0; bottom:112cqw; display:flex; flex-direction:column; align-items:flex-start;">
 			<div data-rt data-layer="name.given.chip" style={`margin:0 0 -0.6cqw 0.8cqw; padding:0.5cqw 2.2cqw 0.4cqw 1.8cqw; background:${s.k.accent}; transform:skewX(-10deg); max-width:60cqw;`}>
 				<div use:fit={{ max: 6.8, min: 5 }} data-fit data-max="6.8" data-min="5" style={`transform:skewX(10deg); font-weight:700; font-style:italic; font-size:6.8cqw; line-height:1; white-space:nowrap; color:${s.k.onAccent}; max-width:56cqw;`}>{s.given}</div>
 			</div>
-			<div use:fit={{ max: 19, min: 11.5, wrapMin: 7, lines: 2, maxH: 17 }} data-rt data-layer="name.family" data-fit data-max="19" data-min="11.5" data-wrap-min="7" data-lines="2" data-max-h="17" style={`width:100%; padding-right:1.2cqw; box-sizing:border-box; font-weight:900; font-style:italic; font-size:19cqw; line-height:0.84; letter-spacing:-0.005em; text-transform:uppercase; white-space:nowrap; text-wrap:balance; color:${s.k.onField}; text-shadow:0.7cqw 0.7cqw 0 ${s.k.echo}, var(--emb, 0 0 0 transparent);`}>{s.family}</div>
+			<div use:fit={{ max: 19, min: 11.5, wrapMin: 7, lines: 2, maxH: 17 }} data-rt data-layer="name.family" data-fit data-max="19" data-min="11.5" data-wrap-min="7" data-lines="2" data-max-h="17" style={`width:100%; max-width:100%; padding-right:1.2cqw; box-sizing:border-box; font-weight:900; font-style:italic; font-size:19cqw; line-height:0.84; letter-spacing:-0.005em; text-transform:uppercase; white-space:nowrap; overflow-wrap:anywhere; text-wrap:balance; color:${s.k.onField}; text-shadow:0.7cqw 0.7cqw 0 ${s.k.echo}, var(--emb, 0 0 0 transparent);`}>{s.family}</div>
 		</div>
 
 		<div data-rt data-layer="season.chip" style={`position:absolute; left:3.2cqw; top:101.2cqw; height:8cqw; padding:0 2.4cqw; display:flex; align-items:center; background:var(--stamp, ${s.k.paper}); transform:skewX(-10deg); transform-origin:0 100%;`}>

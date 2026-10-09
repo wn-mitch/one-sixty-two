@@ -459,7 +459,7 @@ function invalidateAllFonts(): void {
 function attachFontListeners(): void {
 	if (fontListenersAttached || typeof document === 'undefined' || !document.fonts) return;
 	fontListenersAttached = true;
-	void document.fonts.ready.then(invalidateAllFonts);
+	void document.fonts.ready.then(invalidateAllFonts, invalidateAllFonts);
 	document.fonts.addEventListener('loadingdone', invalidateAllFonts);
 }
 function detachFontListeners(): void {
