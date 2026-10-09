@@ -17,4 +17,3 @@
 <Story exportName="Flip" name="Flip" args={{ mode: 'flip' }} {template} />
 <Story exportName="InlineReview" name="Inline review" args={{ initialTurned: true }} {template} />
 <Story exportName="TextBack" name="Text back" args={{ initialTurned: true, initialTextBack: true }} {template} />
-<Story exportName="Details" name="Details" args={{ initialDetailsOpen: true }} {template} />

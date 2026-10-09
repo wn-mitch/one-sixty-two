@@ -3,8 +3,7 @@
  let { details, id }: { details: Supplemental; id?: string } = $props();
 </script>
 
-<section class="supplemental" {id} aria-label="Card provenance and model details" tabindex="-1">
- <h3>{details.title}</h3>
+<section class="supplemental" {id} aria-label="Sources and season evidence">
  {#each details.sections as section}
   <section aria-label={section.h}>
    <h4>{section.h}</h4>
@@ -19,7 +18,6 @@
 
 <style>
  .supplemental { font-family: system-ui, sans-serif; font-size: 1rem; line-height: 1.5; color: var(--text); text-align: left; }
- h3 { font-size: 1.25rem; margin: 0 0 1rem; }
  h4 { font-size: 1rem; margin: 0 0 .5rem; }
  section > section { padding-block: 1rem; border-top: 1px solid var(--border); }
  dl { margin: 0; display: grid; gap: .75rem; }

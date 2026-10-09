@@ -63,11 +63,6 @@ export function seasonEstimates(
  for (const position of defensivePositions) {
   for (const note of defensivePositionNotes(position, profile.defense.positions[position])) notes.add(note);
  }
- if (defensivePositions.length) {
-  notes.add('Aggregate DEF starts from joined historical fld162 fielding runs above average per 162 team games, not WAR or positional runs, and residualizes error, double-play, and throwing effects to avoid counting the same value twice.');
-  notes.add('Component rates are normalized and shrunk toward the season, league, and position cohort; a same-year combined-league cohort is used when needed, and genuinely missing evidence stays explicitly neutral.');
-  notes.add('Double-play and outfield-assist rates per inning are context-affected opportunity proxies; an outfield assist rate is not an observed throw-out percentage. Putouts do not invent range, framing, blocking, throwing velocity, or other unsupported skills.');
- }
  for (const field of profile.estimatedFields) {
   if (field.startsWith('fielding.') || field.startsWith('catcherCS.')) {
    continue;

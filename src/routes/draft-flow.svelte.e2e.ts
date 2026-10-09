@@ -332,7 +332,7 @@ test.describe('draft sheet interaction boundaries', () => {
 		await expectNoPersistenceChange(page, before);
 	});
 
-	test('shows the designed back, readable text, and details without mutating the saved draft', async ({ page, request }) => {
+	test('shows the designed back and readable season evidence without mutating the saved draft', async ({ page, request }) => {
 		const manifest = await currentManifest(request);
 		const scenario = await cardScenario(request, manifest, () => true);
 		await openSavedDraft(page, scenario.draft);
@@ -349,8 +349,7 @@ test.describe('draft sheet interaction boundaries', () => {
 
 		await sheet.getByRole('button', { name: 'Text version', exact: true }).click();
 		await expect(sheet.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
-		await sheet.getByRole('button', { name: 'Details', exact: true }).click();
-		await expect(sheet.locator('.details[tabindex="-1"]')).toBeFocused();
+		await expect(sheet.getByRole('heading', { name: 'Statistics source', exact: true })).toBeVisible();
 		await expectNoPersistenceChange(page, before);
 	});
 

@@ -1,9 +1,8 @@
 <script lang="ts">
- import { untrack } from 'svelte';
+ import { tick, untrack } from 'svelte';
  import type { ResultsInspection } from '../game/results-types.ts';
  import type { CardViewModel } from './view-model.ts';
  import CardFlip from './CardFlip.svelte';
- import CardDetails from './CardDetails.svelte';
 
  let { id, s, inspection, turned = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, onFrontSelect, onClose }: {
   id?: string;
@@ -22,7 +21,7 @@
  const initial = untrack(() => ({ turned, textBack, selectedMode }));
  let observedSeason = untrack(() => seasonKey);
  let heading = $state<HTMLHeadingElement>();
- let details = $state<CardDetails>();
+ let textToggle = $state<HTMLButtonElement>();
  const view = $derived(inspection?.[selectedMode]);
 
  $effect(() => {
@@ -34,7 +33,12 @@
  });
 
  export function focusHeading(): void { heading?.focus({ preventScroll: true }); }
- export async function showDetails(): Promise<void> { await details?.showDetails(); }
+ export async function showTextVersion(): Promise<void> {
+  textBack = true;
+  turned = true;
+  await tick();
+  textToggle?.focus({ preventScroll: true });
+ }
  function selectMode(mode: 'simulated' | 'actual'): void { selectedMode = mode; turned = true; }
  function toggleText(): void { textBack = !textBack; turned = true; }
 </script>
@@ -50,11 +54,10 @@
    <button type="button" aria-pressed={selectedMode === 'actual'} onclick={() => selectMode('actual')}>Actual season</button>
   </div>
  {/if}
- <button type="button" class="text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>
+ <button bind:this={textToggle} type="button" class="text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>
  <div class="review-artwork">
-  <CardFlip {s} bind:turned {textBack} {showControl} {onFrontSelect} inspectionView={view} backId="{reviewId}-back" onDetails={showDetails} />
+  <CardFlip {s} bind:turned {textBack} {showControl} {onFrontSelect} inspectionView={view} inspectionDetails={inspection?.details} backId="{reviewId}-back" onDetails={showTextVersion} />
  </div>
- <CardDetails bind:this={details} {s} {inspection} />
 </section>
 
 <style>

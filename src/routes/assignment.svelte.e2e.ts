@@ -145,7 +145,6 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await selected.sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
 	const disclosures = selected.sheet.locator('[role="tabpanel"]:not([hidden]) .card-review');
 	await disclosures.getByRole('button', { name: 'Text version', exact: true }).click();
-	await disclosures.getByRole('button', { name: 'Details', exact: true }).click();
 	await selected.sheet.getByRole('tab', { name: 'Field', exact: true }).click();
 
 	await fieldSlot(page, origin).click();
@@ -155,7 +154,6 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await selected.sheet.getByRole('button', { name: 'Back to field', exact: true }).click();
 	await selected.sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
 	await expect(selected.sheet.locator('[role="tabpanel"]:not([hidden]) .inspection-back')).toBeVisible();
-	await expect(selected.sheet.locator('[role="tabpanel"]:not([hidden]) .details')).toBeVisible();
 	await selected.sheet.getByRole('tab', { name: 'Field', exact: true }).click();
 	await selected.sheet.getByRole('button', { name: 'Cancel move', exact: true }).click();
 	await expect(selected.sheet.getByRole('heading', { name: /^Your field/ })).toBeFocused();

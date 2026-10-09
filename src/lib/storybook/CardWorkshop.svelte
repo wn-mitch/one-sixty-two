@@ -15,7 +15,6 @@
 		longIdentity?: boolean;
 		initialTurned?: boolean;
 		initialTextBack?: boolean;
-		initialDetailsOpen?: boolean;
 	}
 </script>
 
@@ -39,8 +38,7 @@
 		missingPhoto = false,
 		longIdentity = false,
 		initialTurned = false,
-		initialTextBack = false,
-		initialDetailsOpen = false
+		initialTextBack = false
 	}: CardWorkshopProps = $props();
 
 	const eraYear: Record<CardEra, number> = {
@@ -85,7 +83,6 @@
 	let flipKey = $state(0);
 	let replayToken = 0;
 	let turned = $state(untrack(() => initialTurned));
-	let details = $state<CardReview>();
 	let wallDetails = $state<CardReview>();
 	let selectedWall = $state<CardViewModel | null>(null);
 
@@ -192,20 +189,12 @@
 		return result;
 	}
 
-	async function showDetails(): Promise<void> {
-		await details?.showDetails();
-	}
-
-	async function showWallDetails(nextCard: CardViewModel): Promise<void> {
+	async function showWallTextVersion(nextCard: CardViewModel): Promise<void> {
 		selectedWall = nextCard;
 		await tick();
-		await wallDetails?.showDetails();
+		await wallDetails?.showTextVersion();
 	}
 
-	$effect(() => {
-		instance;
-		if (initialDetailsOpen) void tick().then(() => details?.showDetails());
-	});
 	$effect(() => {
 		if (dials.values.textBack) untrack(() => turned = true);
 	});
@@ -235,9 +224,9 @@
 					{#each wallCards as wallCard (wallCard.full)}
 						<article class="wall-entry">
 							<div class="card-shell" style:width={`${Math.min(cardWidth, 250)}px`}>
-								<Card s={wallCard} interactive wall capture={false} onDetails={() => void showWallDetails(wallCard)} />
+								<Card s={wallCard} interactive wall capture={false} onDetails={() => void showWallTextVersion(wallCard)} />
 							</div>
-							<button type="button" onclick={() => void showWallDetails(wallCard)}>Show {wallCard.full} details</button>
+							<button type="button" onclick={() => void showWallTextVersion(wallCard)}>Show {wallCard.full} text version</button>
 						</article>
 					{/each}
 				</div>
@@ -248,7 +237,7 @@
 						<article class="gallery-entry">
 							<h2>{galleryCard.era}</h2>
 							<div class="card-shell" style:width={`${Math.min(cardWidth, 230)}px`}>
-								<Card s={galleryCard} capture={false} onDetails={() => void showWallDetails(galleryCard)} />
+								<Card s={galleryCard} capture={false} onDetails={() => void showWallTextVersion(galleryCard)} />
 							</div>
 						</article>
 					{/each}
@@ -258,20 +247,20 @@
 				<div class="single-card">
 					{#key flipKey}
 						<div class="card-shell" style:width={`${cardWidth}px`}>
-							<CardReview bind:this={details} s={card} bind:turned bind:textBack={() => dials.values.textBack, value => dials.setValue('textBack', value)} />
+							<CardReview s={card} bind:turned bind:textBack={() => dials.values.textBack, value => dials.setValue('textBack', value)} />
 						</div>
 					{/key}
 				</div>
 			{:else if mode === 'interactive'}
 				<div class="single-card" style={`--card-front-width:${cardWidth}px;--card-back-width:${cardWidth}px`}>
-					<CardReview bind:this={details} s={card} bind:turned bind:textBack={() => dials.values.textBack, value => dials.setValue('textBack', value)} />
+					<CardReview s={card} bind:turned bind:textBack={() => dials.values.textBack, value => dials.setValue('textBack', value)} />
 				</div>
 			{:else}
 				<div class="single-card">
 					<div class="card-shell" style:width={`${cardWidth}px`}>
-						<Card s={card} interactive idle={mode === 'idle'} capture={false} onDetails={() => void showWallDetails(card)} />
+						<Card s={card} interactive idle={mode === 'idle'} capture={false} onDetails={() => void showWallTextVersion(card)} />
 					</div>
-					<button type="button" onclick={() => void showWallDetails(card)}>Show card details</button>
+					<button type="button" onclick={() => void showWallTextVersion(card)}>Show card text version</button>
 					{#if selectedWall}<CardReview bind:this={wallDetails} s={selectedWall} turned={true} />{/if}
 				</div>
 			{/if}

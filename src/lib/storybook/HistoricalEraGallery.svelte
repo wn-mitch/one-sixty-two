@@ -8,10 +8,9 @@
 </script>
 
 <script lang="ts">
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import { createDialKitController } from 'dialkit/svelte';
 	import Card from '#lib/cards/Card.svelte';
-	import CardDetails from '#lib/cards/CardDetails.svelte';
 	import InspectionBack from '#lib/cards/InspectionBack.svelte';
 	import { createCardViewModel } from '#lib/cards/view-model.ts';
 	import { loadHistoricalEra, type HistoricalEraGalleryData, type HistoricalGalleryEntry } from './historical-gallery.ts';
@@ -39,7 +38,7 @@
 	let disposed = false;
 	let seededWidth = $state<number | null>(null);
 	let textOverrides = $state<Record<string, boolean>>({});
-	let detailRefs = $state<Record<string, CardDetails | undefined>>({});
+	let textToggles = $state<Record<string, HTMLButtonElement | undefined>>({});
 
 	function clampWidth(value: number): number {
 		return Math.max(160, Math.min(410, Math.round(Number.isFinite(value) ? value : 240)));
@@ -56,8 +55,10 @@
 		textOverrides = { ...textOverrides, [seasonId]: !isTextBack(seasonId) };
 	}
 
-	function showDetails(franchiseId: string): void {
-		void detailRefs[franchiseId]?.showDetails();
+	async function showTextVersion(seasonId: string): Promise<void> {
+		textOverrides = { ...textOverrides, [seasonId]: true };
+		await tick();
+		textToggles[seasonId]?.focus({ preventScroll: true });
 	}
 
 	function resetPresentation(): void {
@@ -174,24 +175,23 @@
 							<span>{entry.profile.displayName}</span>
 							<span>{entry.profile.year} · {entry.profile.seasonId}</span>
 						</div>
-						<button class="text-toggle" type="button" aria-pressed={isTextBack(entry.profile.seasonId)} aria-controls={`historical-${entry.franchise.id}-back`} onclick={() => toggleTextBack(entry.profile.seasonId)}>Text version</button>
+						<button bind:this={textToggles[entry.profile.seasonId]} class="text-toggle" type="button" aria-pressed={isTextBack(entry.profile.seasonId)} aria-controls={`historical-${entry.franchise.id}-back`} onclick={() => toggleTextBack(entry.profile.seasonId)}>Text version</button>
 						<div class="card-pair" style={`--gallery-card-width:${dialWidth}px`}>
 							<figure class="card-face" data-face-label="Front">
-								<Card s={card} face="front" onDetails={() => showDetails(entry.franchise.id)} />
+								<Card s={card} face="front" onDetails={() => showTextVersion(entry.profile.seasonId)} />
 								<figcaption>Front · {entry.profile.seasonId}</figcaption>
 							</figure>
 							<figure class="card-face" data-face-label="Back">
 								<div class="reverse-viewport" id={`historical-${entry.franchise.id}-back`}>
 									{#if isTextBack(entry.profile.seasonId)}
-										<InspectionBack s={card} simplified onDetails={() => showDetails(entry.franchise.id)} />
+										<InspectionBack s={card} simplified onDetails={() => showTextVersion(entry.profile.seasonId)} />
 									{:else}
-										<Card s={card} face="back" onDetails={() => showDetails(entry.franchise.id)} />
+										<Card s={card} face="back" onDetails={() => showTextVersion(entry.profile.seasonId)} />
 									{/if}
 								</div>
 								<figcaption>Back · {entry.profile.seasonId}</figcaption>
 							</figure>
 						</div>
-						<CardDetails bind:this={detailRefs[entry.franchise.id]} s={card} />
 					{:else}
 						<div class="status-pair" style={`--gallery-card-width:${dialWidth}px`}>
 							<div class="status-panel"><strong>{entry.state === 'absent' ? 'No eligible historical season' : 'Historical card error'}</strong><span>{entry.state === 'absent' ? `No eligible historical season in ${era}` : entry.message}</span></div>

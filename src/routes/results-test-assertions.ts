@@ -65,13 +65,12 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await review.getByRole('button', { name: '162-0 season', exact: true }).click();
 	await expect(review.getByRole('region', { name: /^162-0 season statistics for / }).locator('tbody tr')).toHaveText(simulatedRows);
 
-	await review.locator('.disclosure-controls').getByRole('button', { name: 'Value details', exact: true }).click();
+	await review.getByRole('button', { name: 'Text version', exact: true }).first().click();
 	await expect(review.getByRole('region', { name: '162-0 season value details', exact: true })).toBeVisible();
 	await expect(review.getByRole('heading', { name: 'Estimated WAR breakdown', exact: true })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('details')).toHaveCount(162);
 
 	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
-	await review.getByRole('button', { name: 'Text version', exact: true }).click();
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	const firstSeasonId = await review.getAttribute('data-season-id');
 	const nextTrigger = page.locator('.hand-card').last();

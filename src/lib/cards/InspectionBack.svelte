@@ -1,15 +1,17 @@
 <script lang="ts">
- import type { InspectionSeasonView, TeamRank } from '../game/results-types.ts';
+ import type { InspectionDetailSection, InspectionSeasonView, TeamRank } from '../game/results-types.ts';
  import type { CardViewModel } from './view-model.ts';
+ import Supplemental from './Supplemental.svelte';
 
  interface Props {
   s: CardViewModel;
   onDetails: () => void;
   view?: InspectionSeasonView;
   simplified?: boolean;
+  valueDetails?: readonly InspectionDetailSection[];
  }
 
- let { s, onDetails, view, simplified = false }: Props = $props();
+ let { s, onDetails, view, simplified = false, valueDetails }: Props = $props();
  const colors = $derived.by(function (): { ground: string; ink: string } {
   switch (s.era) {
    case '2020s':
@@ -82,8 +84,26 @@
   </table>
   <footer class="results-footer">
    <span>{view.label}</span>
-   <button type="button" onclick={onDetails}>Value details</button>
+   {#if !simplified}<button type="button" aria-label="Show text version for {s.full}" onclick={onDetails}>Text version</button>{/if}
   </footer>
+  {#if simplified}
+   {#if view.label === '162-0 season' && valueDetails}
+    <section class="result-values" aria-label="162-0 season value details">
+     {#each valueDetails as section (section.key)}
+      <section aria-label={section.label}>
+       <h4>{section.label}</h4>
+       <dl>
+        {#each section.rows as row (row.key)}
+         <div><dt>{row.label}</dt><dd>{row.formattedValue}</dd></div>
+        {/each}
+       </dl>
+       <p>{section.note}</p>
+      </section>
+     {/each}
+    </section>
+   {/if}
+   <Supplemental details={s.details} />
+  {/if}
  </section>
 {:else}
  <section class="inspection-back historical-back" class:simplified data-era={s.era} aria-label="Historical season text version" style:--back-ground={colors.ground} style:--back-ink={colors.ink}>
@@ -112,8 +132,9 @@
    <p>{s.logoLabel}</p>
    <p data-layer="sources.stats">{s.b.srcStats}</p>
    <p data-layer="sources.photo">{s.b.srcPhoto}</p>
-   <button type="button" onclick={onDetails}>Details ›</button>
+   {#if !simplified}<button type="button" onclick={onDetails}>Text version</button>{/if}
   </footer>
+  {#if simplified}<Supplemental details={s.details} />{/if}
  </section>
 {/if}
 
@@ -162,6 +183,9 @@
  .simplified th, .simplified td { height: auto; padding: .5rem .25rem; overflow-wrap: anywhere; }
  .simplified thead th { font-size: .875rem; letter-spacing: normal; text-transform: none; }
  .simplified .results-footer { padding-inline: 0; font-size: .875rem; }
+ .result-values > section { padding-block: 1rem; border-top: 1px solid var(--border); }
+ .result-values dl { grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: .75rem; }
+ .result-values dd { font: inherit; font-weight: 700; }
  @media (max-width: 25rem) {
   .historical-back { padding: 1rem; }
   .counts { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -1,5 +1,5 @@
 <script lang="ts">
- import type { InspectionSeasonView } from '../game/results-types.ts';
+ import type { InspectionDetailSection, InspectionSeasonView } from '../game/results-types.ts';
  import type { CardViewModel } from './view-model.ts';
  import Card from './Card.svelte';
  import InspectionBack from './InspectionBack.svelte';
@@ -12,6 +12,7 @@
   showControl = true,
   onFrontSelect,
   inspectionView,
+  inspectionDetails,
   textBack = false,
   backId
  }: {
@@ -21,6 +22,7 @@
   showControl?: boolean;
   onFrontSelect?: (trigger: HTMLButtonElement) => void;
   inspectionView?: InspectionSeasonView;
+  inspectionDetails?: readonly InspectionDetailSection[];
   textBack?: boolean;
   backId?: string;
  } = $props();
@@ -66,7 +68,7 @@
     {/each}
     <div id={backId} class="back" inert={!turned} aria-hidden={!turned}>
      {#if inspectionView || textBack}
-      <InspectionBack {s} view={inspectionView} simplified={textBack} {onDetails} />
+      <InspectionBack {s} view={inspectionView} valueDetails={inspectionDetails} simplified={textBack} {onDetails} />
      {:else}
       <Card {s} face="back" {onDetails} />
      {/if}

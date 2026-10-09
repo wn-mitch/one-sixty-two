@@ -350,7 +350,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 	const nickname = (team.match(/(?:Red Sox|White Sox|Blue Jays|Devil Rays)(?:$| of )/i)?.[0].replace(/ of $/, '')
 		?? team.replace(/ of .+$/, '').trim().split(/\s+/).at(-1))?.toUpperCase() || EM_DASH;
 	const attribution = manifest?.attribution;
-	const statSource = attribution ? 'Stats · historical source · Details' : 'Statistics provenance unavailable';
+	const statSource = attribution ? 'Stats · historical source' : 'Statistics provenance unavailable';
 	const statisticsSource: SupplementalSection = {
 		h: 'Statistics source',
 		rows: attribution ? [
@@ -364,16 +364,12 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 		]
 	};
 	const estimates = seasonEstimates(profile, profile.eligibleSlots, slot);
-	const modelContext: SupplementalRow[] = [
-		{ k: 'Environment', v: 'This historical season is adjusted into the common 2025 environment. Historical WAR/162 ranks choices and selects the cosmetic finish; that scalar is not a simulation input. The separately sourced, position-specific defensive estimate is a pre-season gameplay input.' },
-		{ k: 'Simulation', v: 'How the simulation works', href: '/about#simulation' }
-	];
 	let logoLabel = 'No verified team mark';
 	if (cardLogo) logoLabel = cardLogo.historical ? 'Verified historical team mark' : 'Current franchise mark';
 	else if (mediaStatus === 'loading') logoLabel = 'Loading team mark';
 	else if (mediaStatus === 'unavailable') logoLabel = 'Team mark source unavailable';
 	let photoSource = profile.bullpen ? 'Team-season pool · no photo' : 'No photo';
-	if (cardPhoto) photoSource = `${cardPhoto.dateLabel === 'date unknown' ? 'Undated photo' : `Photo ${cardPhoto.dateLabel}`} · Details`;
+	if (cardPhoto) photoSource = cardPhoto.dateLabel === 'date unknown' ? 'Undated photo' : `Photo ${cardPhoto.dateLabel}`;
 	else if (!profile.bullpen && mediaStatus === 'loading') photoSource = 'Photo availability loading';
 	else if (!profile.bullpen && mediaStatus === 'unavailable') photoSource = 'Photo source unavailable';
 	let photoCaption = 'No verified photo published';
@@ -402,36 +398,18 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 			{ h: 'Bullpen pool', rows: [
 				{ k: 'Team-season', v: `${team}, ${front.year}` }, { k: `Members (${profile.bullpen.members.length})`, v: profile.bullpen.members.map(member => member.displayName).join(', ') || EM_DASH },
 				{ k: 'Excluded saves leader', v: profile.bullpen.excluded.displayName || EM_DASH },
-				{ k: 'Exclusion rule', v: 'The saves leader is excluded within the exact team-season; ties break by pitching outs, then season ID. The pool is fixed independently of the drafted closer.' },
-				{ k: 'Source limitation', v: 'Source records do not split every starter and relief appearance, so this is a pool of relief-dominant pitcher-seasons, not reconstructed relief-only innings. Throwing handedness is neutral and support workload is unlimited.' },
-				{ k: 'WAR', v: 'No composite WAR or individual WAR applies to this team unit.' },
-				{ k: 'Portrait', v: 'No individual portrait is used for this historical team unit.' }
 			] },
-			{ h: 'Model notes', rows: [
-				...modelContext,
-				{ k: 'Workload', v: estimates.join(' ') || 'No bullpen-specific estimate is flagged.' },
-				...(manifest?.approximations ?? []).map((v, index) => ({ k: `Shared note ${index + 1}`, v }))
-			] },
+			...(estimates.length ? [{ h: 'Season estimates', rows: estimates.map((v, index) => ({ k: `Estimate ${index + 1}`, v })) }] : []),
 			logoRows(cardLogo, mediaStatus),
 			statisticsSource
 		]
 	} : {
 		title: `${front.full}, ${team} ${front.year}`,
 		sections: [
-			{ h: 'Ranking', rows: [
-				{ k: 'WAR/162', v: [hasBatting ? `batting ${decimal(ranking?.battingWAR162, 3)}` : '', hasPitching ? `pitching ${decimal(ranking?.pitchingWAR162, 3)}` : ''].filter(Boolean).join(' · ') || EM_DASH },
-				{ k: 'Role', v: 'WAR/162 ranks draft choices and determines the cosmetic card finish. It is not a simulation input.' },
+			{ h: 'WAR source', rows: [
 				{ k: 'Source', v: rankings?.source.description || 'Ranking source unavailable', href: rankings?.source.url }
 			] },
-			{ h: 'Pre-season estimates', rows: [
-				...modelContext,
-				{ k: 'Position appearances', v: 'Appearances establish historical qualification and help select the primary hitter position. They are not defensive-range ratings.' },
-				...(estimates.length ? estimates.map((v, index) => ({ k: `Estimate ${index + 1}`, v })) : [
-					{ k: 'Estimates', v: 'No missing-data or position-specific estimates apply to this represented role. Shared simulation assumptions still apply.' }
-				]),
-				{ k: 'Season results', v: 'These inputs are fixed before the simulated season. Results report realized batting, pitching, and defensive contributions separately.' },
-				...(manifest?.approximations ?? []).map((v, index) => ({ k: `Shared note ${index + 1}`, v }))
-			] },
+			...(estimates.length ? [{ h: 'Pre-season estimates', rows: estimates.map((v, index) => ({ k: `Estimate ${index + 1}`, v })) }] : []),
 			photoRows(cardPhoto, profile.year, media?.modifications, mediaStatus),
 			logoRows(cardLogo, mediaStatus),
 			statisticsSource
@@ -444,8 +422,8 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 		fams: families, sz: families.length > 1 ? TWO_SIZE : SINGLE_SIZE, cols: families.length > 1 ? 5 : 4,
 		hasApps: !profile.bullpen, appsText: families.length !== 1, appsLabel: 'Games at', apps: apps(profile, hasPitching),
 		hasWar: !!backWar, war: backWar, isBullpen: !!profile.bullpen,
-		pool: profile.bullpen ? 'Excludes saves leader · members listed in details' : '', srcStats: statSource,
-		srcPhoto: photoSource, srcCue: 'Details ›'
+		pool: profile.bullpen ? 'Excludes saves leader · members in text version' : '', srcStats: statSource,
+		srcPhoto: photoSource, srcCue: 'Text version ›'
 	};
 	return { ...front, b: back, details: supplemental };
 }

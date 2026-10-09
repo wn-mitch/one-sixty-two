@@ -107,6 +107,21 @@ test.describe('Cards workshop', () => {
 		await expect(flip).toHaveAttribute('data-face', 'front');
 	});
 
+	test('opens season evidence in the text back instead of a separate details panel', async ({ page }) => {
+		await openStory(page, 'cards-states--interactive');
+		const review = page.locator('.card-review');
+		await review.getByRole('button', { name: 'Turn over', exact: true }).click();
+		await review.getByRole('button', { name: /^Show text version for / }).click();
+		const text = review.getByRole('region', { name: 'Historical season text version', exact: true });
+		await expect(text).toBeVisible();
+		await expect(review.getByRole('button', { name: 'Text version', exact: true })).toBeFocused();
+		await expect(text.getByRole('heading', { name: 'Statistics source', exact: true })).toBeVisible();
+		await expect(text.getByRole('link', { name: 'CC0 1.0', exact: true }).first()).toHaveAttribute('href', 'https://creativecommons.org/publicdomain/zero/1.0/');
+		await expect(review.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+		await review.getByRole('button', { name: 'Text version', exact: true }).click();
+		await expect(review.locator('.back .card[data-face="back"]')).toBeVisible();
+	});
+
 	for (const reducedMotion of ['no-preference', 'reduce'] as const) {
 		test(`switches the same two-way back in place with ${reducedMotion} motion`, async ({ page }) => {
 			await page.emulateMedia({ reducedMotion });

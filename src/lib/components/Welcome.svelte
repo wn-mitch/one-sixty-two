@@ -3,7 +3,6 @@
  import type { CardMediaStatus, CardViewModel } from '#lib/cards/view-model.ts';
  import Card from '#lib/cards/Card.svelte';
  import HomeWall from './HomeWall.svelte';
- import { tableScroll } from './table-scroll.ts';
 
  interface ShowcaseCardView {
   seasonId: string;
@@ -46,7 +45,7 @@
    <p class="start-status muted" role="status">Verified photos are unavailable. Cards use their canonical missing-image treatment.</p>
   {/if}
   {#if eraCards.length}
-   <div class="era-strip" role="region" aria-label="Card designs from eight eras" use:tableScroll>
+   <div class="era-strip" role="region" aria-label="Card designs from eight eras">
     {#each eraCards as era (era.decade)}
      <figure>
       <div class="era-card" aria-hidden="true"><Card s={era.card.model} onDetails={noDetails} /></div>
@@ -105,11 +104,9 @@
  .start-status { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); }
  .era-strip {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: var(--space-10);
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
  }
  .era-strip figure {
   display: grid;
@@ -130,11 +127,11 @@
  @media (min-width: 48rem) {
   .era-strip {
    display: grid;
-   grid-template-columns: repeat(4, var(--home-era-card-width, 128px));
+   grid-template-columns: repeat(4, minmax(0, 1fr));
    gap: var(--space-3);
-   max-width: 34.25rem;
+   max-width: min(100%, calc(4 * var(--home-era-card-width, 128px) + 3 * var(--space-3)));
   }
-  .era-strip figure, .era-card { width: var(--home-era-card-width, 128px); }
+  .era-strip figure, .era-card { width: 100%; min-width: 0; }
  }
  @media (max-width: 47.999rem) {
   .welcome {

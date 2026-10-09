@@ -44,6 +44,24 @@ test.describe('application workshop stories', () => {
 		await expect(page.getByRole('status')).toBeVisible();
 	});
 
+	test('fits every welcome era without a scrolling rail', async ({ page }) => {
+		await openStory(page, 'application-welcome--start');
+		const strip = page.getByRole('region', { name: 'Card designs from eight eras', exact: true });
+		await expect(strip.locator('figure')).toHaveCount(8);
+		for (const width of [320, 402, 768, 1212]) {
+			await page.setViewportSize({ width, height: 788 });
+			await expect.poll(() => strip.evaluate(root => {
+				const bounds = root.getBoundingClientRect();
+				const style = getComputedStyle(root);
+				return !['auto', 'scroll'].includes(style.overflowX) &&
+					[...root.querySelectorAll('figure')].every(figure => {
+						const card = figure.getBoundingClientRect();
+						return card.left >= bounds.left - 1 && card.right <= bounds.right + 1;
+					});
+			})).toBe(true);
+		}
+	});
+
 	test('edits batting order, restores it, and simulates the edited draft', async ({ page }) => {
 		const fixtures = createExampleFixtures();
 		const edited = {

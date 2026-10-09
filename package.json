@@ -28,6 +28,8 @@
 		"test:unit": "vitest run",
 		"test": "npm run test:unit && npm run test:e2e",
 		"test:e2e": "playwright test",
+		"prestorybook": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare",
+		"prebuild-storybook": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare",
 		"storybook": "storybook dev --host 127.0.0.1 --port 6006 --exact-port --no-open --disable-telemetry --no-version-updates",
 		"build-storybook": "storybook build --disable-telemetry",
 		"test:storybook": "playwright test --config playwright.storybook.config.ts"

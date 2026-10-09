@@ -101,13 +101,6 @@ async function openTextVersion(root: Locator): Promise<Locator> {
 	return text;
 }
 
-async function openDetails(root: Locator): Promise<Locator> {
-	await root.locator('.disclosure-controls').getByRole('button', { name: 'Details', exact: true }).click();
-	const details = root.locator('.details');
-	await expect(details).toBeVisible();
-	await expect(details).toBeFocused();
-	return details;
-}
 
 async function confirmNarrowPick(page: Page, scenario: CardScenario): Promise<Draft> {
 	const sheet = draftSheet(page);
@@ -149,7 +142,7 @@ test('keeps a changed exact season in the narrow designed-back sheet through ran
 		await expect(sheet.locator('.inspection-back')).toBeVisible();
 		await expect(card).toHaveAttribute('data-season-id', changedProfile!.seasonId);
 
-		const details = await openDetails(sheet);
+		const details = sheet.locator('.inspection-back');
 		await expect(details.getByRole('heading', { name: 'Statistics source', exact: true })).toBeVisible();
 		await expect(details.getByText('Credit', { exact: true }).first()).toBeVisible();
 		await expect(details.getByText('Licence', { exact: true }).first()).toBeVisible();
@@ -215,7 +208,7 @@ test('keeps an inspectable card draftable when the optional media index fails', 
 	const { card, sheet, era } = await selectNarrowCard(page, scenario);
 	await expect(card.getByRole('img', { name: 'Photo source unavailable', exact: true })).toBeVisible();
 	await openNarrowBack(sheet, era);
-	const details = await openDetails(sheet);
+	const details = await openTextVersion(sheet);
 	const photo = details.getByRole('heading', { name: 'Photo', exact: true }).locator('..');
 	await expect(photo).toContainText(/source is unavailable/i);
 	const saved = await confirmNarrowPick(page, scenario);
@@ -253,9 +246,8 @@ test('shows a bullpen designed back, readable members and excluded saves leader,
 	const text = await openTextVersion(sheet);
 	await expect(text).toContainText(/excludes saves leader/i);
 	await expect(text).toContainText(/no composite WAR/i);
-	const details = await openDetails(sheet);
-	for (const member of scenario.profile.bullpen!.members) await expect(details).toContainText(member.displayName);
-	await expect(details).toContainText(scenario.profile.bullpen!.excluded.displayName);
+	for (const member of scenario.profile.bullpen!.members) await expect(text).toContainText(member.displayName);
+	await expect(text).toContainText(scenario.profile.bullpen!.excluded.displayName);
 	const saved = await confirmNarrowPick(page, scenario);
 	expect(saved.picks.at(-1)).toMatchObject({ seasonId: scenario.candidate.seasonId, slot: 'BP' });
 });

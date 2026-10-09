@@ -28,7 +28,8 @@ test('renders exact front and reverse facts and switches only the reverse to tex
 	await expect(entry.locator('.card[data-face="front"]')).toBeVisible();
 	await expect(entry.locator('#historical-F01-back')).toBeVisible();
 	await expect(entry.getByText('Historical F01 Player', { exact: true }).first()).toBeVisible();
-	await entry.getByRole('button', { name: 'Text version', exact: true }).click();
+	await entry.getByRole('button', { name: /^Show text version for / }).click();
+	await expect(entry.getByRole('button', { name: 'Text version', exact: true })).toBeFocused();
 	await expect(entry.locator('.inspection-back')).toBeVisible();
 	await expect(entry.locator('.card[data-face="front"]')).toBeVisible();
 	await expect(entry.locator('.card[data-face="back"]')).toHaveCount(0);
