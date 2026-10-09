@@ -4,6 +4,12 @@
 
 product
 
+## Release and Compatibility Policy
+
+The game is pre-release. Iteration takes priority over backward compatibility. Breaking existing saves, replay links, schemas, data formats, and seeded simulation results is allowed when changing the game or simulation. Do not retain legacy engines, add compatibility shims or migrations, or delay changes to preserve obsolete contracts unless explicitly requested.
+
+Version the current contracts and reject incompatible data explicitly rather than silently interpreting it under different rules. Determinism is required within the same supported model and data version, not across releases. Breaking compatibility does not excuse regressions in current intended behavior.
+
 ## Users
 
 Baseball fans drafting on phones while watching a game, then inspecting and sharing the simulated season. Desktop users need the same complete flow, not a separate dashboard.
@@ -25,7 +31,7 @@ Brown or sepia surfaces, generic SaaS cards, copied sports artwork, fabricated p
 - Keep the next pick obvious and the collected roster visible.
 - Let real team identity and player imagery carry personality.
 - Distinguish the drafted season from the photo's verified year.
-- Preserve the complete game, determinism, and current schema 4 / `pa-v3` replay contract during visual changes; reject incompatible beta data explicitly instead of silently migrating it.
+- Preserve the complete game and determinism during visual changes. Simulation and schema changes follow the pre-release compatibility policy above; no specific model or replay version is frozen.
 - Keep modeled probabilities distinct from observed scores and traditional baseball facts.
 - Treat missing imagery as a designed state, not a reason to block play.
 
