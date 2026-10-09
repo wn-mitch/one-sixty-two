@@ -15,6 +15,62 @@ async function openChoosing(page: Page, args = ''): Promise<void> {
 }
 
 test.describe('Draft board browsing', () => {
+	test('keeps loading cards readable and honors live reduced motion', async ({ page }) => {
+		await openStory(page, 'draft-board--loading');
+		await expect(page.getByRole('status', { name: 'Loading available player seasons' })).toBeVisible();
+		await expect(page.locator('.loading-card.flying')).toBeVisible({ timeout: 6000 });
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await expect(page.locator('.loading-card.flying')).toHaveCount(0);
+		for (const width of [320, 1100, 1440]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.evaluate(() => document.fonts.ready);
+			await expect.poll(() => page.locator('.loading-cards').evaluate(root => root.getAnimations({ subtree: true }).length)).toBe(0);
+			const layout = await page.locator('.loading-cards').evaluate(root => ({
+				overflow: document.documentElement.scrollWidth > innerWidth,
+				labelsFit: [...root.querySelectorAll('.team-word')].every(label => {
+					const range = document.createRange();
+					range.selectNodeContents(label);
+					const text = range.getBoundingClientRect();
+					const card = label.closest('.loading-card')!.getBoundingClientRect();
+					return text.left >= card.left && text.right <= card.right;
+				})
+			}));
+			expect(layout).toEqual({ overflow: false, labelsFit: true });
+		}
+		await expect(page.locator('.picked-count')).toContainText('0 / 14');
+	});
+
+	test('keeps desktop actions on one row and retains exact seasons across ranking pages', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await openChoosing(page);
+		for (const width of [1100, 1440]) {
+			await page.setViewportSize({ width, height: 900 });
+			await expect(page.locator('.wide-controls').first()).toBeVisible();
+			const rows = await page.locator('.wide-controls').evaluateAll(nodes => nodes.map(row => {
+				const controls = [...row.querySelectorAll('select, button')].map(node => node.getBoundingClientRect());
+				return { aligned: controls.every(rect => Math.abs(rect.top - controls[0].top) < 1),
+					touchSafe: controls.every(rect => rect.height >= 44),
+					labels: [...row.querySelectorAll('option')].map(option => option.textContent?.trim()) };
+			}));
+			expect(rows.every(row => row.aligned && row.touchSafe && row.labels.every(label => /^\d{4}$/.test(label ?? '')))).toBe(true);
+			expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+		}
+		const group = page.locator('.candidate-card:has(select option:nth-child(2))').first();
+		const playerId = await group.getAttribute('data-candidate-group');
+		const selectedGroup = page.locator(`.candidate-card[data-candidate-group="${playerId}"]`);
+		const select = group.locator('.wide-season-picker select');
+		const seasonId = await select.evaluate(node => {
+			const input = node as HTMLSelectElement;
+			return [...input.options].find(option => option.value !== input.value)!.value;
+		});
+		await select.selectOption(seasonId);
+		await expect(selectedGroup).toHaveCount(0);
+		await page.getByRole('navigation', { name: 'Player card pages' }).getByRole('button', { name: 'Next', exact: true }).click();
+		await expect(selectedGroup.locator('.player-card')).toHaveAttribute('data-season-id', seasonId);
+		await selectedGroup.getByRole('button', { name: 'Turn over', exact: true }).click();
+		await expect(selectedGroup.getByRole('button', { name: 'Turn over', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	});
+
 	test('filters qualified candidates, reorders through real sort and ranking states, and pages results', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openChoosing(page);

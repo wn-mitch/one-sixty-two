@@ -3,6 +3,7 @@ import { POSITIONS } from '../game/types.ts';
 import type { HitterSlot, Manifest, Position, Profile, Slot } from '../game/types.ts';
 import { selectLogo, selectPhoto } from '../media/client.ts';
 import type { MediaAsset, MediaManifest, PlayerPhoto } from '../media/types.ts';
+import { logoShapeFor, type LogoShape } from '../media/logo-shapes.ts';
 import { captureLabel, exactSeason, photoContextLabel, photoLabel } from '../media/photo-policy.ts';
 import type { WarSeasonRanking, WarRankings } from '../rankings/types.ts';
 import { seasonEstimates } from '../components/season-estimates.ts';
@@ -97,6 +98,7 @@ export interface CardFront {
 	hasLogo: boolean;
 	noLogo: boolean;
 	logoLabel: string;
+	logoShape: LogoShape;
 	k: Roles;
 	fin: Readonly<FinishMaterial>;
 	mediaStatus: CardMediaStatus;
@@ -310,6 +312,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 	const logo = selectLogo(media, profile.franchiseId, profile.year);
 	const cardPhoto = photo ? selectedPhoto(photo, profile.year) : null;
 	const cardLogo = logo ? selectedLogo(logo.asset, logo.historical) : null;
+	const logoShape: CardFront['logoShape'] = logo ? logoShapeFor(profile.franchiseId) : 'round';
 	const roleWar = role === 'batting' ? ranking?.battingWAR162 : ranking?.pitchingWAR162;
 	const displayedWar = role === 'bullpen' ? undefined : finite(input.war) ? input.war : roleWar;
 	const battingKey = battingDerived(profile);
@@ -388,6 +391,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 		caption: photoCaption,
 		logo: cardLogo?.url ?? '', selectedLogo: cardLogo, hasLogo: !!cardLogo, noLogo: !cardLogo,
 		logoLabel,
+		logoShape,
 		k: roles({ primary: media?.teams[profile.franchiseId]?.color || STOCK, secondary: STOCK }),
 		fin: materialFor(finishFor(finishRole(profile, slot, role), ranking?.battingWAR162, ranking?.pitchingWAR162)),
 		mediaStatus

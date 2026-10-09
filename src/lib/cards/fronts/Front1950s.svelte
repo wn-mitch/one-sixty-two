@@ -30,7 +30,7 @@
 			<span data-rt data-layer="season.position">{s.pos}</span>
 		</div>
 
-		<div data-layer="logo.medallion" style={`position:absolute; top:8.6cqw; left:8.6cqw; width:15cqw; height:15cqw; border-radius:50%; background:var(--stamp, ${s.k.stock}); box-shadow:0 0 0 0.6cqw ${s.k.fieldOnStock};`}>
+		<div data-layer="logo.medallion" style={`position:absolute; top:8.6cqw; left:8.6cqw; width:15cqw; height:15cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.stock}); box-shadow:0 0 0 0.6cqw ${s.k.fieldOnStock};`}>
 			<LogoSlot s={s} />
 		</div>
 

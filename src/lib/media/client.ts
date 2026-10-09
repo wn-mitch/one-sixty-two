@@ -16,7 +16,8 @@ function asset(value: unknown, version: string): value is MediaAsset {
   && typeof value.height === 'number' && value.height > 0 && Number.isFinite(value.height)
   && httpsUrl(value.sourceUrl) && httpsUrl(value.licenseUrl)
   && typeof value.license === 'string' && !!value.license.trim()
-  && typeof value.credit === 'string' && !!value.credit.trim();
+  && typeof value.credit === 'string' && !!value.credit.trim()
+  && (value.sourceChecksum === undefined || (typeof value.sourceChecksum === 'string' && /^[a-f0-9]{64}$/.test(value.sourceChecksum)));
 }
 export function validateMedia(value: unknown, version: string): asserts value is MediaManifest {
  if (!record(value) || (value.schemaVersion !== 2 && value.schemaVersion !== 3) || value.version !== version

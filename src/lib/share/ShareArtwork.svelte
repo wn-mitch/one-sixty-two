@@ -38,6 +38,14 @@
 	function ignoreCardDetails(): void { /* Front-only export has no details action. */ }
 </script>
 
+{#snippet diamondLines()}
+	<div class="diamond-lines" aria-hidden="true">
+		<svg class="outfield-arc" viewBox="0 0 100 100" preserveAspectRatio="none">
+			<path d="M 0 50 A 50 50 0 0 1 100 50" vector-effect="non-scaling-stroke" />
+		</svg>
+	</div>
+{/snippet}
+
 <section
 	bind:this={root}
 	class:scorecard={format === 'scorecard'}
@@ -62,7 +70,7 @@
 			<div class="losses"><b>{model.record.losses} <small>L</small></b><span>{firstLoss}</span></div>
 		</section>
 		<section class="text-diamond" aria-label="Starting field">
-			<div class="diamond-lines" aria-hidden="true"></div>
+			{@render diamondLines()}
 			{#each field as entry (entry.seasonId)}
 				<div class="text-player" style={`--x:${fieldPosition[entry.slot].x}%;--y:${fieldPosition[entry.slot].y}%`}>
 					<strong>{entry.slot}</strong><b>{entry.card.family}</b><span>{entry.card.year} {entry.card.abbr}</span>
@@ -82,7 +90,7 @@
 			<div class="ledger"><span>{firstLoss}</span><span>Longest streak: <b>{model.record.longestWinningStreak} W</b></span><span>Run difference: <b>{differenceLabel}</b></span></div>
 		</section>
 		<section class="card-diamond" aria-label="Starting field">
-			<div class="diamond-lines" aria-hidden="true"></div>
+			{@render diamondLines()}
 			{#each field as entry (entry.seasonId)}
 				<div class="diamond-player" style={`--x:${fieldPosition[entry.slot].x}%;--y:${fieldPosition[entry.slot].y}%`}>
 					<div class="diamond-card"><Card s={entry.card} capture onDetails={ignoreCardDetails} /></div><strong>{entry.slot}</strong>
@@ -97,7 +105,7 @@
 		<footer class="diamond-footer"><strong>Can you beat {model.record.wins}–{model.record.losses}?</strong><span>Same roster, same season<br />{replayLabel}</span></footer>
 	{:else}
 		<section class="wide-field" aria-label="Starting field">
-			<div class="diamond-lines" aria-hidden="true"></div>
+			{@render diamondLines()}
 			{#each field as entry (entry.seasonId)}
 				<div class="wide-card" style={`--x:${fieldPosition[entry.slot].x}%;--y:${fieldPosition[entry.slot].y}%`}><Card s={entry.card} capture onDetails={ignoreCardDetails} /></div>
 			{/each}
@@ -123,7 +131,7 @@
 	.brand i,.wide-brand i { display:block; border:solid currentColor; transform:rotate(45deg); }
 	.brand > span,.wide-kicker { color:oklch(76% .018 255); font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
 	.diamond-lines { position:absolute; inset:0; pointer-events:none; }
-	.diamond-lines::before { content:''; position:absolute; left:3%; right:3%; top:5%; height:17%; border-top:.18cqw solid oklch(37% .016 255); border-radius:50%; }
+	.outfield-arc { position:absolute; left:3%; top:5%; width:94%; height:17%; overflow:visible; fill:none; stroke:oklch(37% .016 255); stroke-width:.18cqw; }
 	.diamond-lines::after { content:''; position:absolute; left:39%; top:41%; width:22%; aspect-ratio:1; border:.16cqw solid oklch(37% .016 255); background:oklch(27% .016 255 / .58); transform:rotate(45deg); }
 
 	.scorecard { padding:3.7cqw 5.93cqw 0; display:flex; flex-direction:column; }

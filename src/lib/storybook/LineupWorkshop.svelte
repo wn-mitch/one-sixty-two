@@ -45,6 +45,7 @@
 	}
 
 	function updateOrder(kind: 'batting' | 'starter', order: string[]): void {
+		if (effectiveBusy) return;
 		draft = kind === 'batting'
 			? { ...draft, battingOrder: [...order] }
 			: { ...draft, starterOrder: [...order] };

@@ -90,10 +90,10 @@ function semanticAsset(asset: PreparedAsset, override: { license: string; licens
 		sourceUrl: asset.sourceUrl,
 		license: override.license,
 		licenseUrl: override.licenseUrl,
-		credit: override.credit
+		credit: override.credit,
+		...(asset.sourceChecksum ? { sourceChecksum: asset.sourceChecksum } : {})
 	};
 }
-
 function directLogoMetadata(franchiseId: string, source: DirectTeamLogoSource, pageId: number): CommonsMetadata {
 	return {
 		title: `direct:${franchiseId}`,
@@ -103,11 +103,13 @@ function directLogoMetadata(franchiseId: string, source: DirectTeamLogoSource, p
 		mime: 'image/svg+xml',
 		downloadUrl: source.url,
 		sourceUrl: source.sourceUrl,
+		description: 'Direct team identity source',
 		dateOriginal: null,
 		license: source.license,
 		licenseUrl: source.licenseUrl,
 		credit: source.credit,
 		sourceId: `direct:${franchiseId}`,
+		rightsText: 'Copyrighted team identification artwork; permission not established (fair-use assertion only).',
 		pinSourceChecksum: source.checksum
 	};
 }
@@ -317,10 +319,11 @@ export async function generateMedia(input: {
 		} else if ('source' in team.current) {
 			const metadata = directLogoMetadata(franchiseId, team.current, -(acceptedLogos.length + 1));
 			acceptedLogos.push({
-				franchiseId, metadata,
-				license: team.current.license,
-				licenseUrl: team.current.licenseUrl,
-				credit: team.current.credit
+				franchiseId,
+				metadata,
+				license: metadata.license ?? '',
+				licenseUrl: metadata.licenseUrl ?? '',
+				credit: metadata.credit ?? ''
 			});
 		} else {
 			const metadata = commons.get(team.current.title);

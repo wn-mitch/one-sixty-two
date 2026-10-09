@@ -108,7 +108,7 @@ export interface CommonsMetadata {
 	sourceId?: string;
 	categories?: string[];
 	rightsText?: string;
-	/** Exact source bytes required for reviewed direct team marks. */
+	/** Optional byte pin for direct, non-free team identity assets. */
 	pinSourceChecksum?: string;
 }
 

@@ -20,7 +20,7 @@
 			<PhotoMask s={s} emptyStyle={`background:repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 1.1cqw, rgba(0,0,0,0) 1.1cqw 2.2cqw), ${s.k.accent};`} />
 		</div>
 
-		<div data-layer="logo.disc" style={`position:absolute; top:4.4cqw; right:4.4cqw; width:22cqw; height:22cqw; border-radius:50%; background:var(--stamp, ${s.k.paper}); box-shadow:inset 0 0 0 0.9cqw ${s.k.accent};`}>
+		<div data-layer="logo.disc" style={`position:absolute; top:4.4cqw; right:4.4cqw; width:22cqw; height:22cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper}); box-shadow:inset 0 0 0 0.9cqw ${s.k.accent};`}>
 			<LogoSlot s={s} markStyle="left:3cqw; top:3cqw; width:16cqw; height:16cqw;" fallbackStyle={`font-weight:800; font-style:italic; font-size:7.4cqw; color:${s.k.fieldOnPaper};`} />
 		</div>
 

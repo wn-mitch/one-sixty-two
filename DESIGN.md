@@ -57,14 +57,16 @@ Native card dialogs and the field sheet use an ambient shadow at `oklch(8% .01 2
 - Buttons and native selects have a 44px minimum height. Icon-only controls have a 44px minimum width and an accessible action name. Dense layout never shrinks the interactive surface with a transform.
 - Keyboard focus uses a 3px focus-colour outline with 4px offset. Scrollable rails must leave the focused control visible. Hover is tonal; pressing may translate a control by 1px.
 - Selected filters use the text ground and background-colour ink with `aria-pressed`. Qualification buttons preview a placement; they are not commitment buttons.
-- Native exact-season selects carry exact season IDs and historical-team labels. Never replace them with year-only IDs or a fixed number of demo season buttons.
+- Native exact-season selects carry exact season IDs and display the year without the redundant team name. Never replace their values with year-only IDs or a fixed number of demo season buttons.
 - Loading, failed data, empty search, hidden blocked cards, and unavailable qualifications are distinct states. Show truthful copy and the relevant retry or reveal action. Never fabricate data to fill a visual gap.
 
 ## Imagery
 
 Use free reusable sources first, retaining per-file source, credit, licence, and verified capture-year metadata. Prefer photos from the selected year; otherwise choose the nearest verified photo from the player's playing career and show its actual year. No current-photo-as-historical claim. No fabricated faces. Missing images receive an intentional no-photo treatment. Current franchise marks must not be presented as verified historical marks. Copyright status and trademark restrictions are distinct.
 
-Team marks fit wholly inside their padded tiles, preserving aspect ratio without cropping or intrinsic image dimensions expanding the layout. Missing verified marks retain labelled abbreviation fallbacks.
+Team marks fit wholly inside their padded tiles, preserving aspect ratio without cropping or intrinsic image dimensions expanding the layout. Reviewed round source marks retain circular frames; square/freeform marks use square frames across era fronts, backs, and interface tiles. Missing reviewed marks retain labelled abbreviation fallbacks.
+
+All club marks identify actual franchises rather than the app's own brand. Reviewed non-free marks may be included in the UI and exported season share images under an asserted fair-use basis, with accurate source/copyright disclosure and a non-affiliation notice. Do not describe those marks as freely licensed or permission-cleared. Portrait and atmosphere reuse requirements are unchanged. There is no standalone logo download or card-printing feature.
 
 ## Interaction and Responsive Behaviour
 
@@ -80,7 +82,7 @@ Wide mode starts at 1100px, or 1024px in landscape. The draft shell has a 1440px
 
 The content has three visual columns: a 132px filter rail, flexible candidate cards, and a 452px field panel. Gaps between columns are 28px. The filter rail contains search, qualification filters with distinct-player counts, ranking selection/method/retry, blocked-card visibility, and pagination metadata. Both rails stick 72px from the viewport top and cap their scrolling area against the available viewport height. Sort and blocked-card controls must remain reachable on short windows.
 
-Candidate grids have two columns below 1360px and three above, with 20px horizontal and 28px vertical gaps. Each card has one wrapping control bar below its artwork: native exact-season select, legal placement buttons, unavailable qualification buttons, and Turn over. The turn control does not sit above the artwork or select the player. Text and source disclosures sit beneath a turned card. Do not repeat separate qualification and availability rows when the controls already convey them.
+Candidate grids have two columns below 1360px and three above, with 20px horizontal and 28px vertical gaps. Each card has one nonwrapping control bar below its artwork: native year-labelled exact-season select, legal placement buttons, unavailable qualification buttons, and Turn over. Exceptionally long qualification lists scroll within that bar rather than wrapping or shrinking touch targets. The turn control does not sit above the artwork or select the player. Text and source disclosures sit beneath a turned card. Do not repeat separate qualification and availability rows when the controls already convey them.
 
 Desktop hides a player group by default only when none of its seasons has an engine-approved destination. Show blocked cards restores those groups so the user can select one and rearrange the roster. Filled-position filters stay usable. A group with a viable alternate season remains visible; an explicit remembered season or selected candidate is not silently replaced. A selected candidate remains visible if its destination becomes illegal. Search, filter, sort, page, and visibility changes clear transient placement, not remembered exact-season choices. Narrow browsing continues to show blocked candidates.
 
@@ -108,13 +110,17 @@ Home’s decorative wall is independently clipped and rotated −7°. Desktop re
 
 Neighboring wall rows use disjoint era palettes, and each row separates matching eras through its repeat seam. Each showcase player belongs to one row and appears once per base cycle, even when several seasons are available. Full cycles repeat to cover the viewport; a finite showcase can repeat players within a row on wide screens.
 
+Draft loading renders eight era-styled TEAM placeholders, never invented eligible players. One card lifts and flies upward out of the grid. The responsive grid keeps artwork at least 72px wide, pauses offscreen and while the document is hidden, and stays static when Motion is off or the operating system requests reduced motion.
+
 ### Lineup, season, and results
 
-The lineup editor separates batting order, starting rotation, closer, and bullpen remainder. Reordering uses explicit labelled controls; fielding/DH reassignment remains qualification-aware. Starting pitchers each receive 54 starts. Present workload assumptions near the affected unit instead of implying a real-world full pitching roster.
+The lineup editor separates batting order, starting rotation, closer, and bullpen remainder. All fourteen entries use 72px canonical compact fronts and open the shared native inspection dialog. Mouse/touch handles reorder only within batting order or starting rotation, with insertion previews and committed-drop-only persistence. Escape, pointer cancellation, or dropping outside the list leaves order unchanged. Labelled up/down controls and live announcements provide keyboard ordering. Closer and bullpen remainder remain fixed; fielding/DH reassignment remains qualification-aware. Starting pitchers each receive 54 starts. Workload assumptions appear beside the affected unit.
 
 Simulation shows progress, current record, and the latest game without hiding later games after a loss. Results lead with the final W–L, first loss/no losses, streak, runs ledger, and share actions. The awards spread considers every participating individual for MVP, batting title, fewest runs allowed (RA9), strikeout leader, and LVP; BP is excluded from individual awards. Exact unrounded ties receive chips, stable identity chooses the featured winner, and categories merge when one player wins more than one. The rest-of-hand preserves every unfeatured roster card in slot order with 72px compact fronts. Turning points attach the correct drafted batter or pitcher/BP by season identity. Totals and all 162 expandable game boxes remain below.
 
 Statistics use semantic tables, aligned numeric columns, and labelled internal horizontal scrolling, never document-level overflow. Results inspection ranks hitters against hitters and pitchers/BP against pitchers/BP with unrounded competition values; unsupported/missing values and invalid denominators show no comparative rank. The simulated view discloses realized batting/running/defensive or pitching value and replacement units; the actual view keeps historical WAR/162 and recorded counts/rates separate. Source and model information remains reachable from the relevant card or Rules & model page. A current compatible replay loads by opaque ID, validates its authoritative action history, and recomputes the same season without replacing the recipient's local draft.
+
+Season in review and game boxes share the dense `.stat-table` scorebook treatment in `src/routes/layout.css`: 12px tabular data, 36px baseline rows that grow for complete identities, striped grounds, grouped columns, and a sticky name/year column. Portrait date labels do not appear inside statistical rows. Horizontal scrolling stays within labelled regions and joins the tab order only when necessary. The wide game log has two columns, with expanded details spanning both; narrow screens retain one chronological list. Every existing statistic and all 162 game boxes remain accessible.
 
 ### Sharing and publication
 

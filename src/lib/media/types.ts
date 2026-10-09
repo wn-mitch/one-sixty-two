@@ -6,6 +6,7 @@ export interface MediaAsset {
  license: string;
  licenseUrl: string;
  credit: string;
+ sourceChecksum?: string;
 }
 export interface PlayerPhoto extends MediaAsset {
  /** Present only for an exact capture year; publication and upload dates are not capture dates. */

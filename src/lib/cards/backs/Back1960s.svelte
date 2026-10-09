@@ -38,7 +38,7 @@
 					<div use:fit={{ max: 11, min: 7.5, wrapMin: 6.4, lines: 2, maxH: 13 }} data-rt data-layer="name.full" data-fit data-max="11" data-min="7.5" data-wrap-min="6.4" data-lines="2" data-max-h="13" style="width:100%; font-weight:800; font-size:11cqw; line-height:.88; text-transform:uppercase; white-space:nowrap; text-wrap:balance;">{s.b.name}</div>
 					<div use:fit={{ max: 4, min: 3.1 }} data-rt data-layer="team.name" data-fit data-max="4" data-min="3.1" style="margin-top:1.4cqw; width:100%; font-weight:700; font-size:4cqw; line-height:1; letter-spacing:.1em; text-transform:uppercase; white-space:nowrap;">{s.b.team}</div>
 				</div>
-				<div data-layer="logo.disc" style={`position:relative; flex:none; width:15cqw; height:15cqw; border-radius:50%; background:${s.k.paper};`}>
+				<div data-layer="logo.disc" style={`position:relative; flex:none; width:15cqw; height:15cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:${s.k.paper};`}>
 					<LogoSlot {s} markStyle="left:2.2cqw; top:2.2cqw; width:10.6cqw; height:10.6cqw;" fallbackStyle={`font-size:5cqw; color:${s.k.fieldOnPaper};`} />
 				</div>
 			</div>
