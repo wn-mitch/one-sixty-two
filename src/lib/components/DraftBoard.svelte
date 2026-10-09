@@ -14,6 +14,7 @@
  import Roster from './Roster.svelte';
  import Reveal from './Reveal.svelte';
  import DraftSheet from './DraftSheet.svelte';
+ import DraftLoadingCards from './DraftLoadingCards.svelte';
  let { draft, manifest, pool, profiles, phase, loading, busy, error, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onDraft, onReassign, onNew }: {
   draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
   phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean; error: string;
@@ -323,7 +324,10 @@
      <button id="roll-next" class="primary" disabled={busy} onclick={onRoll}>Roll next franchise <span aria-hidden="true">↗</span></button>
     </div>
    {:else if loading || phase === 'revealing'}
-    <div class="stack" role="status" aria-label="Loading available player seasons"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><span class="muted">Finding eligible seasons…</span></div>
+    <div class="loading-stack" role="status" aria-label="Loading available player seasons">
+     <DraftLoadingCards />
+     <span class="muted">Finding eligible seasons…</span>
+    </div>
    {:else if pool.length}
     <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}

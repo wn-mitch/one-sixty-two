@@ -4,6 +4,7 @@ import type {
 	CandidateIdentity,
 	CommonsMetadata,
 	DataManifest,
+	DirectTeamLogoSource,
 	ExclusionCounts,
 	TeamSourceRegistry,
 	WikidataCategory,
@@ -276,6 +277,15 @@ export function validateCuratedPlayerPhoto(
 	return asset ? { year: captureYear, ...asset } : null;
 }
 
+export function validateDirectTeamLogoSource(source: DirectTeamLogoSource): void {
+	if (source.source !== 'direct' || !/^https:\/\/\S+$/.test(source.url)
+		|| !/^https:\/\/\S+$/.test(source.sourceUrl) || !source.license.trim()
+		|| !/^https:\/\/\S+$/.test(source.licenseUrl) || !source.credit.trim()
+		|| !/^[a-f0-9]{64}$/.test(source.checksum)) {
+		throw new Error('Invalid direct team logo source');
+	}
+}
+
 export function validateTeamSources(
 	registry: TeamSourceRegistry,
 	franchises: DataManifest['franchises']
@@ -294,10 +304,18 @@ export function validateTeamSources(
 		if (!entry.name.trim() || !/^#[0-9a-f]{6}$/i.test(entry.color)) {
 			throw new Error(`Invalid team metadata for franchise ${franchiseId}`);
 		}
-		for (const source of [entry.current, ...entry.historical].filter(Boolean)) {
-			if (!source || !source.title.trim() || source.title.startsWith('File:')) {
-				throw new Error(`Invalid Commons title for franchise ${franchiseId}`);
+		const current = entry.current;
+		if (current && 'source' in current) {
+			try {
+				validateDirectTeamLogoSource(current);
+			} catch {
+				throw new Error(`Invalid direct team logo source for franchise ${franchiseId}`);
 			}
+		} else if (current && (!current.title.trim() || current.title.startsWith('File:'))) {
+			throw new Error(`Invalid Commons title for franchise ${franchiseId}`);
+		}
+		for (const source of entry.historical) {
+			if (!source.title.trim() || source.title.startsWith('File:')) throw new Error(`Invalid Commons title for franchise ${franchiseId}`);
 		}
 		for (const source of entry.historical) {
 			if (!Number.isInteger(source.firstYear) || !Number.isInteger(source.lastYear) || source.firstYear > source.lastYear) {

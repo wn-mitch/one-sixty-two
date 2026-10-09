@@ -29,7 +29,7 @@
 				<span aria-hidden="true" style={`width:.9cqw; height:.9cqw; border-radius:50%; background:${s.k.onAccent};`}></span>
 				<span data-layer="season.position">{s.pos}</span>
 			</div>
-			<div data-layer="logo.disc" style={`position:absolute; right:2.6cqw; bottom:2.6cqw; width:19cqw; height:19cqw; border-radius:50%; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 1.1cqw ${s.k.field};`}>
+			<div data-layer="logo.disc" style={`position:absolute; right:2.6cqw; bottom:2.6cqw; width:19cqw; height:19cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 1.1cqw ${s.k.field};`}>
 				<LogoSlot {s} markStyle="left:2.6cqw; top:2.6cqw; width:13.8cqw; height:13.8cqw;" fallbackStyle={`font-size:6.4cqw; color:${s.k.fieldOnPaper};`} />
 			</div>
 		</div>

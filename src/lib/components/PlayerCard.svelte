@@ -132,7 +132,7 @@
 							onchange={event => onSeasonChange?.(event.currentTarget.value)}
 						>
 							{#each seasonChoices as season (season.seasonId)}
-								<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>
+								<option value={season.seasonId}>{season.year}</option>
 							{/each}
 						</select>
 					</label>
@@ -168,7 +168,7 @@
 							onchange={event => onSeasonChange?.(event.currentTarget.value)}
 						>
 							{#each seasonChoices as season (season.seasonId)}
-								<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>
+								<option value={season.seasonId}>{season.year}</option>
 							{/each}
 						</select>
 					</label>
@@ -286,13 +286,13 @@
 	.compact-qualification strong { color: var(--card-ink); }
 	.placement-list { display: flex; flex-wrap: wrap; gap: .35rem; }
 	.placement { min-height: 2.75rem; min-width: 2.75rem; padding: .3rem .5rem; color: var(--card-ink); background: color-mix(in oklch, var(--surface) 72%, var(--focus)); border: 1px solid var(--focus); border-radius: .25rem; font-size: .72rem; font-weight: 750; }
-	.wide-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; width: 100%; }
-	.wide-season-picker { flex: 1 1 8rem; min-width: 7rem; }
+	.wide-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: .35rem; width: calc(100% + 1rem); box-sizing: border-box; margin: -.5rem; padding: .5rem; overflow-x: auto; }
+	.wide-season-picker { flex: 1 0 4.5rem; min-width: 4.5rem; }
 	.wide-season-picker select { min-height: 2.75rem; padding-block: .25rem; }
 	.wide-controls .placement-list { display: contents; }
 	.wide-controls .placement { flex: 0 0 2.75rem; }
 	.placement:disabled { color: var(--card-muted); border-color: var(--border); background: var(--surface); cursor: not-allowed; opacity: .7; text-decoration: line-through; }
-	.no-open-position { color: var(--card-muted); font-size: .72rem; font-weight: 700; }
+	.no-open-position { flex: none; white-space: nowrap; color: var(--card-muted); font-size: .72rem; font-weight: 700; }
 	.art-frame { width: min(100%, 20rem); margin-inline: auto; }
 	.draft-mode.wide { --card-front-width: 100%; --card-back-width: 410px; }
 	.draft-mode.wide .art-frame { width: 100%; }

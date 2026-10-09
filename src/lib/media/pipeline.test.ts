@@ -14,7 +14,7 @@ import { auditMedia } from '../../../scripts/media/audit.ts';
 import { writeResearch } from '../../../scripts/media/research.ts';
 import type { ResearchContext } from '../../../scripts/media/research.ts';
 import { parse } from 'csv-parse/sync';
-import type { ApprovedPhotoReview } from '../../../scripts/media/types.ts';
+import type { ApprovedPhotoReview, DirectTeamLogoSource, TeamSourceRegistry } from '../../../scripts/media/types.ts';
 import type { AcquiredTables } from '../../../scripts/data/acquire.ts';
 
 let root: string;
@@ -108,14 +108,46 @@ describe('reviewed image acquisition and offline compilation', () => {
 	});
 	it('uses decoded dimensions, never upscales, invalidates changed crops and pins source bytes', async () => {
 		const assetDir = join(root, 'assets');
-		const full = await prepareImage(metadata, root, assetDir, true, 384, undefined, digest(source));
+		const pinnedMetadata = { ...metadata, pinSourceChecksum: digest(source) };
+		const full = await prepareImage(pinnedMetadata, root, assetDir, true, 384, undefined, digest(source));
 		const cropped = await prepareImage(metadata, root, assetDir, true, 384, crop, digest(source));
 		expect([full.width, full.height]).toEqual([80, 40]); expect([cropped.width, cropped.height]).toEqual([40, 40]);
+		expect(full.sourceChecksum).toBe(digest(source));
 		expect(cropped.filename).not.toBe(full.filename);
 		const { stdout } = await exec('magick', [join(assetDir, cropped.filename), '-format', '%[fx:mean.r] %[fx:mean.b]', 'info:']);
 		const [red, blue] = stdout.trim().split(/\s+/).map(Number); expect(red).toBeLessThan(.05); expect(blue).toBeGreaterThan(.95);
 		expect((await prepareImage(metadata, root, assetDir, true, 384, crop, digest(source))).filename).toBe(cropped.filename);
 		await expect(prepareImage(metadata, root, assetDir, true, 384, crop, '0'.repeat(64))).rejects.toThrow('bytes changed');
+		await expect(prepareImage(pinnedMetadata, root, assetDir, true, 384, undefined, '0'.repeat(64))).rejects.toThrow('bytes changed');
+	});
+	it('keeps direct club marks distinct and refuses changed source bytes', async () => {
+		const alternateUrl = 'https://example.invalid/alternate.ppm';
+		const alternate = Buffer.concat([Buffer.from('P6\n40 80\n255\n'), source.subarray(Buffer.byteLength('P6\n80 40\n255\n'))]);
+		const alternateKey = digest(alternateUrl);
+		await writeFile(join(root, 'downloads', `${alternateKey}.bin`), alternate);
+		await writeFile(join(root, 'downloads', `${alternateKey}.json`), JSON.stringify({ url: alternateUrl, checksum: digest(alternate), length: alternate.length }));
+		const franchises = Array.from({ length: 30 }, (_, i) => ({ id: `T${i}`, name: `Synthetic Club ${i}` }));
+		const teamSources: TeamSourceRegistry = Object.fromEntries(franchises.map(team => [team.id, { name: team.name, color: '#123456', current: null, historical: [] }]));
+		const direct: DirectTeamLogoSource = { source: 'direct', url: sourceUrl, sourceUrl: metadata.sourceUrl,
+			license: 'Copyrighted identification artwork; permission not established', licenseUrl: 'https://example.invalid/rights', credit: 'Example rights holder', checksum: digest(source) };
+		teamSources.T0.current = direct;
+		teamSources.T1.current = { ...direct, url: alternateUrl, checksum: digest(alternate) };
+		const input = { dataManifest: { dataVersion: 'synthetic-data', candidates: [], franchises },
+			tables: { People: [], Batting: [], Pitching: [] } as unknown as AcquiredTables,
+			teamSources, playerSources: {}, reviewedPlayerPhotos: {}, atmosphereSources: [],
+			cacheDir: root, outputDir: join(root, 'published'), offline: true, log: () => {} };
+		const generated = await generateMedia(input);
+		validateMedia(generated.manifest, generated.manifest.version);
+		expect([generated.manifest.teams.T0.logo?.width, generated.manifest.teams.T0.logo?.height]).toEqual([80, 40]);
+		expect([generated.manifest.teams.T1.logo?.width, generated.manifest.teams.T1.logo?.height]).toEqual([40, 80]);
+		const originalUrl = generated.manifest.teams.T0.logo!.url;
+		const key = digest(sourceUrl);
+		await writeFile(join(root, 'downloads', `${key}.bin`), alternate);
+		await writeFile(join(root, 'downloads', `${key}.json`), JSON.stringify({ url: sourceUrl, checksum: digest(alternate), length: alternate.length }));
+		await expect(generateMedia(input)).rejects.toThrow('bytes changed');
+		const originalFile = join(root, 'published', generated.manifest.version, originalUrl.split('/').at(-1)!);
+		const { stdout } = await exec('magick', ['identify', '-format', '%wx%h', originalFile]);
+		expect(stdout).toBe('80x40');
 	});
 	it('publishes reviewed pre-debut crops and same-year alternatives reproducibly without broad searches', async () => {
 		const first = review(), second = { ...review('archive:alternative'), uniform: 'mlb' as const, franchiseId: 'AAA' };

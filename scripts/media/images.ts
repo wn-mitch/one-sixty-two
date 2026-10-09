@@ -128,6 +128,7 @@ export async function prepareImage(
 		sourceUrl: metadata.sourceUrl,
 		license: metadata.license ?? '',
 		licenseUrl: metadata.licenseUrl ?? '',
-		credit: metadata.credit ?? ''
+		credit: metadata.credit ?? '',
+		...(metadata.pinSourceChecksum ? { sourceChecksum } : {})
 	};
 }

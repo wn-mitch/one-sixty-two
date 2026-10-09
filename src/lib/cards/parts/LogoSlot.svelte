@@ -2,7 +2,7 @@
 	import type { CardFront } from '../view-model.ts';
 
 	export interface LogoSlotProps {
-		s: Pick<CardFront, 'abbr' | 'team' | 'logo' | 'hasLogo' | 'noLogo' | 'logoLabel'>;
+	s: Pick<CardFront, 'abbr' | 'team' | 'logo' | 'hasLogo' | 'noLogo' | 'logoLabel' | 'logoShape'>;
 		markStyle?: string;
 		fallbackStyle?: string;
 	}

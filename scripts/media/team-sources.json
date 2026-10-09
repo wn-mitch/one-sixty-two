@@ -27,6 +27,6 @@
  "STL":{"name":"St. Louis Cardinals","color":"#C41E3A","current":{"title":"St. Louis Cardinals insignia logo.svg"},"historical":[]},
  "TBD":{"name":"Tampa Bay Rays","color":"#8FBCE6","current":{"title":"Tampa Bay Rays cap logo.svg"},"historical":[]},
  "TEX":{"name":"Texas Rangers","color":"#003278","current":{"title":"Texas Rangers Insignia.svg"},"historical":[]},
- "TOR":{"name":"Toronto Blue Jays","color":"#134A8E","current":{"title":"Toronto Blue Jays wordmark logo wide blue-red.svg"},"historical":[]},
+ "TOR":{"name":"Toronto Blue Jays","color":"#134A8E","current":{"source":"direct","url":"https://www.mlbstatic.com/team-logos/141.svg","sourceUrl":"https://www.mlbstatic.com/team-logos/141.svg","license":"Copyrighted team identification artwork; permission not established (fair-use assertion only)","licenseUrl":"https://www.mlb.com/official-information/terms-of-use","credit":"Major League Baseball / Toronto Blue Jays","checksum":"1920a269c4dce0f8f38d338c4a47380144922a7d84f92ad4609188cac0f4d8e3"},"historical":[]},
  "WSN":{"name":"Washington Nationals","color":"#AB0003","current":{"title":"Washington Nationals Cap Insig.svg"},"historical":[{"title":"Montreal Expos Cap Logo (1992 to 2004).svg","firstYear":1992,"lastYear":2004}]}
 }

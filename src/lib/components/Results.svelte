@@ -13,7 +13,6 @@
 	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
 	import AtmosphereImage from './AtmosphereImage.svelte';
 	import GameDetails from './GameDetails.svelte';
-	import PlayerPhoto from './PlayerPhoto.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
 	import ResultsHand from './ResultsHand.svelte';
 	import SeasonMoments from './SeasonMoments.svelte';
@@ -170,22 +169,27 @@
 		<AtmosphereImage id="camden-atmosphere" compact />
 	</div>
 
+	<section class="season-review" aria-labelledby="season-review-heading">
+		<header class="review-heading">
+			<h3 id="season-review-heading">Season in review</h3>
+			<span>Simulated season · 162 games</span>
+		</header>
 	<section class="season-totals" aria-labelledby="batting-heading">
 		<div class="section-heading">
 			<div>
-				<p class="eyebrow">162-game totals</p>
-				<h3 id="batting-heading" tabindex="-1">Batting</h3>
+				<h4 id="batting-heading" tabindex="-1">Batting</h4>
 			</div>
 			<p>Every plate appearance, including all games after the first loss.</p>
 		</div>
-		<div class="table-scroll" role="region" aria-label="Season batting totals" use:tableScroll>
-			<table>
+		<div class="table-scroll stat-table-scroll" role="region" aria-label="Season batting totals" use:tableScroll>
+			<table class="stat-table">
+				<caption class="sr-only">Simulated season batting totals</caption>
 				<thead>
 					<tr>
 						<th scope="col">Batter</th><th scope="col">PA</th><th scope="col">AB</th><th scope="col">H</th>
-						<th scope="col">2B</th><th scope="col">3B</th><th scope="col">HR</th><th scope="col">BB</th>
-						<th scope="col">HBP</th><th scope="col">SO</th><th scope="col">R</th><th scope="col">RBI</th>
-						<th scope="col">SB</th><th scope="col">CS</th><th scope="col">SF</th>
+						<th scope="col">2B</th><th scope="col">3B</th><th scope="col" class="stat-key">HR</th><th scope="col" class="stat-group">BB</th>
+						<th scope="col">HBP</th><th scope="col">SO</th><th scope="col" class="stat-group">R</th><th scope="col" class="stat-key">RBI</th>
+						<th scope="col" class="stat-group">SB</th><th scope="col">CS</th><th scope="col">SF</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -193,15 +197,12 @@
 						{@const profile = profileById.get(line.seasonId)}
 						<tr>
 							<th scope="row">
-								<div class="stat-identity">
-									{#if profile}<PlayerPhoto playerId={profile.playerId} year={profile.year} franchiseId={profile.franchiseId} name={line.displayName} size="small" credits={false} />{/if}
-									<span>{line.displayName}{#if profile}<small>Drafted {profile.year}</small>{/if}</span>
-								</div>
+								<span class="stat-identity">{line.displayName}{#if profile}<small>{profile.year}</small>{/if}</span>
 							</th>
 							<td>{line.PA}</td><td>{line.AB}</td><td>{line.H}</td>
-							<td>{line.doubles}</td><td>{line.triples}</td><td>{line.HR}</td><td>{line.BB}</td>
-							<td>{line.HBP}</td><td>{line.SO}</td><td>{line.R}</td><td>{line.RBI}</td>
-							<td>{line.SB}</td><td>{line.CS}</td><td>{line.SF}</td>
+							<td>{line.doubles}</td><td>{line.triples}</td><td class="stat-key">{line.HR}</td><td class="stat-group">{line.BB}</td>
+							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{line.RBI}</td>
+							<td class="stat-group">{line.SB}</td><td>{line.CS}</td><td>{line.SF}</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -212,18 +213,18 @@
 	<section class="season-totals" aria-labelledby="pitching-heading">
 		<div class="section-heading">
 			<div>
-				<p class="eyebrow">Outs-based workload</p>
-				<h3 id="pitching-heading" tabindex="-1">Pitching</h3>
+				<h4 id="pitching-heading" tabindex="-1">Pitching</h4>
 			</div>
 			<p>RA9 is runs allowed per nine innings. It is not simulated ERA.</p>
 		</div>
-		<div class="table-scroll" role="region" aria-label="Season pitching totals" use:tableScroll>
-			<table class="pitching-table">
+		<div class="table-scroll stat-table-scroll" role="region" aria-label="Season pitching totals" use:tableScroll>
+			<table class="stat-table pitching-table">
+				<caption class="sr-only">Simulated season pitching totals</caption>
 				<thead>
 					<tr>
 						<th scope="col">Pitcher</th><th scope="col">IP</th><th scope="col">H</th><th scope="col">BB</th>
-						<th scope="col">HBP</th><th scope="col">SO</th><th scope="col">R</th><th scope="col">RA9</th>
-						<th scope="col">Starts</th><th scope="col">App.</th>
+						<th scope="col">HBP</th><th scope="col">SO</th><th scope="col" class="stat-group">R</th><th scope="col" class="stat-key">RA9</th>
+						<th scope="col" class="stat-group">Starts</th><th scope="col">App.</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -231,20 +232,18 @@
 						{@const profile = profileById.get(line.seasonId)}
 						<tr>
 							<th scope="row">
-								<div class="stat-identity">
-									{#if profile && line.role !== 'support'}<PlayerPhoto playerId={profile.playerId} year={profile.year} franchiseId={profile.franchiseId} name={line.displayName} size="small" credits={false} />{/if}
-									<span>{pitcherName(line)}{#if profile && line.role !== 'support'}<small>Drafted {profile.year}</small>{/if}</span>
-								</div>
+								<span class="stat-identity">{pitcherName(line)}{#if profile}<small>{profile.year} · {line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : 'SP'}</small>{/if}</span>
 							</th>
 							<td>{innings(line.outs)}</td><td>{line.H}</td><td>{line.BB}</td>
-							<td>{line.HBP}</td><td>{line.SO}</td><td>{line.R}</td><td>{ra9(line)}</td>
-							<td>{line.starts}</td><td>{line.appearances}</td>
+							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{ra9(line)}</td>
+							<td class="stat-group">{line.starts}</td><td>{line.appearances}</td>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
 		</div>
 		<p class="support-note muted">Support bullpen covers every relief inning not assigned to your closer.</p>
+	</section>
 	</section>
 
 	<section class="game-log" aria-label="All 162 games">
@@ -325,26 +324,15 @@
 	.score-actions { display: grid; align-content: center; gap: var(--space-3); }
 	.share-shortcuts { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 	.new-draft { justify-self: start; }
-	.season-totals, .game-log {
-		display: grid;
-		gap: var(--space-4);
-		min-width: 0;
-	}
-	.section-heading {
-		display: flex;
-		align-items: end;
-		justify-content: space-between;
-		gap: var(--space-6);
-	}
-	.section-heading .eyebrow { margin: 0 0 var(--space-2); }
+	.season-review { display: grid; gap: var(--space-6); min-width: 0; }
+	.review-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--border); }
+	.review-heading h3 { font-size: var(--text-xl); }
+	.review-heading > span { color: var(--muted); font-size: var(--text-xs); }
+	.season-totals, .game-log { display: grid; gap: var(--space-3); min-width: 0; }
+	.section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 	.section-heading h3 { font-size: var(--text-xl); }
-	.section-heading > p {
-		max-width: 36rem;
-		margin: 0;
-		color: var(--muted);
-		font-size: var(--text-sm);
-		text-align: right;
-	}
+	.section-heading h4 { margin: 0; font-size: var(--text-base); font-weight: 750; }
+	.section-heading > p { max-width: 60ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	.result-nav {
 		display: flex;
 		flex-wrap: wrap;
@@ -358,42 +346,14 @@
 		min-height: 2.75rem;
 		font-size: var(--text-sm);
 	}
-	table { width: 100%; min-width: 50rem; font-size: var(--text-sm); }
-	.pitching-table { min-width: 42rem; }
-	th, td {
-		padding: var(--space-2) var(--space-3);
-		border-bottom: 1px solid var(--border);
-		text-align: right;
-		white-space: nowrap;
-	}
-	th:first-child {
-		position: sticky;
-		left: 0;
-		z-index: 1;
-		max-width: 16rem;
-		background: var(--background);
-		text-align: left;
-	}
-	thead th { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; }
-	tbody th { color: var(--text); }
-	.stat-identity {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		min-width: 10rem;
-		max-width: 14rem;
-		white-space: normal;
-	}
-	.stat-identity > span { min-width: 0; overflow-wrap: anywhere; }
-	.stat-identity small {
-		display: block;
-		margin-top: var(--space-1);
-		color: var(--muted);
-		font-size: var(--text-xs);
-		font-weight: 500;
-	}
+	.stat-identity { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .5rem; max-width: 15rem; white-space: normal; }
+	.stat-identity small { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 	.support-note { margin: 0; font-size: var(--text-xs); }
-	.game-list { min-width: 0; border-top: 1px solid var(--border); }
+	.game-list { display: grid; min-width: 0; border-top: 1px solid var(--border); }
+	@media (min-width: 64rem) {
+		.game-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-6); align-items: start; }
+		.game-list :global(.game-detail[open]) { grid-column: 1 / -1; }
+	}
 	.baseball-atmosphere .eyebrow { margin-bottom: var(--space-3); }
 
 	@media (min-width: 48rem) {

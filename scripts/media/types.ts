@@ -12,10 +12,20 @@ export interface DataManifest {
 	franchises: Array<{ id: string; name: string }>;
 }
 
+export interface DirectTeamLogoSource {
+	source: 'direct';
+	url: string;
+	sourceUrl: string;
+	license: string;
+	licenseUrl: string;
+	credit: string;
+	checksum: string;
+}
+
 export interface TeamSourceEntry {
 	name: string;
 	color: string;
-	current: { title: string } | null;
+	current: { title: string } | DirectTeamLogoSource | null;
 	historical: Array<{ title: string; firstYear: number; lastYear: number }>;
 }
 
@@ -98,6 +108,8 @@ export interface CommonsMetadata {
 	sourceId?: string;
 	categories?: string[];
 	rightsText?: string;
+	/** Optional byte pin for direct, non-free team identity assets. */
+	pinSourceChecksum?: string;
 }
 
 export interface ApprovedPhotoReview {

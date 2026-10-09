@@ -9,6 +9,7 @@ import {
 	isReusableLicense,
 	parseCaptureYear,
 	validateCuratedPlayerPhoto,
+	validateDirectTeamLogoSource,
 	validatePlayerPhoto
 } from '../../../scripts/media/logic.ts';
 import type { CommonsMetadata, DataManifest } from '../../../scripts/media/types.ts';
@@ -140,6 +141,25 @@ describe('free-media licence policy', () => {
 		expect(isReusableLicense('CC BY-NC 4.0')).toBe(false);
 		expect(isReusableLicense('GFDL 1.2')).toBe(false);
 		expect(isReusableLicense('All rights reserved')).toBe(false);
+	});
+});
+
+describe('direct team identity sources', () => {
+	const source = {
+		source: 'direct' as const,
+		url: 'https://www.mlbstatic.com/team-logos/141.svg',
+		sourceUrl: 'https://www.mlbstatic.com/team-logos/141.svg',
+		license: 'Copyrighted team identification artwork; permission not established (fair-use assertion only)',
+		licenseUrl: 'https://www.mlb.com/official-information/terms-of-use',
+		credit: 'Major League Baseball / Toronto Blue Jays',
+		checksum: '1920a269c4dce0f8f38d338c4a47380144922a7d84f92ad4609188cac0f4d8e3'
+	};
+
+	it('accepts pinned direct identity sources without treating them as reusable portraits', () => {
+		expect(() => validateDirectTeamLogoSource(source)).not.toThrow();
+		expect(isReusableLicense(source.license)).toBe(false);
+		expect(() => validateDirectTeamLogoSource({ ...source, checksum: 'bad' })).toThrow('Invalid direct team logo source');
+		expect(() => validateDirectTeamLogoSource({ ...source, url: 'http://example.invalid/logo.svg' })).toThrow('Invalid direct team logo source');
 	});
 });
 

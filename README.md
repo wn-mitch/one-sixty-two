@@ -8,9 +8,17 @@ Draft cards select a candidate without saving a pick. Choose a highlighted field
 
 ## Interface and results
 
-Home uses a bounded set of real canonical profiles for its drifting card wall and era strip, plus all thirty franchise marks. Roster, staff, and Results hand cards use the canonical compact treatment: the same eight decade fronts receive era-specific plates, natural name wrapping, and a 72px minimum artwork width. The phone field grows vertically rather than scrolling sideways, and the five-person staff wraps three plus two when five 72px cards do not fit.
+Home uses a bounded set of real canonical profiles for its drifting card wall and era strip, plus all thirty franchise marks. Roster, staff, lineup, and Results hand cards use the canonical compact treatment: the same eight decade fronts receive era-specific plates, natural name wrapping, and a 72px minimum artwork width. The phone field grows vertically rather than scrolling sideways, and the five-person staff wraps three plus two when five 72px cards do not fit.
+
+The lineup uses dedicated mouse/touch drag handles within batting order or starting rotation. An insertion marker previews the drop; only a completed drop saves the order. Escape or dropping outside the list cancels. Labelled up/down buttons remain available for keyboard ordering, and closer/BP stay fixed. Compact cards open the shared inspection dialog; fielding/DH changes retain qualification-aware moves and reciprocal swaps.
+
+Draft loading uses eight era-styled TEAM placeholders, with one card plucked upward out of the board. These are not eligible-player cards or fabricated selections. The animation pauses offscreen or while the page is hidden and remains static when Motion is off or reduced motion is requested.
 
 Results preserve the complete batting and pitching totals and all 162 game boxes. The awards spread considers every participating individual and features MVP, batting title, fewest runs allowed (RA9), strikeout leader, and LVP; the pooled BP remains in team accounting but is not an individual award candidate. Exact unrounded ties receive chips, one stable winner is featured per category, and multiple awards merge onto one card. Inspection switches between the simulated 162-0 season and the recorded actual season, with hitter and pitcher cohorts ranked separately; missing or invalid source values are unavailable, not zero.
+
+Season in review and game boxes share a dense scorebook treatment: compact name/year identities, tabular numeric alignment, alternating row grounds, grouped statistics, and a sticky identity column inside labelled horizontal scroll regions. Every statistic remains available on phones. The game log uses two columns on wide screens; expanded boxes span both columns.
+
+Exported season artwork uses static SVG field geometry, flat card compositing, and a font/image/text-fit readiness gate before capture. Repeated captures of the same publication must produce identical PNG bytes.
 
 One Motion toggle appears on Home and Results. Ambient motion uses a fixed amount of 2.5× and speed of 1×. Only the on/off preference persists in `162-zero:motion:v1`; storage denial leaves the toggle usable for the session. One visibility-aware scheduler drives wall rows, card drift/finish lighting, spotlights, and marquees only while subscribers are visible. The live reduced-motion preference disables the toggle, stops autonomous motion, and restores a fixed readable card-light pose.
 
@@ -72,7 +80,9 @@ The data compiler pins an immutable third-party transport commit and SHA-256 for
 
 ## Images
 
-Team marks use reviewed Wikimedia Commons sources. Historical marks apply only within their verified year ranges; other marks are labelled as current franchise identity. A missing reusable mark remains an explicit abbreviation fallback.
+Team marks identify real franchises in the interface and exported season share images. Reviewed Wikimedia Commons sources retain their documented copyright status. Explicitly reviewed non-free marks retain their source and copyright disclosure and rely on an asserted fair-use basis, not a reuse licence or established permission. This policy applies to every club mark; attribution and non-affiliation notices are not permission. Portraits and atmosphere photographs still require documented reusable sources. The game provides no standalone logo download or card-printing feature.
+
+Historical marks apply only within their verified year ranges; other marks are labelled as current franchise identity. The Toronto current mark is the bird, not a wordmark. Missing reviewed marks retain an explicit abbreviation fallback. Reviewed round source marks retain circular frames; square/freeform marks use square frames without cropping the artwork.
 
 Normal media compilation consumes reviewed sources. Broad discovery runs explicitly with `just media-discover`; `--providers=cached,commons,openverse,loc`, `--player=ID`, `--missing-only`, `--limit=N`, `--requests=N`, `--refresh`, and `--offline` control a resumable run. Missing players are ordered by selectable cards restored, followed by players lacking same-decade MLB photographs. Cached Wikidata identities (`P1825`), portraits (`P18`), player categories (`P373`), name aliases, Commons structured subjects, and `--collection="Commons category"` supply leads. Openverse and Library of Congress searches preserve provider pagination and source links. A blocked or interrupted search never counts as an exhausted search. TCDB is a manual research reference, not an automated image provider.
 

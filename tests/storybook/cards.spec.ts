@@ -44,6 +44,29 @@ test.describe('Cards workshop', () => {
 		await expect(rendered).toHaveJSProperty('clientWidth', 410);
 	});
 
+	test('keeps the 1980s badge border clear of gem edging', async ({ page }) => {
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await page.goto('/?path=/story/cards-workshop--missing-photo');
+		await page.locator('#control-era').selectOption('1980s');
+		await page.locator('#control-finish').selectOption('gem');
+		const canvas = page.frameLocator('#storybook-preview-iframe');
+		const rendered = canvas.locator('.card[data-card="1980s"][data-finish="gem"]').first();
+		await expect(rendered).toBeVisible();
+		for (const boundary of ['Home', 'End']) {
+			await page.locator('#control-width').press(boundary);
+			const clearance = await rendered.evaluate(root => {
+				const badge = root.querySelector<HTMLElement>('[data-layer="logo.disc"]')!;
+				const rim = root.querySelector<HTMLElement>('[data-layer="material.prism-ring"]')!;
+				const badgeRect = badge.getBoundingClientRect(), rimRect = rim.getBoundingClientRect();
+				const spread = Number.parseFloat(getComputedStyle(badge).boxShadow.match(/-?[\d.]+px/g)!.at(-1)!);
+				return { left: badgeRect.left - spread - rimRect.left - Number.parseFloat(getComputedStyle(rim).paddingLeft),
+					top: badgeRect.top - spread - rimRect.top - Number.parseFloat(getComputedStyle(rim).paddingTop) };
+			});
+			expect(clearance.left).toBeGreaterThanOrEqual(-.5);
+			expect(clearance.top).toBeGreaterThanOrEqual(-.5);
+		}
+	});
+
 	test('keeps illustrative photos matched to gallery identities and supports deliberate missing media', async ({ page }) => {
 		await openStory(page, 'cards-workshop--era-gallery');
 		const photos = page.locator('.gallery [data-layer="photo.image"]');
