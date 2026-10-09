@@ -1,12 +1,15 @@
-import { LEGACY_SLOTS, MODEL_VERSION, POSITIONS, SLOTS, type Position, type Profile, type ReplaySchemaVersion, type SimulationData, type Slot } from '../game/types.ts';
+import { MODEL_VERSION, POSITIONS, SLOTS, type DefensiveEnvironment, type Position, type SimulationData } from '../game/types.ts';
+import { neutralDefensivePosition } from './defense.ts';
 import { AVERAGE_RATES, syntheticProfile } from './fixtures.ts';
 import type { GameInput, SeasonInput, TeamInput } from './types.ts';
 
 export function testTeam(id: string): TeamInput {
  const hitters = Array.from({ length: 9 }, (_, index) => {
   const profile = syntheticProfile(`${id}-h${index}`);
-  profile.eligibleSlots = [index < 8 ? POSITIONS[index] : 'DH'];
-  profile.errorRates = Object.fromEntries(POSITIONS.map(position => [position, 0])) as Profile['errorRates'];
+  const slot = index < 8 ? POSITIONS[index] : 'DH';
+  profile.eligibleSlots = [slot];
+  profile.primaryHitterSlot = slot;
+  if (slot !== 'DH') profile.defense.positions[slot] = neutralDefensivePosition(slot);
   profile.stealAttempt = 0;
   return profile;
  });
@@ -22,11 +25,20 @@ export function testTeam(id: string): TeamInput {
 export function eventTable(pitchers: number): Float64Array {
  return Float64Array.from({ length: 9 * pitchers * 8 }, (_, index) => (index % 8 + 1) / 8);
 }
+export function testDefenseEnvironment(): DefensiveEnvironment {
+ return {
+  leagueRates: AVERAGE_RATES,
+  leagueErrorRates: Object.fromEntries(POSITIONS.map(position => [position, 0.01])) as Record<Position, number>,
+  leagueStealAttempt: 0.03,
+  leagueStealSuccess: 0.75,
+  leagueDoublePlay: 0.08
+ };
+}
 export function testGame(): GameInput {
  const home = testTeam('home');
  const away = testTeam('away');
  return { number: 1, opponentId: 'away', opponentName: 'Club away', challengeIsHome: true, home, away,
-  leagueRates: AVERAGE_RATES, leagueCatcherCS: 0.25, park: 1,
+  defenseEnvironment: testDefenseEnvironment(), park: 1,
   homeMatchups: eventTable(away.pitchers.length), awayMatchups: eventTable(home.pitchers.length) };
 }
 export const EVENT = { BB: 0.0625, HBP: 0.1875, SO: 0.3125, single: 0.4375, double: 0.5625, triple: 0.6875, HR: 0.8125, OUT: 0.9375 };
@@ -34,12 +46,14 @@ export function scripted(values: number[], fallback = EVENT.SO): () => number {
  let index = 0;
  return () => index < values.length ? values[index++] : fallback;
 }
-function seasonFixture(seed: number, schemaVersion: ReplaySchemaVersion, modelVersion: string, slots: readonly Slot[]): SeasonInput {
- const roster = slots.map((slot, index) => {
+function seasonFixture(seed: number): SeasonInput {
+ const roster = SLOTS.map((slot, index) => {
   const profile = syntheticProfile(`roster-${index}`);
   profile.franchiseId = `F${index}`;
   profile.teamId = `T${index}`;
   profile.eligibleSlots = [slot];
+  profile.primaryHitterSlot = POSITIONS.includes(slot as Position) ? slot as Position : 'DH';
+  if (profile.primaryHitterSlot !== 'DH') profile.defense.positions[profile.primaryHitterSlot] = neutralDefensivePosition(profile.primaryHitterSlot);
   if (slot === 'BP') {
    profile.displayName = 'Synthetic Club bullpen remainder';
    profile.pitching!.G = 60;
@@ -59,15 +73,12 @@ function seasonFixture(seed: number, schemaVersion: ReplaySchemaVersion, modelVe
  bullpen.pitching!.G = 60;
  bullpen.pitching!.GS = 0;
  bullpen.pitching!.IPouts = 486;
- const data: SimulationData = { schemaVersion: 1, dataVersion: 'synthetic', leagueRates: AVERAGE_RATES, bullpen, opponents,
-  observedRuns: 4.45, leagueErrorRates: roster[0].profile.errorRates, leagueStealAttempt: 0.03, leagueStealSuccess: 0.75, leagueCatcherCS: 0.25, leagueDoublePlay: 0.08 };
- return { schemaVersion, modelVersion, seed, roster, battingOrder: roster.slice(0, 9).map(pick => pick.profile.seasonId), starterOrder: roster.slice(9, 12).map(pick => pick.profile.seasonId), data };
+ const defenseEnvironment = testDefenseEnvironment();
+ const data: SimulationData = { schemaVersion: 1, dataVersion: 'synthetic', bullpen, opponents,
+  observedRuns: 4.45, ...defenseEnvironment, defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1' };
+ return { schemaVersion: 4, modelVersion: MODEL_VERSION, seed, roster, battingOrder: roster.slice(0, 9).map(pick => pick.profile.seasonId), starterOrder: roster.slice(9, 12).map(pick => pick.profile.seasonId), data };
 }
 
 export function testSeason(seed = 162): SeasonInput {
- return seasonFixture(seed, 3, MODEL_VERSION, SLOTS);
-}
-
-export function testLegacySeason(seed = 162, schemaVersion: 1 | 2 = 1): SeasonInput {
- return seasonFixture(seed, schemaVersion, 'pa-v1', LEGACY_SLOTS);
+ return seasonFixture(seed);
 }

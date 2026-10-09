@@ -1,28 +1,65 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
  import { Session } from '#lib/game/session.svelte.ts';
- import Reveal from '#lib/components/Reveal.svelte';
- import CandidateList from '#lib/components/CandidateList.svelte';
- import Roster from '#lib/components/Roster.svelte';
+ import DraftBoard from '#lib/components/DraftBoard.svelte';
  import Lineup from '#lib/components/Lineup.svelte';
  import Progress from '#lib/components/Progress.svelte';
  import Results from '#lib/components/Results.svelte';
- import TeamLogo from '#lib/components/TeamLogo.svelte';
- import AtmosphereImage from '#lib/components/AtmosphereImage.svelte';
+ import Welcome from '#lib/components/Welcome.svelte';
+ import { createCardViewModel, type CardMediaStatus } from '#lib/cards/view-model.ts';
  import { draftRules } from '#lib/game/rules.ts';
- import { SLOTS } from '#lib/game/types.ts';
+ import { loadShowcase } from '#lib/game/data.ts';
+ import type { ShowcaseCard } from '#lib/game/types.ts';
+ import { loadMedia } from '#lib/media/client.ts';
+ import type { MediaManifest } from '#lib/media/types.ts';
  import { loadRankings } from '#lib/rankings/client.ts';
  import type { WarRankings } from '#lib/rankings/types.ts';
+
  const session = new Session();
  let rankings = $state.raw<WarRankings | null>(null);
  let rankingLoading = $state(false);
  let rankingError = $state(false);
  let rankingAttempt = $state(0);
+ let showcase = $state.raw<ShowcaseCard[]>([]);
+ let showcaseLoading = $state(false);
+ let showcaseError = $state(false);
+ let media = $state.raw<MediaManifest | null>(null);
+ let mediaStatus = $state<CardMediaStatus>('loading');
  const rankingVersion = $derived(session.draft?.dataVersion ?? session.manifest?.dataVersion ?? null);
+ const showcaseCards = $derived(showcase.map(({ profile, slot }) => ({
+  seasonId: profile.seasonId,
+  playerId: profile.playerId,
+  model: createCardViewModel({ profile, slot, manifest: session.manifest, media, mediaStatus, rankings })
+ })));
+
  function retryRankings() {
   rankingAttempt++;
  }
- onMount(() => { void session.initialize(); return () => session.dispose(); });
+ onMount(() => {
+  let disposed = false;
+  void session.initialize();
+  void loadMedia()
+   .then(value => { if (!disposed) { media = value; mediaStatus = 'ready'; } })
+   .catch(() => { if (!disposed) mediaStatus = 'unavailable'; });
+  return () => {
+   disposed = true;
+   session.dispose();
+  };
+ });
+ $effect(() => {
+  const manifest = session.manifest;
+  let disposed = false;
+  showcase = [];
+  showcaseLoading = !!manifest;
+  showcaseError = false;
+  if (manifest) {
+   void loadShowcase(manifest)
+    .then(value => { if (!disposed) showcase = value; })
+    .catch(() => { if (!disposed) showcaseError = true; })
+    .finally(() => { if (!disposed) showcaseLoading = false; });
+  }
+  return () => { disposed = true; };
+ });
  $effect(() => {
   const version = rankingVersion;
   rankingAttempt;
@@ -50,74 +87,33 @@
  });
 </script>
 
-<svelte:head>
- <title>162-0 | The undefeated baseball challenge</title>
- <meta name="description" content="Roll a franchise and decade. Draft fourteen historical selections. Can your team survive 162 games without a loss?" />
-</svelte:head>
 
-<main>
+<main class:home-start={session.phase === 'start'}>
  <div class="sr-only" aria-live="polite" aria-atomic="true">{session.announce}</div>
- {#if session.storageNotice}<p class="notice">{session.storageNotice}</p>{/if}
- {#if session.error}
-  <div class="error" role="alert">
-   <p>{session.error}</p>
-   {#if session.canRetry}<button class="secondary" disabled={session.loading} onclick={() => void session.retry()}>Retry</button>{/if}
-   {#if session.incompatible}<button class="secondary" disabled={session.loading} onclick={() => session.requestNew()}>Start new draft</button>{/if}
-  </div>
- {/if}
- {#if session.confirmNew}
-  <section class="confirmation" aria-label="Confirm new draft">
-   <h2>Leave this roster behind?</h2>
-   <p>Your picks are permanent. Starting a new draft replaces this saved run with a new seed.</p>
-   <div class="actions"><button class="secondary" onclick={() => session.confirmNew = false}>Keep draft</button><button class="primary" onclick={() => void session.startNew()}>Discard and start new</button></div>
-  </section>
- {/if}
+ <div class="session-feedback">
+  {#if session.storageNotice}<p class="notice">{session.storageNotice}</p>{/if}
+  {#if session.error}
+   <div class="error" role="alert">
+    <p>{session.error}</p>
+    {#if session.canRetry}<button class="secondary" disabled={session.loading} onclick={() => void session.retry()}>Retry</button>{/if}
+    {#if session.incompatible}<button class="secondary" disabled={session.loading} onclick={() => session.requestNew()}>Start new draft</button>{/if}
+   </div>
+  {/if}
+  {#if session.confirmNew}
+   <section class="confirmation" aria-label="Confirm new draft">
+    <h2>Leave this roster behind?</h2>
+    <p>Your picks are permanent. Starting a new draft replaces this saved run with a new seed.</p>
+    <div class="actions"><button class="secondary" onclick={() => session.confirmNew = false}>Keep draft</button><button class="primary" onclick={() => void session.startNew()}>Discard and start new</button></div>
+   </section>
+  {/if}
+ </div>
 
  {#if session.phase === 'start'}
-  <section class="welcome">
-   <div class="welcome-copy">
-    <p class="eyebrow">Baseball history. One undefeated season.</p>
-    <h1>Can you go <strong>162-0?</strong></h1>
-    <p class="intro">Roll a franchise and decade. Draft nine hitters, three starters, a closer, and a team-season bullpen remainder. One pick per franchise; each athlete only once. Take your team through all 162 games.</p>
-    <div class="actions">
-     <button class="primary start" disabled={session.loading || !session.manifest} onclick={() => session.requestNew()}>Start draft <span aria-hidden="true">↗</span></button>
-     {#if session.savedDraft}<button class="secondary" disabled={session.loading} onclick={() => void session.resume()}>Resume draft</button>{/if}
-    </div>
-    {#if session.loading}<p class="muted" role="status">Loading the historical player pool…</p>{/if}
-    <p class="start-note">Great teams still lose. That's the challenge.</p>
-   </div>
-   <aside class="welcome-lineup" aria-label="Your challenge roster">
-    <div class="preview-heading"><span class="eyebrow">The roster card</span><span>{SLOTS.length} picks</span></div>
-    <h2>Build from the greats.<br />Win with your choices.</h2>
-    <div class="preview-line"><strong>09</strong><div><span>Hitters</span><small>C · 1B · 2B · 3B · SS · LF · CF · RF · DH</small></div></div>
-    <div class="preview-line"><strong>03</strong><div><span>Starting pitchers</span><small>Your rotation. 54 starts apiece.</small></div></div>
-    <div class="preview-line"><strong>01</strong><div><span>Closer</span><small>Season innings cap and rest.</small></div></div>
-    <div class="preview-line"><strong>01</strong><div><span>Bullpen remainder</span><small>A historical team’s relief pool, without its saves leader.</small></div></div>
-    <div class="franchise-preview">
-     {#if session.manifest}
-      <div class="team-marks">{#each session.manifest.franchises.slice(0, 4) as franchise}<TeamLogo franchiseId={franchise.id} label={franchise.name} size="small" />{/each}</div>
-     {/if}
-     <p>30 franchises · 1950–2025 seasons<br />Actual 2025 opposition</p>
-    </div>
-    <AtmosphereImage id="fenway-night" />
-   </aside>
-  </section>
+  <Welcome manifest={session.manifest} loading={session.loading} hasSavedDraft={!!session.savedDraft} onStart={() => session.requestNew()} onResume={() => void session.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
  {:else if session.draft && session.manifest}
   {#if session.phase === 'ready' || session.phase === 'revealing' || session.phase === 'choosing'}
-   <div class="draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
-   <div class="draft-layout">
-    <aside><Roster draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} /></aside>
-    <section class="draft-main" aria-label="Make your next pick">
-     <Reveal roll={session.draft.currentRoll} manifest={session.manifest} revealing={session.phase === 'revealing'} pickNumber={session.draft.picks.length + 1} schemaVersion={session.draft.schemaVersion} />
-     {#if session.phase === 'ready'}
-      <div class="next-roll"><p class="muted">{session.draft.picks.length ? "Pick locked in. Who's next?" : 'Your roster starts with one roll.'}</p><button id="roll-next" class="primary" disabled={session.busy} onclick={() => void session.roll()}>Roll next franchise <span aria-hidden="true">↗</span></button></div>
-     {:else if session.loading || session.phase === 'revealing'}
-      <div class="stack" role="status" aria-label="Loading available player seasons"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><span class="muted">Finding eligible seasons…</span></div>
-     {:else if session.pool.length > 0}
-      <CandidateList profiles={session.pool} draft={session.draft} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} busy={session.busy} onDraft={(id, slot) => session.commit(id, slot)} />
-     {/if}
-    </section>
-   </div>
+   <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {session.draft.picks.length} of {draftRules(session.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
+   <DraftBoard draft={session.draft} manifest={session.manifest} pool={session.pool} profiles={session.profiles} phase={session.phase} loading={session.loading} busy={session.busy} error={session.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void session.roll()} onDraft={(id, slot) => session.commit(id, slot)} onReassign={(id, slot) => session.reassign(id, slot)} onNew={() => session.requestNew()} />
   {:else if session.phase === 'lineup'}
    <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <Lineup draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} busy={session.busy} onReassign={(id, slot) => session.reassign(id, slot)} onOrder={(kind, order) => session.order(kind, order)} onsimulate={() => void session.simulate()} />
@@ -125,54 +121,33 @@
    <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={session.loading} onclick={() => session.requestNew()}>New draft</button></div>
    <Progress completed={session.completed} revealed={session.revealed} result={session.result} onskip={() => session.skip()} />
   {:else if session.phase === 'results' && session.result}
-   <Results result={session.result} draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => session.requestNew()} onShare={() => void session.share()} shareLink={session.shareLink} shareStatus={session.shareStatus} />
+   <Results result={session.result} draft={session.draft} profiles={session.profiles} manifest={session.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => session.requestNew()} onShare={(action, format) => void session.share(action, format)} publication={session.publication} sharing={session.sharing} shareStatus={session.shareStatus} />
   {/if}
  {/if}
 </main>
 
 <style>
  main { min-height: 65vh; padding-block: var(--space-6); }
- .welcome { display: grid; gap: var(--space-12); padding-block: var(--space-8) var(--space-4); }
- .welcome-copy { min-width: 0; }
- .welcome .eyebrow { margin: 0 0 var(--space-4); }
- h1 { font-size: var(--text-2xl); }
- h1 strong { display: block; white-space: nowrap; font-size: 5rem; line-height: 1.05; letter-spacing: -.065em; margin-top: var(--space-2); }
- .intro { font-size: var(--text-base); color: var(--muted); margin: var(--space-6) 0; max-width: 44ch; }
+ main:has(:global(.draft-board.wide)) { padding-top: 0; }
+ main:has(:global(.draft-board.wide)) .narrow-draft-top { display: none; }
+ .home-start { position: relative; padding-block: 0; }
+ .session-feedback:empty { display: none; }
+ .home-start .session-feedback {
+  position: relative;
+  z-index: 3;
+  width: min(80rem, 100%);
+  margin-inline: auto;
+  padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right));
+ }
  .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
- .start { display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 20rem; font-size: var(--text-base); min-height: 3.5rem; padding-inline: var(--space-5); }
- .start-note { margin-top: var(--space-4); color: var(--muted); font-size: var(--text-xs); }
- .welcome-lineup { background: var(--surface); padding: var(--space-6); border-block: 1px solid var(--border); }
- .preview-heading { display: flex; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-6); }
- .preview-heading .eyebrow { margin: 0; }
- .preview-heading > span:last-child { color: var(--muted); font-size: var(--text-xs); }
- .welcome-lineup h2 { font-size: var(--text-xl); margin-bottom: var(--space-6); }
- .preview-line { display: flex; align-items: center; gap: var(--space-4); padding-block: var(--space-4); border-top: 1px solid var(--border); }
- .preview-line > strong { color: var(--muted); font-size: var(--text-xl); font-weight: 500; }
- .preview-line > div { display: grid; gap: var(--space-1); }
- .preview-line small { color: var(--muted); font-size: var(--text-xs); }
- .franchise-preview { margin-top: var(--space-6); }
- .team-marks { display: flex; flex-wrap: wrap; align-items: start; gap: var(--space-4); }
- .franchise-preview p { color: var(--muted); font-size: var(--text-xs); margin: var(--space-4) 0 0; }
  .draft-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
  .stage-divider { padding-inline: var(--space-2); color: var(--border); }
- .draft-layout { display: grid; gap: var(--space-6); min-width: 0; }
- aside, .draft-main { min-width: 0; }
- .next-roll { margin-block: var(--space-8); }
- .next-roll p { margin-bottom: var(--space-4); }
  .confirmation { border: 1px solid var(--accent); background: var(--surface); padding: var(--space-5); border-radius: var(--radius); margin-bottom: var(--space-6); }
  .confirmation h2 { font-size: var(--text-xl); }
  .error p { margin: 0 0 var(--space-3); }
  .error button + button { margin-left: var(--space-2); }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
- @media (min-width: 64rem) {
-  main { padding-block: var(--space-8); }
-  .welcome { grid-template-columns: 1.25fr 1fr; align-items: center; gap: var(--space-16); padding-block: var(--space-12); }
-  h1 { font-size: var(--text-3xl); }
-  h1 strong { font-size: 7rem; }
-  .intro { font-size: var(--text-lg); }
-  .draft-layout { grid-template-columns: minmax(0, 1fr) 20rem; align-items: start; gap: var(--space-8); }
-  .draft-layout > aside { grid-column: 2; grid-row: 1; position: sticky; top: var(--space-6); }
-  .draft-main { grid-column: 1; grid-row: 1; }
+ @media (max-width: 24rem) {
+  .draft-top .eyebrow { max-width: 10rem; }
  }
- @media (max-width: 24rem) { h1 strong { font-size: var(--text-score); } .welcome-lineup { padding: var(--space-4); } .draft-top .eyebrow { max-width: 10rem; } }
 </style>

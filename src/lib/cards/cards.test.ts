@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { finishFor } from './finish.ts';
 import { contrast, INK, KRAFT, mix, PAPER, roles, STOCK } from './tokens.ts';
-import type { Profile } from '../game/types.ts';
+import type { DefensivePosition, Profile } from '../game/types.ts';
 import type { MediaManifest } from '../media/types.ts';
 import { createCardViewModel, eraForYear } from './view-model.ts';
 
@@ -52,12 +52,28 @@ describe('fixed cosmetic finishes', () => {
 
 const batting = { AB: 100, H: 30, doubles: 5, triples: 1, HR: 4, BB: 10, HBP: 2, SO: 20, SH: 1, SF: 3, SB: 2, CS: 1, GIDP: 2, PA: 116 };
 const pitching = { G: 28, GS: 28, IPouts: 498, H: 124, HR: 14, BB: 44, HBP: 2, SO: 219, BFP: 660, ER: 43, SV: 0 };
+const cfDefense: DefensivePosition = {
+ hitPrevention: 0.25,
+ doublePlay: 0,
+ outfieldThrowing: 0.1,
+ errorAvoidance: 0.2,
+ catcherThrowing: 0,
+ evidence: {
+  hitPrevention: { status: 'exact', exposure: 4200 },
+  doublePlay: { status: 'notApplicable', exposure: 0 },
+  outfieldThrowing: { status: 'exact', exposure: 4200 },
+  errorAvoidance: { status: 'exact', exposure: 500 },
+  catcherThrowing: { status: 'notApplicable', exposure: 0 }
+ },
+ expectedRunsSaved162: 6.2,
+ residualClamped: false
+};
 const profile: Profile = {
  seasonId: 'player:2022:AL:AAA', playerId: 'player', displayName: 'Example Athlete',
  franchiseId: 'AAA', teamId: 'AAA', year: 2022, league: 'AL', historicalTeam: 'Example Club',
- teamGames: 162, bats: 'L', throws: 'R', eligibleSlots: ['DH'], appearances: {}, batting,
- fielding: {}, errorRates: { C: 0, '1B': 0, '2B': 0, '3B': 0, SS: 0, LF: 0, CF: 0, RF: 0 },
- catcherCS: 0, speed: 0, stealAttempt: 0, stealSuccess: 0, doublePlay: 0, estimatedFields: []
+ teamGames: 162, bats: 'L', throws: 'R', eligibleSlots: ['DH'], primaryHitterSlot: 'DH', appearances: {}, batting,
+ fielding: {}, defense: { positions: {} },
+ speed: 0, stealAttempt: 0, stealSuccess: 0, doublePlay: 0, estimatedFields: []
 };
 
 describe('card data boundaries', () => {
@@ -94,13 +110,20 @@ describe('card data boundaries', () => {
  it('reports position games, distinguishes DH only, and never claims defensive range', () => {
   const dh = createCardViewModel({ profile });
   expect(dh.b.dia.dh).toEqual({ on: true, off: false, g: 'only' });
-  const fielder = createCardViewModel({ profile: { ...profile, eligibleSlots: ['CF', 'DH'], appearances: { CF: 78, RF: 73 } } });
+  const fielder = createCardViewModel({ profile: {
+   ...profile,
+   eligibleSlots: ['CF', 'DH'],
+   primaryHitterSlot: 'CF',
+   appearances: { CF: 78, RF: 73 },
+   defense: { positions: { CF: cfDefense } }
+  } });
   expect(fielder.b.dia.cf.g).toBe('78');
   expect(fielder.b.dia.rf.g).toBe('73');
   expect(fielder.b.dia.dh.on).toBe(false);
   expect(fielder.b.apps).not.toMatch(/range/i);
   expect(fielder.b.fams[0].cols).toBe(5);
-  const pitcher = createCardViewModel({ profile: { ...profile, eligibleSlots: ['SP1'], pitching } });
+  expect(fielder.st3).toMatchObject({ l: 'DEF est.', v: '+6' });
+  const pitcher = createCardViewModel({ profile: { ...profile, eligibleSlots: ['SP1'], primaryHitterSlot: null, pitching } });
   expect(pitcher.b.fams.map(f => f.title)).toEqual(['Pitching · 2022']);
   expect(pitcher.b.dia.p.g).toBe('28');
   expect(pitcher.b.fams[0].key.find(c => c.l === 'IP')?.v).toBe('166.0');
@@ -133,7 +156,7 @@ describe('card data boundaries', () => {
  });
  it('keeps pooled relief at Base with member and saves-leader disclosure', () => {
   const bullpen = { members: [{ seasonId: 'member', playerId: 'member', displayName: 'Pool Member' }], excluded: { seasonId: 'excluded', playerId: 'excluded', displayName: 'Saves Leader' } };
-  const model = createCardViewModel({ profile: { ...profile, eligibleSlots: ['BP'], pitching, bullpen }, ranking: { battingWAR162: 8, pitchingWAR162: 8 } });
+  const model = createCardViewModel({ profile: { ...profile, eligibleSlots: ['BP'], primaryHitterSlot: null, pitching, bullpen }, ranking: { battingWAR162: 8, pitchingWAR162: 8 } });
   expect(model.fin.tier).toBe('base');
   expect(model.st1.v).toBe('—');
   expect(model.b.hasWar).toBe(false);
@@ -143,7 +166,7 @@ describe('card data boundaries', () => {
   expect(model.b.fams[0].cols).toBe(5);
   expect(model.details.sections[0].rows.map(r => r.v)).toEqual(expect.arrayContaining(['Pool Member', 'Saves Leader']));
   for (const mediaStatus of ['loading', 'unavailable'] as const) {
-   const unit = createCardViewModel({ profile: { ...profile, eligibleSlots: ['BP'], pitching, bullpen }, mediaStatus });
+   const unit = createCardViewModel({ profile: { ...profile, eligibleSlots: ['BP'], primaryHitterSlot: null, pitching, bullpen }, mediaStatus });
    expect(unit.b.srcPhoto).toBe('Team-season pool · no photo');
    expect(unit.caption).toBe(unit.b.srcPhoto);
   }

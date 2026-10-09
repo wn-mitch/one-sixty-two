@@ -7,6 +7,8 @@ node_modules
 .wrangler
 /.svelte-kit
 /build
+/storybook-static/
+/debug-storybook.log
 
 # OS
 .DS_Store
@@ -23,6 +25,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+.wrangler.browser-suite-*.json
 .cache/
 static/data/
 static/rankings/

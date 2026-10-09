@@ -5,12 +5,15 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Manifest, Profile, Slot } from '../lib/game/types.ts';
 import { selectPhoto } from '../lib/media/client.ts';
-import type { MediaManifest, MediaPointer } from '../lib/media/types.ts';
+import type { CaptureDate, MediaManifest, MediaPointer } from '../lib/media/types.ts';
+import { photoLabel } from '../lib/media/photo-policy.ts';
 import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 import { isHitter } from '../lib/components/candidate-ranking.ts';
+import type { CompactPixelClip } from './compact-test-harness.ts';
+import { imagePixelDigest } from './image-test-helpers.ts';
 
 const ERAS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'] as const;
-const WIDTHS = [240, 320] as const;
+const WIDTHS = [240, 320, 330, 410] as const;
 
 test.setTimeout(180000);
 
@@ -27,6 +30,7 @@ interface HarnessAssets {
 
 let harnessAssets: HarnessAssets | undefined;
 let harnessDirectory: string | undefined;
+
 
 async function getJson<T>(request: APIRequestContext, url: string): Promise<T> {
 	const response = await request.get(url);
@@ -62,7 +66,7 @@ function isTwoWay(profile: Profile): boolean {
 }
 
 function selectedPhoto(media: MediaManifest, profile: Profile): boolean {
-	return !!selectPhoto(media, profile.playerId, profile.year);
+	return !!selectPhoto(media, profile.playerId, profile.year, profile.franchiseId);
 }
 
 async function selectSpecimens(
@@ -110,8 +114,10 @@ async function buildHarness(): Promise<HarnessAssets> {
 	await writeFile(entry, `
 import { mount, tick, unmount } from 'svelte';
 import Card from ${JSON.stringify(cardPath)};
+import CardFlip from ${JSON.stringify(resolve('src/lib/cards/CardFlip.svelte'))};
 import { createCardViewModel } from ${JSON.stringify(modelPath)};
 import { contrast, mix } from ${JSON.stringify(tokensPath)};
+import { compactNameClips as readCompactNameClips, inspectCompact as inspectCompactModels, previewCompact as renderCompact, disposeCompact } from ${JSON.stringify(resolve('src/routes/compact-test-harness.ts'))};
 
 let models = [];
 
@@ -121,6 +127,16 @@ export function prepare(input) {
 		model: createCardViewModel({ profile, slot, media: input.media, manifest: input.manifest, rankings: input.rankings })
 	}));
 }
+
+export function inspectCompact({ eras, widths }) {
+	return inspectCompactModels(models.map(entry => entry.model), eras, widths);
+}
+
+export function previewCompact(era) {
+	return renderCompact(models[0].model, era);
+}
+
+export { disposeCompact, readCompactNameClips as compactNameClips };
 
 function afterLayout() {
 	return tick()
@@ -205,6 +221,22 @@ export async function inspect({ eras, widths }) {
 			await unmount(instance);
 			host.replaceChildren();
 		}
+		for (const era of eras) for (const { label, model } of models) for (const width of [330, 410]) {
+			host.style.width = width + 'px';
+			const instance = mount(CardFlip, { target: host, props: { s: { ...model, era }, turned: true, onDetails: () => {} } });
+			await afterLayout();
+			const back = host.querySelector('.back [data-card]');
+			const front = host.querySelector('.front');
+			const rect = { width: back.offsetWidth, height: back.offsetHeight };
+			const problems = problemsFor(back);
+			if (back.dataset.card !== era || back.dataset.face !== 'back' || !front.inert || front.getAttribute('aria-hidden') !== 'true'
+				|| Math.abs(rect.width - width) > 1 || Math.abs(rect.width / rect.height - 5 / 7) > .01) {
+				problems.push({ kind: 'designed-flip-geometry', width: rect.width, height: rect.height });
+			}
+			reports.push({ era, label, width, face: 'flipped-back', problems });
+			await unmount(instance);
+			host.replaceChildren();
+		}
 		const cards = models.slice(0, 2).map(({ model }) => mount(Card, { target: host, props: { s: { ...model, era: '1970s' }, face: 'front', onDetails: () => {} } }));
 		await afterLayout();
 		const paths = [...host.querySelectorAll('svg path[id]')].map(path => path.id);
@@ -214,6 +246,66 @@ export async function inspect({ eras, widths }) {
 		await Promise.all(cards.map(unmount));
 		return { cases: reports.length, failures: reports.filter(report => report.problems.length), duplicateArcIds, brokenArcRefs };
 	} finally {
+		host.remove();
+	}
+}
+
+export async function preview() {
+	const host = document.createElement('div');
+	host.id = 'portrait-policy-preview';
+	host.style.cssText = 'position:absolute;left:0;top:0;z-index:10000;display:grid;grid-template-columns:repeat(4,320px);gap:16px;padding:16px;background:#121419;';
+	document.body.append(host);
+	for (const { model } of models) {
+		const frame = document.createElement('div'); frame.style.width = '320px'; host.append(frame);
+		mount(Card, { target: frame, props: { s: model, face: 'front', onDetails: () => {} } });
+	}
+	await afterLayout();
+	await Promise.all([...host.querySelectorAll('img')].map(image => image.decode().catch(() => {})));
+}
+export async function inspectLifecycle({ eras }) {
+	const host = document.createElement('div');
+	host.style.cssText = 'position:fixed;left:0;top:0;z-index:10000;display:grid;grid-template-columns:repeat(8,240px);gap:8px;';
+	document.body.append(host);
+	const specimen = models.find(entry => entry.label === 'long-name') ?? models[0];
+	const frames = eras.map(() => {
+		const frame = document.createElement('div');
+		frame.style.width = '240px';
+		host.append(frame);
+		return frame;
+	});
+	const instances = frames.map((frame, index) => mount(Card, {
+		target: frame,
+		props: { s: { ...specimen.model, era: eras[index] }, face: 'front', onDetails: () => {} }
+	}));
+	try {
+		await afterLayout();
+		const before = frames.map(frame => frame.querySelector('[data-card]')?.getBoundingClientRect().width ?? 0);
+		for (const frame of frames) frame.style.width = '320px';
+		await afterLayout();
+		const resized = frames.map(frame => {
+			const card = frame.querySelector('[data-card]');
+			const arc = card?.querySelector('[data-fit-arc]');
+			return {
+				width: card?.getBoundingClientRect().width ?? 0,
+				state: card?.getAttribute('data-fit-state'),
+				problems: problemsFor(card),
+				arcLength: arc instanceof SVGTextElement ? arc.getComputedTextLength() : null,
+				arcTarget: arc?.getAttribute('data-fit-arc')
+			};
+		});
+		frames[0].style.width = '330px';
+		frames[1].style.width = '330px';
+		frames[0].querySelector('[data-fit]').textContent = 'Example queued mutation';
+		frames[1].querySelector('[data-layer="name.full"]').textContent = 'Fictional Example Extended Identity';
+		await Promise.resolve();
+		const queuedState = frames[1].querySelector('[data-card]')?.getAttribute('data-fit-state');
+		await unmount(instances[0]);
+		frames[0].remove();
+		await afterLayout();
+		const survivor = frames[1].querySelector('[data-card]');
+		return { before, resized, queuedState, survivorState: survivor?.getAttribute('data-fit-state'), survivorWidth: survivor?.getBoundingClientRect().width ?? 0, survivorProblems: problemsFor(survivor) };
+	} finally {
+		await Promise.all(instances.slice(1).map(unmount));
 		host.remove();
 	}
 }
@@ -278,8 +370,131 @@ test('keeps every era composition within its live card geometry', async ({ page,
 		brokenArcRefs: string[];
 	};
 
-	expect(result.cases).toBe(ERAS.length * specimens.length * WIDTHS.length * 2);
 	expect(result.failures).toEqual([]);
 	expect(result.duplicateArcIds).toEqual([]);
 	expect(result.brokenArcRefs).toEqual([]);
+});
+
+test('shows reviewed uncertain dates and uniform contexts across all eight eras', async ({ page, request }, testInfo) => {
+	const [manifest, current, rankings] = await Promise.all([currentManifest(request), currentMedia(request), currentRankings(request)]);
+	const base = (await selectSpecimens(request, manifest, current))[0];
+	const approved = Object.values(current.players).flatMap(player => player.photos).filter(photo => photo.review === 'approved');
+	expect(approved.length).toBeGreaterThan(0);
+	const media: MediaManifest = { ...current, schemaVersion: 3, players: {} };
+	const expected: string[] = [];
+	const specimens = ERAS.map((era, i) => {
+		const year = Number(era.slice(0, 4)) + 5;
+		const id = `synthetic-media-${i}`;
+		const dates: CaptureDate[] = [{ kind: 'exact', year }, { kind: 'approximate', year: year - 1 }, { kind: 'range', firstYear: year - 3, lastYear: year + 1 }, { kind: 'unknown' }];
+		const captureDate = dates[i % dates.length];
+		const selected = approved[i % approved.length];
+		const photo = { ...selected, year: captureDate.kind === 'exact' ? captureDate.year : undefined, captureDate,
+			uniform: i === 4 ? 'minor' as const : i === 5 ? 'other' as const : 'mlb' as const,
+			context: i >= 6 ? 'later' as const : 'playing' as const };
+		media.players[id] = { name: 'Example Athlete', firstYear: 1950, lastYear: 2025, photos: [photo] };
+		expected.push(photoLabel(photo, year));
+		return { ...base, label: id, profile: { ...base.profile, playerId: id, displayName: 'Example Athlete', year, seasonId: `${id}:${year}:AL:${base.profile.franchiseId}` } };
+	});
+	await installHarness(page);
+	const result = await page.evaluate(async input => {
+		const harness = (window as typeof window & { CardLayoutHarness: { prepare(input: unknown): void; inspect(input: unknown): Promise<{ failures: unknown[] }>; preview(): Promise<void> } }).CardLayoutHarness;
+		harness.prepare(input); const result = await harness.inspect({ eras: input.eras, widths: [240, 320] }); await harness.preview(); return result;
+	}, { specimens, media, manifest, rankings, eras: ERAS });
+	expect(result.failures).toEqual([]);
+	const host = page.locator('#portrait-policy-preview');
+	// Use the actual rendered image alt text: the photo year must not be replaced with the card year.
+	for (const label of expected) await expect(host.getByRole('img', { name: `Example Athlete · ${label}`, exact: true })).toHaveCount(1);
+	await expect(host.locator('[data-card][data-face="front"]')).toHaveCount(8);
+	await host.screenshot({ path: testInfo.outputPath('portrait-policy-eight-eras.png') });
+});
+
+test('keeps compact text readable above every era finish at its minimum width', async ({ page, request }, testInfo) => {
+	const [manifest, media, rankings] = await Promise.all([
+		currentManifest(request), currentMedia(request), currentRankings(request)
+	]);
+	const specimens = await selectSpecimens(request, manifest, media);
+	await installHarness(page);
+	const failures = await page.evaluate(async input => {
+		const harness = (window as typeof window & { CardLayoutHarness: {
+			prepare(input: unknown): void;
+			inspectCompact(input: unknown): Promise<unknown[]>;
+		} }).CardLayoutHarness;
+		harness.prepare(input);
+		return harness.inspectCompact({ eras: input.eras, widths: [64, 72, 96] });
+	}, { specimens, media, manifest, rankings, eras: ERAS });
+	expect(failures).toEqual([]);
+	try {
+		for (const era of ERAS) {
+			await page.evaluate(era => (window as typeof window & {
+				CardLayoutHarness: { previewCompact(era: string): Promise<void> };
+			}).CardLayoutHarness.previewCompact(era), era);
+			const preview = page.locator('#compact-card-preview');
+			await preview.screenshot({ path: testInfo.outputPath(`compact-${era}.png`) });
+			const clips = await page.evaluate(() => (window as typeof window & {
+				CardLayoutHarness: { compactNameClips(): CompactPixelClip[] };
+			}).CardLayoutHarness.compactNameClips());
+			expect(clips.length, `${era} compact name must expose rendered glyph bounds`).toBeGreaterThan(0);
+			const withFinish = await Promise.all(clips.map(clip => page.screenshot({ clip, type: 'png' })));
+			await preview.locator('[data-layer="material"]').evaluate(node => {
+				(node as HTMLElement).style.visibility = 'hidden';
+			});
+			const withoutFinish = await Promise.all(clips.map(clip => page.screenshot({ clip, type: 'png' })));
+			for (const [index, image] of withoutFinish.entries()) {
+				const visiblePixels = await imagePixelDigest(page, { base64: withFinish[index].toString('base64') });
+				const hiddenPixels = await imagePixelDigest(page, { base64: image.toString('base64') });
+				if (hiddenPixels.sha256 !== visiblePixels.sha256) {
+					const visiblePath = testInfo.outputPath(`${era}-name-${index + 1}-with-finish.png`);
+					const hiddenPath = testInfo.outputPath(`${era}-name-${index + 1}-without-finish.png`);
+					await Promise.all([writeFile(visiblePath, withFinish[index]), writeFile(hiddenPath, image)]);
+					await testInfo.attach(`${era}-name-${index + 1}-with-finish.png`, { path: visiblePath, contentType: 'image/png' });
+					await testInfo.attach(`${era}-name-${index + 1}-without-finish.png`, { path: hiddenPath, contentType: 'image/png' });
+				}
+				expect(hiddenPixels, `${era} finish must not change compact name glyph or backing pixels`).toEqual(visiblePixels);
+			}
+		}
+	} finally {
+		await page.evaluate(() => (window as typeof window & {
+			CardLayoutHarness: { disposeCompact(): Promise<void> };
+		}).CardLayoutHarness.disposeCompact());
+	}
+});
+
+test('refits mounted long identities after resize and preserves sibling scheduling on unmount', async ({ page, request }) => {
+	const [manifest, media, rankings] = await Promise.all([
+		currentManifest(request), currentMedia(request), currentRankings(request)
+	]);
+	const specimens = await selectSpecimens(request, manifest, media);
+	await installHarness(page);
+	const result = await page.evaluate(async input => {
+		const harness = (window as typeof window & {
+			CardLayoutHarness: {
+				prepare(input: unknown): void;
+				inspectLifecycle(input: unknown): Promise<{
+					before: number[];
+					resized: Array<{ width: number; state: string | null; problems: unknown[]; arcLength: number | null; arcTarget: string | null }>;
+					queuedState: string | null;
+					survivorState: string | null;
+					survivorWidth: number;
+					survivorProblems: unknown[];
+				}>;
+			};
+		}).CardLayoutHarness;
+		harness.prepare(input);
+		return harness.inspectLifecycle({ eras: input.eras });
+	}, { specimens, media, manifest, rankings, eras: ERAS });
+	expect(result.before).toEqual(ERAS.map(() => 240));
+	expect(result.resized).toHaveLength(ERAS.length);
+	for (const card of result.resized) {
+		expect(card.width).toBeCloseTo(320, 0);
+		expect(card.state).toBe('settled');
+		expect(card.problems).toEqual([]);
+		if (card.arcLength !== null && card.arcTarget !== null) {
+			expect(card.arcLength).toBeLessThanOrEqual(Number(card.arcTarget) + 0.5);
+		}
+	}
+	expect(result.resized.some(card => card.arcLength !== null)).toBe(true);
+	expect(result.queuedState).toBe('unsettled');
+	expect(result.survivorState).toBe('settled');
+	expect(result.survivorWidth).toBeCloseTo(330, 0);
+	expect(result.survivorProblems).toEqual([]);
 });

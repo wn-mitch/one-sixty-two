@@ -2,8 +2,9 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { stageBuildAssets } from './scripts/package-assets.ts';
 
-export default defineConfig({
+export default defineConfig(async ({ command }) => ({
 	server: {
 		// Acquisition caches are generated inputs, not browser source modules.
 		watch: { ignored: ['**/.cache/**'] }
@@ -11,6 +12,7 @@ export default defineConfig({
 	plugins: [
 		tailwindcss(),
 		sveltekit({
+			files: { assets: command === 'build' ? await stageBuildAssets(process.cwd()) : 'static' },
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 				runes: ({ filename }) =>
@@ -34,4 +36,4 @@ export default defineConfig({
 			}
 		]
 	}
-});
+}));

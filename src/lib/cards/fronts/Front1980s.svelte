@@ -19,7 +19,8 @@
 			<PhotoMask {s} focus="50% 22%" />
 		</div>
 
-		<div data-layer="logo.disc" style={`position:absolute; top:2.4cqw; left:2.4cqw; width:15.5cqw; height:15.5cqw; border-radius:50%; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock};`}>
+		<!-- Keep the badge's outer border inside the prism finish rim. -->
+		<div data-layer="logo.disc" style={`position:absolute; top:4cqw; left:4cqw; width:15.5cqw; height:15.5cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock};`}>
 			<LogoSlot {s} markStyle="left:2.2cqw; top:2.2cqw; width:11.1cqw; height:11.1cqw;" fallbackStyle={`color:${s.k.fieldOnPaper};`} />
 		</div>
 		<div data-rt data-layer="season.chip" style={`position:absolute; top:6cqw; right:6cqw; padding:1.1cqw 2.4cqw; background:${s.k.field}; color:${s.k.onField}; display:flex; align-items:center; gap:1.4cqw; font-weight:800; font-style:italic; font-size:5cqw; line-height:1;`}>

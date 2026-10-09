@@ -3,7 +3,7 @@
 	import type { CardFront } from '../view-model.ts';
 
 	export interface PhotoMaskProps {
-		s: Pick<CardFront, 'full' | 'photo' | 'hasPhoto' | 'noPhoto' | 'photoNote' | 'k'>;
+		s: Pick<CardFront, 'full' | 'photo' | 'hasPhoto' | 'noPhoto' | 'photoNote' | 'caption' | 'k'>;
 		style?: string;
 		imageStyle?: string;
 		emptyStyle?: string;
@@ -42,7 +42,7 @@
 			data-rt
 			data-layer="photo.image"
 			src={s.photo}
-			alt={`${s.full} photo`}
+			alt={`${s.full} · ${s.caption}`}
 			style={`position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:${focus}; display:block; ${imageStyle}`}
 			onerror={markUnavailable}
 		/>

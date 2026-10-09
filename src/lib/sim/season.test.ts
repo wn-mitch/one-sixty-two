@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { MODEL_VERSION, type Draft, type Rates } from '../game/types.ts';
 import { buildSchedule, prepareSeasonInput, simulateSeason } from './season.ts';
-import { testLegacySeason, testSeason } from './test-fixtures.ts';
+import { testSeason } from './test-fixtures.ts';
 import { validateSeason } from './validation.ts';
+import type { SeasonInput } from './types.ts';
 
 function draftInput() {
  const input = testSeason();
- const draft: Draft = { schemaVersion: 3, dataVersion: input.data.dataVersion, modelVersion: MODEL_VERSION, seed: input.seed,
+ const draft: Draft = { schemaVersion: 4, dataVersion: input.data.dataVersion, modelVersion: MODEL_VERSION, seed: input.seed,
   picks: input.roster.map(({ profile, slot }) => ({ seasonId: profile.seasonId, slot, franchiseId: profile.franchiseId, decade: 2020 })),
   battingOrder: [...input.battingOrder], starterOrder: [...input.starterOrder], actions: [], currentRoll: null };
  return { input, draft, profiles: input.roster.map(pick => pick.profile) };
@@ -36,7 +37,7 @@ describe('season inputs', () => {
   draft.battingOrder.reverse();
   draft.starterOrder.reverse();
   const prepared = prepareSeasonInput(draft, profiles, input.data);
-  expect(prepared.schemaVersion).toBe(3);
+  expect(prepared.schemaVersion).toBe(4);
   expect(prepared.modelVersion).toBe(MODEL_VERSION);
   expect(prepared.battingOrder).toEqual(draft.battingOrder);
   expect(prepared.starterOrder).toEqual(draft.starterOrder);
@@ -45,7 +46,8 @@ describe('season inputs', () => {
  it('rejects unresolved rolls, mismatched versions, missing profiles and mismatched rolls', () => {
   const { input, draft, profiles } = draftInput();
   expect(() => prepareSeasonInput({ ...draft, currentRoll: { franchiseId: 'T', decade: 2020 } }, profiles, input.data)).toThrow('incomplete');
-  expect(() => prepareSeasonInput({ ...draft, modelVersion: 'obsolete' }, profiles, input.data)).toThrow('incompatible');
+  const incompatibleDraft = { ...draft, modelVersion: 'obsolete' } as unknown as Draft;
+  expect(() => prepareSeasonInput(incompatibleDraft, profiles, input.data)).toThrow('incompatible');
   expect(() => prepareSeasonInput(draft, profiles.slice(1), input.data)).toThrow('Missing');
   draft.picks[0].franchiseId = 'other';
   expect(() => prepareSeasonInput(draft, profiles, input.data)).toThrow('mismatched');
@@ -61,41 +63,31 @@ describe('season inputs', () => {
   draft.battingOrder[0] = draft.battingOrder[1];
   expect(() => prepareSeasonInput(draft, profiles, input.data)).toThrow('lineup');
  });
- it('applies each replay schema policy to model, roster, era and batting order', () => {
-  for (const schemaVersion of [1, 2] as const) {
-   const input = testLegacySeason(162, schemaVersion);
-   const draft: Draft = {
-    schemaVersion, dataVersion: input.data.dataVersion, modelVersion: 'pa-v1', seed: input.seed,
-    picks: input.roster.map(({ profile, slot }) => ({ seasonId: profile.seasonId, slot, franchiseId: profile.franchiseId, decade: 2020 })),
-    battingOrder: [...input.battingOrder], starterOrder: [...input.starterOrder], currentRoll: null
-   };
-   const prepared = prepareSeasonInput(draft, input.roster.map(pick => pick.profile), input.data);
-   expect(prepared.schemaVersion).toBe(schemaVersion);
-   expect(prepared.modelVersion).toBe('pa-v1');
-   expect(prepared.roster).toHaveLength(13);
-  }
-
-  const repeatedFranchise = testLegacySeason(162, 1);
-  repeatedFranchise.roster[1].profile.franchiseId = repeatedFranchise.roster[0].profile.franchiseId;
-  expect(() => validateSeason(repeatedFranchise)).not.toThrow();
-  const uniqueFranchises = testLegacySeason(162, 2);
-  uniqueFranchises.roster[1].profile.franchiseId = uniqueFranchises.roster[0].profile.franchiseId;
-  expect(() => validateSeason(uniqueFranchises)).toThrow('distinct franchises');
-
+ it('enforces the current schema, model, roster, era and batting-order contracts', () => {
   const current = testSeason();
   current.roster[0].profile.year = 1950;
   expect(() => validateSeason(current)).not.toThrow();
   current.roster[0].profile.year = 1949;
   expect(() => validateSeason(current)).toThrow('eligibility');
 
-  const legacy = testLegacySeason();
-  legacy.roster[0].profile.year = 1960;
-  expect(() => validateSeason(legacy)).toThrow('eligibility');
+  const incompatibleSchema = { ...testSeason(), schemaVersion: 3 } as unknown as SeasonInput;
+  expect(() => validateSeason(incompatibleSchema)).toThrow('incompatible');
+  const incompatibleModel = { ...testSeason(), modelVersion: 'pa-v2' } as unknown as SeasonInput;
+  expect(() => validateSeason(incompatibleModel)).toThrow('incompatible');
 
   const bullpenId = current.roster.find(pick => pick.slot === 'BP')!.profile.seasonId;
   current.roster[0].profile.year = 1950;
   current.battingOrder[0] = bullpenId;
   expect(() => validateSeason(current)).toThrow('lineup');
+
+  const missingDefense = testSeason();
+  const catcher = missingDefense.roster.find(pick => pick.slot === 'C')!.profile;
+  delete catcher.defense.positions.C;
+  expect(() => validateSeason(missingDefense)).toThrow('defensive');
+
+  const incompatibleMethods = testSeason();
+  incompatibleMethods.data.defenseMethodVersion = 'defense-v0' as never;
+  expect(() => validateSeason(incompatibleMethods)).toThrow('compatible simulation data');
  });
 });
 
@@ -138,11 +130,42 @@ describe('full seasons', () => {
    expect(box.pitching[3].outs).toBeLessThanOrEqual(3);
    expect(opposition.pitching[5].outs).toBeLessThanOrEqual(3);
    if (box.pitching[3].appearances) closerAppearances.push(game.number);
+   expect(box.pitching.reduce((sum, line) => sum + line.BF, 0)).toBe(opposition.batting.reduce((sum, line) => sum + line.PA, 0));
+   expect(opposition.pitching.reduce((sum, line) => sum + line.BF, 0)).toBe(box.batting.reduce((sum, line) => sum + line.PA, 0));
    for (const team of [box, opposition]) {
     expect(team.innings.reduce<number>((sum, runs) => sum + (runs ?? 0), 0)).toBe(team.runs);
     expect(team.batting.reduce((sum, line) => sum + line.R, 0)).toBe(team.runs);
-    for (const line of team.batting) expect(line.PA).toBe(line.AB + line.BB + line.HBP + line.SF);
+    expect(team.battingRuns).toBeCloseTo(team.batting.reduce((sum, line) => sum + line.battingRuns, 0), 10);
+    expect(team.stealRuns).toBeCloseTo(team.batting.reduce((sum, line) => sum + line.stealRuns, 0), 10);
+    expect(team.defensiveRuns).toBeCloseTo(team.batting.reduce((sum, line) => sum + line.defensiveRuns, 0), 10);
+    expect(team.pitchingRunsAboveNeutral).toBeCloseTo(team.pitching.reduce((sum, line) => sum + line.pitchingRunsAboveNeutral, 0), 10);
+    for (const skill of ['hitPrevention', 'errorAvoidance', 'doublePlay', 'outfieldThrowing', 'catcherThrowing'] as const) {
+     expect(team.defensiveComponents[skill]).toBeCloseTo(team.batting.reduce((sum, line) => sum + line.defensiveComponents[skill], 0), 10);
+    }
+    for (const line of team.batting) {
+     expect(line.PA).toBe(line.AB + line.BB + line.HBP + line.SF);
+     expect(line.defensiveRuns).toBeCloseTo(Object.values(line.defensiveComponents).reduce((sum, value) => sum + value, 0), 10);
+    }
    }
+   const gameLedger = box.battingRuns + box.stealRuns + box.defensiveRuns + box.pitchingRunsAboveNeutral
+    + opposition.battingRuns + opposition.stealRuns + opposition.defensiveRuns + opposition.pitchingRunsAboveNeutral;
+   expect(gameLedger).toBeCloseTo(0, 9);
+  }
+  for (const line of season.batting) {
+   const gameLines = season.games.map(game => (game.isHome ? game.home : game.away).batting.find(candidate => candidate.seasonId === line.seasonId)!);
+   expect(line.fieldingOuts).toBe(gameLines.reduce((sum, candidate) => sum + candidate.fieldingOuts, 0));
+   expect(line.caughtAdvancing).toBe(gameLines.reduce((sum, candidate) => sum + candidate.caughtAdvancing, 0));
+   expect(line.battingRuns).toBeCloseTo(gameLines.reduce((sum, candidate) => sum + candidate.battingRuns, 0), 10);
+   expect(line.stealRuns).toBeCloseTo(gameLines.reduce((sum, candidate) => sum + candidate.stealRuns, 0), 10);
+   expect(line.defensiveRuns).toBeCloseTo(gameLines.reduce((sum, candidate) => sum + candidate.defensiveRuns, 0), 10);
+  }
+  for (const line of season.pitching) {
+   const gameLines = season.games.flatMap(game => {
+    const candidate = (game.isHome ? game.home : game.away).pitching.find(entry => entry.seasonId === line.seasonId);
+    return candidate ? [candidate] : [];
+   });
+   expect(line.BF).toBe(gameLines.reduce((sum, candidate) => sum + candidate.BF, 0));
+   expect(line.pitchingRunsAboveNeutral).toBeCloseTo(gameLines.reduce((sum, candidate) => sum + candidate.pitchingRunsAboveNeutral, 0), 10);
   }
   expect(season.longestWinningStreak).toBe(longest);
   for (const game of closerAppearances) expect(closerAppearances.includes(game - 1) && closerAppearances.includes(game - 2)).toBe(false);
@@ -177,6 +200,7 @@ describe('full seasons', () => {
   const strong = simulateSeason(strongInput);
   const weak = simulateSeason(weakInput);
   expect(strong.modelVersion).toBe(MODEL_VERSION);
+  expect(strong).toMatchObject({ defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1' });
   expect(strong.pitching[4]).toMatchObject({
    seasonId: strongSupport.seasonId,
    playerId: strongSupport.playerId,
@@ -193,18 +217,5 @@ describe('full seasons', () => {
   expect(weak.pitching[4].outs).toBeGreaterThan(0);
   expect(weak.pitching[4].R).toBeGreaterThan(strong.pitching[4].R);
   expect(weak.runsAgainst).toBeGreaterThan(strong.runsAgainst);
- });
- it('keeps legacy support on the shared simulation-data bullpen and pa-v1 model', () => {
-  const input = testLegacySeason(317, 2);
-  input.data.bullpen.displayName = 'Legacy league relief pool';
-  const result = simulateSeason(input);
-  expect(result.modelVersion).toBe('pa-v1');
-  expect(result.pitching[4]).toMatchObject({
-   seasonId: input.data.bullpen.seasonId,
-   playerId: input.data.bullpen.playerId,
-   displayName: 'Legacy league relief pool',
-   role: 'support'
-  });
-  expect(result.pitching[4].outs).toBeGreaterThan(0);
  });
 });

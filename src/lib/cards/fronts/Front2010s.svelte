@@ -24,7 +24,7 @@
 			<span aria-hidden="true" style={`width:0.45cqw; height:3.8cqw; background:${s.k.onField};`}></span>
 			<span data-layer="season.position">{s.pos}</span>
 		</div>
-		<div data-layer="logo.disc" style={`position:absolute; top:4.4cqw; right:4.4cqw; width:16cqw; height:16cqw; border-radius:50%; background:var(--stamp, ${s.k.paper});`}>
+		<div data-layer="logo.disc" style={`position:absolute; top:4.4cqw; right:4.4cqw; width:16cqw; height:16cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper});`}>
 			<LogoSlot {s} markStyle="left:2.2cqw; top:2.2cqw; width:11.6cqw; height:11.6cqw;" fallbackStyle={`font-size:5.2cqw; color:${s.k.fieldOnPaper};`} />
 		</div>
 

@@ -14,8 +14,7 @@ interface SignedDistribution {
 
 const OUT_TRANSITION = 64;
 
-/** Packs bases (bits 0–2), runs (bits 3–5), and an out (bit 6). */
-function transition(mask: number, event: number): number {
+export function neutralTransition(mask: number, event: number): number {
  if (event <= 1) {
   if ((mask & 1) === 0) return mask | 1;
   if ((mask & 2) === 0) return (mask & 4) | 3;
@@ -57,7 +56,7 @@ export function neutralRunDistribution(rates: Rates, outs = 0, bases = 0): Float
    for (let event = 0; event < rates.length; event++) {
     const probability = stateProbability * normalized[event];
     if (probability === 0) continue;
-    const result = transition(stateBases, event);
+    const result = neutralTransition(stateBases, event);
     const resultRuns = (result >> 3) & 7;
     const resultOut = (result & OUT_TRANSITION) !== 0;
     const nextRuns = runs + resultRuns;
@@ -81,6 +80,59 @@ export function neutralRunDistribution(rates: Rates, outs = 0, bases = 0): Float
  const total = distribution.reduce((sum, probability) => sum + probability, 0);
  if (Math.abs(total - 1) > 1e-12) throw new Error('Invalid neutral run distribution');
  return distribution;
+}
+
+/** Expected future runs in each of the 24 transient base/out states. */
+export function neutralRunExpectancy(rates: Rates): Float64Array {
+ validateRates(rates);
+ const expectancy = new Float64Array(STATE_COUNT);
+ for (let state = 0; state < STATE_COUNT; state++) {
+  const distribution = neutralRunDistribution(rates, Math.floor(state / 8), state & 7);
+  let value = 0;
+  for (let runs = 1; runs < distribution.length; runs++) value += runs * distribution[runs];
+  expectancy[state] = value;
+ }
+ return expectancy;
+}
+
+/**
+ * Expected visits to every transient state in a neutral half inning beginning
+ * empty with no outs. These are the fundamental-matrix row used by defensive
+ * reference valuation; runs do not affect state visitation.
+ */
+export function neutralStateVisits(rates: Rates): Float64Array {
+ validateRates(rates);
+ const totalRate = rates.reduce((sum, rate) => sum + rate, 0);
+ const normalized = rates.map(rate => rate / totalRate);
+ const active = new Float64Array(STATE_COUNT);
+ const next = new Float64Array(STATE_COUNT);
+ const visits = new Float64Array(STATE_COUNT);
+ active[0] = 1;
+ let activeMass = 1;
+ for (let step = 0; step < MAX_TRANSITIONS && activeMass > MASS_TOLERANCE; step++) {
+  next.fill(0);
+  for (let state = 0; state < STATE_COUNT; state++) {
+   const stateProbability = active[state];
+   if (stateProbability === 0) continue;
+   visits[state] += stateProbability;
+   const outs = Math.floor(state / 8);
+   const bases = state & 7;
+   for (let event = 0; event < rates.length; event++) {
+    const probability = stateProbability * normalized[event];
+    if (probability === 0) continue;
+    const result = neutralTransition(bases, event);
+    const isOut = (result & OUT_TRANSITION) !== 0;
+    if (!isOut || outs < 2) next[(outs + (isOut ? 1 : 0)) * 8 + (result & 7)] += probability;
+   }
+  }
+  activeMass = 0;
+  for (let state = 0; state < STATE_COUNT; state++) {
+   active[state] = next[state];
+   activeMass += next[state];
+  }
+ }
+ if (activeMass > MASS_TOLERANCE || visits.some(value => !Number.isFinite(value))) throw new Error('Neutral state visits did not converge');
+ return visits;
 }
 
 function convolve(left: Float64Array, right: Float64Array): Float64Array {

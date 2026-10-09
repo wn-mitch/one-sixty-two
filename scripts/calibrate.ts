@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomStream } from '../src/lib/game/random.ts';
-import { HITTER_SLOTS, MODEL_VERSION, POSITIONS, type Position, type Profile, type Rates, type SimulationData, type Slot } from '../src/lib/game/types.ts';
+import { HITTER_SLOTS, MODEL_VERSION, POSITIONS, type DefensiveSkillName, type Position, type Profile, type Rates, type SimulationData, type Slot } from '../src/lib/game/types.ts';
+import { createDefensiveReference, expectedDefensiveRuns, neutralDefensivePosition, type DefensiveReference } from '../src/lib/sim/defense.ts';
 import { simulateGame } from '../src/lib/sim/game.ts';
 import { simulateSeason } from '../src/lib/sim/season.ts';
 import { syntheticProfile } from '../src/lib/sim/fixtures.ts';
@@ -13,6 +14,15 @@ interface Options {
 }
 
 const DEFENSE: Record<Position, number> = { C: 0, '1B': 1, '2B': 2, '3B': 3, SS: 4, LF: 5, CF: 6, RF: 7 };
+const DEFENSE_FAMILY_SIZE = 24;
+const WRONG_WAY_STANDARD_ERRORS = 3;
+
+// The defensive sweep is a fixed family of 24 comparisons. A one-sided
+// three-standard-error bound has a 3.24% normal-approximation union bound
+// across that family, which is more conservative than a 5% Bonferroni gate.
+// It rejects only a statistically supported wrong-way raw scoring effect;
+// exact kernel direction and coupled realized attribution remain hard gates.
+// Seeds and sample size are never retried or adapted after seeing a result.
 
 function parseOptions(arguments_: string[]): Options {
 	let seed = 162;
@@ -36,11 +46,11 @@ function commonProfile(id: string, slot: Slot, rates: Rates, data: SimulationDat
 	profile.franchiseId = `fixture:${id}`;
 	profile.teamId = `fixture:${id}`;
 	profile.eligibleSlots = [slot];
-	profile.appearances = POSITIONS.includes(slot as Position) ? { [slot as Position]: 162 } : {};
+	profile.primaryHitterSlot = POSITIONS.includes(slot as Position) ? slot as Position : 'DH';
+	if (profile.primaryHitterSlot !== 'DH') profile.defense.positions[profile.primaryHitterSlot] = neutralDefensivePosition(profile.primaryHitterSlot);
+	profile.appearances = profile.primaryHitterSlot !== 'DH' ? { [profile.primaryHitterSlot]: 162 } : {};
 	profile.battingRates = [...rates];
 	profile.pitchingRates = [...rates];
-	profile.errorRates = { ...data.leagueErrorRates };
-	profile.catcherCS = data.leagueCatcherCS;
 	profile.speed = 0.5;
 	profile.stealAttempt = data.leagueStealAttempt;
 	profile.stealSuccess = data.leagueStealSuccess;
@@ -81,8 +91,7 @@ function gameInput(number: number, challengeIsHome: boolean, data: SimulationDat
 		challengeIsHome,
 		home: challengeIsHome ? challenge : opponent,
 		away: challengeIsHome ? opponent : challenge,
-		leagueRates: data.leagueRates,
-		leagueCatcherCS: data.leagueCatcherCS,
+		defenseEnvironment: data,
 		park: 1
 	};
 }
@@ -102,13 +111,141 @@ function averageSeason(seed: number, data: SimulationData, hitterRates = data.le
 	leagueBullpen.pitching!.G = 60;
 	leagueBullpen.pitching!.GS = 0;
 	leagueBullpen.pitching!.IPouts = 486;
-	return { schemaVersion: 3, modelVersion: MODEL_VERSION, seed, roster, battingOrder: team.hitters.map(profile => profile.seasonId), starterOrder: starters.map(profile => profile.seasonId),
+	return { schemaVersion: 4, modelVersion: MODEL_VERSION, seed, roster, battingOrder: team.hitters.map(profile => profile.seasonId), starterOrder: starters.map(profile => profile.seasonId),
 		data: { ...data, opponents, bullpen: leagueBullpen } };
 }
 
 function runGame(seed: number, index: number, data: SimulationData, hitterRates?: Rates, starterRates?: Rates): GameResult {
 	const challengeIsHome = index % 2 === 0;
-	return simulateGame(gameInput(index + 1, challengeIsHome, data, hitterRates, starterRates), randomStream((seed + index) >>> 0, 'simulation'));
+	return simulateGame(gameInput(index + 1, challengeIsHome, data, hitterRates, starterRates), randomStream((seed + index) >>> 0, 'simulation'), null);
+}
+
+interface DefenseIsolationResult {
+	position: Position;
+	skill: DefensiveSkillName;
+	positiveRunsAllowed: number;
+	negativeRunsAllowed: number;
+	positiveComponentRuns: number;
+	negativeComponentRuns: number;
+	expectedPositiveRunsSaved162: number;
+	expectedNegativeRunsSaved162: number;
+	pairedMeanRunsSaved: number;
+	pairedStandardError: number;
+	pairedWrongWayUpperBound: number;
+}
+
+const DEFENSE_ISOLATIONS: { position: Position; skill: DefensiveSkillName }[] = [
+	...POSITIONS.flatMap(position => [
+		{ position, skill: 'hitPrevention' as const },
+		{ position, skill: 'errorAvoidance' as const }
+	]),
+	...(['1B', '2B', '3B', 'SS'] as const).map(position => ({ position, skill: 'doublePlay' as const })),
+	...(['LF', 'CF', 'RF'] as const).map(position => ({ position, skill: 'outfieldThrowing' as const })),
+	{ position: 'C', skill: 'catcherThrowing' }
+];
+
+function assertGameValueConservation(game: GameResult, label: string): void {
+	let ledger = 0;
+	let magnitude = 0;
+	for (const box of [game.home, game.away]) {
+		for (const line of box.batting) {
+			const componentRuns = Object.values(line.defensiveComponents).reduce((sum, value) => sum + value, 0);
+			assert.ok(Math.abs(componentRuns - line.defensiveRuns) <= 1e-9, `${label} fielder components do not sum to defensive value`);
+			for (const value of [line.battingRuns, line.stealRuns, line.defensiveRuns]) {
+				ledger += value;
+				magnitude += Math.abs(value);
+			}
+		}
+		for (const line of box.pitching) {
+			ledger += line.pitchingRunsAboveNeutral;
+			magnitude += Math.abs(line.pitchingRunsAboveNeutral);
+		}
+	}
+	assert.ok(Math.abs(ledger) <= 1e-9 * Math.max(1, magnitude), `${label} value ledger does not conserve runs (${ledger})`);
+}
+
+function runDefenseIsolation(
+	seed: number,
+	games: number,
+	data: SimulationData,
+	reference: DefensiveReference,
+	position: Position,
+	skill: DefensiveSkillName
+): DefenseIsolationResult {
+	const positiveSkills = neutralDefensivePosition(position);
+	const negativeSkills = neutralDefensivePosition(position);
+	positiveSkills[skill] = 1;
+	negativeSkills[skill] = -1;
+	const expectedPositiveRunsSaved162 = expectedDefensiveRuns(reference, position, positiveSkills);
+	const expectedNegativeRunsSaved162 = expectedDefensiveRuns(reference, position, negativeSkills);
+	assert.ok(expectedPositiveRunsSaved162 > expectedNegativeRunsSaved162,
+		`${position} ${skill} has a wrong-way exact shared-kernel expectation (${expectedPositiveRunsSaved162} <= ${expectedNegativeRunsSaved162})`);
+
+	let positiveRunsAllowed = 0;
+	let negativeRunsAllowed = 0;
+	let positiveComponentRuns = 0;
+	let negativeComponentRuns = 0;
+	let pairedMeanRunsSaved = 0;
+	let pairedDifferenceSquares = 0;
+	for (let index = 0; index < games; index++) {
+		const challengeIsHome = index % 2 === 0;
+		const positiveInput = gameInput(index + 1, challengeIsHome, data);
+		const negativeInput = gameInput(index + 1, challengeIsHome, data);
+		const positiveTeam = challengeIsHome ? positiveInput.home : positiveInput.away;
+		const negativeTeam = challengeIsHome ? negativeInput.home : negativeInput.away;
+		const fielderIndex = positiveTeam.defense[position];
+		const positiveDefense = positiveTeam.hitters[fielderIndex].defense.positions[position];
+		const negativeDefense = negativeTeam.hitters[fielderIndex].defense.positions[position];
+		assert.ok(positiveDefense && negativeDefense, `Missing ${position} defense fixture`);
+		positiveDefense[skill] = 1;
+		negativeDefense[skill] = -1;
+		positiveDefense.evidence[skill] = { status: 'exact', exposure: 1 };
+		negativeDefense.evidence[skill] = { status: 'exact', exposure: 1 };
+		if (skill === 'hitPrevention') {
+			positiveDefense.expectedRunsSaved162 = 1;
+			negativeDefense.expectedRunsSaved162 = -1;
+		}
+
+		const gameSeed = (seed + index) >>> 0;
+		const positive = simulateGame(positiveInput, randomStream(gameSeed, 'simulation'), null);
+		const negative = simulateGame(negativeInput, randomStream(gameSeed, 'simulation'), null);
+		assertGameValueConservation(positive, `${position} ${skill} positive game ${index + 1}`);
+		assertGameValueConservation(negative, `${position} ${skill} negative game ${index + 1}`);
+		const positiveBox = challengeIsHome ? positive.home : positive.away;
+		const negativeBox = challengeIsHome ? negative.home : negative.away;
+		positiveRunsAllowed += positive.opponentRuns;
+		negativeRunsAllowed += negative.opponentRuns;
+		positiveComponentRuns += positiveBox.batting.reduce((sum, line) => sum + line.defensiveComponents[skill], 0);
+		negativeComponentRuns += negativeBox.batting.reduce((sum, line) => sum + line.defensiveComponents[skill], 0);
+
+		const pairedRunsSaved = negative.opponentRuns - positive.opponentRuns;
+		const previousMean = pairedMeanRunsSaved;
+		pairedMeanRunsSaved += (pairedRunsSaved - previousMean) / (index + 1);
+		pairedDifferenceSquares += (pairedRunsSaved - previousMean) * (pairedRunsSaved - pairedMeanRunsSaved);
+	}
+	const pairedStandardError = Math.sqrt(pairedDifferenceSquares / (games - 1) / games);
+	const pairedWrongWayUpperBound = pairedMeanRunsSaved + WRONG_WAY_STANDARD_ERRORS * pairedStandardError;
+	assert.ok(Number.isFinite(pairedStandardError), `${position} ${skill} produced invalid paired uncertainty`);
+	assert.ok(pairedWrongWayUpperBound >= 0,
+		`${position} ${skill} has a statistically supported wrong-way paired run effect ` +
+		`(mean ${pairedMeanRunsSaved.toFixed(4)} + ${WRONG_WAY_STANDARD_ERRORS} SE ${pairedStandardError.toFixed(4)} < 0)`);
+	assert.ok(positiveComponentRuns > 0,
+		`${position} ${skill} positive skill did not earn positive coupled defensive value (${positiveComponentRuns})`);
+	assert.ok(negativeComponentRuns < 0,
+		`${position} ${skill} negative skill did not earn negative coupled defensive value (${negativeComponentRuns})`);
+	return {
+		position,
+		skill,
+		positiveRunsAllowed,
+		negativeRunsAllowed,
+		positiveComponentRuns,
+		negativeComponentRuns,
+		expectedPositiveRunsSaved162,
+		expectedNegativeRunsSaved162,
+		pairedMeanRunsSaved,
+		pairedStandardError,
+		pairedWrongWayUpperBound
+	};
 }
 
 function improvedHitterRates(baseline: Rates): Rates {
@@ -151,6 +288,7 @@ async function main(): Promise<void> {
 	for (let index = 0; index < options.games; index++) {
 		const result = runGame(options.seed, index, simulation);
 		assert.notEqual(result.challengeRuns, result.opponentRuns, `Calibration game ${index + 1} ended tied`);
+		assertGameValueConservation(result, `Calibration game ${index + 1}`);
 		totalRuns += result.challengeRuns + result.opponentRuns;
 		if (result.win) wins++;
 	}
@@ -190,9 +328,17 @@ async function main(): Promise<void> {
 	assert.ok(higherHitterRuns > baselineChoiceRuns, `Higher-OBP/power hitter did not increase aggregate runs (${higherHitterRuns} <= ${baselineChoiceRuns})`);
 	assert.ok(lowerStarterAllowed < baselineChoiceAllowed, `Lower-hit/walk starter did not reduce aggregate runs allowed (${lowerStarterAllowed} >= ${baselineChoiceAllowed})`);
 
+	assert.equal(DEFENSE_ISOLATIONS.length, DEFENSE_FAMILY_SIZE, 'Defensive isolation family changed without revisiting its fixed multiple-comparison criterion');
+	const defenseReference = createDefensiveReference(simulation);
+	const defenseGamesPerIsolation = Math.max(256, Math.min(1024, Math.ceil(options.games / 10)));
+	const defenseIsolation = DEFENSE_ISOLATIONS.map(({ position, skill }, index) =>
+		runDefenseIsolation((options.seed + index * defenseGamesPerIsolation) >>> 0, defenseGamesPerIsolation, simulation, defenseReference, position, skill));
+
 	console.log(JSON.stringify({
 		dataVersion: simulation.dataVersion,
 		modelVersion: MODEL_VERSION,
+		defenseMethodVersion: simulation.defenseMethodVersion,
+		valuationVersion: simulation.valuationVersion,
 		seed: options.seed,
 		games: options.games,
 		observedRunsPerTeamGame: simulation.observedRuns,
@@ -203,6 +349,14 @@ async function main(): Promise<void> {
 		baselineChoiceRuns,
 		higherHitterRuns,
 		baselineChoiceAllowed,
+		defenseGamesPerIsolation,
+		defenseRawRunCriterion: {
+			familySize: DEFENSE_FAMILY_SIZE,
+			oneSidedStandardErrors: WRONG_WAY_STANDARD_ERRORS,
+			normalApproximationFamilyWiseUpperBound: 0.0324,
+			rejectsWhen: 'paired mean runs saved + 3 standard errors is below zero'
+		},
+		defenseIsolation,
 		lowerStarterAllowed
 	}));
 }

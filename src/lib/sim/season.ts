@@ -39,18 +39,23 @@ function challengeTeam(input: SeasonInput): TeamInput {
   defense[position] = hitters.indexOf(pick.profile);
  }
  const closer = input.roster.find(pick => pick.slot === 'CL')!.profile;
- const support = input.schemaVersion === 3
-  ? input.roster.find(pick => pick.slot === 'BP')!.profile
-  : input.data.bullpen;
+ const support = input.roster.find(pick => pick.slot === 'BP')!.profile;
  return { id: 'challenge', name: 'Your team', hitters, defense,
   pitchers: [...input.starterOrder.map(id => profiles.get(id)!), closer, support],
   starterIndex: 0, closerIndex: 3, bullpenIndex: 4, closerAvailable: true, closerOutsRemaining: closerBudget(closer) };
 }
-const BATTING_STATS = ['PA', 'AB', 'H', 'doubles', 'triples', 'HR', 'BB', 'HBP', 'SO', 'R', 'RBI', 'SB', 'CS', 'SF'] as const;
-const PITCHING_STATS = ['outs', 'H', 'BB', 'HBP', 'SO', 'R', 'starts', 'appearances'] as const;
+const BATTING_STATS = [
+ 'PA', 'AB', 'H', 'doubles', 'triples', 'HR', 'BB', 'HBP', 'SO', 'R', 'RBI', 'SB', 'CS', 'SF',
+ 'battingRuns', 'stealRuns', 'defensiveRuns', 'fieldingOuts', 'caughtAdvancing'
+] as const;
+const PITCHING_STATS = ['outs', 'H', 'BB', 'HBP', 'SO', 'R', 'starts', 'appearances', 'BF', 'pitchingRunsAboveNeutral'] as const;
+const DEFENSIVE_COMPONENTS = ['hitPrevention', 'errorAvoidance', 'doublePlay', 'outfieldThrowing', 'catcherThrowing'] as const;
 function aggregate(batting: BatterLine[], pitching: PitcherLine[], game: GameResult): void {
  const box = game.isHome ? game.home : game.away;
- for (let index = 0; index < batting.length; index++) for (const stat of BATTING_STATS) batting[index][stat] += box.batting[index][stat];
+ for (let index = 0; index < batting.length; index++) {
+  for (const stat of BATTING_STATS) batting[index][stat] += box.batting[index][stat];
+  for (const component of DEFENSIVE_COMPONENTS) batting[index].defensiveComponents[component] += box.batting[index].defensiveComponents[component];
+ }
  for (let index = 0; index < pitching.length; index++) for (const stat of PITCHING_STATS) pitching[index][stat] += box.pitching[index][stat];
 }
 
@@ -82,6 +87,7 @@ export function simulateSeason(input: SeasonInput, onGame?: (game: GameResult) =
  // A fresh box represents one starter appearance; season totals start at zero.
  for (const pitcher of totals.pitching) { pitcher.starts = 0; pitcher.appearances = 0; }
  const result: SeasonResult = { modelVersion: input.modelVersion, dataVersion: input.data.dataVersion, seed: input.seed,
+  defenseMethodVersion: input.data.defenseMethodVersion, valuationVersion: input.data.valuationVersion,
   wins: 0, losses: 0, firstLoss: null, longestWinningStreak: 0, runsFor: 0, runsAgainst: 0,
   games: [], batting: totals.batting, pitching: totals.pitching, starterStarts: [0, 0, 0], highlight: null, lowlight: null };
  const random = randomStream(input.seed, 'simulation');
@@ -98,7 +104,7 @@ export function simulateSeason(input: SeasonInput, onGame?: (game: GameResult) =
   opponent.team.closerAvailable = closerReady(opponent.usage, number, opponent.cap);
   const game = simulateGame({ number, opponentId: opponent.team.id, opponentName: opponent.team.name,
    challengeIsHome: scheduled.isHome, home: scheduled.isHome ? challenge : opponent.team, away: scheduled.isHome ? opponent.team : challenge,
-   leagueRates: input.data.leagueRates, leagueCatcherCS: input.data.leagueCatcherCS, park: scheduled.isHome ? 1 : opponent.park,
+   defenseEnvironment: input.data, park: scheduled.isHome ? 1 : opponent.park,
    homeMatchups: scheduled.isHome ? opponent.challengeNeutral : opponent.opponentPark,
    awayMatchups: scheduled.isHome ? opponent.opponentNeutral : opponent.challengePark }, random, winExpectancy);
   const challengeBox = scheduled.isHome ? game.home : game.away;

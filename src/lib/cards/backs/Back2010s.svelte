@@ -30,7 +30,7 @@
 		<div data-layer="photo.mask" style={`position:absolute; left:0; right:0; top:0; height:34cqw; overflow:hidden; background:${s.k.accent};`}>
 			<PhotoMask {s} focus="50% 18%" emptyStyle="align-items:stretch; justify-content:stretch;" />
 		</div>
-		<div data-layer="logo.disc" style={`position:absolute; top:4cqw; right:4.4cqw; width:13cqw; height:13cqw; border-radius:50%; background:${s.k.paper};`}>
+		<div data-layer="logo.disc" style={`position:absolute; top:4cqw; right:4.4cqw; width:13cqw; height:13cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:${s.k.paper};`}>
 			<LogoSlot {s} markStyle="left:1.8cqw; top:1.8cqw; width:9.4cqw; height:9.4cqw;" fallbackStyle={`font-size:4.4cqw; color:${s.k.fieldOnPaper};`} />
 		</div>
 		<div data-layer="identity.tab" style={`position:absolute; left:0; bottom:calc(100% - 42cqw); min-width:56cqw; max-width:86cqw; box-sizing:border-box; padding:2.6cqw 7cqw 2.2cqw 5cqw; background:${s.k.paper}; color:${s.k.fieldOnPaper}; clip-path:polygon(0 0, calc(100% - 4.4cqw) 0, 100% 4.4cqw, 100% 100%, 0 100%);`}>

@@ -56,7 +56,7 @@
 		<span data-rt data-layer="season.year" style="font-weight:800; font-size:4.6cqw;">{s.year}</span>
 		<span data-rt data-layer="season.position" style="font-weight:700; font-size:3.8cqw; letter-spacing:.06em;">{s.pos}</span>
 	</div>
-	<div data-layer="logo.roundel" style={`position:absolute; right:4.5cqw; top:77.5cqw; width:15cqw; height:15cqw; border-radius:50%; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock};`}>
+	<div data-layer="logo.roundel" style={`position:absolute; right:4.5cqw; top:77.5cqw; width:15cqw; height:15cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock};`}>
 		<LogoSlot {s} markStyle="left:2.2cqw; top:2.2cqw; width:10.6cqw; height:10.6cqw;" fallbackStyle={`color:${s.k.fieldOnPaper};`} />
 	</div>
 

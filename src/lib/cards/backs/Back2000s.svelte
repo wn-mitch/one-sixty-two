@@ -41,7 +41,7 @@
 			<PhotoMask {s} focus="50% 18%" />
 		</div>
 		<div data-layer="frame.photo-rail" style={`position:absolute; right:4cqw; top:32.6cqw; width:24cqw; height:0.8cqw; background:${s.k.accent};`}></div>
-		<div data-layer="logo.slot" style={`position:absolute; right:5cqw; top:24.6cqw; width:8cqw; height:8cqw; border-radius:50%; background:${s.k.paper};`}>
+		<div data-layer="logo.slot" style={`position:absolute; right:5cqw; top:24.6cqw; width:8cqw; height:8cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:${s.k.paper};`}>
 			<LogoSlot {s} markStyle="left:1.2cqw; top:1.2cqw; width:5.6cqw; height:5.6cqw;" fallbackStyle={`font-size:3cqw; color:${s.k.fieldOnPaper};`} />
 		</div>
 		<div data-layer="back.flow" style="position:absolute; left:14cqw; right:4cqw; top:5cqw; bottom:4cqw; display:flex; flex-direction:column; gap:1.8cqw;">

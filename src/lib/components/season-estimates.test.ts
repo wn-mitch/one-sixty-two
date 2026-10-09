@@ -1,74 +1,109 @@
 import { describe, expect, it } from 'vitest';
-import { POSITIONS } from '../game/types.ts';
+import type { DefensiveEvidence, DefensivePosition, DefensiveSkillName, Position, Profile } from '../game/types.ts';
 import { seasonEstimates } from './season-estimates.ts';
 
-const profile = { estimatedFields: [
- ...POSITIONS.map(position => `fielding.${position}.league`), 'catcherCS.league',
- 'bats.neutral', 'throws.neutral', 'BPF.neutral', 'PPF.neutral',
- 'baserunning.league', 'doublePlay.league', 'speed.league', 'pitching.allowedExtraBaseHits.league'
-] };
+const notApplicable: DefensiveEvidence = { status: 'notApplicable', exposure: 0 };
+const exact = (exposure: number): DefensiveEvidence => ({ status: 'exact', exposure });
 
-describe('role-relevant plain-language estimates', () => {
- it('never reports the eight compiler-populated fielding estimates for a DH or pitcher', () => {
-  const dh = seasonEstimates(profile, ['DH']).join(' ');
-  expect(dh).not.toMatch(/catcher|first base|error rate|pitcher platoon|doubles and triples allowed/);
-  expect(dh).toMatch(/Batting handedness/);
-  expect(dh).toMatch(/steal-attempt/);
-  expect(dh).toMatch(/double-play probability/);
-  expect(dh).toMatch(/middle-of-the-pack/);
-  const pitcher = seasonEstimates(profile, ['SP1', 'SP2', 'SP3']).join(' ');
-  expect(pitcher).not.toMatch(/caught-stealing|extra-base advancement|Batting handedness|error rate/);
-  expect(pitcher).toMatch(/Throwing handedness/);
-  expect(pitcher).toMatch(/doubles and triples allowed/);
-  expect(pitcher).toMatch(/pitching park factor/);
+function defensivePosition(overrides: Partial<DefensivePosition> = {}): DefensivePosition {
+ const evidence: Record<DefensiveSkillName, DefensiveEvidence> = {
+  hitPrevention: notApplicable,
+  doublePlay: notApplicable,
+  outfieldThrowing: notApplicable,
+  errorAvoidance: notApplicable,
+  catcherThrowing: notApplicable
+ };
+ return {
+  hitPrevention: 0,
+  doublePlay: 0,
+  outfieldThrowing: 0,
+  errorAvoidance: 0,
+  catcherThrowing: 0,
+  evidence,
+  expectedRunsSaved162: null,
+  residualClamped: false,
+  ...overrides
+ };
+}
+
+function estimateProfile(
+ estimatedFields: string[],
+ positions: Partial<Record<Position, DefensivePosition>> = {}
+): Pick<Profile, 'estimatedFields' | 'defense'> {
+ return { estimatedFields, defense: { positions } };
+}
+
+describe('role-relevant season estimates', () => {
+ it('narrows compiler-wide estimates and defensive positions to the represented role', () => {
+  const source = estimateProfile(
+   ['bats.neutral', 'throws.neutral', 'BPF.neutral', 'PPF.neutral'],
+   {
+    C: defensivePosition({ expectedRunsSaved162: 3 }),
+    '1B': defensivePosition({ expectedRunsSaved162: -2 })
+   }
+  );
+
+  expect(seasonEstimates(source, ['C', '1B', 'DH', 'CL'], 'C')).toEqual(seasonEstimates(source, ['C']));
+  expect(seasonEstimates(source, ['C', '1B', 'DH', 'CL'], 'DH')).toEqual(seasonEstimates(source, ['DH']));
+  expect(seasonEstimates(source, ['C', '1B', 'DH', 'CL'], 'CL')).toEqual(seasonEstimates(source, ['CL']));
+  expect(seasonEstimates(source, ['DH'], 'C')).toEqual(seasonEstimates(source, ['DH']));
  });
- it('restricts defensive notes to legal positions, then narrows to the selected slot', () => {
-  const legal = seasonEstimates(profile, ['C', '1B', 'DH']).join(' ');
-  expect(legal).toMatch(/At catcher/);
-  expect(legal).toMatch(/At first base/);
-  expect(legal).not.toMatch(/At shortstop|At left field/);
-  expect(seasonEstimates(profile, ['C', 'DH'], 'DH').join(' ')).not.toMatch(/At catcher|catcher stolen-base/);
-  expect(seasonEstimates(profile, ['DH'], 'C')).toEqual(seasonEstimates(profile, ['DH']));
+
+ it('uses the shared DEF rounding rule for negative halves and negative zero', () => {
+  const notes = seasonEstimates(estimateProfile([], {
+   LF: defensivePosition({ expectedRunsSaved162: -2.5 }),
+   CF: defensivePosition({ expectedRunsSaved162: -0.2 })
+  }), ['LF', 'CF']);
+  const leftField = notes.find(note => note.startsWith('At left field, DEF est.'));
+  const centerField = notes.find(note => note.startsWith('At center field, DEF est.'));
+
+  expect(leftField).toContain('DEF est. is -3 runs');
+  expect(centerField).toContain('DEF est. is 0 runs');
+  expect(centerField).not.toContain('-0 runs');
  });
- it('explains generic outfield evidence and missing innings without claiming range or invented counts', () => {
-  const notes = seasonEstimates({ estimatedFields: ['fielding.LF.genericOF', 'fielding.LF.InnOuts.unavailable', 'fielding.RF.league'] }, ['LF']).join(' ');
-  expect(notes).toMatch(/combined outfield putouts, assists and errors/);
-  expect(notes).toMatch(/recorded innings are unavailable/);
-  expect(notes).toMatch(/not invented innings/);
-  expect(notes).not.toMatch(/right field|genericOF|InnOuts/);
+
+ it('distinguishes unavailable aggregate evidence from measured zero and an absent record', () => {
+  const unavailable = defensivePosition({
+   evidence: {
+    hitPrevention: { status: 'neutralMissingEvidence', exposure: 0, reason: 'joined fielding runs unavailable' },
+    errorAvoidance: exact(410),
+    doublePlay: notApplicable,
+    outfieldThrowing: notApplicable,
+    catcherThrowing: notApplicable
+   }
+  });
+  const notes = seasonEstimates(estimateProfile([], {
+   C: defensivePosition({ expectedRunsSaved162: 0 }),
+   '1B': unavailable
+  }), ['C', '1B']);
+
+  expect(notes.find(note => note.startsWith('At catcher, DEF est.'))).toContain('DEF est. is 0 runs');
+  expect(notes.find(note => note.startsWith('At first base, aggregate DEF'))).toContain('aggregate DEF is unavailable');
+  expect(seasonEstimates(estimateProfile([]), ['SS']).some(note => note.includes('required pre-season defensive record is unavailable'))).toBe(true);
  });
- it('distinguishes the historical catcher baseline from an unavailable baseline using the 2025 prior', () => {
-  expect(seasonEstimates({ estimatedFields: ['catcherCS.league'] }, ['C'])[0]).toMatch(/that season and league's caught-stealing rate/);
-  const notes = seasonEstimates({ estimatedFields: ['catcherCS.league', 'catcherCS.prior2025'] }, ['C']).join(' ');
-  expect(notes).toMatch(/combined 2025 league/);
-  expect(notes).toMatch(/baseline is unavailable/);
-  expect(seasonEstimates({ estimatedFields: ['catcherCS.prior2025'] }, ['1B'])).toEqual([]);
- });
- it('describes pitcher missing facts honestly instead of implying complete source records', () => {
-  const notes = seasonEstimates({ estimatedFields: ['pitching.BFP.estimated', 'pitching.HBP.estimated', 'pitching.ER.estimated', 'pitching.SV.estimated'] }, ['CL']).join(' ');
-  expect(notes).toMatch(/outs plus hits, walks and hit batters/);
-  expect(notes).toMatch(/missing hit batters/);
-  expect(notes).toMatch(/missing earned runs/);
-  expect(notes).toMatch(/missing saves/);
-  expect(notes).toMatch(/zero when none are present/);
-  expect(notes).not.toMatch(/pitching\.|\.estimated/);
- });
- it('classifies a bullpen unit as pitching and discloses aggregate assumptions', () => {
-  const aggregate = { estimatedFields: ['pooledRelief.BFPWeighted', 'throws.neutral', 'pitching.BFP.estimated', 'PPF.neutral', 'bats.neutral'] };
-  const notes = seasonEstimates(aggregate, ['BP']).join(' ');
-  expect(notes).toContain('weighted by batters faced');
-  expect(notes).toContain('neutral throwing handedness');
-  expect(notes).toContain('outs plus hits, walks and hit batters');
-  expect(notes).toContain('pitching park factor');
-  expect(notes).not.toContain('Batting handedness');
-  expect(notes).not.toContain('exact method is not described');
-  expect(seasonEstimates(aggregate, ['DH']).join(' ')).not.toContain('weighted by batters faced');
- });
- it('discloses unknown identifiers once without leaking raw jargon, and filters known irrelevant namespaces', () => {
-  const notes = seasonEstimates({ estimatedFields: ['future.internalFlag', 'anotherFlag', 'fielding.LF.futureMethod', 'pitching.futureFact.estimated'] }, ['DH']);
-  expect(notes).toHaveLength(1);
-  expect(notes[0]).toMatch(/exact method is not described/);
-  expect(notes[0]).not.toMatch(/future|internalFlag|anotherFlag/);
-  expect(seasonEstimates({ estimatedFields: [] }, ['C'])).toEqual([]);
+
+ it('reports the canonical normalized skill values and their source exposures', () => {
+  const defense = defensivePosition({
+   hitPrevention: 0.42,
+   errorAvoidance: -0.08,
+   outfieldThrowing: 0.25,
+   expectedRunsSaved162: 7.6,
+   evidence: {
+    hitPrevention: exact(5100),
+    errorAvoidance: exact(720),
+    doublePlay: notApplicable,
+    outfieldThrowing: { status: 'genericOutfield', exposure: 4800, reason: 'split-position assists unavailable' },
+    catcherThrowing: notApplicable
+   }
+  });
+  const notes = seasonEstimates(estimateProfile([], { LF: defense }), ['LF']);
+  const skills = notes.find(note => note.startsWith('At left field, normalized defensive skills'));
+
+  expect(skills).toContain('estimated hit prevention +0.42');
+  expect(skills).toContain('exposure 5100 fielding outs');
+  expect(skills).toContain('error avoidance -0.08');
+  expect(skills).toContain('exposure 720 handled chances');
+  expect(skills).toContain('outfield throwing +0.25');
+  expect(skills).toContain('exposure 4800 fielding outs');
  });
 });

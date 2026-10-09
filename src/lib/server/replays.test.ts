@@ -19,7 +19,7 @@ const manifest = {
 	sourceCommit: 'synthetic',
 	franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${index}`, name: `Club ${index}`, decades: [1980] })),
 	candidates,
-	chunks: {}, simulationUrl: '', attributionUrl: '', archiveUrl: '', approximations: [], coverage: [],
+	chunks: {}, simulationUrl: '', showcaseUrl: '', attributionUrl: '', archiveUrl: '', approximations: [], coverage: [],
 	diagnostics: { excludedBatting: 0, excludedPitching: 0, excludedProfiles: 0, estimatedProfiles: 0, reportUrl: '' },
 	attribution: { title: 'Synthetic', credit: 'Synthetic', sourceUrl: 'https://data.invalid', license: 'CC BY-SA 3.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/', sourceCommit: 'synthetic', changes: 'Synthetic.', fullNotice: 'Synthetic.' }
 } as Manifest;
@@ -67,7 +67,30 @@ describe('replay R2 storage', () => {
 		expect(first.key).toBe(`${REPLAY_PREFIX}${first.id}`);
 		expect(bucket.puts).toBe(1);
 		expect(await loadReplay(bucket, first.id, manifest)).toEqual(input);
-		expect(input.schemaVersion === 3 ? input.actions.at(-1)?.type : null).toBe('reassign');
+		expect(input.schemaVersion).toBe(4);
+		expect(input.actions.at(-1)?.type).toBe('reassign');
+	});
+
+	it('rejects pre-cutover schemas and models before writing or returning stored replay bytes', async () => {
+		const current = finish();
+		for (const incompatible of [
+			{ ...current, schemaVersion: 3, modelVersion: 'pa-v2' },
+			{ ...current, schemaVersion: 4, modelVersion: 'pa-v2' }
+		]) {
+			const bucket = new MemoryBucket();
+			await expect(storeReplay(bucket, incompatible, manifest)).rejects.toThrow('incompatible');
+			expect(bucket.puts).toBe(0);
+		}
+
+		const bucket = new MemoryBucket();
+		const stored = await storeReplay(bucket, current, manifest);
+		const bytes = bucket.objects.get(stored.key)!;
+		bucket.objects.set(stored.key, new TextEncoder().encode(JSON.stringify({
+			...JSON.parse(new TextDecoder().decode(bytes)),
+			schemaVersion: 3,
+			modelVersion: 'pa-v2'
+		})));
+		await expect(loadReplay(bucket, stored.id, manifest)).rejects.toThrow('incompatible');
 	});
 
 	it('loads the authoritative manifest only from the deployed asset binding', async () => {

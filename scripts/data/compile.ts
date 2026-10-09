@@ -1,18 +1,31 @@
 import { createHash } from 'node:crypto';
-import { compareId, MAX_SEASON_YEAR, MIN_SEASON_YEAR, POSITIONS, SLOTS, type Attribution, type Manifest, type Profile, type SimulationData } from '../../src/lib/game/types.ts';
+import { compareId, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, POSITIONS, SLOTS, type Attribution, type DefensiveEnvironment, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../../src/lib/game/types.ts';
+import { validateDefensiveEnvironment, validateProfile } from '../../src/lib/sim/validation.ts';
+import { finishFor, type Finish, type FinishRole } from '../../src/lib/cards/finish.ts';
+import { applyDefense } from './defense.ts';
 import { numberField, type Tables } from './counts.ts';
 import { buildBullpenCandidates } from './bullpens.ts';
 import { leagueFielding } from './fielding.ts';
 import { buildOpponents } from './opponents.ts';
 import { compileProfiles } from './profiles.ts';
+import type { CsvRow } from './acquire.ts';
+import { groupJoinedWarRows, sourceRole, sumComplete, type GroupedWarRows } from './source-join.ts';
+import {
+ RANKINGS_SOURCE_CHECKSUM,
+ RANKINGS_LICENSE_URL,
+ RANKINGS_README_URL,
+ RANKINGS_SOURCE_COMMIT,
+ RANKINGS_SOURCE_DESCRIPTION,
+ RANKINGS_SOURCE_URL
+} from '../rankings/source.ts';
 
 export const APPROXIMATIONS = [
  'Historical rates use a 100-opportunity source-league prior and a common 2025 batting environment.',
  'Three-year batting and pitching park factors are coarse run-park proxies, not event-specific measurements.',
  'Pitcher allowed doubles and triples are inferred from source-league non-home-run hit proportions.',
- 'Platoon, extra-base advancement, double-play, tag-up and stolen-base effects are generic model assumptions.',
- 'Fielding represents reliability only, not range; missing exact outfield evidence uses generic OF then league reliability.',
- 'Missing optional handedness, fielding, catcher and baserunning evidence is explicitly labelled; unavailable historical catcher priors use pooled 2025 evidence.',
+ 'Fielding uses position-specific historical error, double-play, outfield-assist and catcher caught-stealing evidence. Double-play and assist rates are context-affected opportunity proxies.',
+ 'Aggregate fielding runs are residualized into estimated hit prevention so component effects are not double counted; missing aggregate evidence leaves DEF unavailable without erasing independently supported skills.',
+ 'Missing optional handedness, fielding components and baserunning evidence is explicitly neutral and labelled.',
  'When source sacrifice flies are unavailable, SF remains an explicitly labelled unavailable zero and PA is a conservative recorded lower bound; no sacrifice-fly count is reconstructed.',
  'Drafted bullpen remainders BFP-weight every relief-dominant pitcher-season after the saves leader; source counts do not split starter and relief appearances.',
  'Three starters each make 54 starts. A workload-limited, rested closer is supported by a bullpen with an unlimited support-pool workload abstraction.',
@@ -31,12 +44,120 @@ export function canonicalJSON(value: unknown): string {
 }
 
 export interface Compilation { manifest: Manifest; files: Record<string, unknown>; payload: Record<string, unknown>; diagnostics: string[] }
+const DEFENSE_METHOD = {
+ version: 'defense-v1',
+ cohortMinimums: { inningOuts: 4374, handledChances: 1000, catcherAttempts: 100 },
+ smoothing: { rateInningOuts: 2700, errorChances: 300, catcherAttempts: 50 },
+ normalization: { rateRelativeScale: 0.5, errorRateScale: 0.02, catcherCaughtStealingScale: 0.2, genericOutfieldStrength: 0.5 },
+ bounds: { aggregateRuns: 15, hitProbabilityDelta: 0.04, referenceInnings: 1458 },
+ semantics: {
+  aggregate: 'fld162 fielding runs above average per 162 team games; pos162 and def162 are excluded.',
+  hitPrevention: 'Residual estimated hit prevention after explicit error, double-play, outfield-assist and catcher-throwing effects.',
+  doublePlay: 'Double plays per fielding out proxy; context affected, not a true opportunity rate.',
+  outfieldThrowing: 'Assists per fielding out proxy; not observed throw-out percentage or throwing velocity.'
+ },
+ source: {
+  name: 'MLB-WAR-data-historical — JEFFBAGWELL',
+  url: RANKINGS_SOURCE_URL,
+  commit: RANKINGS_SOURCE_COMMIT,
+  checksum: RANKINGS_SOURCE_CHECKSUM,
+  licenseUrl: RANKINGS_LICENSE_URL,
+  readmeUrl: RANKINGS_README_URL,
+  description: RANKINGS_SOURCE_DESCRIPTION
+ }
+} as const;
 
-export function compileData(tables: Tables, attribution: Attribution, sourceCommit: string): Compilation {
+interface ShowcaseWar {
+ battingWAR162: number | null;
+ pitchingWAR162: number | null;
+}
+
+function showcaseWar(source: GroupedWarRows): Map<string, ShowcaseWar> {
+ const values = new Map<string, ShowcaseWar>();
+ for (const [seasonId, rows] of source.bySeason) {
+  values.set(seasonId, {
+   battingWAR162: sumComplete(rows.filter(row => sourceRole(row, 'batting')), 'bwar162'),
+   pitchingWAR162: sumComplete(rows.filter(row => sourceRole(row, 'pitching')), 'pwar162')
+  });
+ }
+ return values;
+}
+
+type ShowcaseRole = 'hitter' | 'pitcher';
+interface ShowcaseOption extends ShowcaseCard {
+ role: ShowcaseRole;
+ war: number;
+}
+
+function showcaseSlot(profile: Profile, role: ShowcaseRole): Slot | null {
+ if (role === 'hitter') return profile.primaryHitterSlot;
+ if (profile.eligibleSlots.includes('SP1')) return 'SP1';
+ return profile.eligibleSlots.includes('CL') ? 'CL' : null;
+}
+
+function showcaseOption(profile: Profile, role: ShowcaseRole, value: ShowcaseWar | undefined): ShowcaseOption | null {
+ const slot = showcaseSlot(profile, role);
+ if (slot === null || (role === 'hitter' && !HITTER_SLOTS.includes(slot as typeof HITTER_SLOTS[number]))) return null;
+ const sourceWar = role === 'hitter' ? value?.battingWAR162 : value?.pitchingWAR162;
+ return {
+  profile,
+  slot,
+  role,
+  war: typeof sourceWar === 'number' && Number.isFinite(sourceWar) ? sourceWar : -Infinity
+ };
+}
+
+function showcaseFinish(option: ShowcaseOption, value: ShowcaseWar | undefined): Finish {
+ const role: FinishRole = option.role === 'hitter' ? 'hitter' : option.slot === 'CL' ? 'closer' : 'starter';
+ return finishFor(role, value?.battingWAR162, value?.pitchingWAR162);
+}
+
+function compareShowcaseOption(a: ShowcaseOption, b: ShowcaseOption): number {
+ return b.war - a.war
+  || compareId(a.profile.seasonId, b.profile.seasonId)
+  || compareId(a.role, b.role);
+}
+
+function buildShowcase(candidates: Profile[], source: GroupedWarRows): ShowcaseCard[] {
+ const war = showcaseWar(source);
+ const tiers: readonly Finish[] = ['base', 'foil', 'emboss', 'gem'];
+ const preferredRoles: readonly ShowcaseRole[] = ['hitter', 'pitcher', 'hitter', 'pitcher'];
+ const showcase: ShowcaseCard[] = [];
+ const selected = new Set<string>();
+ for (let decade = 1950; decade <= 2020; decade += 10) {
+  const era = candidates.filter(profile => !profile.bullpen && Math.floor(profile.year / 10) * 10 === decade);
+  for (let index = 0; index < tiers.length; index++) {
+   const tier = tiers[index]!;
+   const preferred = preferredRoles[index]!;
+   const other: ShowcaseRole = preferred === 'hitter' ? 'pitcher' : 'hitter';
+   const available = era.filter(profile => !selected.has(profile.seasonId));
+   const roleOptions = (role: ShowcaseRole) => available.flatMap(profile => {
+    const option = showcaseOption(profile, role, war.get(profile.seasonId));
+    return option && showcaseFinish(option, war.get(profile.seasonId)) === tier ? [option] : [];
+   });
+   const preferredOptions = roleOptions(preferred);
+   const alternateOptions = preferredOptions.length ? preferredOptions : roleOptions(other);
+   const fallbackOptions = alternateOptions.length ? alternateOptions : available.flatMap(profile =>
+    (['hitter', 'pitcher'] as const).flatMap(role => {
+     const option = showcaseOption(profile, role, war.get(profile.seasonId));
+     return option ? [option] : [];
+    })
+   );
+   fallbackOptions.sort(compareShowcaseOption);
+   const chosen = fallbackOptions[0];
+   if (!chosen) throw new Error(`Unable to select four distinct showcase profiles for the ${decade}s`);
+   selected.add(chosen.profile.seasonId);
+   showcase.push({ profile: chosen.profile, slot: chosen.slot });
+  }
+ }
+ if (showcase.length !== 32) throw new Error(`Expected 32 showcase profiles, received ${showcase.length}`);
+ return showcase;
+}
+
+
+export function compileData(tables: Tables, attribution: Attribution, sourceCommit: string, warRows: CsvRow[]): Compilation {
+ if (!warRows.length) throw new Error('Pinned defensive/WAR source is required for core data compilation.');
  const compiled = compileProfiles(tables);
- compiled.candidates.push(...buildBullpenCandidates(compiled));
- const candidates = compiled.candidates;
- const { opponents, bullpen } = buildOpponents(compiled);
  const targetFielding = leagueFielding(compiled.fielding, '2025:ALL');
  const currentBatting = [...compiled.baselines.batters.values()].filter(item => item.group.row.yearID === '2025');
  let sb = 0, cs = 0, onBase = 0, gidp = 0, nonStrikeoutOuts = 0;
@@ -54,7 +175,27 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
   if (r === undefined || !g) throw new Error(`Missing observed scoring: ${team.franchID}`);
   runs += r; games += g;
  }
- const simulationBase = { schemaVersion: 1 as const, leagueRates: compiled.baselines.target, bullpen, opponents, observedRuns: runs / games, leagueErrorRates: targetFielding.errors, leagueStealAttempt: Math.min(0.25, (sb + cs) / Math.max(1, onBase)), leagueStealSuccess: sb / Math.max(1, sb + cs), leagueCatcherCS: targetFielding.catcherCS, leagueDoublePlay: nonStrikeoutOuts > 0 ? Math.min(0.4, 4 * gidp / nonStrikeoutOuts) : 0 };
+ const defenseEnvironment: DefensiveEnvironment = {
+  leagueRates: compiled.baselines.target,
+  leagueErrorRates: targetFielding.errors,
+  leagueStealAttempt: Math.min(0.25, (sb + cs) / Math.max(1, onBase)),
+  leagueStealSuccess: sb / Math.max(1, sb + cs),
+  leagueDoublePlay: nonStrikeoutOuts > 0 ? Math.min(0.4, 4 * gidp / nonStrikeoutOuts) : 0
+ };
+ const joinedWar = groupJoinedWarRows(warRows, { people: tables.People, teams: tables.Teams });
+ const defenseDiagnostics = applyDefense(compiled.profiles, compiled.fielding, joinedWar, defenseEnvironment);
+ compiled.candidates.push(...buildBullpenCandidates(compiled));
+ const candidates = compiled.candidates;
+ const { opponents, bullpen } = buildOpponents(compiled);
+ const simulationBase = {
+  schemaVersion: 1 as const,
+  ...defenseEnvironment,
+  bullpen,
+  opponents,
+  observedRuns: runs / games,
+  defenseMethodVersion: 'defense-v1' as const,
+  valuationVersion: 'sim-war-v1' as const
+ };
  validateCompiled(candidates, simulationBase);
  const chunks: Record<string, Profile[]> = {};
  const decadesByFranchise = new Map<string, Set<number>>();
@@ -85,38 +226,48 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
   excludedProfiles: compiled.diagnostics.filter(message => message.includes(': profile excluded:')).length,
   estimatedProfiles: candidates.filter(profile => profile.estimatedFields.length > 0).length
  };
- const diagnostics = { ...diagnosticCounts, messages: compiled.diagnostics };
- const payload = { schemaVersion: 1, sourceCommit, chunks, simulation: simulationBase, franchises, coverage, attribution, approximations: APPROXIMATIONS, diagnostics };
+ const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, messages: compiled.diagnostics };
+ const showcase = buildShowcase(candidates, joinedWar);
+ const payload = { schemaVersion: 1, sourceCommit, chunks, showcase, simulation: simulationBase, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
  const dataVersion = createHash('sha256').update(canonicalJSON(payload)).digest('hex');
  const prefix = `/data/${dataVersion}`;
  const manifest: Manifest = {
   schemaVersion: 1, dataVersion, sourceCommit, franchises, coverage,
   candidates: candidates.map(profile => ({ seasonId: profile.seasonId, playerId: profile.playerId, franchiseId: profile.franchiseId, decade: Math.floor(profile.year / 10) * 10, eligibleSlots: profile.eligibleSlots })),
   chunks: Object.fromEntries(Object.keys(chunks).sort(compareId).map(key => [key, `${prefix}/${key}.json`])),
-  simulationUrl: `${prefix}/simulation.json`, attributionUrl: `${prefix}/attribution.json`, archiveUrl: `${prefix}/transformed-data.tar.gz`, attribution, approximations: APPROXIMATIONS,
+  simulationUrl: `${prefix}/simulation.json`, showcaseUrl: `${prefix}/showcase.json`, attributionUrl: `${prefix}/attribution.json`, archiveUrl: `${prefix}/transformed-data.tar.gz`, attribution, approximations: APPROXIMATIONS,
   diagnostics: { ...diagnosticCounts, reportUrl: `${prefix}/diagnostics.json` }
  };
  const simulation: SimulationData = { ...simulationBase, dataVersion };
- const files: Record<string, unknown> = { 'manifest.json': manifest, 'simulation.json': simulation, 'attribution.json': attribution, 'diagnostics.json': diagnostics };
+ const files: Record<string, unknown> = { 'manifest.json': manifest, 'simulation.json': simulation, 'showcase.json': showcase, 'attribution.json': attribution, 'defense-source.json': DEFENSE_METHOD, 'diagnostics.json': diagnostics };
  for (const [key, profiles] of Object.entries(chunks)) files[`${key}.json`] = profiles;
  return { manifest, files, payload, diagnostics: compiled.diagnostics };
 }
 
 function validateCompiled(candidates: Profile[], simulation: Omit<SimulationData, 'dataVersion'>): void {
+ validateDefensiveEnvironment(simulation);
  if (simulation.opponents.length !== 30 || new Set(simulation.opponents.map(team => team.id)).size !== 30) throw new Error('Expected thirty opponents');
  if (new Set(candidates.map(profile => profile.seasonId)).size !== candidates.length) throw new Error('Duplicate season identity');
  for (const slot of SLOTS) if (!candidates.some(profile => profile.eligibleSlots.includes(slot))) throw new Error(`Unfillable global slot: ${slot}`);
  const all = [...candidates, simulation.bullpen, ...simulation.opponents.flatMap(team => [...team.hitters, ...team.starters, team.closer, team.bullpen])];
+ all.forEach(validateProfile);
  for (const profile of all) {
   if (profile.year < MIN_SEASON_YEAR || profile.year > MAX_SEASON_YEAR || !['AL', 'NL'].includes(profile.league)) throw new Error(`Out-of-era profile: ${profile.seasonId}`);
   for (const rates of [profile.battingRates, profile.pitchingRates]) {
    if (rates && (rates.length !== 8 || rates.some(value => !Number.isFinite(value) || value < 0) || Math.abs(rates.reduce((a, b) => a + b, 0) - 1) > 1e-9)) throw new Error(`Invalid rates: ${profile.seasonId}`);
   }
-  for (const position of POSITIONS) if (!Number.isFinite(profile.errorRates[position]) || profile.errorRates[position] < 0 || profile.errorRates[position] > 1) throw new Error(`Invalid fielding probability: ${profile.seasonId}:${position}`);
+  for (const position of POSITIONS) {
+   const defensive = profile.defense.positions[position];
+   if (!defensive) continue;
+   for (const skill of ['hitPrevention', 'doublePlay', 'outfieldThrowing', 'errorAvoidance', 'catcherThrowing'] as const) {
+    if (!Number.isFinite(defensive[skill]) || defensive[skill] < -1 || defensive[skill] > 1) throw new Error(`Invalid defensive skill: ${profile.seasonId}:${position}:${skill}`);
+   }
+  }
  }
  for (const profile of candidates) {
   for (const position of POSITIONS) {
    if (profile.eligibleSlots.includes(position) !== Boolean(profile.batting && profile.batting.PA >= 200 && (profile.appearances[position] ?? 0) >= 10)) throw new Error(`Invalid positional eligibility: ${profile.seasonId}:${position}`);
+   if (profile.eligibleSlots.includes(position) && !profile.defense.positions[position]) throw new Error(`Missing eligible-position defense: ${profile.seasonId}:${position}`);
   }
   const isBullpen = profile.eligibleSlots.includes('BP');
   if (Boolean(profile.bullpen) !== isBullpen) throw new Error(`Invalid bullpen metadata: ${profile.seasonId}`);
@@ -137,5 +288,11 @@ function validateCompiled(candidates: Profile[], simulation: Omit<SimulationData
  for (const team of simulation.opponents) {
   if (new Set(team.hitters.map(profile => profile.playerId)).size !== 9) throw new Error(`Duplicate opponent athlete: ${team.id}`);
   if (new Set(team.hitters.map(profile => profile.eligibleSlots[0])).size !== 9) throw new Error(`Invalid opponent positions: ${team.id}`);
+  for (const hitter of team.hitters) {
+   const position = hitter.eligibleSlots[0];
+   if (position !== 'DH' && (!POSITIONS.includes(position as typeof POSITIONS[number]) || !hitter.defense.positions[position as typeof POSITIONS[number]])) {
+    throw new Error(`Missing opponent defense: ${team.id}:${hitter.seasonId}:${position}`);
+   }
+  }
  }
 }

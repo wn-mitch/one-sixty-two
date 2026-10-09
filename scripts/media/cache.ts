@@ -15,7 +15,7 @@ export function digest(bytes: string | Uint8Array): string {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
-async function atomicWrite(path: string, bytes: string | Uint8Array): Promise<void> {
+export async function atomicWrite(path: string, bytes: string | Uint8Array): Promise<void> {
 	await mkdir(dirname(path), { recursive: true });
 	const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
 	try {
@@ -27,7 +27,7 @@ async function atomicWrite(path: string, bytes: string | Uint8Array): Promise<vo
 	}
 }
 
-async function readVerifiedJson<T>(path: string, request: string): Promise<T | null> {
+export async function readVerifiedJson<T>(path: string, request: string): Promise<T | null> {
 	let bytes: Buffer;
 	try {
 		bytes = await readFile(path);
@@ -55,19 +55,25 @@ async function requestWithRetry<T>(
 		try {
 			const response = await fetch(url, {
 				...init,
+				signal: init?.signal ?? AbortSignal.timeout(30_000),
 				headers: { Accept: '*/*', 'User-Agent': USER_AGENT, ...init?.headers }
 			});
 			if (response.ok) return await readResponse(response);
 			if (response.status !== 429 && response.status < 500) {
-				throw new Error(`HTTP ${response.status} ${response.statusText}`);
+				const body = response.headers.get('content-type')?.includes('json') ? await response.json().catch(() => null) as { detail?: unknown } | null : null;
+				const detail = typeof body?.detail === 'string' ? `: ${body.detail.slice(0, 240)}` : '';
+				throw new PermanentProviderError(`HTTP ${response.status} ${response.statusText}${detail}`);
 			}
 			lastError = new Error(`HTTP ${response.status} ${response.statusText}`);
-			const retryAfter = Number(response.headers.get('retry-after'));
+			const retryHeader = response.headers.get('retry-after');
+			const retryAfter = retryHeader && !/^\d+$/.test(retryHeader) ? (Date.parse(retryHeader) - Date.now()) / 1000 : Number(retryHeader);
+			if (retryAfter > 60) throw new PermanentProviderError(`HTTP ${response.status}; provider requires retry after ${Math.ceil(retryAfter)} seconds`);
 			const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(60_000, retryAfter * 1_000) : 1_000 * 2 ** attempt;
 			const wait = Promise.withResolvers<void>();
 			setTimeout(wait.resolve, delay);
 			await wait.promise;
 		} catch (error) {
+			if (error instanceof PermanentProviderError) throw error;
 			lastError = error;
 			if (attempt < 3) {
 				const wait = Promise.withResolvers<void>();
@@ -78,6 +84,7 @@ async function requestWithRetry<T>(
 	}
 	throw new Error(`Provider request ${digest(url).slice(0, 12)} failed`, { cause: lastError });
 }
+class PermanentProviderError extends Error {}
 
 export async function fetchCachedJson<T>(
 	cacheDir: string,
@@ -86,11 +93,12 @@ export async function fetchCachedJson<T>(
 	url: string,
 	offline: boolean,
 	validate?: (payload: T) => boolean,
-	init?: RequestInit
+	init?: RequestInit,
+	refresh = false
 ): Promise<T> {
 	const path = join(cacheDir, namespace, `${digest(request)}.json`);
 	const cached = await readVerifiedJson<T>(path, request);
-	if (cached !== null && (!validate || validate(cached))) return cached;
+	if ((!refresh || offline) && cached !== null && (!validate || validate(cached))) return cached;
 	if (offline) throw new Error(`Offline media acquisition requires cached ${namespace} response ${digest(request)}`);
 	const payload = await requestWithRetry<T>(url, {
 		...init,

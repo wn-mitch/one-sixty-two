@@ -2,6 +2,7 @@
  import { onMount } from 'svelte';
  import { loadMedia } from '../media/client.ts';
  import type { MediaAsset, MediaManifest } from '../media/types.ts';
+ import { photoLabel } from '../media/photo-policy.ts';
  import { compareId } from '../game/types.ts';
  let media = $state.raw<MediaManifest | null>(null);
  let loading = $state(true);
@@ -16,6 +17,7 @@
   asset: MediaAsset;
   captureEvidenceUrl?: string;
   identityEvidenceUrl?: string;
+  rightsEvidenceUrl?: string;
  };
  const rows = $derived.by(() => {
   if (!media) return [] as Credit[];
@@ -27,10 +29,11 @@
   for (const [id, player] of Object.entries(media.players)) {
    player.photos.forEach((asset, index) => entries.push({
     key: `${id}:photo:${index}`,
-    label: `${player.name}: photo ${asset.year}`,
+    label: `${player.name}: ${photoLabel(asset)}`,
     asset,
     captureEvidenceUrl: asset.captureEvidenceUrl,
-    identityEvidenceUrl: asset.identityEvidenceUrl
+    identityEvidenceUrl: asset.identityEvidenceUrl,
+    rightsEvidenceUrl: asset.evidence?.rightsUrl
    }));
   }
   for (const [id, asset] of Object.entries(media.atmosphere)) {
@@ -65,10 +68,10 @@
 </script>
 
 <div class="image-credits" aria-busy={loading}>
- <p>Player portraits prefer the drafted year. Otherwise the game uses the nearest verified photo from that player's recorded playing career and labels its actual year. A portrait is not evidence of performance in that season. Curated archive photos also link their capture-date and player-identity evidence.</p>
+ <p>Reviewed portraits prefer an MLB playing photo from the card’s decade, then another MLB playing photo, a minor-league photo, another baseball playing uniform, and finally a later coaching or old-timers uniform. Within each group, the nearest evidenced date wins, followed by the matching team and image quality. Approximate and unknown dates are labelled. Previously published career photos remain available while their uniform classifications are reviewed.</p>
  <p>Atmosphere photographs are context only. They do not identify the simulated venue or season. Marks without a verified historical year range are labelled as current franchise marks.</p>
- <p>Image copyright licences are separate from the statistical-data licence and do not grant trademark, privacy, publicity, or likeness rights. Club marks may remain protected by trademark rights; this game is not affiliated with or endorsed by the clubs or league.</p>
- <p>Display files are auto-oriented, stripped of metadata, resized, and re-encoded as WebP. Portraits may be cropped to fit the layout. Original files, creator credits, image licences, and available evidence are linked below.</p>
+ <p>Image copyright licences are separate from the statistical-data licence and do not grant trademark, privacy, publicity, or likeness rights. All club marks identify actual franchises in this game and its season share images. Some reviewed marks rely on an asserted fair-use basis; their copyright disclosure is not a reuse licence or established permission. This game is not affiliated with or endorsed by the clubs or league.</p>
+ <p>Display files are auto-oriented, stripped of metadata, resized, and re-encoded as WebP. Portraits may be cropped to fit the layout. Source files, creator credits, licences or rights disclosures, and available evidence are linked below. Portraits and atmosphere photographs require documented reusable sources.</p>
  {#if loading}
   <p class="muted" role="status">Loading image provenance…</p>
  {:else if error}
@@ -97,6 +100,7 @@
        <a href={row.asset.licenseUrl} rel="license noreferrer" target="_blank">{row.asset.license}</a>
        {#if row.captureEvidenceUrl}<a href={row.captureEvidenceUrl} target="_blank" rel="noreferrer">Capture-date evidence</a>{/if}
        {#if row.identityEvidenceUrl}<a href={row.identityEvidenceUrl} target="_blank" rel="noreferrer">Player-identity evidence</a>{/if}
+       {#if row.rightsEvidenceUrl}<a href={row.rightsEvidenceUrl} target="_blank" rel="noreferrer">Underlying rights evidence</a>{/if}
       </div>
      </div>
     </li>

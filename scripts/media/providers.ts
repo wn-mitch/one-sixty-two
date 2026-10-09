@@ -5,6 +5,25 @@ import type { CommonsCategorySource, CommonsMetadata, WikidataCategory, Wikidata
 const WIKIDATA_ENDPOINT = 'https://query.wikidata.org/sparql';
 const COMMONS_ENDPOINT = 'https://commons.wikimedia.org/w/api.php';
 
+export interface CommonsReviewEvidence { sourceId: string; revision: number; content: string }
+
+/** Preserve the file-description revision so underlying rights and captions remain inspectable offline. */
+export async function acquireCommonsReviewEvidence(cacheDir: string, pageIds: number[], offline: boolean): Promise<CommonsReviewEvidence[]> {
+	const evidence: CommonsReviewEvidence[] = [];
+	for (const batch of batches([...new Set(pageIds)].sort((a, b) => a - b), 40)) {
+		const url = new URL(COMMONS_ENDPOINT);
+		url.search = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', prop: 'revisions', rvprop: 'ids|content', rvslots: 'main', pageids: batch.join('|') }).toString();
+		type Response = { query?: { pages?: Array<{ pageid: number; revisions?: Array<{ revid: number; slots?: { main?: { content?: string } } }> }> } };
+		const response = await fetchCachedJson<Response>(cacheDir, 'review-evidence', `revisions-v1:${batch.join('|')}`, url.toString(), offline,
+			value => Array.isArray(value.query?.pages) && value.query!.pages!.every(page => !!page.revisions?.[0]?.slots?.main?.content));
+		for (const page of response.query!.pages!) {
+			const revision = page.revisions![0];
+			evidence.push({ sourceId: `commons:${page.pageid}`, revision: revision.revid, content: revision.slots!.main!.content! });
+		}
+	}
+	return evidence;
+}
+
 interface SparqlResponse {
 	results?: {
 		bindings?: Array<{
@@ -20,7 +39,7 @@ interface MetadataValue {
 	value?: string;
 }
 
-interface CommonsResponse {
+export interface CommonsResponse {
 	query?: {
 		normalized?: Array<{ from: string; to: string }>;
 		redirects?: Array<{ from: string; to: string }>;
@@ -274,31 +293,8 @@ export async function acquireCommonsMetadata(
 			aliases.set(alias.from.replace(/^File:/, ''), alias.to.replace(/^File:/, ''));
 		}
 		for (const page of response.query?.pages ?? []) {
-			const info = page.imageinfo?.[0];
-			if (page.missing || !page.pageid || !page.title || !info?.url || !info.width || !info.height || !info.mime) continue;
-			const normalizedTitle = page.title.replace(/^File:/, '');
-			const ext = info.extmetadata ?? {};
-			const thumbWithinRequest = info.thumbwidth === undefined || (info.thumbwidth > 0 && info.thumbwidth <= thumbnailWidth);
-			const originalWithinRequest = info.width <= thumbnailWidth && info.height <= thumbnailWidth && info.mime !== 'image/svg+xml';
-			const rawDownload = info.thumburl && thumbWithinRequest ? info.thumburl : (originalWithinRequest ? info.url : null);
-			if (!rawDownload) continue;
-			if (info.mime === 'image/svg+xml' && !new URL(rawDownload).pathname.toLowerCase().endsWith('.png')) continue;
-			const rawCredit = ext.Attribution?.value || ext.Artist?.value || null;
-			const sourceUrl = `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(normalizedTitle).replaceAll('%20', '_')}`;
-			metadata.set(normalizedTitle, {
-				title: normalizedTitle,
-				pageId: page.pageid,
-				width: info.width,
-				height: info.height,
-				mime: info.mime,
-				downloadUrl: cleanUrl(rawDownload),
-				sourceUrl,
-				description: ext.ImageDescription?.value ? stripMarkup(ext.ImageDescription.value) : null,
-				dateOriginal: ext.DateTimeOriginal?.value ? stripMarkup(ext.DateTimeOriginal.value) : null,
-				license: ext.LicenseShortName?.value ? stripMarkup(ext.LicenseShortName.value) : null,
-				licenseUrl: ext.LicenseUrl?.value ? stripMarkup(ext.LicenseUrl.value).replace(/^http:/, 'https:') : null,
-				credit: rawCredit ? stripMarkup(rawCredit) : null
-			});
+			const item = metadataFromCommonsPage(page, thumbnailWidth);
+			if (item) metadata.set(item.title, item);
 		}
 		for (const requestedTitle of group) {
 			let resolvedTitle = requestedTitle;
@@ -314,4 +310,26 @@ export async function acquireCommonsMetadata(
 		onProgress(completed, uniqueTitles.length);
 	}
 	return metadata;
+}
+
+export function metadataFromCommonsPage(page: NonNullable<NonNullable<CommonsResponse['query']>['pages']>[number], thumbnailWidth = 384): CommonsMetadata | null {
+	const info = page.imageinfo?.[0];
+	if (page.missing || !page.pageid || !page.title || !info?.url || !info.width || !info.height || !info.mime) return null;
+	const title = page.title.replace(/^File:/, '');
+	const ext = info.extmetadata ?? {};
+	const value = (key: string) => ext[key]?.value ? stripMarkup(String(ext[key].value)) : null;
+	const thumbWithinRequest = info.thumbwidth === undefined || (info.thumbwidth > 0 && info.thumbwidth <= thumbnailWidth);
+	const originalWithinRequest = info.width <= thumbnailWidth && info.height <= thumbnailWidth && info.mime !== 'image/svg+xml';
+	const rawDownload = info.thumburl && thumbWithinRequest ? info.thumburl : (originalWithinRequest ? info.url : null);
+	if (!rawDownload || (info.mime === 'image/svg+xml' && !new URL(rawDownload).pathname.toLowerCase().endsWith('.png'))) return null;
+	return {
+		title, pageId: page.pageid, width: info.width, height: info.height, mime: info.mime,
+		downloadUrl: cleanUrl(rawDownload),
+		sourceUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(title).replaceAll('%20', '_')}`,
+		description: value('ImageDescription'), dateOriginal: value('DateTimeOriginal'),
+		license: value('LicenseShortName'), licenseUrl: value('LicenseUrl')?.replace(/^http:/, 'https:') ?? null,
+		credit: value('Attribution') || value('Artist'), sourceId: `commons:${page.pageid}`,
+		categories: (value('Categories') ?? '').split('|').filter(Boolean),
+		rightsText: value('UsageTerms') ?? ''
+	};
 }

@@ -1,4 +1,6 @@
 import { animate, type JSAnimation } from 'animejs';
+import { autonomousMotion } from './motion-runtime.ts';
+import { motionSettings } from './motion-settings.svelte.ts';
 
 interface Snapshot {
 	clone: HTMLElement;
@@ -45,9 +47,11 @@ function ghostOf(node: HTMLElement, rect: DOMRect): HTMLElement {
 
 export function createCandidateGridMotion(): CandidateGridMotion {
 	let root: HTMLElement | null = null;
-	let reduced: MediaQueryList | null = null;
-	let snapshots = new Map<string, Snapshot>();
+	let reduced = false;
+	let releaseSettings: (() => void) | null = null;
+	let unsubscribeSettings: (() => void) | null = null;
 	let revision = 0;
+	const snapshots = new Map<string, Snapshot>();
 	const animations = new Set<JSAnimation>();
 	const ghosts = new Set<HTMLElement>();
 	const pendingStyles = new Map<HTMLElement, { transform: string; opacity: string }>();
@@ -68,8 +72,10 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 		ghosts.clear();
 	};
 
-	const onReducedMotionChange = () => {
-		if (reduced?.matches) {
+	const onReducedMotionChange = (next: boolean) => {
+		const changed = next !== reduced;
+		reduced = next;
+		if (changed && reduced) {
 			revision++;
 			snapshots.clear();
 			clear();
@@ -101,8 +107,10 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 	return {
 		attach(node) {
 			root = node;
-			reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-			reduced.addEventListener('change', onReducedMotionChange);
+			releaseSettings = motionSettings.retain();
+			unsubscribeSettings = motionSettings.subscribe(settings => {
+				onReducedMotionChange(settings.reducedMotion);
+			});
 		},
 		detach(node) {
 			if (root !== node) return;
@@ -112,7 +120,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			revision++;
 			clear();
 			snapshots.clear();
-			if (!root || reduced?.matches) return revision;
+			if (!root || reduced) return revision;
 			for (const [key, node] of after()) {
 				const rect = measured(node);
 				if (rect) snapshots.set(key, { rect, clone: ghostOf(node, rect) });
@@ -120,7 +128,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			return revision;
 		},
 		play(nextRevision) {
-			if (nextRevision !== revision || !root || reduced?.matches) return;
+			if (nextRevision !== revision || !root || reduced) return;
 			const nodes = after();
 			const departures: HTMLElement[] = [];
 			const survivors: { node: HTMLElement; x: number; y: number }[] = [];
@@ -157,7 +165,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			const stage = <T>(
 				items: T[], start: (item: T, complete: () => void) => void, complete: () => void
 			) => {
-				if (nextRevision !== revision || reduced?.matches) return;
+				if (nextRevision !== revision || reduced) return;
 				if (!items.length) { complete(); return; }
 				let remaining = items.length;
 				for (const item of items) start(item, () => {
@@ -189,8 +197,11 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 		},
 		destroy() {
 			this.skip();
-			if (reduced) reduced.removeEventListener('change', onReducedMotionChange);
-			reduced = null;
+			unsubscribeSettings?.();
+			releaseSettings?.();
+			unsubscribeSettings = null;
+			releaseSettings = null;
+			reduced = false;
 			root = null;
 		}
 	};
@@ -200,5 +211,112 @@ export function candidateGridMotion(node: HTMLElement, controller: CandidateGrid
 	controller.attach(node);
 	return {
 		destroy: () => controller.detach(node)
+	};
+}
+
+export interface MarqueeOptions {
+	speed: number;
+	direction: 1 | -1;
+}
+
+/**
+ * Moves two identical adjacent copies as one continuous row. Mark the first copy
+ * with `data-marquee-copy` when its width plus the row gap is the repeat distance.
+ */
+export function marquee(node: HTMLElement, initialOptions: MarqueeOptions) {
+	const snapshot = node.style.transform;
+	let options = initialOptions;
+	let distance = 0;
+	let offset = 0;
+	let hovered = false;
+	let focused = false;
+	let destroyed = false;
+
+	const render = () => {
+		if (!distance) {
+			node.style.transform = snapshot;
+			return;
+		}
+		const translated = options.direction === 1 ? -offset : -distance + offset;
+		node.style.transform = `${snapshot ? `${snapshot} ` : ''}translate3d(${translated.toFixed(2)}px, 0, 0)`;
+	};
+
+	const measure = () => {
+		const copy = node.querySelector<HTMLElement>('[data-marquee-copy]');
+		const gap = Number.parseFloat(getComputedStyle(node).columnGap);
+		const layoutGap = Number.isFinite(gap) ? gap : 0;
+		const measured = copy
+			? copy.offsetWidth + layoutGap
+			: (node.scrollWidth + layoutGap) / 2;
+		distance = Number.isFinite(measured) && measured > 0 ? measured : 0;
+		if (distance) offset %= distance;
+		else offset = 0;
+		render();
+		registration.wake();
+	};
+
+	const setHovered = (next: boolean) => {
+		hovered = next;
+		registration.wake();
+	};
+	const onPointerEnter = () => setHovered(true);
+	const onPointerLeave = () => setHovered(false);
+	const onFocusIn = () => {
+		focused = true;
+		registration.wake();
+	};
+	const onFocusOut = (event: FocusEvent) => {
+		if (event.relatedTarget instanceof Node && node.contains(event.relatedTarget)) return;
+		focused = false;
+		registration.wake();
+	};
+	const onAssetSettled = () => measure();
+
+	const registration = autonomousMotion.register(node, {
+		active(settings) {
+			return settings.effectiveEnabled && !hovered && !focused && distance > 0 && options.speed > 0;
+		},
+		frame({ delta }) {
+			offset = (offset + options.speed * delta / 1000) % distance;
+			render();
+		},
+		state(settings, visible) {
+			if (!visible) return;
+			if (!settings.effectiveEnabled) {
+				offset = 0;
+				node.style.transform = snapshot;
+			}
+		}
+	});
+	const unobserveResize = autonomousMotion.observeResize(node, measure);
+	node.addEventListener('pointerenter', onPointerEnter);
+	node.addEventListener('pointerleave', onPointerLeave);
+	node.addEventListener('focusin', onFocusIn);
+	node.addEventListener('focusout', onFocusOut);
+	node.addEventListener('load', onAssetSettled, true);
+	node.addEventListener('error', onAssetSettled, true);
+	queueMicrotask(measure);
+	void document.fonts?.ready.then(() => {
+		if (!destroyed) measure();
+	});
+
+	return {
+		update(next: MarqueeOptions) {
+			options = next;
+			render();
+			registration.wake();
+		},
+		destroy() {
+			destroyed = true;
+			node.removeEventListener('pointerenter', onPointerEnter);
+			node.removeEventListener('pointerleave', onPointerLeave);
+			node.removeEventListener('focusin', onFocusIn);
+			node.removeEventListener('focusout', onFocusOut);
+			node.removeEventListener('load', onAssetSettled, true);
+			node.removeEventListener('error', onAssetSettled, true);
+			unobserveResize();
+			registration.unregister();
+			node.style.transform = snapshot;
+		}
 	};
 }
