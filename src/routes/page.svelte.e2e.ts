@@ -206,6 +206,20 @@ async function finishRoster(page: Page, request: APIRequestContext) {
 	}
 }
 
+test('renders a decodable team mark for every franchise in the homepage strip', async ({ page }) => {
+	await page.goto('/');
+	const marks = page.getByRole('region', { name: 'All 30 franchises', exact: true })
+		.locator('.logo-copy[data-marquee-copy] .team-mark img');
+	await expect(marks).toHaveCount(30);
+	for (const mark of await marks.all()) {
+		await mark.scrollIntoViewIfNeeded();
+		await expect.poll(() => mark.evaluate(node => {
+			const image = node as HTMLImageElement;
+			return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+		})).toBe(true);
+	}
+});
+
 test('keeps the slot choice and draft action reachable after choosing a season', async ({ page, request }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
