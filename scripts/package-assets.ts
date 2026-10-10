@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { cp, lstat, readFile, readdir, rm } from 'node:fs/promises';
+import { cp, lstat, readFile, rm } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -39,33 +39,53 @@ async function retainedMediaVersions(directory: string): Promise<Set<string>> {
 	return keep;
 }
 
-/** Keep rollback archives in static/ while bounding the generated deployment package. */
-export async function packageMediaAssets(root: string): Promise<number> {
-	const directory = join(root, '.svelte-kit/cloudflare/media');
-	const keep = await retainedMediaVersions(directory);
-	const entries = await readdir(directory, { withFileTypes: true });
-	const obsolete = entries.filter(entry => entry.isDirectory() && versionPattern.test(entry.name) && !keep.has(entry.name));
-	for (const entry of obsolete) await rm(join(directory, entry.name), { recursive: true });
-	return obsolete.length;
+/**
+ * Generated datasets, rankings and media are served by the ASSETS binding by URL; nothing in the
+ * SvelteKit bundle enumerates them. They bypass Vite's and the adapter's byte-for-byte copies and
+ * are cloned into the deployment directory after the build instead.
+ */
+const GENERATED = new Set(['data', 'media', 'rankings']);
+
+/** Copy-on-write clone where the filesystem supports it (APFS, Btrfs), an ordinary copy elsewhere. */
+function clone(source: string, target: string, filter?: (file: string) => boolean): Promise<void> {
+	return cp(source, target, { recursive: true, mode: constants.COPYFILE_FICLONE, filter });
 }
 
-/** Bound Vite's asset inventory before it enumerates and copies local rollback archives. */
+/** Stage only the hand-authored static files for Vite; generated sections are packaged after the build. */
 export async function stageBuildAssets(root: string): Promise<string> {
 	const source = join(root, 'static');
 	const directory = join(root, '.cache/build-assets');
-	const keep = await retainedMediaVersions(join(source, 'media'));
+	// Fail before building when the rollback pointers are unusable.
+	await retainedMediaVersions(join(source, 'media'));
 	await rm(directory, { recursive: true, force: true });
-	await cp(source, directory, {
-		recursive: true,
-		mode: constants.COPYFILE_FICLONE,
-		filter(file) {
-			const [section, version] = relative(source, file).split(sep);
-			return section !== 'media' || !version || !versionPattern.test(version) || keep.has(version);
-		}
-	});
+	await clone(source, directory, file => !GENERATED.has(relative(source, file).split(sep)[0]));
 	return directory;
 }
 
+/**
+ * Clone the generated sections into the built deployment directory. Media keeps the current and
+ * previous versions and their referenced dependencies; older local rollback archives stay in static/.
+ * Returns the number of archived media versions left out.
+ */
+export async function packageGeneratedAssets(root: string): Promise<number> {
+	const source = join(root, 'static');
+	const output = join(root, '.svelte-kit/cloudflare');
+	const media = join(source, 'media');
+	const keep = await retainedMediaVersions(media);
+	let omitted = 0;
+	for (const section of GENERATED) {
+		await rm(join(output, section), { recursive: true, force: true });
+		await clone(join(source, section), join(output, section), file => {
+			if (section !== 'media') return true;
+			const version = relative(media, file).split(sep)[0];
+			if (!versionPattern.test(version) || keep.has(version)) return true;
+			if (relative(media, file) === version) omitted++;
+			return false;
+		});
+	}
+	return omitted;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-	console.log(`[assets] Omitted ${await packageMediaAssets(process.cwd())} archived media versions from the deployment package; local rollback archives preserved`);
+	console.log(`[assets] Packaged generated assets; omitted ${await packageGeneratedAssets(process.cwd())} archived media versions (local rollback archives preserved)`);
 }

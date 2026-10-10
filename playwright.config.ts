@@ -7,7 +7,7 @@ export default defineConfig({
 	// only BROWSER.quickAction with a loopback Playwright capture bridge.
 	webServer: {
 		command:
-			'npm run build && node scripts/test-server.ts',
+			'node scripts/test-build.ts && node scripts/test-server.ts',
 		port,
 		// Includes preparing and hashing the reviewed portrait inventory.
 		timeout: 600000,

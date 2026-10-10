@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cp, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { digest } from '../../../scripts/media/cache.ts';
 import { prepareImage } from '../../../scripts/media/images.ts';
-import { packageMediaAssets, stageBuildAssets } from '../../../scripts/package-assets.ts';
+import { packageGeneratedAssets, stageBuildAssets } from '../../../scripts/package-assets.ts';
 import { generateMedia } from '../../../scripts/media/compile.ts';
 import { canonicalJSON } from '../../../scripts/data/compile.ts';
 import { selectPhoto, validateMedia } from './client.ts';
@@ -41,30 +41,39 @@ function review(id = 'archive:synthetic'): ApprovedPhotoReview {
 }
 
 describe('reviewed image acquisition and offline compilation', () => {
-	it('packages current, rollback and referenced media without deleting local archives', async () => {
+	it('packages current, rollback and referenced media without staging generated assets through Vite', async () => {
 		const versions = ['a', 'b', 'c', 'd'].map(letter => letter.repeat(64));
-		const directory = join(root, '.svelte-kit/cloudflare/media');
+		const media = join(root, 'static/media');
 		for (const version of versions) {
-			await mkdir(join(directory, version), { recursive: true });
-			await writeFile(join(directory, version, 'manifest.json'), JSON.stringify({ version,
+			await mkdir(join(media, version), { recursive: true });
+			await writeFile(join(media, version, 'manifest.json'), JSON.stringify({ version,
 				...(version === versions[0] ? { photo: `/media/${versions[2]}/portrait.webp` } : {}) }));
 		}
-		for (const [i, name] of ['current', 'previous'].entries()) await writeFile(join(directory, `${name}.json`), JSON.stringify({ version: versions[i], manifestUrl: `/media/${versions[i]}/manifest.json` }));
-		await cp(directory, join(root, 'static/media'), { recursive: true });
-		await writeFile(join(root, 'static/media', versions[3], 'manifest.json'), 'local archive');
-		const staged = join(await stageBuildAssets(root), 'media');
-		for (const version of versions.slice(0, 3)) expect(await readFile(join(staged, version, 'manifest.json'), 'utf8')).toContain(version);
-		await expect(readFile(join(staged, versions[3], 'manifest.json'))).rejects.toMatchObject({ code: 'ENOENT' });
-		expect(await packageMediaAssets(root)).toBe(1);
-		for (const version of versions.slice(0, 3)) expect(await readFile(join(directory, version, 'manifest.json'), 'utf8')).toContain(version);
-		await expect(readFile(join(directory, versions[3], 'manifest.json'))).rejects.toMatchObject({ code: 'ENOENT' });
-		expect(await readFile(join(root, 'static/media', versions[3], 'manifest.json'), 'utf8')).toBe('local archive');
-		await writeFile(join(directory, 'previous.json'), JSON.stringify({ version: '../unsafe', manifestUrl: '/media/../unsafe/manifest.json' }));
-		await expect(packageMediaAssets(root)).rejects.toThrow('Invalid previous');
-		expect(await readFile(join(directory, versions[1], 'manifest.json'), 'utf8')).toContain(versions[1]);
-		await writeFile(join(root, 'static/media/previous.json'), JSON.stringify({ version: '../unsafe', manifestUrl: '/media/../unsafe/manifest.json' }));
+		for (const [i, name] of ['current', 'previous'].entries()) await writeFile(join(media, `${name}.json`), JSON.stringify({ version: versions[i], manifestUrl: `/media/${versions[i]}/manifest.json` }));
+		await writeFile(join(media, versions[3], 'manifest.json'), 'local archive');
+		for (const section of ['data', 'rankings', 'fonts']) {
+			await mkdir(join(root, 'static', section, 'v1'), { recursive: true });
+			await writeFile(join(root, 'static', section, 'v1', 'file.json'), section);
+		}
+		const staged = await stageBuildAssets(root);
+		expect(await readFile(join(staged, 'fonts/v1/file.json'), 'utf8')).toBe('fonts');
+		for (const section of ['data', 'rankings', 'media']) await expect(readFile(join(staged, section, 'v1/file.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+		await expect(readFile(join(staged, 'media/current.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+		const output = join(root, '.svelte-kit/cloudflare');
+		await mkdir(join(output, 'media', versions[3]), { recursive: true });
+		await writeFile(join(output, 'media', versions[3], 'manifest.json'), 'stale package');
+		expect(await packageGeneratedAssets(root)).toBe(1);
+		for (const version of versions.slice(0, 3)) expect(await readFile(join(output, 'media', version, 'manifest.json'), 'utf8')).toContain(version);
+		await expect(readFile(join(output, 'media', versions[3], 'manifest.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+		expect(JSON.parse(await readFile(join(output, 'media/current.json'), 'utf8')).version).toBe(versions[0]);
+		for (const section of ['data', 'rankings']) expect(await readFile(join(output, section, 'v1/file.json'), 'utf8')).toBe(section);
+		expect(await readFile(join(media, versions[3], 'manifest.json'), 'utf8')).toBe('local archive');
+
+		await writeFile(join(media, 'previous.json'), JSON.stringify({ version: '../unsafe', manifestUrl: '/media/../unsafe/manifest.json' }));
 		await expect(stageBuildAssets(root)).rejects.toThrow('Invalid previous');
-		expect(await readFile(join(staged, versions[2], 'manifest.json'), 'utf8')).toContain(versions[2]);
+		await expect(packageGeneratedAssets(root)).rejects.toThrow('Invalid previous');
+		expect(await readFile(join(output, 'media', versions[1], 'manifest.json'), 'utf8')).toContain(versions[1]);
 	});
 	it('reports every individual selection and requires review of every removed source', async () => {
 		const photo = { url: '/media/example/image.webp', width: 80, height: 40, year: 1996, sourceUrl: metadata.sourceUrl, sourceId: 'archive:first', license: 'CC0', licenseUrl: metadata.licenseUrl, credit: metadata.credit };

@@ -68,10 +68,17 @@ async function capture(browser: Browser, options: ScreenshotOptions): Promise<Bu
 		const page = await context.newPage();
 		page.setDefaultTimeout(options.actionTimeout);
 		await page.goto(options.url, { waitUntil: 'networkidle', timeout: options.gotoOptions.timeout });
-		await page.waitForSelector(options.waitForSelector.selector, {
-			state: 'visible',
-			timeout: options.waitForSelector.timeout
-		});
+		try {
+			await page.waitForSelector(options.waitForSelector.selector, {
+				state: 'visible',
+				timeout: options.waitForSelector.timeout
+			});
+		} catch (error) {
+			// Surface the capture route's own readiness failure instead of a bare selector timeout.
+			const failure = await page.locator('[data-capture-failure]').getAttribute('data-capture-failure', { timeout: 1000 }).catch(() => null);
+			if (failure) console.error(`[capture-bridge] ${options.url}: ${failure}`);
+			throw error;
+		}
 		return await page.locator(options.selector).screenshot({
 			type: options.screenshotOptions.type,
 			timeout: options.actionTimeout
