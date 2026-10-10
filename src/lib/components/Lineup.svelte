@@ -9,6 +9,7 @@
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import RosterAssignment from './RosterAssignment.svelte';
+ import { createOrderMotion, type OrderMotion } from './order-motion.ts';
  let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onsimulate }: {
   draft: Draft;
   manifest: Manifest;
@@ -29,13 +30,20 @@
   originalOrder: string[]; active: boolean; insertion: number | null;
  };
  let drag = $state<Drag | null>(null);
+ /** Row geometry measured when a drag activates; transforms never change these layout positions. */
+ type DragLayout = { list: HTMLOListElement; rows: HTMLElement[]; tops: number[]; heights: number[]; source: number; startScroll: number; shifts: number[] };
+ let layout: DragLayout | null = null;
+ let motion: OrderMotion | null = null;
  let scrollFrame = 0;
  let suppressClickUntil = 0;
  let media = $state.raw<MediaManifest | null>(null);
  let mediaStatus = $state<CardMediaStatus>('loading');
  let inspectedSeasonId = $state<string | null>(null);
  let inspectionTrigger: HTMLButtonElement | null = null;
- let review = $state<CardReview>();
+ let inspectionSource = $state<HTMLElement | null>(null);
+ let inspectedOpened = $state(false);
+ let inspectedTurned = $state(false);
+ let inspectedTextBack = $state(false);
  let lineupHeading = $state<HTMLHeadingElement>();
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
  const bySeasonPick = $derived(new Map(draft.picks.map(pick => [pick.seasonId, pick])));
@@ -67,30 +75,88 @@
   announcement = `${profile?.displayName ?? 'Player'}${profile ? ` ${profile.year}` : ''} moved to ${kind === 'batting' ? 'batting position' : 'rotation position'} ${destination + 1}.`;
  }
 
+ /** Raises the tapped card from its row thumbnail, the same flight the draft field uses. */
  async function inspect(seasonId: string, trigger: HTMLButtonElement): Promise<void> {
   if (drag?.active || performance.now() < suppressClickUntil || !cardViews.has(seasonId)) return;
+  inspectedOpened = false;
+  inspectedTurned = false;
+  inspectedTextBack = false;
   inspectionTrigger = trigger;
+  inspectionSource = trigger.querySelector<HTMLElement>('.miniature .card') ?? trigger.querySelector<HTMLElement>('.card-frame');
   inspectedSeasonId = seasonId;
   await tick();
-  review?.focusHeading();
+  if (inspectedSeasonId === seasonId) inspectedOpened = true;
  }
 
  function closeInspection(): void {
   const trigger = inspectionTrigger;
   inspectedSeasonId = null;
   inspectionTrigger = null;
+  inspectionSource = null;
+  inspectedOpened = false;
+  inspectedTurned = false;
+  inspectedTextBack = false;
   void tick().then(() => {
    if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
    else if (lineupHeading?.isConnected) lineupHeading.focus({ preventScroll: true });
   });
  }
 
- function cancelDrag(): void {
+ /** Reorders with a FLIP: rows move from where they appear now to their new slots. */
+ function animateOrder(list: HTMLElement | null, change: () => void, lift?: string): void {
+  if (!list || !motion) { change(); return; }
+  const before = motion.capture(list);
+  change();
+  void tick().then(() => motion?.settle(list, before, lift));
+ }
+
+ function moveBy(kind: OrderKind, seasonId: string, destination: number, trigger: HTMLElement): void {
+  animateOrder(trigger.closest('ol'), () => commitOrder(kind, seasonId, destination));
+ }
+
+ /** Ends any drag; `apply` runs the committed reorder while the lifted row settles into place. */
+ function cancelDrag(apply?: () => void): void {
   const previous = drag;
+  const measured = layout;
   drag = null;
+  layout = null;
   cancelAnimationFrame(scrollFrame);
   if (previous?.active) suppressClickUntil = performance.now() + 400;
   if (previous?.handle.hasPointerCapture(previous.pointerId)) previous.handle.releasePointerCapture(previous.pointerId);
+  if (measured && previous) animateOrder(measured.list, () => apply?.(), previous.seasonId);
+  else apply?.();
+ }
+
+ function measureLayout(current: Drag): DragLayout | null {
+  const row = current.handle.closest<HTMLElement>('li');
+  const list = row?.closest<HTMLOListElement>('[data-order-kind]');
+  if (!row || !list) return null;
+  const rows = Array.from(list.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
+  const top = list.getBoundingClientRect().top;
+  const source = rows.indexOf(row);
+  if (source < 0) return null;
+  const rects = rows.map(child => child.getBoundingClientRect());
+  return {
+   list, rows, source, startScroll: window.scrollY,
+   tops: rects.map(rect => rect.top - top), heights: rects.map(rect => rect.height), shifts: rows.map(() => 0)
+  };
+ }
+
+ /** Follows the pointer with the lifted row and slides its neighbours aside to open the insertion gap. */
+ function renderDrag(): void {
+  if (!drag?.active || !layout || !motion) return;
+  const { rows, source, heights } = layout;
+  motion.place(rows[source], drag.y - drag.startY + window.scrollY - layout.startScroll);
+  const insertion = drag.insertion;
+  const destination = insertion === null ? source : insertion - (source < insertion ? 1 : 0);
+  rows.forEach((row, index) => {
+   if (index === source) return;
+   const shift = source < index && index <= destination ? -heights[source] : destination <= index && index < source ? heights[source] : 0;
+   if (shift !== layout!.shifts[index]) {
+    layout!.shifts[index] = shift;
+    motion!.slide(row, shift);
+   }
+  });
  }
 
  function startDrag(event: PointerEvent, kind: OrderKind, seasonId: string): void {
@@ -105,18 +171,14 @@
  }
 
  function updateInsertion(): void {
-  if (!drag?.active) return;
-  const list = document.elementFromPoint(drag.x, drag.y)?.closest<HTMLOListElement>('[data-order-kind]');
-  if (!list || list.dataset.orderKind !== drag.kind) {
-   drag.insertion = null;
-   return;
-  }
-  const rows = Array.from(list.children);
-  const boundary = rows.findIndex(row => {
-   const rect = row.getBoundingClientRect();
-   return drag!.y < rect.top + rect.height / 2;
-  });
-  drag.insertion = boundary === -1 ? rows.length : boundary;
+  if (!drag?.active || !layout) return;
+  const bounds = layout.list.getBoundingClientRect();
+  const y = drag.y - bounds.top;
+  // Only the drag's own list accepts a drop; midpoints use untransformed layout positions.
+  drag.insertion = drag.x < bounds.left || drag.x > bounds.right || y < 0 || y > bounds.height
+   ? null
+   : layout.tops.filter((top, index) => top + layout!.heights[index] / 2 <= y).length;
+  renderDrag();
  }
 
  function scrollWhileDragging(): void {
@@ -137,6 +199,7 @@
   drag.y = event.clientY;
   if (!drag.active && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) >= 6) {
    drag.active = true;
+   layout = measureLayout(drag);
    scrollFrame = requestAnimationFrame(scrollWhileDragging);
   }
   updateInsertion();
@@ -149,13 +212,18 @@
   if (completed?.active && completed.insertion !== null && !busy) {
    const source = orderFor(completed.kind).indexOf(completed.seasonId);
    const destination = completed.insertion - (source < completed.insertion ? 1 : 0);
-   commitOrder(completed.kind, completed.seasonId, destination);
+   cancelDrag(() => commitOrder(completed.kind, completed.seasonId, destination));
+   return;
   }
   cancelDrag();
  }
 
  function cancelPointer(event: PointerEvent): void {
   if (event.pointerId === drag?.pointerId) cancelDrag();
+ }
+
+ function cancelDragKey(event: KeyboardEvent): void {
+  if (event.key === 'Escape') cancelDrag();
  }
 
  function preventDragClick(event: MouseEvent): void {
@@ -181,16 +249,23 @@
 
  onMount(() => {
   let disposed = false;
+  motion = createOrderMotion();
   void loadMedia().then(value => {
    if (!disposed) { media = value; mediaStatus = 'ready'; }
   }).catch(() => {
    if (!disposed) mediaStatus = 'unavailable';
   });
-  return () => { disposed = true; cancelDrag(); };
+  return () => {
+   disposed = true;
+   layout = null;
+   cancelDrag();
+   motion?.destroy();
+   motion = null;
+  };
  });
 </script>
 
-<svelte:window onpointermove={moveDrag} onpointerup={finishDrag} onpointercancel={cancelPointer} onblur={cancelDrag} onkeydown={event => { if (event.key === 'Escape') cancelDrag(); }} onclickcapture={preventDragClick} />
+<svelte:window onpointermove={moveDrag} onpointerup={finishDrag} onpointercancel={cancelPointer} onblur={() => cancelDrag()} onkeydown={cancelDragKey} onclickcapture={preventDragClick} />
 
 <section class="lineup" aria-label="Set your lineup" aria-busy={busy}>
  <header>
@@ -224,7 +299,7 @@
  </div>
  {#if inspectedCard}
   {#key inspectedSeasonId}
-   <CardReview id="lineup-card-review" bind:this={review} s={inspectedCard} onClose={closeInspection} />
+   <CardReview id="lineup-card-review" s={inspectedCard} bind:opened={inspectedOpened} bind:turned={inspectedTurned} bind:textBack={inspectedTextBack} showControl={false} sourceElement={inspectionSource} raisedOnly onClose={closeInspection} />
   {/key}
  {/if}
  <footer class="simulate">
@@ -236,7 +311,7 @@
 {#snippet artwork(profile: Profile)}
  {@const card = cardViews.get(profile.seasonId)}
  {#if card}
-  <button type="button" class="card-trigger" aria-label={`Inspect ${profile.year} ${profile.displayName} card`} aria-expanded={inspectedSeasonId === profile.seasonId} aria-controls="lineup-card-review" onclick={event => inspect(profile.seasonId, event.currentTarget)}>
+  <button type="button" class="card-trigger" aria-label={`Inspect ${profile.year} ${profile.displayName} card`} aria-expanded={inspectedSeasonId === profile.seasonId && inspectedOpened} aria-controls="lineup-card-review" onclick={event => inspect(profile.seasonId, event.currentTarget)}>
    <span class="miniature" aria-hidden="true" inert>
     <Card s={card} face="front" thumbnail interactive={false} onDetails={() => {}} />
    </span>
@@ -298,8 +373,8 @@
      {#if profile}{@render stats(profile, kind === 'batting' ? 'batting' : 'starter')}{/if}
     </div>
     <div class="move-controls">
-     <button type="button" class="quiet move" disabled={busy || index === 0} aria-label="Move {label} up in {listName}" onclick={() => commitOrder(kind, seasonId, index - 1)}><span aria-hidden="true">↑</span></button>
-     <button type="button" class="quiet move" disabled={busy || index === order.length - 1} aria-label="Move {label} down in {listName}" onclick={() => commitOrder(kind, seasonId, index + 1)}><span aria-hidden="true">↓</span></button>
+     <button type="button" class="quiet move" disabled={busy || index === 0} aria-label="Move {label} up in {listName}" onclick={event => moveBy(kind, seasonId, index - 1, event.currentTarget)}><span aria-hidden="true">↑</span></button>
+     <button type="button" class="quiet move" disabled={busy || index === order.length - 1} aria-label="Move {label} down in {listName}" onclick={event => moveBy(kind, seasonId, index + 1, event.currentTarget)}><span aria-hidden="true">↓</span></button>
     </div>
    </li>
   {/each}
@@ -346,10 +421,8 @@
  .drag-source .drag-handle { cursor: grabbing; }
  .fixed-label { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: var(--text-sm); font-weight: 750; letter-spacing: .04em; }
  .move { width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: var(--text-lg); }
- .drag-source { background: var(--surface-raised); }
- .insert-before::before, .insert-after::after { content: ''; position: absolute; inset-inline: 0; height: 3px; background: var(--accent); pointer-events: none; }
- .insert-before::before { top: 0; }
- .insert-after::after { bottom: 0; }
+ /* The lifted row floats above neighbours that slide aside; the opened gap marks the insertion point. */
+ .drag-source { z-index: 2; background: var(--surface-raised); border-radius: var(--radius); box-shadow: 0 12px 32px oklch(8% .01 255 / .52); }
 
  .assignment-control { flex: 0 0 5.5rem; min-width: 0; }
  .stats { display: flex; gap: var(--space-3); font-variant-numeric: tabular-nums; }

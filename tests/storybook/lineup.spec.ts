@@ -18,7 +18,7 @@ async function dragTo(page: Page, handle: Locator, target: Locator, after = true
 }
 
 test.describe('lineup editor', () => {
-	test('keeps the editor within a 320px viewport and restores focus after inline review', async ({ page }) => {
+	test('keeps the editor within a 320px viewport and raises a tapped card from its row', async ({ page }) => {
 		await page.setViewportSize({ width: 320, height: 800 });
 		await openStory(page, 'lineup-editor--complete');
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -26,15 +26,14 @@ test.describe('lineup editor', () => {
 		await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 		await expect(trigger).toHaveAttribute('aria-controls', 'lineup-card-review');
 		await trigger.click();
-		const review = page.locator('#lineup-card-review');
-		await expect(review).toBeVisible();
+		const review = page.locator('#lineup-card-review.raised-only');
+		await expect(review.locator('[data-card-reader]')).toBeVisible();
+		await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+		await expect(review.getByRole('button', { name: 'Turn over', exact: true })).toBeFocused();
 		await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-		await expect(review.getByRole('heading').first()).toBeFocused();
-		await expect(page.getByRole('dialog')).toHaveCount(0);
 		await page.keyboard.press('Escape');
-		await expect(review).toBeVisible();
-		await review.getByRole('button', { name: 'Hide card', exact: true }).click();
 		await expect(review).toHaveCount(0);
+		await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 		await expect(trigger).toBeFocused();
 	});
 
@@ -47,9 +46,13 @@ test.describe('lineup editor', () => {
 		await dragTo(page, list.locator('.drag-handle').first(), list.locator('li').nth(3));
 		await expect(list.locator('.insert-before')).toHaveCount(1);
 		await expect(list.locator('li').first()).toHaveAttribute('data-season-id', before[0]);
+		// The lifted row follows the pointer while the rows it passes slide up to open the gap.
+		const offsets = () => list.locator(':scope > li').evaluateAll(rows => rows.map(row => new DOMMatrixReadOnly(getComputedStyle(row).transform).m42));
+		await expect.poll(async () => (await offsets()).map(Math.sign)).toEqual([1, -1, -1, -1, 0, 0, 0, 0, 0]);
 		await page.mouse.up();
 		await expect.poll(() => identities(list)).toEqual([...before.slice(1, 4), before[0], ...before.slice(4)]);
 		await expect(page.locator('.announcement')).toContainText('moved to batting position 4');
+		await expect.poll(offsets).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0]);
 		await expect(page.locator('#lineup-card-review')).toHaveCount(0);
 		const afterAssignments = await list.locator('select').evaluateAll(nodes => nodes.map(node => [node.closest('[data-roster-assignment]')!.getAttribute('data-roster-assignment'), node.value]));
 		expect(afterAssignments.sort()).toEqual(assignments.sort());
@@ -126,6 +129,8 @@ test.describe('lineup editor', () => {
 		await client.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
 		expect(await identities(list)).toEqual(before);
 		await expect(list.locator('.drag-source')).toHaveCount(0);
+		// Rows slide back after a cancel; touch again once they are at rest under the original point.
+		await expect.poll(() => list.locator(':scope > li').evaluateAll(rows => rows.every(row => !row.style.transform))).toBe(true);
 		await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
 		await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [to] });
 		await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
