@@ -1,13 +1,14 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { SILVER } from '../cards/finish.ts';
 	import { STOCK, roles } from '../cards/tokens.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
 	import { EASE_IN_OUT, EASE_OUT, MOTION } from '../motion-timing.ts';
 	import type { Roll } from '../game/types.ts';
 	import TeamLogo from './TeamLogo.svelte';
+	import { loadMedia, selectLogo } from '../media/client.ts';
 
-	let { roll, franchiseName, years, teamColor, pickNumber, pickCount, disabled = false, flyTarget, onOpen, onArrive, onDealt }: {
+	let { roll, franchiseName, years, teamColor, pickNumber, pickCount, marks = [], disabled = false, flyTarget, onOpen, onArrive, onDealt }: {
 		/** The committed roll; it arrives after `onOpen` commits it. */
 		roll: Roll | null;
 		franchiseName?: string;
@@ -15,6 +16,8 @@
 		teamColor?: string;
 		pickNumber: number;
 		pickCount: number;
+		/** Franchise ids the sealed pack's coin turns through. */
+		marks?: readonly string[];
 		disabled?: boolean;
 		/** Where the dealt card lands: the header's roll identity. */
 		flyTarget: () => HTMLElement | null;
@@ -37,6 +40,21 @@
 	const palette = $derived(teamColor ? roles({ primary: teamColor, secondary: STOCK }) : null);
 	const cardStyle = $derived(palette ? `--deal-ground: ${palette.field}; --deal-ink: ${palette.onField};` : undefined);
 	const running = new Set<Animation>();
+	let coin = $state<HTMLElement>();
+	// Each pick starts the coin somewhere new in the league.
+	let markIndex = $state(untrack(() => pickNumber * 7));
+	const frontMark = $derived(marks.length ? marks[markIndex % marks.length] : null);
+	const backMark = $derived(marks.length ? marks[(markIndex + 1) % marks.length] : null);
+
+	/** The coin passes edge-on at each turn boundary, so both faces take the next two marks unseen. */
+	function advanceMarks(): void {
+		markIndex += 2;
+	}
+
+	/** Whips the coin through the league while the pack tears and the card pulls. */
+	function spinFast(): void {
+		for (const animation of coin?.getAnimations() ?? []) animation.updatePlaybackRate(MOTION.markSpinBurst);
+	}
 
 	function play(element: HTMLElement | undefined, keyframes: Keyframe[], options: KeyframeAnimationOptions): Promise<void> {
 		if (!element) return Promise.resolve();
@@ -59,6 +77,7 @@
 			return;
 		}
 		if (appSettings.effectiveEnabled) {
+			spinFast();
 			await Promise.all([
 				play(seal, [{ transform: 'none', opacity: 1 }, { transform: 'translate(18%, -140%) rotate(9deg)', opacity: 0 }], { duration: MOTION.packTear }),
 				play(pack, [{ transform: 'none' }, { transform: 'translateY(.35rem) rotate(-1deg)' }], { duration: MOTION.packTear })
@@ -113,6 +132,18 @@
 
 	onMount(() => {
 		const release = appSettings.retain();
+		// A fast spin shows a new mark every few frames; warm the cache so none of them flash in blank.
+		void loadMedia().then(media => {
+			for (const id of marks) {
+				const url = selectLogo(media, id)?.asset.url;
+				if (url) new Image().src = url;
+			}
+		}).catch(() => {});
+		// Each pack rises into place, so the screen it replaces hands off rather than cutting.
+		if (appSettings.effectiveEnabled) {
+			const speed = appSettings.snapshot.cardSpeed || 1;
+			void play(pack, [{ transform: 'translateY(3rem)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: MOTION.packEnter / speed, fill: 'backwards' });
+		}
 		return () => {
 			for (const animation of running) animation.cancel();
 			release();
@@ -147,6 +178,12 @@
 		<button id="roll-next" type="button" class="pack" bind:this={pack} aria-label="Roll next franchise" disabled={disabled || stage !== 'sealed'} onclick={open} style:--foil={SILVER}>
 			<span class="seal" bind:this={seal} aria-hidden="true"></span>
 			<span class="pack-face" aria-hidden="true">
+				{#if frontMark && backMark}
+					<span class="coin" class:spinning={appSettings.effectiveEnabled} style:--mark-spin="{MOTION.markSpin}ms" bind:this={coin} onanimationiteration={advanceMarks}>
+						<span class="coin-face"><TeamLogo franchiseId={frontMark} size="small" /></span>
+						<span class="coin-face coin-back"><TeamLogo franchiseId={backMark} size="small" /></span>
+					</span>
+				{/if}
 				<span class="wordmark"><span class="mark"></span>162-0</span>
 				<span class="pack-title">Franchise pack</span>
 				<span class="pack-count">Pick {pickNumber} of {pickCount}</span>
@@ -158,8 +195,9 @@
 </div>
 
 <style>
-	.foil-pack { display: grid; justify-items: center; gap: var(--space-3); padding-block: var(--space-8); }
-	.stage { position: relative; display: grid; width: min(11.5rem, 52vw); aspect-ratio: 5 / 7.4; perspective: 900px; }
+	/* The dealt card rises 62% of its 7.4/5 height out of the pack, so the top padding reserves that rise below the sticky header. */
+	.foil-pack { --stage-width: min(11.5rem, 52vw); display: grid; justify-items: center; gap: var(--space-3); padding-block: calc(var(--stage-width) * 7.4 / 5 * .62 + var(--space-4)) var(--space-8); }
+	.stage { position: relative; display: grid; width: var(--stage-width); aspect-ratio: 5 / 7.4; perspective: 900px; }
 	.pack, .dealt-card { grid-area: 1 / 1; }
 	.pack {
 		--mx: 30%;
@@ -210,6 +248,16 @@
 		background: oklch(16% .012 255 / .92);
 		border-block: 3px solid oklch(100% 0 0 / .6);
 	}
+	.coin { position: relative; width: 4.5rem; aspect-ratio: 1; margin-bottom: var(--space-1); transform-style: preserve-3d; transform: rotateY(0deg); }
+	/* Each turn runs edge-on to edge-on, so the marks change where neither face can be seen. */
+	.coin.spinning { animation: coin-turn var(--mark-spin) linear infinite; }
+	.coin-face { position: absolute; inset: 0; display: grid; place-items: center; border: 2px solid oklch(100% 0 0 / .6); border-radius: 50%; background: oklch(96% .004 255); overflow: hidden; backface-visibility: hidden; box-shadow: inset 0 0 0 3px oklch(16% .012 255 / .9); }
+	.coin-back { transform: rotateY(180deg); }
+	/* 58% keeps a square mark's corners (its diagonal is 1.41× its side) inside the rim. */
+	.coin-face :global(.team-mark) { width: 58%; height: auto; aspect-ratio: 1; }
+	.coin-face :global(.team-mark img) { width: 100%; height: 100%; object-fit: contain; }
+	@keyframes coin-turn { from { transform: rotateY(-90deg); } to { transform: rotateY(270deg); } }
+	@media (prefers-reduced-motion: reduce) { .coin.spinning { animation: none; } }
 	.wordmark { display: inline-flex; align-items: center; gap: .45rem; font-size: 1.35rem; font-weight: 850; letter-spacing: -.04em; }
 	.mark { width: .55rem; height: .55rem; border: 2px solid currentColor; transform: rotate(45deg); }
 	.pack-title { font: italic 900 1.15rem / 1 'Barlow Condensed', sans-serif; letter-spacing: .02em; text-transform: uppercase; color: var(--accent); }

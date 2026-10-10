@@ -103,6 +103,14 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
  const tape = page.getByRole('region', { name: /Aces vs Bombers/ });
  await expect(tape.getByRole('row', { name: /Series won head-to-head/ })).toContainText(champion === 'Aces' ? /1\s*Series won head-to-head\s*0/ : /0\s*Series won head-to-head\s*1/);
  await expect(tape.getByRole('link', { name: 'Play best-of-five' })).toHaveAttribute('href', /^\/h2h#a=.+&an=Aces&b=.+&bn=Bombers$/);
+ // A saved club returns to its own full results page without disturbing the active run.
+ await page.goto('/seasons');
+ await tile('Aces').click();
+ const results = page.getByRole('region', { name: 'Aces' }).getByRole('link', { name: 'Full season results' });
+ await expect(results).toHaveAttribute('href', `/#replay=${library[0].token}`);
+ await results.click();
+ await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120000 });
+ expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBe(ACTIVE_SAVE);
 });
 
 test('names the broken link instead of starting a series', async ({ page }) => {

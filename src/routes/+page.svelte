@@ -2,6 +2,8 @@
  import { onMount, tick } from 'svelte';
  import Welcome from '#lib/components/Welcome.svelte';
  import ConfirmNewDraft from '#lib/components/ConfirmNewDraft.svelte';
+ import ErrorDialog from '#lib/components/ErrorDialog.svelte';
+ import { freeze, morphInto, riseIn, stash, take } from '#lib/components/phase-motion.ts';
  import { createCardViewModel, type CardMediaStatus } from '#lib/cards/view-model.ts';
  import { loadShowcase } from '#lib/game/data.ts';
  import type { ShowcaseCard } from '#lib/game/types.ts';
@@ -60,20 +62,40 @@
    currentSession?.dispose();
   };
  });
+ const stages = {
+  stadium: () => { if (!StadiumDeck) return import('#lib/components/StadiumDeck.svelte').then(({ default: component }) => { StadiumDeck = component; }); },
+  draft: () => { if (!DraftBoard) return import('#lib/components/DraftBoard.svelte').then(({ default: component }) => { DraftBoard = component; }); },
+  lineup: () => { if (!Lineup) return import('#lib/components/Lineup.svelte').then(({ default: component }) => { Lineup = component; }); },
+  progress: () => { if (!Progress) return import('#lib/components/Progress.svelte').then(({ default: component }) => { Progress = component; }); },
+  results: () => { if (!Results) return import('#lib/components/Results.svelte').then(({ default: component }) => { Results = component; }); }
+ };
  $effect(() => {
   const phase = session?.phase;
   const failed = () => { phaseLoadError = 'This stage could not load. Reload the page to try again.'; };
-  if (phase === 'stadium' && !StadiumDeck) {
-   void import('#lib/components/StadiumDeck.svelte').then(({ default: component }) => { StadiumDeck = component; }).catch(failed);
-  } else if ((phase === 'ready' || phase === 'revealing' || phase === 'choosing') && !DraftBoard) {
-   void import('#lib/components/DraftBoard.svelte').then(({ default: component }) => { DraftBoard = component; }).catch(failed);
-  } else if (phase === 'lineup' && !Lineup) {
-   void import('#lib/components/Lineup.svelte').then(({ default: component }) => { Lineup = component; }).catch(failed);
-  } else if (phase === 'simulating' && !Progress) {
-   void import('#lib/components/Progress.svelte').then(({ default: component }) => { Progress = component; }).catch(failed);
-  } else if (phase === 'results' && !Results) {
-   void import('#lib/components/Results.svelte').then(({ default: component }) => { Results = component; }).catch(failed);
+  const current = phase === 'stadium' ? 'stadium' : phase === 'ready' || phase === 'revealing' || phase === 'choosing' ? 'draft' : phase === 'lineup' ? 'lineup' : phase === 'simulating' ? 'progress' : phase === 'results' ? 'results' : null;
+  if (!current) return;
+  void stages[current]()?.catch(failed);
+  // The next stage loads ahead so its hand-off plays the moment the phase changes, with no loading frame between.
+  const next = { stadium: 'draft', draft: 'lineup', lineup: 'progress', progress: 'results', results: null } as const;
+  const upcoming = next[current];
+  if (upcoming) void stages[upcoming]()?.catch(() => {});
+ });
+ // The season's running record is carried onto the results scoreboard instead of cutting away.
+ let previousPhase: string | undefined;
+ $effect.pre(() => {
+  const phase = session?.phase;
+  if (previousPhase === 'simulating' && phase === 'results') {
+   const record = document.querySelector<HTMLElement>('.progress-shell .record:not(.muted)');
+   const result = session?.result;
+   if (record && result) {
+    const clone = freeze(record);
+    // A skipped reveal leaves a partial count on screen; the copy carries the final record so it lands on matching numbers.
+    const [wins, losses] = clone.querySelectorAll<HTMLElement>('.win, .loss');
+    if (wins && losses) { wins.textContent = `${result.wins} W`; losses.textContent = `${result.losses} L`; }
+    stash('record', new Map([['record', record.getBoundingClientRect()]]), new Map([['record', clone]]));
+   }
   }
+  previousPhase = phase;
  });
  $effect(() => {
   const manifest = session?.manifest ?? null;
@@ -124,25 +146,35 @@
    if (phase === 'results') window.scrollTo(0, 0);
   });
  });
+ $effect(() => {
+  if (session?.phase !== 'results' || !Results) return;
+  const arrival = take('record');
+  if (arrival) void tick().then(() => {
+   const from = arrival.rects.get('record');
+   const clone = arrival.clones.get('record');
+   const heading = document.querySelector<HTMLElement>('#results-heading');
+   if (from && clone && heading) morphInto(clone, from, heading);
+   riseIn(document.querySelectorAll<HTMLElement>('.scoreboard > :not(.record-block), .results > :not(.scoreboard)'), 160);
+  });
+ });
 </script>
 
 
 <main class:home-start={!session || session.phase === 'start'}>
- {#if gameLoadError || phaseLoadError}
-  <div class="error" role="alert"><p>{gameLoadError || phaseLoadError}</p></div>
- {/if}
+ <ErrorDialog message={gameLoadError || phaseLoadError} onDismiss={() => { gameLoadError = ''; phaseLoadError = ''; }}>
+  {#snippet actions()}<button type="button" class="primary" onclick={() => location.reload()}>Reload</button>{/snippet}
+ </ErrorDialog>
  {#if session}
   {@const currentSession = session}
   <div class="sr-only" aria-live="polite" aria-atomic="true">{currentSession.announce}</div>
   <div class="session-feedback">
    {#if currentSession.storageNotice}<p class="notice">{currentSession.storageNotice}</p>{/if}
-   {#if currentSession.error}
-    <div class="error" role="alert">
-     <p>{currentSession.error}</p>
-     {#if currentSession.canRetry}<button class="secondary" disabled={currentSession.loading} onclick={() => void currentSession.retry()}>Retry</button>{/if}
-     {#if currentSession.incompatible}<button class="secondary" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>Start new draft</button>{/if}
-    </div>
-   {/if}
+   <ErrorDialog message={currentSession.error} onDismiss={() => currentSession.error = ''}>
+    {#snippet actions()}
+     {#if currentSession.canRetry}<button type="button" class="primary" disabled={currentSession.loading} onclick={() => void currentSession.retry()}>Retry</button>{/if}
+     {#if currentSession.incompatible}<button type="button" class="primary" disabled={currentSession.loading} onclick={() => { currentSession.error = ''; currentSession.requestNew(); }}>Start new draft</button>{/if}
+    {/snippet}
+   </ErrorDialog>
    <ConfirmNewDraft open={currentSession.confirmNew} onKeep={() => currentSession.confirmNew = false} onDiscard={() => void currentSession.startNew()} />
   </div>
 
@@ -157,7 +189,7 @@
    {:else if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
     <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if DraftBoard}
-     <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} error={currentSession.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
+     <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
     {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the draft…</span></div>{/if}
    {:else if currentSession.phase === 'lineup'}
     <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
@@ -195,8 +227,6 @@
  }
  .draft-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
  .draft-top button { flex: none; white-space: nowrap; }
- .error p { margin: 0 0 var(--space-3); }
- .error button + button { margin-left: var(--space-2); }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
  @media (max-width: 24rem) {
   .draft-top .eyebrow { max-width: 10rem; }

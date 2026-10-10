@@ -1,8 +1,9 @@
 import type { CardViewModel } from '../cards/view-model.ts';
 import type { DEFENSE_METHOD_VERSION, MODEL_VERSION, ReplaySchemaVersion, RULES_VERSION, Slot, VALUATION_VERSION } from '../game/types.ts';
-import type { ENVIRONMENT_VERSION, GEOMETRY_VERSION } from '../sim/park-types.ts';
+import type { ENVIRONMENT_VERSION, GEOMETRY_VERSION, Vec2 } from '../sim/park-types.ts';
 
-export const SHARE_FORMATS = ['scorecard', 'diamond', 'wide'] as const;
+/** The season shares as one image: the draft field card with the final record. */
+export const SHARE_FORMATS = ['field'] as const;
 export type ShareFormat = (typeof SHARE_FORMATS)[number];
 
 export function isShareFormat(value: unknown): value is ShareFormat {
@@ -10,9 +11,7 @@ export function isShareFormat(value: unknown): value is ShareFormat {
 }
 
 export const SHARE_DIMENSIONS = {
-	scorecard: { width: 1080, height: 1350 },
-	diamond: { width: 1080, height: 1350 },
-	wide: { width: 1200, height: 630 }
+	field: { width: 1080, height: 1350 }
 } as const satisfies Record<ShareFormat, { width: number; height: number }>;
 
 export type ShareAction = 'challenge' | 'copy-link' | 'download' | 'copy-image';
@@ -32,6 +31,15 @@ export interface ShareStadium {
 	name: string;
 	geometryVersion: typeof GEOMETRY_VERSION;
 	environmentVersion: typeof ENVIRONMENT_VERSION;
+	franchiseId: string;
+	/** Fair outline from pole to pole in meters, drawn as the field's fence. */
+	outline: readonly Vec2[];
+	/** Measured fence distances printed on the nameplate. */
+	dimensions: readonly { bearingDeg: number; distanceFt: number }[];
+	/** The franchise colour that grounds the field card, when media is pinned. */
+	color: string | null;
+	/** The park photo on the field's stadium card, when media is pinned. */
+	photo: { url: string; width: number; height: number } | null;
 }
 
 export interface ShareRenderCard {
@@ -46,7 +54,7 @@ export interface ShareRenderCard {
  * replay/publication pins; a trusted publication supplies every pin.
  */
 export interface ShareRenderModel {
-	schemaVersion: 1;
+	schemaVersion: 2;
 	replaySchemaVersion: ReplaySchemaVersion;
 	modelVersion: typeof MODEL_VERSION;
 	rulesVersion: typeof RULES_VERSION;

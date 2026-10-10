@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount, tick } from 'svelte';
 	import type { SeasonResult } from '#lib/sim/types.ts';
+	import { arriveAtTop, riseIn, take } from './phase-motion.ts';
 	import TeamLogo from './TeamLogo.svelte';
 
 	interface Props {
@@ -21,9 +23,15 @@
 	let phase = $derived(result ? 'Revealing the season' : 'Playing the season');
 	let progressText = $derived(`${shown} of 162 games ${result ? 'revealed' : 'simulated'}`);
 	let latestGame = $derived(result && shown > 0 ? result.games[shown - 1] : null);
+	let shell = $state<HTMLElement>();
+
+	onMount(() => {
+		// Arriving from the lineup, the broadcast builds up line by line.
+		if (take('lineup')) void tick().then(() => { if (shell) { arriveAtTop(); riseIn(shell.children as HTMLCollectionOf<HTMLElement>); } });
+	});
 </script>
 
-<section class="progress-shell" aria-labelledby="simulation-heading">
+<section bind:this={shell} class="progress-shell" aria-labelledby="simulation-heading">
 	<div class="broadcast-status"><span aria-hidden="true"></span>162-0 / Season broadcast</div>
 
 	<p class="eyebrow">Simulation in progress</p>

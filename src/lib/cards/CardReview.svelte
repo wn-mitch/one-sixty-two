@@ -82,8 +82,8 @@ let heading = $state<HTMLHeadingElement>();
   {#snippet backControls()}
    {#if inspection}
     <div class="season-toggle" role="group" aria-label="Season statistics">
-     <button type="button" aria-pressed={selectedMode === 'simulated'} onclick={() => selectMode('simulated')}>162-0 season</button>
-     <button type="button" aria-pressed={selectedMode === 'actual'} onclick={() => selectMode('actual')}>Actual season</button>
+     <button type="button" aria-label="162-0 season" aria-pressed={selectedMode === 'simulated'} onclick={() => selectMode('simulated')}>162-0</button>
+     <button type="button" aria-label="Actual season" aria-pressed={selectedMode === 'actual'} onclick={() => selectMode('actual')}>Actual</button>
     </div>
    {/if}
    {#if textBack}<button type="button" class="back-text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>{/if}
@@ -100,7 +100,11 @@ let heading = $state<HTMLHeadingElement>();
  .review-header p { margin: .25rem 0 0; color: var(--muted); }
  .review-artwork { width: min(100%, 410px); margin-inline: auto; }
  .raised-only, .raised-only .review-artwork { display: contents; }
- .season-toggle { display: flex; flex-wrap: wrap; gap: .5rem; }
+ /* A two-part switch in the card's own ink, so it reads as part of the back rather than page chrome. */
+ .season-toggle { display: inline-flex; padding: 2px; border: 1px solid currentColor; border-radius: 999px; }
+ .season-toggle button { min-height: 2.5rem; padding: 0 .85rem; border: 0; border-radius: 999px; color: inherit; background: transparent; font: 750 .75rem/1 system-ui, sans-serif; letter-spacing: .02em; white-space: nowrap; }
+ .season-toggle button:hover { background: color-mix(in oklch, currentColor 12%, transparent); }
+ .season-toggle button[aria-pressed='true'] { color: var(--back-ground, var(--background)); background: var(--back-ink, var(--text)); }
  .back-text-toggle { min-height: 44px; }
  button { min-height: 44px; }
 </style>

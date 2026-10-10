@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Card from '../../cards/Card.svelte';
 	import type { CardViewModel } from '../../cards/view-model.ts';
-	import type { LibraryView } from '../../game/library.ts';
+	import { libraryLink, type LibraryView } from '../../game/library.ts';
 	import { average, innings, onBase, ra9, rate, slugging, teamTitle, teamTotals } from '../../game/library-stats.ts';
 	import type { SeriesRecord } from '../../game/series-history.ts';
 	import { tableScroll } from '../table-scroll.ts';
@@ -71,7 +71,10 @@
 		</form>
 	{:else}
 		<div class="actions">
-			{#if entry.status === 'playable'}<button type="button" class="small" onclick={() => onCopy(entry)}>Copy challenge link</button>{/if}
+			{#if entry.status === 'playable'}
+				<a class="button primary small" href={libraryLink(entry)}>Full season results</a>
+				<button type="button" class="small" onclick={() => onCopy(entry)}>Copy challenge link</button>
+			{/if}
 			<button type="button" class="small" onclick={startRename} aria-label={`Rename ${teamTitle(entry)}`}>Rename</button>
 			<button type="button" class="small quiet danger" onclick={() => onDelete(entry)} aria-label={`Delete ${teamTitle(entry)}`}>Delete</button>
 		</div>

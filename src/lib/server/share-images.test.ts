@@ -165,12 +165,12 @@ async function digest(bytes: Uint8Array): Promise<string> {
 }
 
 describe('trusted immutable share publication', () => {
-	it('recomputes the real season and captures all exact formats with authenticated documented options', async () => {
+	it('recomputes the real season and captures the field image with authenticated documented options', async () => {
 		const test = fixture();
 		const publication = await prepareSharePublication(test.bindings, REPLAY_ID);
 		expect(publication).toMatchObject({ schemaVersion: 1, replayId: REPLAY_ID, replayUrl: `${ORIGIN}/r/${REPLAY_ID}` });
 		expect(publication.record.wins + publication.record.losses).toBe(162);
-		expect(test.browser.calls).toHaveLength(3);
+		expect(test.browser.calls).toHaveLength(SHARE_FORMATS.length);
 		for (const [index, format] of SHARE_FORMATS.entries()) {
 			const options = test.browser.calls[index];
 			expect(options.url).toBe(`${ORIGIN}/__share/${publication.modelDigest}/${format}`);
@@ -200,17 +200,17 @@ describe('trusted immutable share publication', () => {
 		expect(test.browser.calls).toHaveLength(calls);
 	});
 
-	it('publishes no manifest when the third capture fails and a later explicit retry succeeds', async () => {
+	it('publishes no manifest when the capture fails and a later explicit retry succeeds', async () => {
 		const test = fixture();
-		test.browser.failCall = 3;
+		test.browser.failCall = 1;
 		await expect(prepareSharePublication(test.bindings, REPLAY_ID)).rejects.toThrow('capture failed');
 		expect(test.bucket.objects.has(`replays/v1/${REPLAY_ID}`)).toBe(true);
 		expect(test.bucket.objects.has(`shares/v1/replays/${REPLAY_ID}/manifest.json`)).toBe(false);
-		expect([...test.bucket.objects.keys()].filter(key => key.startsWith('shares/v1/images/'))).toHaveLength(2);
+		expect([...test.bucket.objects.keys()].filter(key => key.startsWith('shares/v1/images/'))).toHaveLength(0);
 
 		test.browser.failCall = null;
 		const publication = await prepareSharePublication(test.bindings, REPLAY_ID);
-		expect(publication.images.wide).toMatchObject(SHARE_DIMENSIONS.wide);
+		expect(publication.images.field).toMatchObject(SHARE_DIMENSIONS.field);
 		expect(test.bucket.objects.has(`shares/v1/replays/${REPLAY_ID}/manifest.json`)).toBe(true);
 	});
 
@@ -222,7 +222,7 @@ describe('trusted immutable share publication', () => {
 			prepareSharePublication(test.bindings, REPLAY_ID)
 		]);
 		expect(left).toEqual(right);
-		expect(test.browser.calls).toHaveLength(3);
+		expect(test.browser.calls).toHaveLength(SHARE_FORMATS.length);
 		expect(await readSharePublication(test.bindings, REPLAY_ID)).toEqual(left);
 	});
 
@@ -250,14 +250,14 @@ describe('trusted immutable share publication', () => {
 		const test = fixture();
 		await expect(readSharePublication(test.bindings, '../escape')).rejects.toBeInstanceOf(ShareNotFoundError);
 		const publication = await prepareSharePublication(test.bindings, REPLAY_ID);
-		const format: ShareFormat = 'wide';
+		const format: ShareFormat = 'field';
 		const image = publication.images[format];
 		const calls = test.browser.calls.length;
 		test.bucket.objects.set(`shares/v1/images/${image.sha256}.png`, png(1, 1));
 		await expect(loadPublishedShareImage(test.bindings, REPLAY_ID, format)).rejects.toBeInstanceOf(ShareIncompatibleError);
 		test.bucket.objects.set(
 			`shares/v1/images/${image.sha256}.png`,
-			png(SHARE_DIMENSIONS.wide.width, SHARE_DIMENSIONS.wide.height, 255)
+			png(SHARE_DIMENSIONS.field.width, SHARE_DIMENSIONS.field.height, 255)
 		);
 		await expect(loadPublishedShareImage(test.bindings, REPLAY_ID, format)).rejects.toBeInstanceOf(ShareIncompatibleError);
 		expect(test.browser.calls).toHaveLength(calls);

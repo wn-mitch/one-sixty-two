@@ -391,7 +391,12 @@ test.describe('Draft board field sheet', () => {
 		const selectedSeason = await confirmation.getAttribute('data-selected-season');
 		await expect(confirmation).toHaveAttribute('data-pending-slot', '2B');
 		await sheet.getByRole('button', { name: 'Draft at 2B', exact: true }).click();
-		await expect(sheet.getByRole('alert')).toContainText('Example draft confirmation failed');
+		// The error stacks above the sheet as its own modal; dismissing it leaves the sheet and preview intact.
+		const errorDialog = page.locator('dialog.error-dialog[open]');
+		await expect(errorDialog.getByRole('alert')).toContainText('Example draft confirmation failed');
+		await errorDialog.getByRole('button', { name: 'Dismiss', exact: true }).click();
+		await expect(errorDialog).toHaveCount(0);
+		await expect(sheet).toBeVisible();
 		await expect(confirmation).toHaveAttribute('data-selected-season', selectedSeason ?? '');
 		await expect(confirmation).toHaveAttribute('data-pending-slot', '2B');
 		await expect(page.locator('.picked-count')).toHaveText('0 / 14');
@@ -402,6 +407,22 @@ test.describe('Draft board field sheet', () => {
 		await expect(panelConfirmation).toHaveAttribute('data-selected-season', selectedSeason ?? '');
 		await expect(panelConfirmation).toHaveAttribute('data-pending-slot', '2B');
 		await expect(page.locator('.field-panel').getByRole('heading', { name: /^Your field/ })).toBeFocused();
+	});
+
+	test('brings the candidate grid back when a desktop pick fails after it clears', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await openChoosing(page, '&args=commitError:true');
+		const card = candidate(page, '06');
+		await card.getByRole('button', { name: /^Preview .+ at 2B$/ }).click();
+		await page.locator('.field-panel').getByRole('button', { name: 'Draft at 2B', exact: true }).click();
+		await expect(page.locator('dialog.error-dialog[open]')).toContainText('Example draft confirmation failed');
+		const settled = await page.locator('.candidates').evaluate(root => ({
+			running: root.getAnimations({ subtree: true }).length,
+			opacity: getComputedStyle(root).opacity,
+			card: getComputedStyle(root.querySelector('[data-candidate-group]')!).opacity,
+			inert: root.closest('.draft-browser')!.hasAttribute('inert')
+		}));
+		expect(settled).toEqual({ running: 0, opacity: '1', card: '1', inert: false });
 	});
 
 	test('preserves candidate and roster review backs through resize without committing a preview', async ({ page }) => {

@@ -2,7 +2,6 @@
 	import ShareArtwork from '#lib/share/ShareArtwork.svelte';
 	import {
 		SHARE_DIMENSIONS,
-		SHARE_FORMATS,
 		type ShareAction,
 		type ShareFormat,
 		type SharePublication,
@@ -18,16 +17,14 @@
 	}
 
 	let { model, publication, sharing, status, onShare }: Props = $props();
-	let format = $state<ShareFormat>('scorecard');
+	const format: ShareFormat = 'field';
 	let publishedImage = $derived(publication?.images[format] ?? null);
 	let previewRecord = $derived(publication?.record ?? model.record);
+	// The live preview renders at the published pixel size and scales down, so compact card minimums
+	// lay out exactly as they do in the captured PNG.
+	let previewWidth = $state(0);
+	let previewScale = $derived(previewWidth / SHARE_DIMENSIONS[format].width);
 	let statusIsError = $derived(/unavailable|could not|denied|incompatible|cannot be published/i.test(status));
-
-	const LABELS: Record<ShareFormat, string> = {
-		scorecard: 'Scorecard',
-		diamond: 'Diamond',
-		wide: 'Wide'
-	};
 
 	function selectLink(event: FocusEvent | MouseEvent): void {
 		(event.currentTarget as HTMLInputElement).select();
@@ -40,46 +37,32 @@
 			<p class="eyebrow">Share the season</p>
 			<h3 id="share-art-heading">Challenge a friend</h3>
 		</div>
-		<div class="format-picker" aria-label="Share image format">
-			{#each SHARE_FORMATS as option}
-				<button
-					type="button"
-					class:active={format === option}
-					aria-pressed={format === option}
-					disabled={sharing}
-					onclick={() => format = option}
-				>{LABELS[option]}</button>
-			{/each}
-		</div>
 	</header>
 
-	<div class="preview">
+	<div class="preview" bind:clientWidth={previewWidth} style:aspect-ratio={publishedImage ? undefined : `${SHARE_DIMENSIONS[format].width} / ${SHARE_DIMENSIONS[format].height}`}>
 		{#if publishedImage}
 			<img
 				src={publishedImage.url}
 				width={publishedImage.width}
 				height={publishedImage.height}
-				alt={`${previewRecord.wins}-${previewRecord.losses} season ${LABELS[format].toLowerCase()} share image`}
+				alt={`${previewRecord.wins}-${previewRecord.losses} season share image`}
 			/>
 		{:else}
-			<ShareArtwork {model} {format} />
+			<div class="stage" style:width="{SHARE_DIMENSIONS[format].width}px" style:transform="scale({previewScale})">
+				<ShareArtwork {model} {format} />
+			</div>
 		{/if}
 	</div>
-	<p class="preview-state">
-		{#if publishedImage}
-			Published PNG · {SHARE_DIMENSIONS[format].width}×{SHARE_DIMENSIONS[format].height}
-		{:else}
-			Local preview · The replay link is prepared when you share.
-		{/if}
-	</p>
-
-	<div class="primary-actions">
+	{#if publishedImage}
+		<p class="preview-state">Published PNG · {SHARE_DIMENSIONS[format].width}×{SHARE_DIMENSIONS[format].height}</p>
+	{/if}
+	<div class="actions">
 		<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', format)}>Challenge a friend</button>
-		<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', format)}>Copy link</button>
-	</div>
-	<div class="image-actions">
-		<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('download', format)}>Download PNG</button>
-		<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-image', format)}>Copy image</button>
+		<div class="action-group" role="group" aria-label="More ways to share">
+			<button type="button" disabled={sharing} onclick={() => onShare('copy-link', format)}>Copy link</button>
+			<button type="button" disabled={sharing} onclick={() => onShare('download', format)}>Download PNG</button>
+			<button type="button" disabled={sharing} onclick={() => onShare('copy-image', format)}>Copy image</button>
+		</div>
 	</div>
 
 	{#if publication}
@@ -102,6 +85,7 @@
 <style>
 	.share-panel {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--space-4);
 		min-width: 0;
 		padding-block: var(--space-6);
@@ -115,30 +99,6 @@
 	}
 	h3 { margin: var(--space-1) 0 0; }
 	.eyebrow { margin: 0; }
-	.format-picker {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-	.format-picker button {
-		min-height: 2.25rem;
-		padding: var(--space-1) var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		background: var(--surface);
-		color: var(--muted);
-		font: inherit;
-		font-size: var(--text-xs);
-		font-weight: 700;
-		cursor: pointer;
-	}
-	.format-picker button:hover:not(:disabled),
-	.format-picker button:focus-visible,
-	.format-picker button.active {
-		border-color: var(--text);
-		color: var(--text);
-	}
-	.format-picker button.active { background: var(--surface-raised); }
 	.preview {
 		position: relative;
 		width: 100%;
@@ -149,16 +109,39 @@
 		background: var(--surface);
 	}
 	.preview img { display: block; width: 100%; height: auto; }
+	.stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 	.preview-state {
 		margin: calc(var(--space-3) * -1) 0 0;
 		color: var(--muted);
 		font-size: var(--text-xs);
 	}
-	.primary-actions, .image-actions {
+	/* One primary action, then the secondary ways to share joined into a single control. */
+	.actions {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: var(--space-3);
 	}
+	.action-group {
+		display: inline-flex;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+	.action-group button {
+		min-height: 2.75rem;
+		padding: 0 var(--space-4);
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-sm);
+		font-weight: 650;
+		white-space: nowrap;
+	}
+	.action-group button + button { border-left: 1px solid var(--border); }
+	.action-group button:hover:not(:disabled) { background: var(--surface-raised); }
 	.share-panel button:disabled { cursor: wait; opacity: .58; }
 	label {
 		font-size: var(--text-xs);
@@ -177,11 +160,17 @@
 	}
 	.share-status { margin: 0; color: var(--muted); }
 	.share-status.error { color: var(--error); }
+	/* Wide screens keep the preview at a readable size and set the controls beside it. */
+	@media (min-width: 64rem) {
+		.share-panel { grid-template-columns: minmax(0, 30rem) minmax(0, 1fr); column-gap: var(--space-8); align-content: start; }
+		.share-panel > * { grid-column: 2; }
+		.share-panel > .preview { grid-column: 1; grid-row: 1 / span 8; align-self: start; }
+		.share-panel > .preview-state { margin-top: 0; }
+		header { flex-direction: column; align-items: start; }
+	}
 	@media (max-width: 40rem) {
 		header { align-items: start; flex-direction: column; }
-		.format-picker { width: 100%; }
-		.format-picker button { flex: 1; }
-		.primary-actions, .image-actions { display: grid; grid-template-columns: 1fr 1fr; }
-		.primary-actions .primary { grid-column: 1 / -1; }
+		.actions .primary, .action-group { width: 100%; }
+		.action-group button { flex: 1; min-width: 0; padding-inline: var(--space-2); white-space: normal; line-height: 1.15; }
 	}
 </style>

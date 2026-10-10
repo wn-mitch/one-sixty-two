@@ -41,6 +41,8 @@ let stack = $state<HTMLDivElement>();
 let sourceFocus: HTMLElement | undefined;
 const readerOpen = $derived(raisedOnly ? opened : turned);
 let previousOpen = untrack(() => readerOpen);
+// A reader that mounts already open belongs to a parent that places focus itself.
+let openedOnMount = untrack(() => readerOpen);
 let backDisplayed = $state(untrack(() => turned));
 
 function controlOwner(): Element | undefined {
@@ -75,8 +77,11 @@ function toggle(): void {
 }
 
 $effect(() => {
- if (readerOpen) void tick().then(() => stack?.querySelector<HTMLButtonElement>('.reader-return')?.focus({ preventScroll: true }));
- if (!readerOpen) return;
+ if (readerOpen && !openedOnMount) void tick().then(() => stack?.querySelector<HTMLButtonElement>('.reader-return')?.focus({ preventScroll: true }));
+ if (!readerOpen) {
+  openedOnMount = false;
+  return;
+ }
  const closeOnOutsidePointer = (event: PointerEvent) => {
   const target = event.target;
   if (!(target instanceof Node)) return;
@@ -139,12 +144,12 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
      <div class="stock-edge" data-layer="flip.slab" style:background={color} style:transform="translateZ(-{index + 1}px)"></div>
     {/each}
     <div id={backId} class="back" inert={!turned} aria-hidden={!turned}>
-     {#if backDisplayed && backControls}
-      <div class="back-controls">{@render backControls()}</div>
-     {/if}
      {#if inspectionView || textBack}
-      <InspectionBack {s} view={inspectionView} simplified={textBack} {onDetails} />
+      <InspectionBack {s} view={inspectionView} simplified={textBack} {onDetails} controls={backDisplayed ? backControls : undefined} />
      {:else}
+      {#if backDisplayed && backControls}
+       <div class="back-controls">{@render backControls()}</div>
+      {/if}
       <Card {s} face="back" {onDetails} />
      {/if}
     </div>

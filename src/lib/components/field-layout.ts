@@ -30,7 +30,7 @@ export const FIELD = {
 	home: { x: 212, y: 350 },
 	nameplate: { y: 426, height: 34 },
 	/** The compact stadium card, mirroring the DH across home plate. */
-	stadium: { x: 46, y: 354 },
+	stadium: { x: 46, y: 344 },
 	/** Center of each roster card's artwork; the caption hangs below it. */
 	slots: {
 		LF: { x: 76, y: 76 },
@@ -40,8 +40,8 @@ export const FIELD = {
 		'2B': { x: 276, y: 160 },
 		'3B': { x: 72, y: 240 },
 		'1B': { x: 352, y: 240 },
-		C: { x: 212, y: 352 },
-		DH: { x: 378, y: 354 },
+		C: { x: 212, y: 342 },
+		DH: { x: 378, y: 344 },
 		SP1: { x: 52, y: 508 },
 		SP2: { x: 132, y: 508 },
 		SP3: { x: 212, y: 508 },
@@ -93,7 +93,7 @@ function projector(outline: readonly (readonly [number, number])[]): (x: number,
 }
 
 /** Field artwork for a stadium's measured outline, or a generic symmetric park when none is chosen. */
-export function fieldArt(stadium: StadiumSummary | null | undefined): FieldArt {
+export function fieldArt(stadium: Pick<StadiumSummary, 'outline'> | null | undefined): FieldArt {
 	const outline = stadium?.outline.length ? stadium.outline : FALLBACK_OUTLINE;
 	const project = projector(outline);
 	const diagonal = BASE_M / Math.SQRT2;

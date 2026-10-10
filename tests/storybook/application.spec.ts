@@ -10,6 +10,19 @@ test.beforeAll(async () => {
 	example = await getExampleSeason();
 });
 
+/** Every game in the results calendar, one control per game, including both halves of a doubleheader. */
+const SEASON_GAME = '[aria-controls="season-game-detail"]';
+
+/** Final scores in calendar order, read from each game control's label. */
+function calendarScores(page: Page): Promise<string[]> {
+	return page.locator(SEASON_GAME).evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')!.match(/(?:won|lost) (\d+–\d+)/)![1]));
+}
+
+async function openGame(page: Page, index: number): Promise<void> {
+	await page.locator(SEASON_GAME).nth(index).click();
+	await page.locator('#season-game-detail summary', { hasText: 'Batting and pitching' }).click();
+}
+
 async function waitForResult(page: Page): Promise<void> {
 	await expect(page.getByRole('heading', { name: /final record/i })).toBeVisible({ timeout: 15_000 });
 }
@@ -83,13 +96,14 @@ test.describe('application workshop stories', () => {
 
 		await firstCard.getByRole('button', { name: /down in batting order/i }).click();
 		await page.getByRole('button', { name: /simulate 162 games/i }).click();
-		await expect(page.getByRole('button', { name: /skip animation/i })).toBeVisible();
+		// The workshop simulates on the main thread after the lineup's exit, which runs past the default wait under parallel workers.
+		await expect(page.getByRole('button', { name: /skip animation/i })).toBeVisible({ timeout: 15000 });
 		await page.getByRole('button', { name: /skip animation/i }).click();
 		await waitForResult(page);
 		await expectFinalRecord(page, expected);
-		const firstGame = page.locator('.game-detail').first();
-		await expect(page.locator('.game-detail summary .score')).toHaveText(expected.games.map(game => `${game.challengeRuns}–${game.opponentRuns}`));
-		await firstGame.locator('summary').click();
+		expect(await calendarScores(page)).toEqual(expected.games.map(game => `${game.challengeRuns}–${game.opponentRuns}`));
+		await openGame(page, 0);
+		const firstGame = page.locator('#season-game-detail');
 		const game = expected.games[0];
 		const challenge = game.isHome ? game.home : game.away;
 		await expect(firstGame.getByRole('region', { name: `${challenge.name} batting box score for Game ${game.number}`, exact: true })
@@ -142,7 +156,7 @@ test.describe('application workshop stories', () => {
 			await expect(page.getByRole('progressbar', { name: 'Season simulation progress' })).toBeVisible();
 			await page.getByRole('button', { name: /skip animation/i }).click();
 			await waitForResult(page);
-			await expect(page.locator('.game-detail summary .score')).toHaveText(scores);
+			expect(await calendarScores(page)).toEqual(scores);
 			await expectFinalRecord(page, example.result);
 		}
 	});
@@ -159,11 +173,12 @@ test.describe('application workshop stories', () => {
 		await openStory(page, 'results-season--complete');
 		await waitForResult(page);
 		const loss = example.result.games.find((game) => !game.win)!;
-		await expect(page.locator('.game-detail').nth(loss.number - 1).locator('.game-number')).toContainText(`Game ${loss.number}`);
-		const finalDetails = page.locator('.game-detail').last();
+		await expect(page.locator(SEASON_GAME).nth(loss.number - 1)).toHaveAttribute('aria-label', new RegExp(`^Game ${loss.number}, .+, lost `));
+		const finalDetails = page.locator('#season-game-detail');
 		const lastGame = example.result.games.at(-1)!;
 		await expect(finalDetails.locator('.game-content')).toHaveCount(0);
-		await finalDetails.locator('summary').click();
+		await openGame(page, lastGame.number - 1);
+		await expect(finalDetails.getByRole('heading', { name: new RegExp(`^Game ${lastGame.number}`) })).toBeVisible();
 		const inningCount = Math.max(9, lastGame.away.innings.length, lastGame.home.innings.length);
 		await expect(finalDetails.locator('.line-score tbody tr').first().locator('td')).toHaveText([
 			...Array.from({ length: inningCount }, (_, index) => lastGame.away.innings[index] == null ? '–' : String(lastGame.away.innings[index])),
@@ -207,8 +222,8 @@ test.describe('application workshop stories', () => {
 		expect(Math.abs((await firstIdentity.boundingBox())!.x - initialLeft)).toBeLessThanOrEqual(1);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 
-		const lastGame = page.locator('.game-detail').last();
-		await lastGame.locator('summary').click();
+		const lastGame = page.locator('#season-game-detail');
+		await openGame(page, example.result.games.length - 1);
 		const innings = lastGame.getByRole('region', { name: /inning line score/i });
 		await innings.focus();
 		await page.keyboard.press('ArrowRight');
@@ -219,7 +234,7 @@ test.describe('application workshop stories', () => {
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 
 		await page.setViewportSize({ width: 1440, height: 900 });
-		const listBox = (await page.locator('.game-list').boundingBox())!;
+		const listBox = (await page.locator('.season-calendar').boundingBox())!;
 		expect((await lastGame.boundingBox())!.width).toBeGreaterThanOrEqual(listBox.width - 1);
 		await expect(lastGame.locator('tbody th').first()).toBeVisible();
 	});

@@ -10,15 +10,16 @@
  import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import CandidateList from './CandidateList.svelte';
- import { dealIntoGrid } from './deal-motion.ts';
+ import { dealIntoGrid, dealOutOfGrid } from './deal-motion.ts';
+ import { arriveAtTop, morphInto, riseIn, stash, take } from './phase-motion.ts';
  import Roster from './Roster.svelte';
  import Reveal from './Reveal.svelte';
  import DraftSheet from './DraftSheet.svelte';
  import FoilPack from './FoilPack.svelte';
  import Settings from './Settings.svelte';
- let { draft, manifest, pool, profiles, phase, loading, busy, error, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onDraft, onReassign, onNew }: {
+ let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onDraft, onReassign, onNew }: {
   draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
-  phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean; error: string;
+  phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean;
   rankings: WarRankings | null; rankingLoading: boolean; rankingError: boolean;
   onRetryRankings: () => void; onRoll: () => void; onNew: () => void;
   onDraft: (seasonId: string, slot: Slot) => void;
@@ -39,6 +40,8 @@
  let dealtArrived = $state(false);
  /** A finished deal still owes the candidate grid its deal-out, played when the grid first renders. */
  let dealOutPending = $state(false);
+ /** A confirmed pick is clearing the candidate grid before it commits. */
+ let leaving = $state(false);
  let sheetTab = $state<'field' | 'back'>('field');
  let trigger = $state<HTMLElement | null>(null);
  let selectionTrigger: HTMLElement | null = null;
@@ -58,6 +61,9 @@
    const grid = draftBoard?.querySelector<HTMLElement>('.candidates');
    const mark = draftBoard?.querySelector<HTMLElement>('[data-roll-mark]');
    if (grid) dealIntoGrid(grid, mark?.getBoundingClientRect() ?? null);
+   // Taking the dealt card removes it, so focus that fell to the page moves to the pool's search.
+   const active = document.activeElement;
+   if (!active || active === document.body) grid?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true });
   });
  });
  let fieldHeading = $state<HTMLHeadingElement>();
@@ -87,14 +93,11 @@
  const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll?.franchiseId ?? ''}:${draft.currentRoll?.decade ?? ''}`);
  const rosterSlots = $derived(draftRules(draft.schemaVersion).slots);
  const occupiedSlots = $derived(new Set(draft.picks.map(pick => pick.slot)));
- const lastPick = $derived(draft.picks.at(-1));
- const lastProfile = $derived(lastPick ? rosterBySeason.get(lastPick.seasonId) : undefined);
- const lastPickLabel = $derived(lastProfile && lastPick ? `${lastProfile.displayName} · ${lastProfile.year} · ${lastPick.slot}` : undefined);
  const roll = $derived(draft.currentRoll);
  const rollColor = $derived(roll ? media?.teams[roll.franchiseId]?.color : undefined);
  const homeStadium = $derived(draft.homeStadium ? manifest.stadiums.find(stadium => stadium.ref.id === draft.homeStadium!.id) ?? null : null);
  const rollFranchise = $derived(roll ? manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name : undefined);
- const canConfirm = $derived(phase === 'choosing' && !busy && !movingSeasonId && !!selectedProfile && !!pendingSlot && destinations.includes(pendingSlot));
+ const canConfirm = $derived(phase === 'choosing' && !busy && !leaving && !movingSeasonId && !!selectedProfile && !!pendingSlot && destinations.includes(pendingSlot));
 
  function clearTransient(): void {
   selectedSeasonId = null;
@@ -151,7 +154,7 @@
  }
  function closeInspectionOnEscape(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || !inspectedSeasonId) return;
-  if (document.activeElement?.closest('.settings-dialog[open]')) return;
+  if (document.activeElement?.closest('.settings-dialog[open], .error-dialog[open]')) return;
   preserveSheetCancel = true;
   event.preventDefault();
   event.stopPropagation();
@@ -175,7 +178,7 @@
   }
   if (!selectedProfile || busy) return;
   if (event.composedPath().some(node => node instanceof Element &&
-   node.matches('[data-app-settings], [data-candidate-card], [data-slot], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
+   node.matches('[data-app-settings], .error-dialog, [data-candidate-card], [data-slot], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
   clearTransient();
   sheetOpen = false;
  }
@@ -241,13 +244,27 @@
   const candidate = manifestBySeason.get(seasonId);
   if (pendingSlot && (!candidate || !legalSlots(draft, candidate, manifest).includes(pendingSlot))) pendingSlot = null;
  }
- function confirmPick(): void {
+ async function confirmPick(): Promise<void> {
   if (!canConfirm || !selectedSeasonId || !pendingSlot || !selectedProfile || !selectedCandidate) return;
   const roll = draft.currentRoll;
   if (!roll || selectedCandidate.franchiseId !== roll.franchiseId || selectedCandidate.decade !== roll.decade) return;
   if (!legalSlots(draft, selectedCandidate, manifest).includes(pendingSlot)) return;
+  const seasonId = selectedSeasonId;
+  const slot = pendingSlot;
+  const before = draft;
+  // The candidates leave first so the next pack arrives on a clear stage.
+  leaving = true;
+  const grid = wide ? draftBoard?.querySelector<HTMLElement>('.candidates') : null;
+  const exit = grid ? await dealOutOfGrid(grid) : [];
+  // The last pick hands every field card to its lineup row.
+  if (draft.picks.length + 1 === rosterSlots.length) stash('field', new Map([...draftBoard?.querySelectorAll<HTMLElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} .roster-item[data-season-id]`) ?? []]
+   .map(item => [item.dataset.seasonId!, (item.querySelector<HTMLElement>('.miniature .card') ?? item).getBoundingClientRect()] as const)
+   .filter(([, rect]) => rect.width > 0)));
   // Session catches errors. Only the ensuing draft identity change closes the preview.
-  onDraft(selectedSeasonId, pendingSlot);
+  onDraft(seasonId, slot);
+  leaving = false;
+  await tick();
+  if (draft === before) for (const animation of exit) animation.cancel();
  }
  function beginMove(seasonId: string, nextTrigger: HTMLElement): void {
   movingSeasonId = seasonId;
@@ -443,6 +460,17 @@
   };
   query.addEventListener('change', adapt);
   window.addEventListener('cancel', guardInspectionCancel, true);
+  const arrival = take('stadium');
+  if (arrival) void tick().then(() => {
+   if (disposed || !draftBoard) return;
+   arriveAtTop();
+   // The chosen park's card shrinks onto the field's stadium card while the board rises around it.
+   const from = arrival.rects.get('card');
+   const clone = arrival.clones.get('card');
+   const mini = draftBoard.querySelector<HTMLElement>('.field-panel .stadium-mini .mini-card');
+   if (from && clone && mini) morphInto(clone, from, mini);
+   riseIn(draftBoard.querySelectorAll<HTMLElement>(':scope > .draft-header, .field-panel'));
+  });
   return () => {
    disposed = true;
    releaseSettings();
@@ -536,7 +564,6 @@
 {/snippet}
 
 {#snippet fieldFooter()}
- {#if error && !wide}<p class="sheet-error" role="alert">{error}</p>{/if}
  {#if movingSeasonId}
   <div class="move-controls">
    {#if wide && movingProfile}<p><strong>Moving {movingProfile.displayName} · {movingProfile.year}</strong></p>{/if}
@@ -544,9 +571,13 @@
   </div>
  {:else if selectedProfile}
   <div class="pick-confirmation" data-pending-slot={pendingSlot ?? ''} data-selected-season={selectedSeasonId}>
-   <p>{#if pendingSlot}<span class="preview-label">Preview</span> {/if}<strong>{selectedProfile.displayName}</strong> · {selectedProfile.year}{#if pendingSlot} · {pendingSlot}{:else}<span class="placement-hint">{destinations.length ? 'Choose a highlighted open position.' : 'Reassign your roster to make room.'}</span>{/if}</p>
+   <p class="pick-line">
+    <span class="preview-label">{pendingSlot ? `Preview · ${pendingSlot}` : 'Selected'}</span>
+    <span class="pick-name"><strong>{selectedProfile.displayName}</strong> <span class="pick-year">{selectedProfile.year}</span></span>
+    {#if !pendingSlot}<span class="placement-hint">{destinations.length ? 'Choose a highlighted open position.' : 'Reassign your roster to make room.'}</span>{/if}
+   </p>
    <div class="confirmation-actions">
-    <button type="button" class="primary" disabled={!canConfirm} onclick={confirmPick}>{pendingSlot ? `Draft at ${pendingSlot}` : 'Draft player'}</button>
+    <button type="button" class="primary" disabled={!canConfirm} onclick={() => void confirmPick()}>{pendingSlot ? `Draft at ${pendingSlot}` : 'Draft player'}</button>
     {#if pendingSlot}<button type="button" class="secondary" onclick={() => pendingSlot = null}>Back</button>{/if}
     <button type="button" class="quiet" onclick={cancelSelection}>Cancel selection</button>
    </div>
@@ -557,7 +588,7 @@
 <div bind:this={draftBoard} class="draft-board" class:wide>
  <header class="draft-header">
   {#if wide}<a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>{/if}
-  <Reveal {roll} {manifest} compact={wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} lastPick={wide ? undefined : lastPickLabel} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
+  <Reveal {roll} {manifest} compact={wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
   {#if wide}
    <a class="rules-link" href="/about">Rules &amp; model</a>
    <Settings />
@@ -573,7 +604,14 @@
   {/if}
  </div>
  <div class="board-columns">
-  <section class="draft-browser" aria-label="Make your next pick">
+  {#if wide}
+   <aside class="field-panel" aria-label="Your field">
+    <div class="panel-header">{@render fieldHeader()}</div>
+    <div class="field-scroll">{@render fieldContent()}</div>
+    {#if movingSeasonId || selectedProfile}<div class="field-footer">{@render fieldFooter()}</div>{/if}
+   </aside>
+  {/if}
+  <section class="draft-browser" aria-label="Make your next pick" inert={leaving}>
    {#if phase === 'ready' || dealing}
     <FoilPack
      {roll}
@@ -582,28 +620,21 @@
      teamColor={rollColor}
      pickNumber={draft.picks.length + 1}
      pickCount={rosterSlots.length}
+     marks={manifest.franchises.map(franchise => franchise.id)}
      disabled={busy && !dealing}
      flyTarget={() => draftBoard?.querySelector<HTMLElement>('[data-roll-mark]') ?? null}
      onOpen={() => { dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
      onArrive={() => dealtArrived = true}
      onDealt={() => { dealing = false; dealOutPending = true; }}
     />
-    {#if wide && lastPickLabel}<p class="last-pick muted">Last pick: <strong>{lastPickLabel}</strong></p>{/if}
    {:else if loading || phase === 'revealing'}
     <p class="loading-copy muted" role="status">Finding eligible seasons…</p>
    {:else if showingCandidates}
-    <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
+    <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
-  {#if wide}
-   <aside class="field-panel" aria-label="Your field">
-    <div class="panel-header">{@render fieldHeader()}</div>
-    <div class="field-scroll">{@render fieldContent()}</div>
-    {#if movingSeasonId || selectedProfile}<div class="field-footer">{@render fieldFooter()}</div>{/if}
-   </aside>
-  {/if}
  </div>
- <DraftSheet open={!wide && sheetOpen} {trigger} onClose={dismissSheet} header={fieldHeader} children={fieldContent} footer={movingSeasonId || selectedProfile || error ? fieldFooter : undefined} />
+ <DraftSheet open={!wide && sheetOpen} {trigger} onClose={dismissSheet} header={fieldHeader} children={fieldContent} footer={movingSeasonId || selectedProfile ? fieldFooter : undefined} />
 </div>
 
 <style>
@@ -612,12 +643,12 @@
  .open-field { display: flex; align-items: center; gap: .625rem; min-height: 44px; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
  .board-columns { display: grid; min-width: 0; }
- .wide .board-columns { grid-template-columns: minmax(0, 1fr) 452px; gap: 28px; align-items: start; padding-top: 16px; }
+ .wide .board-columns { grid-template-columns: 452px minmax(0, 1fr); gap: 28px; align-items: start; padding-top: 16px; }
  .wide .draft-toolbar { display: none; }
  .field-panel { position: sticky; top: 72px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: calc(100dvh - 88px); min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
  .panel-header { padding-inline: 1rem; }
  .field-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 0 1rem 1rem; }
- .field-footer { padding: .75rem 1rem; border-top: 1px solid var(--border); background: var(--background); }
+ .field-footer { padding: 1rem 1rem 1rem; border-top: 1px solid var(--border); background: var(--background); }
  .field-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-block: 1rem .5rem; }
  .close-field { display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; margin-right: -.5rem; }
  .field-header > div { min-width: 0; width: 100%; }
@@ -636,17 +667,18 @@
  .confirmation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
  .confirmation-actions button, .move-controls button, .field-header button { min-height: 44px; }
  .pick-confirmation p, .move-controls p { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
- .preview-label { color: var(--accent); font-weight: 750; }
- .sheet-error { color: var(--error); margin: 0 0 .75rem; }
- .last-pick { margin: 0; text-align: center; overflow-wrap: anywhere; }
+ .pick-confirmation .pick-line { display: grid; gap: .3rem; margin-bottom: .85rem; }
+ .preview-label { color: var(--accent); font-size: .6875rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+ .pick-name { font-size: 1rem; line-height: 1.2; }
+ .pick-year { margin-left: .2rem; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
  .loading-copy { padding-block: var(--space-8); text-align: center; }
- .placement-hint { display: block; color: var(--muted); margin-top: .25rem; font-size: .75rem; }
+ .placement-hint { display: block; color: var(--muted); font-size: .75rem; }
  .wide .move-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
  .wide .move-controls p { flex-basis: 100%; }
  .wide .confirmation-actions { gap: .4rem; }
  .wide .confirmation-actions button { padding-inline: .65rem; font-size: .8125rem; }
  .wide .confirmation-actions .primary { margin-left: auto; order: 3; }
- .wide .pick-confirmation p { margin-bottom: .5rem; }
+ .wide .pick-confirmation .pick-line { margin-bottom: .75rem; }
  .draft-header { min-width: 0; }
  .wide .draft-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 20px; min-height: 64px; box-sizing: border-box; padding-block: 10px; border-bottom: 1px solid var(--border); background: var(--background); }
  .wordmark { flex: none; display: inline-flex; align-items: center; gap: .625rem; min-height: 44px; color: var(--text); text-decoration: none; font-size: 1.25rem; font-weight: 850; letter-spacing: -.04em; }

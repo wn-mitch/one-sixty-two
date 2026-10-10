@@ -19,6 +19,7 @@ const sourceRoots = [
 	'src/lib/cards/backs',
 	'src/lib/cards/fronts',
 	'src/lib/cards/parts',
+	'src/lib/components/field-layout.ts',
 	'src/lib/share',
 	'src/routes/+layout.svelte',
 	'src/routes/__share/[model]/[format]/+page.svelte',

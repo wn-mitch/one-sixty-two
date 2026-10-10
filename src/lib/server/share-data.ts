@@ -221,7 +221,7 @@ export function validateStoredShareModel(model: unknown, current: CurrentShareAs
 		record.runsFor,
 		record.runsAgainst
 	].every(number => Number.isInteger(number) && number >= 0);
-	if (!SHA256.test(digest) || value.schemaVersion !== 1 || value.replaySchemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION ||
+	if (!SHA256.test(digest) || value.schemaVersion !== 2 || value.replaySchemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION ||
 		value.modelVersion !== MODEL_VERSION || value.rulesVersion !== RULES_VERSION || value.dataVersion !== current.manifest.dataVersion ||
 		value.defenseMethodVersion !== DEFENSE_METHOD_VERSION || value.valuationVersion !== VALUATION_VERSION ||
 		!value.homeStadium || value.homeStadium.geometryVersion !== GEOMETRY_VERSION || value.homeStadium.environmentVersion !== ENVIRONMENT_VERSION ||

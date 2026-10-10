@@ -11,7 +11,7 @@
  import RosterItem from './RosterItem.svelte';
  import StadiumCard from './StadiumCard.svelte';
  import TeamLogo from './TeamLogo.svelte';
- import { venuePhoto } from './VenueCard.svelte';
+ import { venuePhoto } from '../media/venue.ts';
  import { FIELD, fieldArt } from './field-layout.ts';
  import { captureField, slideField } from './field-motion.ts';
 
@@ -403,6 +403,8 @@
  .highlighted .card-frame { outline-color: var(--accent); }
  .highlighted .slot-placeholder { border-color: var(--accent); color: var(--accent); background: color-mix(in oklch, var(--accent) 14%, transparent); }
  .preview .card-frame { outline-style: dashed; }
+ /* C, DH, and the pitching staff sit just above an edge of the field card, so their names stay on one line instead of spilling past it. */
+ .field-slot:is([data-slot='C'], [data-slot='DH']) :global(.identity strong), .staff-slot :global(.identity strong) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
  .source { opacity: .82; }
  .unavailable .slot-placeholder { border-color: var(--error); color: var(--error); }
  .staff-slots { display: contents; }

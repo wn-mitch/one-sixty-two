@@ -1,5 +1,6 @@
 import { appSettings } from '../game/settings.svelte.ts';
 import { EASE_OUT, MOTION } from '../motion-timing.ts';
+import { clearStage } from './phase-motion.ts';
 
 const CARD = '[data-candidate-group]';
 
@@ -30,4 +31,14 @@ export function dealIntoGrid(root: HTMLElement, origin: DOMRect | null): Animati
 			{ transform: 'none', opacity: 1 }
 		], { duration: MOTION.dealOut / speed, delay: index * MOTION.dealStagger / speed, easing: EASE_OUT, fill: 'backwards' });
 	});
+}
+
+/**
+ * Clears the candidate grid after a pick: cards on screen drop out the bottom in reading order
+ * while the rest of the browser fades. Resolves when the last card has left. The animations hold
+ * their end state; cancel them to bring the grid back when the pick does not land.
+ */
+export async function dealOutOfGrid(root: HTMLElement): Promise<Animation[]> {
+	if (!appSettings.animateCards) return [];
+	return clearStage(root.querySelectorAll<HTMLElement>(CARD), [root]);
 }

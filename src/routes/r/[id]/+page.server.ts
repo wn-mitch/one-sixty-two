@@ -28,9 +28,9 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 			description: `${resultSummary} Longest winning streak: ${streakGames}. Can you beat ${wins}-${losses}?`,
 			canonical: new URL(publication.replayUrl, env.PUBLIC_ORIGIN).href,
 			image: {
-				url: new URL(publication.images.wide.url, env.PUBLIC_ORIGIN).href,
-				width: publication.images.wide.width,
-				height: publication.images.wide.height,
+				url: new URL(publication.images.field.url, env.PUBLIC_ORIGIN).href,
+				width: publication.images.field.width,
+				height: publication.images.field.height,
 				type: 'image/png',
 				alt: `162-0 share card for a ${wins}-${losses} season`
 			}

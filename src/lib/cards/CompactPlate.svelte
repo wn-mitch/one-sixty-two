@@ -64,6 +64,11 @@
 		font-family: 'Barlow Condensed', sans-serif;
 		pointer-events: none;
 	}
+	/* Captures use a flat compositing tree; stacking order keeps the plate above the finish instead. */
+	:global(.card[data-capture='true']) .compact-plate {
+		transform: none;
+		z-index: 1;
+	}
 	.fade {
 		position: absolute;
 		left: 0;

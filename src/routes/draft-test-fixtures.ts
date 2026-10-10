@@ -86,13 +86,33 @@ export async function openPack(page: Page): Promise<void> {
  await dealt.click();
 }
 
-/** Chooses the first stadium, then opens the foil pack that deals the first franchise. */
-export async function chooseStadium(page: Page): Promise<void> {
+/** Chooses the first stadium and waits for the sealed foil pack to take focus. */
+export async function selectStadium(page: Page): Promise<void> {
  const deck = page.getByRole('region', { name: 'Choose your home stadium' });
  // The radio sits under its venue card; players choose by clicking the card's photo.
  await deck.locator('.choice').first().locator('.photo').click();
  await expect(deck.getByRole('radio').first()).toBeChecked();
  await deck.getByRole('button', { name: 'Draft at this stadium', exact: true }).click();
  await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeFocused();
+}
+
+/** Chooses the first stadium, then opens the foil pack that deals the first franchise. */
+export async function chooseStadium(page: Page): Promise<void> {
+ await selectStadium(page);
  await openPack(page);
+}
+
+/**
+ * Opens the pack when the pool load is expected to fail: the error dialog takes focus over the
+ * dealt card, Retry loads the pool, and taking the card then reveals the candidates.
+ */
+export async function openPackThroughRetry(page: Page): Promise<unknown> {
+ await page.getByRole('button', { name: 'Roll next franchise', exact: true }).click();
+ const retry = page.locator('dialog.error-dialog[open]').getByRole('button', { name: 'Retry', exact: true });
+ await expect(retry).toBeVisible();
+ const committed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).currentRoll, STORAGE_KEY);
+ await retry.click();
+ await expect(page.locator('dialog.error-dialog[open]')).toHaveCount(0);
+ await page.getByRole('button', { name: /^Take / }).click();
+ return committed;
 }

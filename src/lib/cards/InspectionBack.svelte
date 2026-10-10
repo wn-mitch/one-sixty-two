@@ -1,4 +1,5 @@
 <script lang="ts">
+ import type { Snippet } from 'svelte';
  import type { InspectionSeasonView, TeamRank } from '../game/results-types.ts';
  import type { CardViewModel } from './view-model.ts';
  import SourceCredits from './SourceCredits.svelte';
@@ -8,9 +9,11 @@
   onDetails: () => void;
   view?: InspectionSeasonView;
   simplified?: boolean;
+  /** Review controls, such as the season toggle, rendered in the footer as part of the card. */
+  controls?: Snippet;
  }
 
- let { s, onDetails, view, simplified = false }: Props = $props();
+ let { s, onDetails, view, simplified = false, controls }: Props = $props();
  const colors = $derived.by(function (): { ground: string; ink: string } {
   switch (s.era) {
    case '2020s':
@@ -82,7 +85,7 @@
    </tbody>
   </table>
   <footer class="results-footer">
-   <span>{view.label}</span>
+   {#if controls}{@render controls()}{:else}<span>{view.label}</span>{/if}
    {#if !simplified}<button type="button" aria-label="Show text version for {s.full}" onclick={onDetails}>Text version</button>{/if}
   </footer>
   {#if simplified}<SourceCredits details={s.details} />{/if}
@@ -114,6 +117,7 @@
    <p>{s.logoLabel}</p>
    <p data-layer="sources.stats">{s.b.srcStats}</p>
    <p data-layer="sources.photo">{s.b.srcPhoto}</p>
+   {#if controls}<div class="footer-controls">{@render controls()}</div>{/if}
    {#if !simplified}<button type="button" onclick={onDetails}>Text version</button>{/if}
   </footer>
   {#if simplified}<SourceCredits details={s.details} />{/if}
@@ -156,6 +160,7 @@
  .best .rank span { background: oklch(84% .12 85); color: oklch(28% .07 75); font-weight: 850; }
  .worst .rank span { background: oklch(75% .12 25); color: oklch(25% .09 25); font-weight: 850; }
  .results-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: auto; padding: .55rem 1rem .7rem; font-size: .7rem; font-weight: 750; }
+ .footer-controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: .5rem; }
  .results-footer button { min-height: 44px; padding: .35rem .65rem; font-size: .875rem; }
  .simplified { --back-ground: var(--surface) !important; --back-ink: var(--text) !important; padding: 1rem; color: var(--text); background: var(--surface); font: 1rem/1.5 system-ui, sans-serif; }
  .simplified h3, .simplified dd { font: inherit; font-weight: 700; }

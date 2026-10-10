@@ -22,11 +22,6 @@ import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts'
 import type { ShareAction, ShareFormat, SharePublication } from '../share/types.ts';
 
 export type Phase = 'start' | 'stadium' | 'ready' | 'revealing' | 'choosing' | 'lineup' | 'simulating' | 'results';
-const SHARE_FORMAT_LABEL: Record<ShareFormat, string> = {
- scorecard: 'Scorecard',
- diamond: 'Diamond',
- wide: 'Wide'
-};
 
 export class Session {
  manifest = $state.raw<Manifest | null>(null);
@@ -53,7 +48,7 @@ export class Session {
  textCopyFallback = $state(false);
  private selected = new Map<string, Profile>();
  private savedPhase: SavedPhase = 'draft';
- private retryAction: 'initialize' | 'pool' | 'resume' | 'simulation' | null = null;
+ private retryAction = $state<'initialize' | 'pool' | 'resume' | 'simulation' | null>(null);
  private shared = false;
  private epoch = 0;
  private runId = 0;
@@ -403,7 +398,7 @@ export class Session {
   this.announce = `Season complete: ${this.result.wins} wins, ${this.result.losses} losses.`;
  }
  skip(): void { this.skipReveal = true; if (this.result) this.showResults(); }
- async share(action: ShareAction = 'copy-link', format: ShareFormat = 'scorecard'): Promise<void> {
+ async share(action: ShareAction = 'copy-link', format: ShareFormat = 'field'): Promise<void> {
   if (!this.draft || !this.result || this.loading || this.sharing) return;
   const epoch = this.epoch;
   const request = ++this.shareRequest;
@@ -496,7 +491,7 @@ export class Session {
     }
    } else if (action === 'download') {
     await downloadPublishedImage(publication, format);
-    if (this.shareIsCurrent(request, epoch)) this.shareStatus = `${SHARE_FORMAT_LABEL[format]} PNG downloaded.`;
+    if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Season PNG downloaded.';
    } else if (!imageClipboardSupported || !imageCopy) {
     this.imageDownloadFallback = true;
     this.shareStatus = 'Image copy is unavailable. Use Download PNG instead.';

@@ -212,7 +212,7 @@ test.describe('draft interaction boundaries', () => {
 		await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeVisible();
 	});
 
-	test('hides fully blocked desktop groups until the explicit toggle without disabling qualification filters', async ({ page, request }) => {
+	test('hides fully blocked desktop groups until the explicit toggle and drops filled-position filters', async ({ page, request }) => {
 		const manifest = await currentManifest(request);
 		const scenario = await blockedScenario(request, manifest);
 		await openSavedDraft(page, scenario.draft);
@@ -225,8 +225,8 @@ test.describe('draft interaction boundaries', () => {
 		await toggle.click();
 		await expect(group).toBeVisible();
 
-		const filter = page.locator('.filters').getByRole('button', { name: scenario.profile.eligibleSlots[0], exact: true });
-		await expect(filter).toBeEnabled();
+		// Every slot this blocked player qualifies for is filled, so none of them is offered as a filter.
+		for (const slot of scenario.profile.eligibleSlots) await expect(page.locator('.filters').getByRole('button', { name: slot, exact: true })).toHaveCount(0);
 		await group.getByRole('combobox', { name: `Exact season for ${scenario.profile.displayName}`, exact: true }).selectOption(scenario.profile.seasonId);
 		await group.locator('button.select-front').click();
 		await expect(page.locator('.field-panel .pick-confirmation')).toHaveAttribute('data-selected-season', scenario.profile.seasonId);

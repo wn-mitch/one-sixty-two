@@ -23,6 +23,7 @@
   busy,
   selectedSeasonId,
   selectedSeasons,
+  previewing = false,
   wide,
   onSelect,
   onPlace,
@@ -39,6 +40,8 @@
   busy: boolean;
   selectedSeasonId: string | null;
   selectedSeasons: Map<string, string>;
+  /** The selected season is shown on the field as a placement preview. */
+  previewing?: boolean;
   wide: boolean;
   onSelect: (seasonId: string, seasons: Profile[], trigger: HTMLButtonElement) => void;
   onPlace?: (seasonId: string, seasons: Profile[], slot: Slot, trigger: HTMLButtonElement) => void;
@@ -87,7 +90,9 @@
    if (!candidateIndex.has(profile.seasonId)) continue;
    for (const slot of profile.eligibleSlots) found.add(slot);
   }
-  return draftRules(draft.schemaVersion).slots.filter(slot => found.has(slot));
+  // A filled position can take no one new, so it is not offered as a filter.
+  const filled = new Set(draft.picks.map(pick => pick.slot));
+  return draftRules(draft.schemaVersion).slots.filter(slot => found.has(slot) && !filled.has(slot));
  });
  const filterOptions = $derived.by((): FilterSlot[] => ['All', ...qualificationSlots]);
  const activeFilter = $derived(filterOptions.includes(filter) ? filter : 'All');
@@ -312,6 +317,7 @@
          data-candidate-group={group.playerId}
          data-candidate-card={group.playerId}
          data-selected={selectedSeasonId === profile.seasonId}
+         data-previewing={previewing && selectedSeasonId === profile.seasonId}
          data-flipped={flippedPlayerId === group.playerId}
         >
          <PlayerCard
@@ -373,6 +379,8 @@
  .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; align-items: start; }
  .candidate-card { display: grid; gap: var(--space-2); width: 100%; max-width: 24rem; min-width: 0; margin-inline: auto; }
  .candidates:has(.candidate-card[data-selected='true']) .candidate-card:not([data-selected='true']) :global(.art-frame) { opacity: .56; }
+ /* The previewed card already sits on the field, so its source steps back slightly. */
+ .candidate-card[data-previewing='true'] :global(.art-frame) { opacity: .7; transition: opacity .18s ease-out; }
  .empty { padding-block: var(--space-4) var(--space-8); }
  .ranking-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-4); font-size: var(--text-sm); }
  .ranking-controls label { font-weight: 650; }

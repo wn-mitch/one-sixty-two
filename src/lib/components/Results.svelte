@@ -11,8 +11,7 @@
 	import { createShareRenderModel } from '../share/model.ts';
 	import type { ShareAction, ShareFormat, SharePublication } from '../share/types.ts';
 	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
-	import AtmosphereImage from './AtmosphereImage.svelte';
-	import GameDetails from './GameDetails.svelte';
+	import SeasonCalendar from './SeasonCalendar.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
 	import ResultsHand from './ResultsHand.svelte';
 	import SeasonMoments from './SeasonMoments.svelte';
@@ -145,8 +144,8 @@
 
 		<div class="score-actions" aria-busy={sharing}>
 			<div class="share-shortcuts">
-				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'scorecard')}>{sharing ? 'Preparing…' : 'Challenge a friend'}</button>
-				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'scorecard')}>{sharing ? 'Preparing…' : 'Copy link'}</button>
+				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'field')}>{sharing ? 'Preparing…' : 'Challenge a friend'}</button>
+				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'field')}>{sharing ? 'Preparing…' : 'Copy link'}</button>
 			</div>
 			<div class="more-actions">
 				<a class="button quiet" href="/seasons">Play head-to-head</a>
@@ -212,11 +211,6 @@
 		<button class="quiet" type="button" onclick={() => jumpTo('pitching-heading')}>Pitching totals</button>
 		<button class="quiet" type="button" onclick={() => jumpTo('game-log-heading')}>All 162 games <span aria-hidden="true">↓</span></button>
 	</nav>
-
-	<div class="baseball-atmosphere">
-		<p class="eyebrow">Baseball atmosphere · Not the simulated venue</p>
-		<AtmosphereImage id="camden-atmosphere" compact />
-	</div>
 
 	<section class="season-review" aria-labelledby="season-review-heading">
 		<header class="review-heading">
@@ -301,13 +295,9 @@
 				<p class="eyebrow">Every score counts</p>
 				<h3 id="game-log-heading" tabindex="-1">All {result.games.length} games</h3>
 			</div>
-			<p>Open any game for its inning line and complete box score.</p>
+			<p>Choose any game for its inning line and complete box score.</p>
 		</div>
-		<div class="game-list">
-			{#each result.games as game (game.number)}
-				<GameDetails {game} />
-			{/each}
-		</div>
+		<SeasonCalendar games={result.games} seed={result.seed} />
 	</section>
 
 </section>
@@ -315,7 +305,7 @@
 <style>
 	.results {
 		display: grid;
-		gap: var(--space-10);
+		gap: var(--space-8);
 		min-width: 0;
 	}
 	.scoreboard {
@@ -390,12 +380,6 @@
 	.stat-identity { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .5rem; max-width: 15rem; white-space: normal; }
 	.stat-identity small { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 	.support-note { margin: 0; font-size: var(--text-xs); }
-	.game-list { display: grid; min-width: 0; border-top: 1px solid var(--border); }
-	@media (min-width: 64rem) {
-		.game-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-6); align-items: start; }
-		.game-list :global(.game-detail[open]) { grid-column: 1 / -1; }
-	}
-	.baseball-atmosphere .eyebrow { margin-bottom: var(--space-3); }
 
 	@media (min-width: 48rem) {
 		.scoreboard {

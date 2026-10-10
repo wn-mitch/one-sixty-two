@@ -10,6 +10,8 @@
  import type { WarRankings } from '../rankings/types.ts';
  import RosterAssignment from './RosterAssignment.svelte';
  import { createOrderMotion, type OrderMotion } from './order-motion.ts';
+ import { arriveAtTop, clearStage, flyInto, riseIn, stash, take } from './phase-motion.ts';
+ import { MOTION } from '../motion-timing.ts';
  let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onsimulate }: {
   draft: Draft;
   manifest: Manifest;
@@ -45,6 +47,8 @@
  let inspectedTurned = $state(false);
  let inspectedTextBack = $state(false);
  let lineupHeading = $state<HTMLHeadingElement>();
+ let lineupRoot = $state<HTMLElement>();
+ let leaving = $state(false);
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
  const bySeasonPick = $derived(new Map(draft.picks.map(pick => [pick.seasonId, pick])));
  const closerPick = $derived(draft.picks.find(pick => pick.slot === 'CL'));
@@ -222,6 +226,19 @@
   if (event.pointerId === drag?.pointerId) cancelDrag();
  }
 
+ /** Rows drop away before the season starts so the broadcast opens on a clear screen. */
+ async function simulate(): Promise<void> {
+  if (busy || leaving || !lineupRoot) return;
+  leaving = true;
+  const exit = await clearStage(lineupRoot.querySelectorAll<HTMLElement>('li[data-season-id]'), lineupRoot.querySelectorAll<HTMLElement>(':scope > header, .section-heading, .workload, .simulate'));
+  stash('lineup');
+  onsimulate();
+  await tick();
+  leaving = false;
+  // Still mounted means the season did not start.
+  if (lineupRoot?.isConnected) for (const animation of exit) animation.cancel();
+ }
+
  function cancelDragKey(event: KeyboardEvent): void {
   if (event.key === 'Escape') cancelDrag();
  }
@@ -250,6 +267,21 @@
  onMount(() => {
   let disposed = false;
   motion = createOrderMotion();
+  const arrival = take('field');
+  if (arrival) void tick().then(() => {
+   if (disposed || !lineupRoot) return;
+   arriveAtTop();
+   // Each field card flies from its slot to its row; the rest of the screen rises in around them.
+   riseIn(lineupRoot.querySelectorAll<HTMLElement>(':scope > header, .section-heading, .workload, .simulate'));
+   [...lineupRoot.querySelectorAll<HTMLElement>('li[data-season-id]')].forEach((row, index) => {
+    const delay = index * MOTION.handoffStagger;
+    const from = arrival.rects.get(row.dataset.seasonId!);
+    const card = row.querySelector<HTMLElement>('.miniature .card');
+    if (from && card && card.getBoundingClientRect().top < innerHeight) flyInto(card, from, delay);
+    // Each row's details follow its card in, together.
+    riseIn(row.querySelectorAll<HTMLElement>(':scope > :not(.card-trigger)'), delay + MOTION.handoff * .4, 0);
+   });
+  });
   void loadMedia().then(value => {
    if (!disposed) { media = value; mediaStatus = 'ready'; }
   }).catch(() => {
@@ -267,7 +299,7 @@
 
 <svelte:window onpointermove={moveDrag} onpointerup={finishDrag} onpointercancel={cancelPointer} onblur={() => cancelDrag()} onkeydown={cancelDragKey} onclickcapture={preventDragClick} />
 
-<section class="lineup" aria-label="Set your lineup" aria-busy={busy}>
+<section bind:this={lineupRoot} class="lineup" aria-label="Set your lineup" aria-busy={busy} inert={leaving}>
  <header>
   <h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">Set your lineup</h2>
   <p class="muted">Drag the numbers or use the arrows to set the order. Tap a card to inspect its season.</p>
@@ -303,7 +335,7 @@
   {/key}
  {/if}
  <footer class="simulate">
-  <button type="button" class="primary" disabled={busy || !complete} onclick={onsimulate}>{busy ? 'Preparing your season…' : 'Simulate 162 games'}</button>
+  <button type="button" class="primary" disabled={busy || !complete} onclick={() => void simulate()}>{busy ? 'Preparing your season…' : 'Simulate 162 games'}</button>
   {#if !complete && !busy}<p class="notice">All {draftRules(draft.schemaVersion).slots.length} selected seasons must finish loading before the season can start.</p>{/if}
  </footer>
 </section>

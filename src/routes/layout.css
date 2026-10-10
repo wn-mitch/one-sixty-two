@@ -54,6 +54,10 @@ button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .primary { background: var(--accent); color: var(--background); border-color: var(--accent); }
 .primary:hover:not(:disabled) { background: var(--accent-hover); }
+a.button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+a.button:hover { color: var(--text); }
+a.button.primary, a.button.primary:hover { color: var(--background); }
+a.button.primary:hover { background: var(--accent-hover); }
 .secondary { background: var(--surface); }
 .quiet { background: transparent; border-color: transparent; }
 a { color: var(--text); text-underline-offset: .2em; }

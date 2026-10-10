@@ -8,13 +8,53 @@ import { resolveStadium, validateDraftVersion, validateSeason, validateTeam } fr
 import { closerBudget, closerReady, recordCloser, type CloserUsage } from './workload.ts';
 import { WinExpectancyModel } from './win-expectancy.ts';
 
+/**
+ * Builds the season as series, the way a real schedule reads. Twelve opponents play six games: six
+ * of them as three-game series at each venue, and six as a four-game and a two-game series, the
+ * four-game set at home for three of them. The other eighteen get a three-game and a two-game
+ * series at opposite venues, the home three-game set going to exactly nine of them. Every opponent
+ * visits and hosts, and the season is 81 home and 81 away. Series come in random order, and the same opponent never plays two series back to back.
+ */
 export function buildSchedule(seed: number, opponentIds: string[]): ScheduleGame[] {
  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff || opponentIds.length !== 30 || new Set(opponentIds).size !== 30 || opponentIds.some(id => !id)) throw new Error('Schedule requires a valid seed and thirty distinct opponents');
  const random = randomStream(seed, 'schedule');
  const ids = [...opponentIds].sort(compareId);
- const opponents = ids.flatMap(id => Array<string>(5).fill(id));
- opponents.push(...shuffle([...ids], random).slice(0, 12));
- return shuffle(opponents, random).map((opponentId, index) => ({ opponentId, isHome: index % 2 === 0 }));
+ const shuffled = shuffle([...ids], random);
+ const evenSix = new Set(shuffled.slice(0, 6));
+ const homeFour = new Set(shuffled.slice(6, 9));
+ const awayFour = new Set(shuffled.slice(9, 12));
+ const homeThree = new Set(shuffled.slice(12, 21));
+ const series: { opponentId: string; games: number; isHome: boolean }[] = [];
+ for (const opponentId of ids) {
+  if (evenSix.has(opponentId)) series.push({ opponentId, games: 3, isHome: true }, { opponentId, games: 3, isHome: false });
+  else if (homeFour.has(opponentId) || awayFour.has(opponentId)) {
+   const home = homeFour.has(opponentId);
+   series.push({ opponentId, games: 4, isHome: home }, { opponentId, games: 2, isHome: !home });
+  } else {
+   const home = homeThree.has(opponentId);
+   series.push({ opponentId, games: 3, isHome: home }, { opponentId, games: 2, isHome: !home });
+  }
+ }
+ // Draw series in random order, never the previous opponent again, and never leaving a tail that
+ // forces a repeat: the only dead ends are a lone series against the opponent just drawn, or two
+ // remaining series against one opponent.
+ const order: typeof series = [];
+ const pool = [...series];
+ while (pool.length) {
+  const last = order.at(-1)?.opponentId;
+  const legal = pool.filter((set, index) => {
+   if (set.opponentId === last) return false;
+   const rest = pool.filter((_, at) => at !== index);
+   if (rest.length === 1 && rest[0].opponentId === set.opponentId) return false;
+   return !(rest.length === 2 && rest[0].opponentId === rest[1].opponentId);
+  });
+  const pick = legal[Math.floor(random() * legal.length)];
+  if (!pick) throw new Error('Schedule could not separate repeat series');
+  order.push(pick);
+  pool.splice(pool.indexOf(pick), 1);
+ }
+ series.splice(0, series.length, ...order);
+ return series.flatMap(set => Array.from({ length: set.games }, () => ({ opponentId: set.opponentId, isHome: set.isHome })));
 }
 
 export function prepareSeasonInput(draft: Draft, profiles: Profile[], data: SimulationData): SeasonInput {

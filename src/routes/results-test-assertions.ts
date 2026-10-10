@@ -67,7 +67,7 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 
 	await review.getByRole('button', { name: /^Show text version for / }).click();
 	await expect(simulatedBack.locator('tbody tr')).toHaveText(simulatedRows);
-	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('details')).toHaveCount(162);
+	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('[aria-controls="season-game-detail"]')).toHaveCount(162);
 
 	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');

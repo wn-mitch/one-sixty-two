@@ -89,8 +89,9 @@ function assertDimensions(root: HTMLElement, format: ShareFormat): void {
 	}
 }
 
-function fittingIsSettled(root: HTMLElement, format: ShareFormat): boolean {
-	const expectedCards = format === 'wide' ? 9 : 14;
+function fittingIsSettled(root: HTMLElement): boolean {
+	// Every roster card is drawn once on the field.
+	const expectedCards = 14;
 	const captureCards = root.querySelectorAll<HTMLElement>('[data-card][data-capture=\"true\"]');
 	const fittedRoots = [...root.querySelectorAll<HTMLElement>('[data-card]')];
 	return captureCards.length === expectedCards && fittedRoots.length >= captureCards.length &&
@@ -147,14 +148,14 @@ export async function waitForShareCapture(
 			}
 		}
 		await decodeImages(root, deadline, options.signal);
-		await waitUntil(() => fittingIsSettled(root, format), deadline, options.signal);
+		await waitUntil(() => fittingIsSettled(root), deadline, options.signal);
 		assertNoFitOverflow(root);
 		assertDimensions(root, format);
 		await beforeDeadline(nextFrame(options.signal), deadline, options.signal);
 		await beforeDeadline(nextFrame(options.signal), deadline, options.signal);
 		assertNoFitOverflow(root);
 		assertDimensions(root, format);
-		if (!fittingIsSettled(root, format)) throw new Error('Share card fitting changed before capture');
+		if (!fittingIsSettled(root)) throw new Error('Share card fitting changed before capture');
 		assertCaptureCardsAreFlat(root);
 		root.dataset.shareState = 'ready';
 		root.dataset.shareReady = 'true';

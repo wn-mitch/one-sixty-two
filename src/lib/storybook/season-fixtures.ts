@@ -36,9 +36,7 @@ export function createExamplePublication(result: SeasonResult | null, options: E
    runsAgainst: result?.runsAgainst ?? 0
   },
   images: {
-   scorecard: { url: options.imageUrl, width: 1080, height: 1350, sha256: options.imageDigest },
-   diamond: { url: options.imageUrl, width: 1080, height: 1350, sha256: options.imageDigest },
-   wide: { url: options.imageUrl, width: 1200, height: 630, sha256: options.imageDigest }
+   field: { url: options.imageUrl, width: 1080, height: 1350, sha256: options.imageDigest }
   }
  };
 }

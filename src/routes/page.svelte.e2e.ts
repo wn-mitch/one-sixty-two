@@ -1,15 +1,21 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import type { APIRequestContext, BrowserContext, Page, TestInfo } from '@playwright/test';
+import type { APIRequestContext, BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
 import { TEST_SHARE_CAPTURE_TOKEN } from '../../scripts/test-capture-contract.ts';
 import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.ts';
 import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, type Draft, type Slot } from '../lib/game/types.ts';
 import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
 import type { ShareFormat, SharePublication } from '../lib/share/types.ts';
-import { chooseStadium, currentManifest, openPack, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
 import { verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
+
+/** Every game in the results calendar, one control per game, including both halves of a doubleheader. */
+const SEASON_GAME = '[aria-controls="season-game-detail"]';
+function gameLabels(region: Locator): Promise<(string | null)[]> {
+	return region.locator(SEASON_GAME).evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')));
+}
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(300000);
@@ -53,7 +59,7 @@ async function captureTrustedArtwork(
 				fontResources: performance.getEntriesByType('resource')
 					.filter(entry => entry.name.includes('/fonts/')).length
 			};
-		}, format === 'wide' ? 9 : 14);
+		}, 14);
 		expect(readiness).toEqual({
 			width: dimensions.width,
 			height: dimensions.height,
@@ -120,10 +126,10 @@ async function verifyPublication(
 	}
 	const missingFonts = await context.newPage();
 	try {
-		await missingFonts.setViewportSize(SHARE_DIMENSIONS.scorecard);
+		await missingFonts.setViewportSize(SHARE_DIMENSIONS.field);
 		await missingFonts.setExtraHTTPHeaders({ 'x-share-capture-token': TEST_SHARE_CAPTURE_TOKEN });
 		await missingFonts.route('**/fonts/**', route => route.fulfill({ status: 503, body: 'Font unavailable' }));
-		await missingFonts.goto(`${origin}/__share/${publication.modelDigest}/scorecard`, { waitUntil: 'networkidle' });
+		await missingFonts.goto(`${origin}/__share/${publication.modelDigest}/field`, { waitUntil: 'networkidle' });
 		const artwork = missingFonts.locator('[data-share-artwork]');
 		await expect(artwork).toHaveAttribute('data-share-state', 'failed');
 		await expect(artwork).toHaveAttribute('data-share-failure', 'A required share font failed to load');
@@ -138,9 +144,9 @@ async function verifyPublication(
 	const { wins, losses, firstLoss, longestWinningStreak } = publication.record;
 	expect(html).toContain(`<title>${wins}-${losses} season | 162-0</title>`);
 	expect(html).toContain(`property=\"og:url\" content=\"${publication.replayUrl}\"`);
-	expect(html).toContain(`property=\"og:image\" content=\"${publication.images.wide.url}\"`);
-	expect(html).toContain('property=\"og:image:width\" content=\"1200\"');
-	expect(html).toContain('property=\"og:image:height\" content=\"630\"');
+	expect(html).toContain(`property=\"og:image\" content=\"${publication.images.field.url}\"`);
+	expect(html).toContain('property=\"og:image:width\" content=\"1080\"');
+	expect(html).toContain('property=\"og:image:height\" content=\"1350\"');
 	expect(html).toContain('name=\"twitter:card\" content=\"summary_large_image\"');
 	expect(html).toContain(firstLoss === null ? 'No losses.' : `First loss: Game ${firstLoss}.`);
 	expect(html).toContain(`Longest winning streak: ${longestWinningStreak} ${longestWinningStreak === 1 ? 'game' : 'games'}.`);
@@ -283,7 +289,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	expect(startersAfter).toEqual([startersBefore[1], startersBefore[0], startersBefore[2]]);
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	const games = page.getByRole('region', { name: 'All 162 games', exact: true });
-	await expect(games.locator('details')).toHaveCount(162);
+	await expect(games.locator(SEASON_GAME)).toHaveCount(162);
 	await verifyResultsInspection(page);
 	const moments = page.getByRole('region', { name: 'Season turning points', exact: true });
 	await expect(moments.getByRole('heading', { name: 'Season turning points', exact: true })).toBeVisible();
@@ -298,9 +304,9 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 		expect(copy).toMatch(/\d+\.\d% → \d+\.\d%/);
 		expect(copy).toMatch(/[+−]\d+\.\d pp/);
 	}
-	const scores = await games.locator('details > summary .score').allTextContents();
-	await games.locator('details > summary').first().click();
-	await expect(games.locator('details').first().getByRole('table').first()).toBeVisible();
+	const scores = await gameLabels(games);
+	await games.locator(SEASON_GAME).first().click();
+	await expect(page.locator('#season-game-detail').getByRole('table').first()).toBeVisible();
 	const uploadResponse = page.waitForResponse(response =>
 		new URL(response.url()).pathname === '/api/replays' && response.request().method() === 'POST'
 	);
@@ -320,20 +326,13 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	expect(new URL(url).origin).toBe(origin);
 	expect(url.length).toBeLessThan(100);
 	expect(publication.replayUrl).toBe(url);
-	await expect(page.getByText(`Published PNG · ${SHARE_DIMENSIONS.scorecard.width}×${SHARE_DIMENSIONS.scorecard.height}`, { exact: true })).toBeVisible();
+	await expect(page.getByText(`Published PNG · ${SHARE_DIMENSIONS.field.width}×${SHARE_DIMENSIONS.field.height}`, { exact: true })).toBeVisible();
 	await verifyPublication(request, context, origin, publication, testInfo);
 	const cachedPublication = await request.get(`/api/replays/${publication.replayId}/share`);
 	expect(cachedPublication.status()).toBe(200);
 	expect(await cachedPublication.json()).toEqual(publication);
 	const sharePanel = page.locator('.share-panel');
-	for (const [label, format] of [['Diamond', 'diamond'], ['Wide', 'wide']] as const) {
-		await sharePanel.getByRole('button', { name: label, exact: true }).click();
-		await expect(sharePanel.locator('.preview img')).toHaveAttribute('src', publication.images[format].url);
-		await expect(sharePanel.getByText(
-			`Published PNG · ${SHARE_DIMENSIONS[format].width}×${SHARE_DIMENSIONS[format].height}`,
-			{ exact: true }
-		)).toBeVisible();
-	}
+	await expect(sharePanel.locator('.preview img')).toHaveAttribute('src', publication.images.field.url);
 	const repeatPreparations: string[] = [];
 	page.on('request', browserRequest => {
 		if (browserRequest.method() === 'POST' && /\/api\/replays\/[^/]+\/share$/.test(new URL(browserRequest.url()).pathname)) {
@@ -344,17 +343,17 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await sharePanel.getByRole('button', { name: 'Copy image', exact: true }).click();
 	await expect(sharePanel.locator('.share-status')).toHaveText('PNG copied.');
 	// Clipboard implementations may re-encode PNGs; the displayed image must remain exact.
-	const storedPixels = await imagePixelDigest(page, { url: publication.images.wide.url });
+	const storedPixels = await imagePixelDigest(page, { url: publication.images.field.url });
 	const clipboardPixels = await imagePixelDigest(page, { clipboard: true });
-	expect(clipboardPixels).toEqual({ ...SHARE_DIMENSIONS.wide, sha256: storedPixels.sha256 });
+	expect(clipboardPixels).toEqual({ ...SHARE_DIMENSIONS.field, sha256: storedPixels.sha256 });
 	const downloadEvent = page.waitForEvent('download');
 	await sharePanel.getByRole('button', { name: 'Download PNG', exact: true }).click();
 	const download = await downloadEvent;
-	expect(download.suggestedFilename()).toBe(`162-0-${publication.record.wins}-${publication.record.losses}-wide.png`);
+	expect(download.suggestedFilename()).toBe(`162-0-${publication.record.wins}-${publication.record.losses}-field.png`);
 	const downloadPath = await download.path();
 	if (!downloadPath) throw new Error('The PNG download has no saved file');
-	expect(createHash('sha256').update(await readFile(downloadPath)).digest('hex')).toBe(publication.images.wide.sha256);
-	await expect(sharePanel.locator('.share-status')).toHaveText('Wide PNG downloaded.');
+	expect(createHash('sha256').update(await readFile(downloadPath)).digest('hex')).toBe(publication.images.field.sha256);
+	await expect(sharePanel.locator('.share-status')).toHaveText('Season PNG downloaded.');
 	expect(repeatPreparations).toEqual([]);
 	// The stored replay must survive a fresh HTTP read, not just the upload response.
 	const stored = await page.request.get(`/api/replays/${publication.replayId}`);
@@ -363,11 +362,11 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await replay.goto(url);
 	await expect(replay.locator('#results-heading')).toBeVisible({ timeout: 30_000 });
 	const replayGames = replay.getByRole('region', { name: 'All 162 games', exact: true });
-	await expect(replayGames.locator('details')).toHaveCount(162);
+	await expect(replayGames.locator(SEASON_GAME)).toHaveCount(162);
 	const replayMoments = replay.getByRole('region', { name: 'Season turning points', exact: true });
 	await expect(replayMoments.locator('.moment-card .story')).toHaveCount(2);
 	expect(await replayMoments.locator('.moment-card').allTextContents()).toEqual(momentCopy);
-	expect(await replayGames.locator('details > summary .score').allTextContents()).toEqual(scores);
+	expect(await gameLabels(replayGames)).toEqual(scores);
 	const replayUrl = replay.url();
 	for (const [name, id] of [['Batting totals', 'batting-heading'], ['Pitching totals', 'pitching-heading'], ['All 162 games', 'game-log-heading']]) {
 		await replay.getByRole('button', { name, exact: true }).click();
@@ -376,8 +375,8 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	}
 	await replay.reload();
 	await expect(replay.locator('#results-heading')).toBeVisible({ timeout: 30_000 });
-	await expect(replayGames.locator('details')).toHaveCount(162);
-	expect(await replayGames.locator('details > summary .score').allTextContents()).toEqual(scores);
+	await expect(replayGames.locator(SEASON_GAME)).toHaveCount(162);
+	expect(await gameLabels(replayGames)).toEqual(scores);
 	expect(errors).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 	await replay.close();
@@ -433,10 +432,8 @@ test('retries a failed chunk without rerolling the committed draft', async ({ pa
 		return route.continue();
 	});
 	await page.getByRole('button', { name: /Start draft/ }).click();
-	await chooseStadium(page);
-	await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
-	const committed = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll);
-	await page.getByRole('button', { name: 'Retry', exact: true }).click();
+	await selectStadium(page);
+	const committed = await openPackThroughRetry(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll)).toEqual(committed);
 	expect(aborted).toBe(true);
@@ -488,10 +485,8 @@ for (const invalid of ['empty', 'wrong-roll']) {
 			return route.continue();
 		});
 		await page.getByRole('button', { name: /Start draft/ }).click();
-		await chooseStadium(page);
-		await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible({ timeout: 5000 });
-		const committed = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll);
-		await page.getByRole('button', { name: 'Retry', exact: true }).click();
+		await selectStadium(page);
+		const committed = await openPackThroughRetry(page);
 		await expect(page.locator('.player-card').first()).toBeVisible({ timeout: 5000 });
 		expect(intercepted).toBe(2);
 		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll)).toEqual(committed);
@@ -507,7 +502,7 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 		if (index < 13) await openPack(page);
 	}
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
-	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('details')).toHaveCount(162);
+	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator(SEASON_GAME)).toHaveCount(162);
 	const completed = await page.evaluate(() => localStorage.getItem('162-zero:v1'));
 	await page.reload();
 	const gate = Promise.withResolvers<void>();

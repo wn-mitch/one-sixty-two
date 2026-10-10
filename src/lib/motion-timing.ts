@@ -32,6 +32,28 @@ export const MOTION = {
 	dealStagger: 45,
 	/** Cards beyond this many on screen skip the flight so the deal never drags. */
 	dealMaxCards: 12,
+	/** One candidate card dropping out the bottom of the screen after a pick. */
+	gridDrop: 420,
+	/** Gap between consecutive candidate cards leaving, in reading order. */
+	gridDropStagger: 30,
+	/** The next pack rising into place once the candidates have left. */
+	packEnter: 460,
+	/** One idle turn of the franchise-mark coin on a sealed pack. */
+	markSpin: 2800,
+	/** How many times faster the coin spins while the pack tears and the card pulls. */
+	markSpinBurst: 14,
+	/** A new screen's sections rising into place after the previous screen hands off. */
+	screenRise: 480,
+	/** Stadium cards sliding to their new places when a favorite or the sort changes. */
+	deckReorder: 320,
+	/** Gap between consecutive sections rising, top to bottom. */
+	screenRiseStagger: 70,
+	/** A card or record travelling from one screen into its place on the next; divided by the card speed setting. */
+	handoff: 720,
+	/** Gap between consecutive cards in a multi-card handoff. */
+	handoffStagger: 35,
+	/** How long a departing screen's positions stay valid for the incoming screen to pick up. */
+	handoffTtl: 4000,
 	/** Raising a roster card for review and returning it; divided by the card speed setting. */
 	cardFlight: 780,
 	/** Turning the field card between the field and its stadium details. */

@@ -84,13 +84,13 @@
 </section>
 
 <style>
-	.awards { display: grid; gap: var(--space-4); min-width: 0; }
+	.awards { display: grid; gap: var(--space-3); min-width: 0; }
 	.section-heading { display: flex; align-items: end; justify-content: space-between; gap: var(--space-6); }
 	.section-heading .eyebrow { margin: 0 0 var(--space-2); }
 	.section-heading h3 { font-size: var(--text-xl); }
 	.section-heading > p { max-width: 36rem; margin: 0; color: var(--muted); font-size: var(--text-sm); text-align: right; }
-	.award-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-5); min-width: 0; padding: var(--space-2) var(--space-1) var(--space-5); }
-	.award-entry { display: grid; align-content: start; gap: var(--space-3); min-width: 0; --award-tone: var(--accent); }
+	.award-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-4); min-width: 0; padding: var(--space-1) var(--space-1) var(--space-2); }
+	.award-entry { display: grid; align-content: start; gap: var(--space-2); min-width: 0; --award-tone: var(--accent); }
 	.award-entry.red { --award-tone: var(--error); }
 	.award-kicker { margin: 0; color: var(--award-tone); font-size: var(--text-xs); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 	.award-card { width: 100%; min-height: 0; padding: 0; border: 0; background: transparent; border-radius: .55rem; text-align: inherit; }

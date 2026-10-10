@@ -36,9 +36,7 @@ function publication(): SharePublication {
 		modelDigest: 'a'.repeat(64),
 		record,
 		images: {
-			scorecard: { url: `${origin}/api/replays/${replayId}/share/scorecard.png`, width: 1080, height: 1350, sha256: 'b'.repeat(64) },
-			diamond: { url: `${origin}/api/replays/${replayId}/share/diamond.png`, width: 1080, height: 1350, sha256: 'c'.repeat(64) },
-			wide: { url: `${origin}/api/replays/${replayId}/share/wide.png`, width: 1200, height: 630, sha256: 'd'.repeat(64) }
+			field: { url: `${origin}/api/replays/${replayId}/share/field.png`, width: 1080, height: 1350, sha256: 'b'.repeat(64) }
 		}
 	};
 }
@@ -48,7 +46,7 @@ function draft(): Draft {
 		schemaVersion: 5,
 		dataVersion: 'data-version',
 		modelVersion: 'contact-v1',
-		rulesVersion: 'classic-v1',
+		rulesVersion: 'classic-v2',
 		seed: 162,
 		homeStadium: { id: 'F00-2025', version: 'synthetic-F00' },
 		picks: [],
@@ -117,7 +115,7 @@ describe('explicit replay publication', () => {
 		expect(isShareIncompatibility(error)).toBe(true);
 
 		const forged = publication();
-		forged.images.wide.width = 1080;
+		forged.images.field.width = 1200;
 		expect(() => validateSharePublication(forged, replayId, origin)).toThrow('invalid publication');
 	});
 });
@@ -137,7 +135,7 @@ describe('browser action boundaries', () => {
 			headers: { 'content-type': 'image/png' }
 		}));
 
-		const copying = beginCopyPublishedImage(pending, 'scorecard', {
+		const copying = beginCopyPublishedImage(pending, 'field', {
 			fetch: fetcher,
 			clipboard: { write } as unknown as Pick<Clipboard, 'write'>,
 			ClipboardItem: FakeClipboardItem as unknown as typeof ClipboardItem
@@ -146,12 +144,12 @@ describe('browser action boundaries', () => {
 		expect(fetcher).not.toHaveBeenCalled();
 		resolvePublication(publication());
 		await copying;
-		expect(fetcher).toHaveBeenCalledWith(publication().images.scorecard.url, { headers: { accept: 'image/png' } });
+		expect(fetcher).toHaveBeenCalledWith(publication().images.field.url, { headers: { accept: 'image/png' } });
 		expect(copied?.type).toBe('image/png');
 	});
 
 	it('offers honest capability failures instead of substituting image copy with link copy', async () => {
-		expect(() => beginCopyPublishedImage(Promise.resolve(publication()), 'diamond', {
+		expect(() => beginCopyPublishedImage(Promise.resolve(publication()), 'field', {
 			fetch: vi.fn(),
 			clipboard: undefined,
 			ClipboardItem: undefined
@@ -162,13 +160,13 @@ describe('browser action boundaries', () => {
 	it('downloads the exact stored PNG bytes with a deterministic filename', async () => {
 		const bytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
 		const saved = vi.fn();
-		await downloadPublishedImage(publication(), 'wide', {
+		await downloadPublishedImage(publication(), 'field', {
 			fetch: vi.fn(async () => new Response(bytes, { headers: { 'content-type': 'image/png' } })),
 			save: saved
 		});
 		expect(saved).toHaveBeenCalledTimes(1);
 		expect(saved.mock.calls[0][0]).toBeInstanceOf(Blob);
-		expect(saved.mock.calls[0][1]).toBe('162-0-118-44-wide.png');
+		expect(saved.mock.calls[0][1]).toBe('162-0-118-44-field.png');
 		expect(new Uint8Array(await saved.mock.calls[0][0].arrayBuffer())).toEqual(bytes);
 	});
 
@@ -186,7 +184,7 @@ describe('browser action boundaries', () => {
 });
 
 describe('Session share orchestration', () => {
-	it('prepares once, publishes the link only after wide artwork exists, and reuses the immutable publication', async () => {
+	it('prepares once, publishes the link only after the field artwork exists, and reuses the immutable publication', async () => {
 		const writeText = vi.fn(async () => undefined);
 		const requests: string[] = [];
 		vi.stubGlobal('location', { origin });
@@ -323,7 +321,7 @@ describe('Session share orchestration', () => {
 		}));
 		const session = sessionWithResult();
 
-		await session.share('copy-image', 'diamond');
+		await session.share('copy-image', 'field');
 		expect(session.publication).toEqual(publication());
 		expect(session.imageDownloadFallback).toBe(true);
 		expect(session.shareStatus).toContain('Download PNG');

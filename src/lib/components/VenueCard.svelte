@@ -1,20 +1,9 @@
-<script lang="ts" module>
- import { compareId } from '../game/types.ts';
- import type { AtmospherePhoto, MediaManifest } from '../media/types.ts';
-
- /** The ballpark photo printed on a franchise's stadium card: its first atmosphere photo by ID. */
- export function venuePhoto(media: MediaManifest | null, franchiseId: string): AtmospherePhoto | null {
-  if (!media) return null;
-  return Object.values(media.atmosphere)
-   .filter(candidate => candidate.franchiseId === franchiseId)
-   .sort((a, b) => compareId(a.id, b.id))[0] ?? null;
- }
-</script>
-
 <script lang="ts">
  import { onMount } from 'svelte';
  import { STOCK, roles } from '../cards/tokens.ts';
  import { loadMedia } from '../media/client.ts';
+ import type { MediaManifest } from '../media/types.ts';
+ import { venuePhoto } from '../media/venue.ts';
  import type { StadiumSummary } from '../sim/park-types.ts';
  import StadiumCard from './StadiumCard.svelte';
  import TeamLogo from './TeamLogo.svelte';

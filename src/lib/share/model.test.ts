@@ -19,7 +19,7 @@ function fixture(): CreateShareRenderModelInput {
 	const draft: Draft = {
 		schemaVersion: 5,
 		modelVersion: 'contact-v1',
-		rulesVersion: 'classic-v1',
+		rulesVersion: 'classic-v2',
 		dataVersion: season.data.dataVersion,
 		seed: season.seed,
 		homeStadium: season.homeStadium,
@@ -54,7 +54,7 @@ function fixture(): CreateShareRenderModelInput {
 	};
 	const games = Array.from({ length: 162 }, (_, index) => ({ number: index + 1 } as GameResult));
 	const result: SeasonResult = {
-		modelVersion: 'contact-v1', rulesVersion: 'classic-v1', dataVersion: season.data.dataVersion, seed: season.seed, homeStadium: season.homeStadium,
+		modelVersion: 'contact-v1', rulesVersion: 'classic-v2', dataVersion: season.data.dataVersion, seed: season.seed, homeStadium: season.homeStadium,
 		defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2',
 		wins: 100, losses: 62, firstLoss: 3, longestWinningStreak: 12, runsFor: 811, runsAgainst: 644,
 		games, batting: [], pitching: [], starterStarts: [54, 54, 54], highlight: null, lowlight: null

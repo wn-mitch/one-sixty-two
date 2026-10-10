@@ -5,7 +5,7 @@
 	import { draftRules } from '../game/rules.ts';
 	import TeamLogo from './TeamLogo.svelte';
 
-	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor, lastPick, concealed = false, compact = false }: {
+	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor, concealed = false, compact = false }: {
 		roll: Roll | null;
 		manifest: Manifest;
 		revealing: boolean;
@@ -13,7 +13,6 @@
 		schemaVersion: ReplaySchemaVersion;
 		teamColor?: string;
 		/** Summary of the previous pick, shown while no roll is pending. */
-		lastPick?: string;
 		/** Holds the roll's space without showing it while the pack deals it. */
 		concealed?: boolean;
 		compact?: boolean;
@@ -63,7 +62,7 @@
 			<p class="status">{concealed ? 'Dealing a franchise…' : revealing ? 'Revealing your player pool…' : 'Choose one exact season from this franchise.'}</p>
 		{:else}
 			<h2>Your next great pick.</h2>
-			<p class="status">{lastPick ? `Last pick: ${lastPick}` : 'Open a pack to deal a franchise and an era.'}</p>
+			<p class="status">Open a pack to deal a franchise and an era.</p>
 		{/if}
 	</div>
 </section>

@@ -87,7 +87,7 @@ export interface Pick extends Roll { seasonId: string; slot: Slot }
 export const CURRENT_REPLAY_SCHEMA_VERSION = 5 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
 export const MODEL_VERSION = 'contact-v1' as const;
-export const RULES_VERSION = 'classic-v1' as const;
+export const RULES_VERSION = 'classic-v2' as const;
 export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
 export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =

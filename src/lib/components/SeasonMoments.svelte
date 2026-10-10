@@ -55,11 +55,6 @@
      <strong>{copy.winChance} <small>{copy.swing}</small></strong>
     </div>
     {#if copy.final}<p class="final">{copy.final}</p>{/if}
-    {#if card && view}
-     <button type="button" class="inspect-action" aria-expanded={selectedSeasonId === card.seasonId} aria-controls={reviewId} onclick={event => onInspect(card.seasonId, event.currentTarget)}>
-      Inspect {card.profile.displayName}
-     </button>
-    {/if}
    </div>
   {:else}
    <div class="moment-copy">
@@ -79,7 +74,6 @@
   {@render momentPanel('Season highlight', 'highlight', highlight, highlightCard, highlightView)}
   {@render momentPanel('Season lowlight', 'lowlight', lowlight, lowlightCard, lowlightView)}
  </div>
- <p class="model-note">Win expectancy is an equal-strength estimate from the inning, half, outs, occupied bases, score, and neutral league rates. Future plate appearances use fixed league rates and simplified base advancement; player and team strength are not modeled, and future steals, errors, double plays, and sacrifice flies are omitted. Ties after regulation are valued at 50%, with no ghost runner.</p>
 </section>
 
 <style>
@@ -91,7 +85,8 @@
  .moment-card.has-participant { grid-template-columns: 6.875rem minmax(0, 1fr); }
  .moment-card.highlight { border-top-color: var(--success); }
  .moment-card.lowlight { border-top-color: var(--error); }
- .participant-card { all: unset; display: block; width: 100%; border-radius: var(--radius); cursor: pointer; touch-action: manipulation; }
+ /* Only the card itself is the inspect target; it does not stretch down the panel. */
+ .participant-card { all: unset; display: block; align-self: start; width: 100%; border-radius: var(--radius); cursor: pointer; touch-action: manipulation; }
  .participant-card:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
  .participant-art { display: block; width: 100%; border-radius: var(--radius); box-shadow: 0 .75rem 1.5rem color-mix(in oklch, var(--background) 68%, transparent); }
  .moment-copy { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-3); min-width: 0; }
@@ -106,8 +101,6 @@
  .expectancy > span { max-width: 18rem; color: var(--muted); font-size: var(--text-xs); }
  .expectancy strong { font-size: var(--text-lg); font-variant-numeric: tabular-nums; white-space: normal; }
  .expectancy small { display: inline-block; margin-left: var(--space-2); color: var(--text); font-size: var(--text-sm); white-space: nowrap; }
- .inspect-action { justify-self: start; min-height: 2.75rem; }
- .model-note { max-width: 78ch; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
  @media (min-width: 48rem) {
   .moment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
  }

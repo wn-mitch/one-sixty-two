@@ -3,6 +3,7 @@ import { CURRENT_REPLAY_SCHEMA_VERSION, DEFENSE_METHOD_VERSION, HITTER_SLOTS, MO
 import { ENVIRONMENT_VERSION, GEOMETRY_VERSION } from '../sim/park-types.ts';
 import type { Candidate, Draft, Manifest, Profile, Slot } from '../game/types.ts';
 import type { MediaManifest } from '../media/types.ts';
+import { venuePhoto } from '../media/venue.ts';
 import type { WarRankings } from '../rankings/types.ts';
 import type { SeasonResult } from '../sim/types.ts';
 import { validateProfile } from '../sim/validation.ts';
@@ -172,10 +173,22 @@ function publicationPins(input: CreateShareRenderModelInput): {
 	};
 }
 
-function shareStadium(draft: Draft, manifest: Manifest): ShareStadium {
+function shareStadium(draft: Draft, manifest: Manifest, media: MediaManifest | null | undefined): ShareStadium {
 	const summary = manifest.stadiums.find(item => item.ref.id === draft.homeStadium?.id && item.ref.version === draft.homeStadium?.version);
 	if (!summary) throw new Error('Share stadium does not match the current dataset');
-	return { id: summary.ref.id, version: summary.ref.version, name: summary.name, geometryVersion: GEOMETRY_VERSION, environmentVersion: ENVIRONMENT_VERSION };
+	const photo = venuePhoto(media, summary.franchiseId);
+	return {
+		id: summary.ref.id,
+		version: summary.ref.version,
+		name: summary.name,
+		geometryVersion: GEOMETRY_VERSION,
+		environmentVersion: ENVIRONMENT_VERSION,
+		franchiseId: summary.franchiseId,
+		outline: summary.outline.map(([x, y]) => [x, y] as [number, number]),
+		dimensions: summary.dimensions.map(({ bearingDeg, distanceFt }) => ({ bearingDeg, distanceFt })),
+		color: media?.teams[summary.franchiseId]?.color ?? null,
+		photo: photo ? { url: photo.url, width: photo.width, height: photo.height } : null
+	};
 }
 
 /** Build the sole render model used by local previews and trusted captures. */
@@ -186,7 +199,7 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		!draft.homeStadium || result.homeStadium.id !== draft.homeStadium.id || result.homeStadium.version !== draft.homeStadium.version) {
 		throw new Error('Share result does not match the drafted season');
 	}
-	const homeStadium = shareStadium(draft, manifest);
+	const homeStadium = shareStadium(draft, manifest, media);
 	const record = validateRecord(result);
 	const picks = validateDraftShape(draft, manifest);
 	const profiles = validateProfiles(input.profiles, picks);
@@ -210,7 +223,7 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 	});
 
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		replaySchemaVersion: draft.schemaVersion,
 		modelVersion: result.modelVersion,
 		rulesVersion: result.rulesVersion,

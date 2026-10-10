@@ -18,7 +18,7 @@ function draftInput() {
 }
 
 describe('challenge schedule', () => {
- it('plays five per opponent plus twelve distinct sixth games, with 81 at each venue', () => {
+ it('plays five per opponent plus twelve distinct sixth games as home and away series, with 81 at each venue', () => {
   const ids = testSeason().data.opponents.map(team => team.id);
   const schedule = buildSchedule(162, ids);
   expect(schedule).toHaveLength(162);
@@ -26,9 +26,27 @@ describe('challenge schedule', () => {
   const counts = ids.map(id => schedule.filter(game => game.opponentId === id).length);
   expect(counts.filter(count => count === 6)).toHaveLength(12);
   expect(counts.filter(count => count === 5)).toHaveLength(18);
-  expect(schedule.every((game, index) => game.isHome === (index % 2 === 0))).toBe(true);
+  // Games come in two-, three-, and four-game series at one venue, never the same opponent twice in a row.
+  const series: { opponentId: string; isHome: boolean; games: number }[] = [];
+  for (const game of schedule) {
+   const last = series.at(-1);
+   if (last && last.opponentId === game.opponentId && last.isHome === game.isHome) last.games++;
+   else series.push({ ...game, games: 1 });
+  }
+  expect(series).toHaveLength(60);
+  expect(series.map(set => set.games).sort()).toEqual([...Array(6).fill(2), ...Array(18).fill(2), ...Array(30).fill(3), ...Array(6).fill(4)].sort());
+  expect(series.every((set, index) => index === 0 || set.opponentId !== series[index - 1].opponentId)).toBe(true);
+  for (const id of ids) expect(new Set(series.filter(set => set.opponentId === id).map(set => set.isHome))).toEqual(new Set([true, false]));
   expect(buildSchedule(162, [...ids].reverse())).toEqual(schedule);
   expect(buildSchedule(163, ids)).not.toEqual(schedule);
+ });
+ it('never schedules back-to-back series against one opponent', () => {
+  const ids = testSeason().data.opponents.map(team => team.id);
+  for (let seed = 0; seed < 2000; seed++) {
+   const schedule = buildSchedule(seed, ids);
+   const opponents = schedule.filter((game, index) => index === 0 || game.opponentId !== schedule[index - 1].opponentId || game.isHome !== schedule[index - 1].isHome).map(game => game.opponentId);
+   expect(opponents.every((id, index) => index === 0 || id !== opponents[index - 1]), `seed ${seed}`).toBe(true);
+  }
  });
  it('rejects incomplete or duplicate opposition', () => {
   expect(() => buildSchedule(162, Array<string>(30).fill('same'))).toThrow('thirty distinct');

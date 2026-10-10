@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
 	import DraftBoard from '#lib/components/DraftBoard.svelte';
+	import ErrorDialog from '#lib/components/ErrorDialog.svelte';
 	import { commitPick, reassignPick, rollDraft } from '#lib/game/draft.ts';
 	import type { Draft, HitterSlot, Profile, Slot } from '#lib/game/types.ts';
 	import type { WarRankings } from '#lib/rankings/types.ts';
@@ -203,7 +204,6 @@
 				{phase}
 				{loading}
 				{busy}
-				{error}
 				{rankings}
 				{rankingLoading}
 				{rankingError}
@@ -214,6 +214,7 @@
 				onNew={reset}
 			/>
 		{/key}
+		<ErrorDialog message={error} onDismiss={() => error = ''} />
 	</div>
 {/snippet}
 
