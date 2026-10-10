@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BattingCounts, DefensiveEvidence, DefensivePosition, DefensiveSkillName, Profile } from '../game/types.ts';
-import { createCardViewModel } from './view-model.ts';
+import { createCardViewModel, lineupStats } from './view-model.ts';
 import type { CardViewModel } from './view-model.ts';
 
 const notApplicable: DefensiveEvidence = { status: 'notApplicable', exposure: 0 };
@@ -169,5 +169,20 @@ describe('shared historical OPS fallback', () => {
   });
   expect(createCardViewModel({ profile: twoWay, slot: 'DH' }).st2).toMatchObject({ l: 'OPS', v: '1.500' });
   expect(createCardViewModel({ profile: twoWay, slot: 'SP1' }).st2).toMatchObject({ l: 'ERA', v: '3.00' });
+ });
+});
+
+describe('lineup stat line', () => {
+ it('derives hitter OBP/SLG/HR and hides estimated inputs', () => {
+  expect(lineupStats(profile(), 'batting')).toEqual([{ l: 'OBP', v: '.500' }, { l: 'SLG', v: '1.000' }, { l: 'HR', v: '1' }]);
+  expect(lineupStats(profile({ estimatedFields: ['batting.SF.estimated', 'batting.HR.estimated'] }), 'batting'))
+   .toEqual([{ l: 'OBP', v: '—' }, { l: 'SLG', v: '—' }, { l: 'HR', v: '—' }]);
+  expect(lineupStats(profile({ batting: undefined }), 'batting').map(stat => stat.v)).toEqual(['—', '—', '—']);
+ });
+
+ it('orders starter and closer lines by role', () => {
+  const pitcher = profile({ pitching: { G: 60, GS: 0, IPouts: 271, H: 40, HR: 4, BB: 15, HBP: 1, SO: 80, BFP: 260, ER: 20, SV: 41 } });
+  expect(lineupStats(pitcher, 'starter')).toEqual([{ l: 'ERA', v: '1.99' }, { l: 'SO', v: '80' }, { l: 'IP', v: '90.1' }]);
+  expect(lineupStats(pitcher, 'closer')).toEqual([{ l: 'ERA', v: '1.99' }, { l: 'SO', v: '80' }, { l: 'SV', v: '41' }]);
  });
 });

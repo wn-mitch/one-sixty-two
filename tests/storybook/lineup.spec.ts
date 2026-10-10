@@ -97,7 +97,7 @@ test.describe('lineup editor', () => {
 		const handles = page.locator('.drag-handle');
 		await expect(handles).toHaveCount(12);
 		for (const handle of await handles.all()) await expect(handle).toBeDisabled();
-		for (const control of await page.locator('.move, [data-assignment-select], [data-assignment-action]').all()) await expect(control).toBeDisabled();
+		for (const control of await page.locator('.move, [data-assignment-select]').all()) await expect(control).toBeDisabled();
 		const list = page.locator('[data-order-kind="batting"]');
 		const before = await identities(list);
 		await handles.first().dispatchEvent('pointerdown', { pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
@@ -132,8 +132,11 @@ test.describe('lineup editor', () => {
 		await expect.poll(() => identities(list)).toEqual([before[1], before[0], ...before.slice(2)]);
 		await expect(page.locator('#lineup-card-review')).toHaveCount(0);
 		const scrollBefore = await page.evaluate(() => window.scrollY);
-		await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 20, y: 850 }] });
-		for (const y of [750, 650, 550, 450]) await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 20, y }] });
+		// Swipe down the card column; only the numbered handles opt out of native touch scrolling.
+		const cards = (await list.locator('.card-trigger').first().boundingBox())!;
+		const x = cards.x + cards.width / 2;
+		await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: 850 }] });
+		for (const y of [750, 650, 550, 450]) await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] });
 		await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 		await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBefore);
 		await client.detach();

@@ -76,10 +76,10 @@ test.describe('application workshop stories', () => {
 		await openStory(page, 'lineup-editor--complete');
 		const firstCard = page.locator('.order').first().locator('li').first();
 		await firstCard.getByRole('button', { name: /down in batting order/i }).click();
-		await expect(firstCard.locator('.order-heading .name')).toHaveText(firstName);
+		await expect(firstCard.locator('.identity .name')).toHaveText(firstName);
 		await expect(page.locator('.announcement')).toContainText(/moved to batting position 2/i);
 		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
-		await expect(firstCard.locator('.order-heading .name')).toHaveText(originalFirstName);
+		await expect(firstCard.locator('.identity .name')).toHaveText(originalFirstName);
 
 		await firstCard.getByRole('button', { name: /down in batting order/i }).click();
 		await page.getByRole('button', { name: /simulate 162 games/i }).click();
@@ -107,22 +107,19 @@ test.describe('application workshop stories', () => {
 		const centerId = await center.getAttribute('data-roster-assignment');
 		await expect(left.getByLabel(/position for example batter 06/i)).toHaveValue('LF');
 		await expect(center.getByLabel(/position for example batter 07/i)).toHaveValue('CF');
-		await left.getByLabel(/position for example batter 06/i).selectOption('CF');
-		await expect(left.locator('[data-assignment-action]')).toBeEnabled();
-		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
-		await expect(left.getByLabel(/position for example batter 06/i)).toHaveValue('LF');
-		await expect(left.locator('[data-assignment-action]')).toBeDisabled();
-		await expect(page.locator('.announcement')).toHaveText('');
-
-		await left.getByLabel(/position for example batter 06/i).selectOption('CF');
-		await expect(left.locator('.status')).toBeVisible();
-		await expect(left.locator('.status')).toContainText(/Example Batter 07.*LF/);
-		await left.getByRole('button', { name: /swap example batter 06 to cf/i }).click();
+		const leftSelect = left.getByLabel(/position for example batter 06/i);
+		await expect(leftSelect.locator('option[value="CF"]')).toHaveText('CF · swap with Example Batter 07');
+		await expect(leftSelect.locator('option[value="LF"]')).toHaveText('LF');
+		await leftSelect.selectOption('CF');
 		await expect(left).toHaveAttribute('data-roster-assignment', leftId!);
 		await expect(center).toHaveAttribute('data-roster-assignment', centerId!);
-		await expect(left.getByLabel(/position for example batter 06/i)).toHaveValue('CF');
+		await expect(leftSelect).toHaveValue('CF');
 		await expect(center.getByLabel(/position for example batter 07/i)).toHaveValue('LF');
-		await expect(left.locator('.status')).toBeHidden();
+		await expect(page.locator('.announcement')).toHaveText('Example Batter 06 moved to CF; Example Batter 07 moves to LF.');
+
+		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
+		await expect(leftSelect).toHaveValue('LF');
+		await expect(page.locator('.announcement')).toHaveText('');
 	});
 
 	test('reveals a real partial record and keeps replay output stable across resets', async ({ page }) => {

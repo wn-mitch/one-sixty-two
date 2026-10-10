@@ -4,7 +4,7 @@
  import { draftRules } from '../game/rules.ts';
  import Card from '../cards/Card.svelte';
  import CardReview from '../cards/CardReview.svelte';
- import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
+ import { createCardViewModel, lineupStats, type CardMediaStatus } from '../cards/view-model.ts';
  import { loadMedia } from '../media/client.ts';
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
@@ -194,9 +194,8 @@
 
 <section class="lineup" aria-label="Set your lineup" aria-busy={busy}>
  <header>
-  <p class="eyebrow">{draftRules(draft.schemaVersion).slots.length} picks. One shot at perfection.</p>
-  <h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">Make the lineup yours.</h2>
-  <p class="muted">Drag the handles or use the arrows to order hitters and starters. Tap a card to inspect its exact season. Fielding and DH assignments can change before simulation.</p>
+  <h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">Set your lineup</h2>
+  <p class="muted">Drag the numbers or use the arrows to set the order. Tap a card to inspect its season.</p>
   {#if !rankings && (rankingLoading || rankingError)}
    <p class="muted">{rankingLoading ? 'Season value rankings are loading.' : 'Season value rankings are unavailable.'} Your lineup can still be edited.</p>
   {/if}
@@ -204,27 +203,23 @@
  <p class="announcement" aria-live="polite" aria-atomic="true">{announcement}</p>
  <div class="lineup-columns">
   <section aria-labelledby="batting-heading">
-   <div class="section-heading"><h3 id="batting-heading">Batting order</h3><span class="muted">1 through 9</span></div>
+   <div class="section-heading"><h3 id="batting-heading">Batting order</h3><span class="muted">Fielding and DH can change before simulation</span></div>
    {@render orderList('batting', draft.battingOrder)}
   </section>
   <section aria-labelledby="rotation-heading">
    <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3><span class="muted">54 starts each</span></div>
    {@render orderList('starter', draft.starterOrder)}
-   <p class="workload muted">Your three starters cycle in this order for all 162 games. No injuries or seasonal starter fatigue are modeled.</p>
-   <div class="closer">
-    <h3>Closer</h3>
+   <p class="workload muted">The three starters cycle in this order for all 162 games, without injuries or fatigue.</p>
+   <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3></div>
+   <ul class="order fixed" aria-labelledby="relief-heading">
     {#if closer}
-     {@render fixedPlayer(closer)}
+     {@render fixedPlayer(closer, 'CL', 'Closer')}
     {:else}
-     <p class="muted">Loading selected closer…</p>
+     <li><span class="order-number fixed-label">CL</span><span class="muted identity">Loading selected closer…</span></li>
     {/if}
-    <p class="workload muted">Available from the ninth inning when tied or ahead by 1–3. One inning per appearance, with a season innings cap and rest after two consecutive games.</p>
-   </div>
-   <div class="support">
-    <h3>Drafted bullpen remainder</h3>
-    {#if bullpen}{@render fixedPlayer(bullpen)}{/if}
-    <p class="workload muted">Pooled relief-dominant pitcher-seasons, excluding this team-season’s saves leader, handle the remaining innings with unlimited support workload. Composition stays fixed independently of your closer. This is a pitching abstraction, not a full 26-player roster.</p>
-   </div>
+    {#if bullpen}{@render fixedPlayer(bullpen, 'BP', 'Bullpen remainder')}{/if}
+   </ul>
+   <p class="workload muted">The closer pitches the ninth when tied or ahead by 1–3, one inning at a time, with an innings cap and rest after two straight games. The pooled bullpen covers every other relief inning.</p>
   </section>
  </div>
  {#if inspectedCard}
@@ -246,44 +241,66 @@
     <Card s={card} face="front" thumbnail interactive={false} onDetails={() => {}} />
    </span>
   </button>
+ {:else}
+  <span class="card-trigger placeholder" aria-hidden="true"></span>
  {/if}
 {/snippet}
 
-{#snippet fixedPlayer(profile: Profile)}
- <div class="fixed-player" data-season-id={profile.seasonId}>
+{#snippet stats(profile: Profile, role: 'batting' | 'starter' | 'closer')}
+ <span class="stats">
+  {#each lineupStats(profile, role) as stat (stat.l)}
+   <span class="stat"><span class="value">{stat.v}</span> <span class="label">{stat.l}</span></span>
+  {/each}
+ </span>
+{/snippet}
+
+{#snippet fixedPlayer(profile: Profile, label: string, role: string)}
+ <li class="fixed-player" data-season-id={profile.seasonId}>
+  <span class="order-number fixed-label" aria-label={role}>{label}</span>
   {@render artwork(profile)}
   <div class="identity">
    <strong class="name">{profile.displayName}</strong>
    <span class="season">{profile.year}</span>
   </div>
- </div>
+  <div class="meta">
+   {#if profile.bullpen}
+    <span class="muted pool">Relief pool · {profile.bullpen.members.length} pitchers</span>
+   {:else}
+    {@render stats(profile, 'closer')}
+   {/if}
+  </div>
+ </li>
 {/snippet}
 
 {#snippet orderList(kind: OrderKind, order: string[])}
- <ol class="order" data-order-kind={kind} aria-label={kind === 'batting' ? 'Batting order' : 'Starting rotation'}>
+ <ol class="order {kind}" data-order-kind={kind} aria-label={kind === 'batting' ? 'Batting order' : 'Starting rotation'}>
   {#each order as seasonId, index (seasonId)}
    {@const profile = bySeason.get(seasonId)}
    {@const pick = bySeasonPick.get(seasonId)}
    {@const dragging = drag?.active && drag.kind === kind}
+   {@const label = `${profile?.displayName ?? 'player'}${profile ? ` ${profile.year}` : ''}`}
+   {@const listName = kind === 'batting' ? 'batting order' : 'starting rotation'}
    <li data-season-id={seasonId} class:drag-source={dragging && drag?.seasonId === seasonId} class:insert-before={dragging && drag?.insertion === index} class:insert-after={dragging && drag?.insertion === order.length && index === order.length - 1}>
-    {#if profile && pick}{@render artwork(profile)}{/if}
-    <div class="order-heading">
-     <span class="order-number" aria-label="Position {index + 1}">{index + 1}</span>
-     <div class="identity">
-      <strong class="name">{profile?.displayName ?? 'Loading selected season…'}</strong>
-      {#if profile}<span class="season">{profile.year}</span>{/if}
-     </div>
+    <button type="button" class="order-number drag-handle" disabled={busy} aria-label={`Position ${index + 1}. Drag ${label} within ${listName}`} title="Drag to reorder" onpointerdown={event => startDrag(event, kind, seasonId)} onlostpointercapture={cancelPointer}>
+     <span class="grip" aria-hidden="true">⠿</span><span aria-hidden="true">{index + 1}</span>
+    </button>
+    {#if profile && pick}{@render artwork(profile)}{:else}<span class="card-trigger placeholder" aria-hidden="true"></span>{/if}
+    <div class="identity">
+     <strong class="name">{profile?.displayName ?? 'Loading selected season…'}</strong>
+     {#if profile}<span class="season">{profile.year}</span>{/if}
+    </div>
+    <div class="meta">
+     {#if kind === 'batting'}
+      <span class="assignment-control">
+       <RosterAssignment {seasonId} {draft} {manifest} {profiles} busy={busy || !!drag?.active} {onReassign} onAnnounce={message => { announcement = message; }} />
+      </span>
+     {/if}
+     {#if profile}{@render stats(profile, kind === 'batting' ? 'batting' : 'starter')}{/if}
     </div>
     <div class="move-controls">
-     <button type="button" class="secondary drag-handle" disabled={busy} aria-label={`Drag ${profile?.displayName ?? 'player'}${profile ? ` ${profile.year}` : ''} within ${kind === 'batting' ? 'batting order' : 'starting rotation'}`} title="Drag to reorder; use arrow buttons for keyboard ordering" onpointerdown={event => startDrag(event, kind, seasonId)} onlostpointercapture={cancelPointer}><span aria-hidden="true">⠿</span></button>
-     <button type="button" class="secondary move" disabled={busy || index === 0} aria-label="Move {profile?.displayName ?? 'player'}{profile ? ` ${profile.year}` : ''} up in {kind === 'batting' ? 'batting order' : 'starting rotation'}" onclick={() => commitOrder(kind, seasonId, index - 1)}><span aria-hidden="true">↑</span></button>
-     <button type="button" class="secondary move" disabled={busy || index === order.length - 1} aria-label="Move {profile?.displayName ?? 'player'}{profile ? ` ${profile.year}` : ''} down in {kind === 'batting' ? 'batting order' : 'starting rotation'}" onclick={() => commitOrder(kind, seasonId, index + 1)}><span aria-hidden="true">↓</span></button>
+     <button type="button" class="quiet move" disabled={busy || index === 0} aria-label="Move {label} up in {listName}" onclick={() => commitOrder(kind, seasonId, index - 1)}><span aria-hidden="true">↑</span></button>
+     <button type="button" class="quiet move" disabled={busy || index === order.length - 1} aria-label="Move {label} down in {listName}" onclick={() => commitOrder(kind, seasonId, index + 1)}><span aria-hidden="true">↓</span></button>
     </div>
-    {#if kind === 'batting'}
-     <div class="assignment-control">
-      <RosterAssignment {seasonId} {draft} {manifest} {profiles} busy={busy || !!drag?.active} {onReassign} />
-     </div>
-    {/if}
    </li>
   {/each}
  </ol>
@@ -291,41 +308,80 @@
 
 <style>
  .lineup { min-width: 0; }
- header { margin-block: var(--space-6); }
- h2 { margin: var(--space-2) 0 var(--space-4); font-size: var(--text-2xl); }
- header > .muted { max-width: 60ch; font-size: var(--text-sm); }
+ header { margin-block: var(--space-6) var(--space-8); }
+ h2 { margin: 0 0 var(--space-2); font-size: var(--text-2xl); }
+ header > .muted { max-width: 60ch; font-size: var(--text-sm); margin: 0; }
  .lineup-columns { display: grid; gap: var(--space-8); }
  .lineup-columns > section { min-width: 0; }
- .section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-2); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
+ .section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+ .relief-heading { margin-top: var(--space-8); }
  h3 { font-size: var(--text-lg); }
  .section-heading > span { font-size: var(--text-xs); }
+
+ /* Narrow: number | card | identity over meta | stacked arrows. */
  .order { list-style: none; padding: 0; margin: 0; }
- .order li { position: relative; display: grid; grid-template-columns: max(5.5rem, 88px) minmax(0, 1fr); align-items: start; gap: var(--space-2) var(--space-3); padding-block: var(--space-4); min-width: 0; border-bottom: 1px solid var(--border); }
+ .order li {
+  position: relative; display: grid; align-items: center; min-width: 0;
+  grid-template-columns: 2.75rem 56px minmax(0, 1fr) 2.75rem;
+  grid-template-areas: 'num card identity move' 'num card meta move';
+  gap: var(--space-1) var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--border);
+ }
  .order li:last-child { border-bottom: 0; }
- .order li > .card-trigger { grid-row: 1 / 3; }
- .order-heading { grid-column: 2; display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
- .order-number { flex: 0 0 1rem; color: var(--muted); font-size: var(--text-base); font-weight: 750; }
- .identity { display: grid; min-width: 0; gap: var(--space-1); }
+ .order-number { grid-area: num; }
+ .order li > .card-trigger { grid-area: card; }
+ .identity { grid-area: identity; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); min-width: 0; align-self: end; }
+ .meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-width: 0; align-self: start; }
+ .move-controls { grid-area: move; display: flex; flex-direction: column; }
  .name { font-weight: 650; overflow-wrap: anywhere; font-size: var(--text-sm); }
- .season { color: var(--muted); font-size: var(--text-xs); }
- .move-controls { display: flex; flex-wrap: wrap; gap: var(--space-1); grid-column: 2; }
- .move, .drag-handle { width: 2.75rem; min-height: 2.75rem; padding: var(--space-2); font-size: var(--text-lg); }
- .drag-handle { touch-action: none; cursor: grab; user-select: none; }
+ .season { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+
+ .drag-handle {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  width: 2.75rem; min-height: 2.75rem; padding: 0; border: 0; border-radius: var(--radius);
+  background: none; color: var(--text); font-size: var(--text-xl); font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1;
+  touch-action: none; cursor: grab; user-select: none;
+ }
+ .drag-handle:hover:not(:disabled) { background: var(--surface-hover); }
+ .drag-handle .grip { color: var(--muted); font-size: var(--text-xs); line-height: 1; }
  .drag-source .drag-handle { cursor: grabbing; }
+ .fixed-label { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: var(--text-sm); font-weight: 750; letter-spacing: .04em; }
+ .move { width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: var(--text-lg); }
  .drag-source { background: var(--surface-raised); }
  .insert-before::before, .insert-after::after { content: ''; position: absolute; inset-inline: 0; height: 3px; background: var(--accent); pointer-events: none; }
  .insert-before::before { top: 0; }
  .insert-after::after { bottom: 0; }
- .assignment-control { grid-column: 1 / -1; min-width: 0; }
- .fixed-player { display: grid; grid-template-columns: max(5.5rem, 88px) minmax(0, 1fr); gap: var(--space-3); align-items: center; margin-block: var(--space-3); }
- .card-trigger { display: block; width: max(5.5rem, 88px); min-width: 88px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
- .card-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+ .assignment-control { flex: 0 0 5.5rem; min-width: 0; }
+ .stats { display: flex; gap: var(--space-3); font-variant-numeric: tabular-nums; }
+ .stat { display: grid; justify-items: end; min-width: 2.75rem; line-height: 1.2; }
+ .stat .value { font-size: var(--text-sm); font-weight: 650; }
+ .stat .label { color: var(--muted); font-size: var(--text-xs); }
+ .pool { font-size: var(--text-xs); }
+
+ .fixed-player { grid-template-areas: 'num card identity identity' 'num card meta meta'; }
+ .card-trigger { display: block; width: 56px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
+ .card-trigger.placeholder { aspect-ratio: 5 / 7; border-radius: var(--radius); background: var(--surface-raised); cursor: default; }
+ .card-trigger:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
  .miniature { display: block; width: 100%; pointer-events: none; }
- .closer, .support { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
- .workload { font-size: var(--text-xs); line-height: 1.5; max-width: 60ch; }
- .simulate { margin-top: var(--space-8); padding-block: var(--space-6); border-top: 1px solid var(--border); }
+ .workload { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: 1.5; max-width: 60ch; }
+
+ .simulate { position: sticky; bottom: 0; z-index: 1; margin-top: var(--space-8); padding-block: var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--background); }
  .simulate .primary { width: 100%; }
+ .simulate .notice { margin: var(--space-2) 0 0; }
  .announcement { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
- @media (min-width: 64rem) { .lineup-columns { grid-template-columns: 1.25fr 1fr; gap: var(--space-12); } .simulate .primary { width: auto; min-width: 16rem; } }
- @media (min-width: 40rem) { .assignment-control { grid-column: 2; } }
+
+ /* Wide rows: one line per player, arrows side by side. */
+ @media (min-width: 40rem) {
+  .order li { grid-template-columns: 2.75rem 56px minmax(0, 1fr) auto 5.5rem; grid-template-areas: 'num card identity meta move'; padding-block: var(--space-2); }
+  .fixed-player { grid-template-areas: 'num card identity meta .'; }
+  .identity { flex-direction: column; flex-wrap: nowrap; align-items: start; gap: var(--space-1); align-self: center; }
+  .meta { flex-wrap: nowrap; align-self: center; }
+  .move-controls { flex-direction: row; }
+ }
+ @media (max-width: 23.99rem) {
+  .order li { grid-template-columns: 2rem 56px minmax(0, 1fr) 2.75rem; column-gap: var(--space-2); }
+  .stats { gap: var(--space-2); }
+  .stat { min-width: 0; }
+ }
+ @media (min-width: 64rem) { .lineup-columns { grid-template-columns: 1.35fr 1fr; gap: var(--space-12); } .simulate .primary { width: auto; min-width: 16rem; } }
 </style>

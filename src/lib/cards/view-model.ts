@@ -171,6 +171,15 @@ function pitchingDerived(profile: Profile): CardStat[] {
 		{ l: 'SO', v: statistic(profile, 'pitching', 'SO', pitching.SO) }
 	];
 }
+/** Compact historical line beside a lineup row: OBP/SLG/HR for hitters, ERA/SO/IP for starters, ERA/SO/SV for closers. */
+export function lineupStats(profile: Profile, role: 'batting' | 'starter' | 'closer'): CardStat[] {
+	if (role === 'batting') {
+		const derived = battingDerived(profile);
+		return [derived[1], derived[2], { l: 'HR', v: statistic(profile, 'batting', 'HR', profile.batting?.HR) }];
+	}
+	const [era, , ip, so] = pitchingDerived(profile);
+	return role === 'starter' ? [era, so, ip] : [era, so, { l: 'SV', v: statistic(profile, 'pitching', 'SV', profile.pitching?.SV) }];
+}
 function battingFamily(profile: Profile, title: string): CardFamily {
 	const batting = profile.batting;
 	return {
