@@ -1,3 +1,4 @@
+import { stadiumSummary } from '../sim/park.ts';
 import { describe, expect, it } from 'vitest';
 import { SLOTS, type Draft, type Manifest, type Profile, type Slot } from './types.ts';
 import { createResultsModel, type ResultsModel } from './results-model.ts';
@@ -27,8 +28,10 @@ function fixture(): Fixture {
 	const draft: Draft = {
 		schemaVersion: input.schemaVersion,
 		modelVersion: input.modelVersion,
+		rulesVersion: input.rulesVersion,
 		dataVersion: input.data.dataVersion,
 		seed: input.seed,
+		homeStadium: input.homeStadium,
 		picks: input.roster.map(({ profile, slot }) => ({
 			seasonId: profile.seasonId,
 			slot,
@@ -83,10 +86,12 @@ function fixture(): Fixture {
 	}));
 	const result: SeasonResult = {
 		modelVersion: input.modelVersion,
+		rulesVersion: input.rulesVersion,
 		dataVersion: input.data.dataVersion,
 		seed: input.seed,
-		defenseMethodVersion: 'defense-v1',
-		valuationVersion: 'sim-war-v1',
+		homeStadium: input.homeStadium,
+		defenseMethodVersion: 'defense-v2',
+		valuationVersion: 'sim-war-v2',
 		wins: 100,
 		losses: 62,
 		firstLoss: 2,
@@ -107,6 +112,7 @@ function fixture(): Fixture {
 		franchises: [],
 		candidates: [],
 		chunks: {},
+		stadiums: input.data.stadiums.map(stadium => stadiumSummary(stadium, null)),
 		simulationUrl: '/simulation.json',
 		showcaseUrl: '/showcase.json',
 		attributionUrl: '/attribution.json',

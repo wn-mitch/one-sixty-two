@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compareId, SLOTS, type Manifest, type Profile, type ShowcaseCard, type SimulationData } from '../src/lib/game/types.ts';
+import { compareId, DEFENSE_METHOD_VERSION, SLOTS, VALUATION_VERSION, type Manifest, type Profile, type ShowcaseCard, type SimulationData } from '../src/lib/game/types.ts';
 import { validateDefensiveEnvironment, validateProfile } from '../src/lib/sim/validation.ts';
 
 export interface CurrentData {
@@ -29,7 +29,7 @@ function validateGeneratedProfile(profile: Profile | null | undefined): asserts 
 }
 
 function validateGeneratedSimulation(simulation: SimulationData): void {
-	if (simulation.defenseMethodVersion !== 'defense-v1' || simulation.valuationVersion !== 'sim-war-v1' ||
+	if (simulation.defenseMethodVersion !== DEFENSE_METHOD_VERSION || simulation.valuationVersion !== VALUATION_VERSION ||
 		!Number.isFinite(simulation.observedRuns) || simulation.observedRuns <= 0 ||
 		!Array.isArray(simulation.opponents) || simulation.opponents.length !== 30 ||
 		new Set(simulation.opponents.map(opponent => opponent?.id)).size !== 30) {

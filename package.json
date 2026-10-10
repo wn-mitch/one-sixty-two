@@ -8,6 +8,7 @@
 	},
 	"scripts": {
 		"data:prepare": "node scripts/prepare-data.ts",
+		"data:statcast": "node scripts/curate-statcast.ts",
 		"rankings:prepare": "node scripts/prepare-rankings.ts",
 		"share:prepare": "node scripts/prepare-share.ts",
 		"media:prepare": "node scripts/prepare-media.ts",

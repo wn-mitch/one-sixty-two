@@ -1,19 +1,48 @@
 import { POSITIONS, type DefensiveEnvironment } from '../game/types.ts';
-import { createBases, force, homeRun, type Bases } from './advancement.ts';
+import { createBases, force, type Bases } from './advancement.ts';
 import {
- CONTACT_UNIFORM_COUNT,
+ CONTACT_UNIFORMS,
+ sampleContact,
+ sampleNonContact,
+ type ContactDraw,
+ type PreparedMatchups
+} from './contact-profile.ts';
+import {
+ DECISION_DOUBLE_PLAY,
+ DECISION_ERROR,
+ DECISION_FIRST_ATTEMPT,
+ DECISION_FIRST_OUT,
+ DECISION_SECOND_ATTEMPT,
+ DECISION_SECOND_OUT,
+ DECISION_THIRD_ATTEMPT,
+ DECISION_THIRD_OUT,
+ createContactOptions,
  createContactResult,
+ createDecisions,
  createPreparedDefense,
- fillContactPacket,
- matchupRatesAt,
  resolveContact,
  type ContactOptions,
  type ContactResult,
+ type Decisions,
  type PreparedDefense
 } from './contact.ts';
 import { doublePlayParticipants, stealSuccessProbability } from './defense-rules.ts';
-import { sampleEvent } from './matchup.ts';
-import type { DefensiveRunComponents, SeasonMomentOutcome, TeamBox, TeamInput } from './types.ts';
+import {
+ OUTCOME_FOUL,
+ OUTCOME_GROUND_OUT,
+ buildFieldingPlan,
+ computeCandidates,
+ createFieldingCandidates,
+ createFieldingPlan,
+ createPhysicalOutcomes,
+ fieldingOutcomes,
+ selectOutcome,
+ type FieldingCandidates,
+ type FieldingPlan,
+ type PhysicalOutcomes
+} from './fielding.ts';
+import { TRACE_DEAD_BALL, createFlightTrace, traceFlight, type FlightTrace, type PreparedPark } from './flight.ts';
+import type { DefensiveRunComponents, GameRandomStreams, SeasonMomentOutcome, TeamBox, TeamInput } from './types.ts';
 import {
  centeredPlateAppearanceValue,
  centeredStealValue,
@@ -22,6 +51,9 @@ import {
  type RunValueModel
 } from './value.ts';
 import { beforePlateAppearance, type Workload } from './workload.ts';
+
+/** Foul and dead balls resample contact for the same batter and pitcher at most this often. */
+export const MAX_CONTACT_RETRIES = 100;
 
 export interface InningEvent {
  outsBefore: number; outsAfter: number; basesBefore: number; basesAfter: number;
@@ -32,12 +64,13 @@ export interface InningEvent {
 export type InningObserver = (event: InningEvent) => void;
 export interface InningContext {
  offense: TeamInput; defense: TeamInput; batting: TeamBox; pitching: TeamBox;
- bases: Bases; workload: Workload; matchups: Float64Array; next: number; maxPA: number;
- prepared: PreparedDefense; values: RunValueModel;
- packet: Float64Array; matchupRates: Float64Array; neutralContact: ContactResult; actualContact: ContactResult;
- dpEnabled: Uint8Array; dpParticipants: Uint8Array; options: ContactOptions;
+ bases: Bases; workload: Workload; matchups: PreparedMatchups; next: number; maxPA: number;
+ prepared: PreparedDefense; values: RunValueModel; park: PreparedPark;
+ trace: FlightTrace; candidates: FieldingCandidates; plan: FieldingPlan; outcomes: PhysicalOutcomes;
+ draw: ContactDraw; uniforms: Float64Array; decisions: Decisions; reachUniform: number;
+ reach: Uint8Array; throwing: Float64Array; zeros: Float64Array;
+ contact: ContactResult; dpParticipants: Uint8Array; options: ContactOptions;
 }
-
 
 export function createInningContext(
  offense: TeamInput,
@@ -45,24 +78,25 @@ export function createInningContext(
  batting: TeamBox,
  pitching: TeamBox,
  workload: Workload,
- matchups: Float64Array,
+ matchups: PreparedMatchups,
  environment: DefensiveEnvironment,
+ park: PreparedPark,
  maxPA: number
 ): InningContext {
- const dpEnabled = new Uint8Array(POSITIONS.length);
+ if (matchups.batterCount !== offense.hitters.length || matchups.pitcherCount !== defense.pitchers.length) throw new Error('Invalid game matchup table');
  return {
-  offense, defense, batting, pitching, workload, matchups, maxPA,
+  offense, defense, batting, pitching, workload, matchups, maxPA, park,
   bases: createBases(batting, pitching),
   next: 0,
   prepared: createPreparedDefense(defense, environment),
   values: getRunValueModel(environment),
-  packet: new Float64Array(CONTACT_UNIFORM_COUNT),
-  matchupRates: new Float64Array(8),
-  neutralContact: createContactResult(),
-  actualContact: createContactResult(),
-  dpEnabled,
+  trace: createFlightTrace(), candidates: createFieldingCandidates(), plan: createFieldingPlan(), outcomes: createPhysicalOutcomes(),
+  draw: { region: 0, speedMph: 0, launchDeg: 0, sprayDeg: 0, carry: 1 }, uniforms: new Float64Array(CONTACT_UNIFORMS),
+  decisions: createDecisions(), reachUniform: 0,
+  reach: new Uint8Array(POSITIONS.length), throwing: new Float64Array(POSITIONS.length), zeros: new Float64Array(POSITIONS.length),
+  contact: createContactResult(),
   dpParticipants: new Uint8Array(3),
-  options: { hitPrevention: false, errorAvoidance: false, doublePlayPositions: dpEnabled, outfieldThrowing: false }
+  options: createContactOptions()
  };
 }
 
@@ -120,35 +154,107 @@ function contactValue(context: InningContext, result: ContactResult): number {
  return result.runs + remainingRunExpectancy(context.values, result.outsAfter, basesMask(result), result.ended);
 }
 
-function resolveContactValue(
- context: InningContext,
- output: ContactResult,
- outs: number,
- event: number,
- hitter: number,
- pitcher: number,
- doublePlay: number,
- runsBefore: number,
- target: number
-): number {
- resolveContact(
-  output,
-  context.bases,
-  outs,
-  event,
-  context.matchupRates,
-  hitter,
-  pitcher,
-  context.offense.hitters,
-  doublePlay,
-  context.prepared,
-  context.options,
-  context.packet,
-  runsBefore,
-  target,
-  context.dpParticipants
- );
- return contactValue(context, output);
+/** Fielding plan for the current reach/arm switches, the shared reach uniform, then the legal adapter. */
+function resolvePass(context: InningContext, outs: number, hitter: number, pitcher: number, doublePlay: number, runsBefore: number, target: number): number {
+ buildFieldingPlan(context.trace, context.candidates, context.reach, context.throwing, context.plan);
+ fieldingOutcomes(context.plan, context.offense.hitters[hitter].speed, context.outcomes);
+ const selected = selectOutcome(context.outcomes, context.reachUniform);
+ const kind = context.outcomes.kind[selected];
+ if (kind === OUTCOME_FOUL) throw new Error('Foul contact reached legal resolution');
+ resolveContact(context.contact, context.bases, outs, kind, context.outcomes.fielder[selected], context.outcomes.bases[selected],
+  hitter, pitcher, context.offense.hitters, doublePlay, context.prepared, context.options, context.decisions, runsBefore, target, context.dpParticipants);
+ return contactValue(context, context.contact);
+}
+
+function resetSwitches(context: InningContext): void {
+ context.reach.fill(0);
+ context.throwing.fill(0);
+ context.options.errorPositions.fill(0);
+ context.options.doublePlayPositions.fill(0);
+ context.options.outfieldThrowing = false;
+}
+
+/**
+ * Replays fielding on the same trace and uniforms, enabling skills incrementally in the order
+ * hit prevention, errors, double-play participants, outfield throws. Within hit prevention and
+ * errors, positions are enabled one at a time and each change is credited to that position.
+ * The final pass is the actual defense and stays in `context.contact`.
+ */
+function resolveDefensiveContact(context: InningContext, outs: number, hitter: number, pitcher: number, doublePlay: number, runsBefore: number, target: number): number {
+ const prepared = context.prepared;
+ resetSwitches(context);
+ let previous = resolvePass(context, outs, hitter, pitcher, doublePlay, runsBefore, target);
+ let defensiveRuns = 0;
+ const credit = (position: number, component: keyof DefensiveRunComponents, next: number) => {
+  addDefense(context, position, component, previous - next);
+  defensiveRuns += previous - next;
+  previous = next;
+ };
+ for (let position = 0; position < POSITIONS.length; position++) {
+  context.reach[position] = 1;
+  if (prepared.hitPrevention[position] !== 0) credit(position, 'hitPrevention', resolvePass(context, outs, hitter, pitcher, doublePlay, runsBefore, target));
+ }
+ for (let position = 0; position < POSITIONS.length; position++) {
+  context.options.errorPositions[position] = 1;
+  if (prepared.errorAvoidance[position] !== 0) credit(position, 'errorAvoidance', resolvePass(context, outs, hitter, pitcher, doublePlay, runsBefore, target));
+ }
+ const fielder = context.contact.fielder;
+ const grounded = context.outcomes.kind[selectOutcome(context.outcomes, context.reachUniform)] === OUTCOME_GROUND_OUT;
+ const participantCount = grounded ? doublePlayParticipants(fielder, context.dpParticipants) : 0;
+ for (let index = 0; index < participantCount; index++) {
+  const participant = context.dpParticipants[index];
+  context.options.doublePlayPositions[participant] = 1;
+  credit(participant, 'doublePlay', resolvePass(context, outs, hitter, pitcher, doublePlay, runsBefore, target));
+ }
+ context.throwing.set(prepared.outfieldThrowing);
+ context.options.outfieldThrowing = true;
+ const next = resolvePass(context, outs, hitter, pitcher, doublePlay, runsBefore, target);
+ if (next !== previous) credit(context.contact.thrower >= 0 ? context.contact.thrower : context.plan.retriever, 'outfieldThrowing', next);
+ return defensiveRuns;
+}
+
+/** Foul-territory catches and dead-ball contact use the actual defense with no counterfactual credit. */
+function resolveFoulCatch(context: InningContext, outs: number, hitter: number, pitcher: number, doublePlay: number, runsBefore: number, target: number): void {
+ resetSwitches(context);
+ context.reach.fill(1);
+ context.options.errorPositions.fill(1);
+ context.options.doublePlayPositions.fill(1);
+ context.throwing.set(context.prepared.outfieldThrowing);
+ context.options.outfieldThrowing = true;
+ resolvePass(context, outs, hitter, pitcher, doublePlay, runsBefore, target);
+}
+
+function fillUniforms(output: Float64Array, offset: number, count: number, random: () => number): void {
+ for (let index = offset; index < offset + count; index++) {
+  const value = random();
+  if (!(value >= 0 && value < 1)) throw new Error('Invalid random sample');
+  output[index] = value;
+ }
+}
+
+/**
+ * Samples contact until a fair ball or a caught foul. Returns false only when the attempts are
+ * exhausted; the caller fails explicitly.
+ */
+function sampleFairContact(context: InningContext, pair: number, hitter: number, streams: GameRandomStreams): boolean {
+ const packet = context.decisions.packet;
+ for (let attempt = 0; attempt < MAX_CONTACT_RETRIES; attempt++) {
+  fillUniforms(context.uniforms, 0, CONTACT_UNIFORMS, streams.contact);
+  sampleContact(context.matchups, pair, context.uniforms, context.draw);
+  context.reachUniform = streams.fielding();
+  if (!(context.reachUniform >= 0 && context.reachUniform < 1)) throw new Error('Invalid random sample');
+  packet[DECISION_ERROR] = streams.fielding();
+  packet[DECISION_DOUBLE_PLAY] = streams.fielding();
+  for (const slot of [DECISION_THIRD_ATTEMPT, DECISION_THIRD_OUT, DECISION_SECOND_ATTEMPT, DECISION_SECOND_OUT, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT]) packet[slot] = streams.advancement();
+  traceFlight(context.draw, context.park, context.trace);
+  computeCandidates(context.trace, context.prepared.hitPrevention, context.candidates);
+  context.reach.fill(1);
+  context.throwing.set(context.prepared.outfieldThrowing);
+  buildFieldingPlan(context.trace, context.candidates, context.reach, context.throwing, context.plan);
+  fieldingOutcomes(context.plan, context.offense.hitters[hitter].speed, context.outcomes);
+  if (context.outcomes.kind[selectOutcome(context.outcomes, context.reachUniform)] !== OUTCOME_FOUL) return true;
+ }
+ return false;
 }
 
 function commitContact(context: InningContext, result: ContactResult): void {
@@ -161,53 +267,6 @@ function commitContact(context: InningContext, result: ContactResult): void {
  }
  context.bases.ended = result.ended;
  context.bases.winningAdvance = result.winningAdvance;
-}
-
-function resolveDefensiveContact(
- context: InningContext,
- outs: number,
- event: number,
- hitterIndex: number,
- pitcherIndex: number,
- doublePlay: number,
- runsBefore: number,
- target: number
-): number {
- const options = context.options;
- context.dpEnabled.fill(0);
- options.hitPrevention = false;
- options.errorAvoidance = false;
- options.outfieldThrowing = false;
- let previous = resolveContactValue(context, context.neutralContact, outs, event, hitterIndex, pitcherIndex, doublePlay, runsBefore, target);
- const fielder = context.neutralContact.fielder;
-
- options.hitPrevention = true;
- let next = resolveContactValue(context, context.actualContact, outs, event, hitterIndex, pitcherIndex, doublePlay, runsBefore, target);
- addDefense(context, fielder, 'hitPrevention', previous - next);
- let defensiveRuns = previous - next;
- previous = next;
-
- options.errorAvoidance = true;
- next = resolveContactValue(context, context.neutralContact, outs, event, hitterIndex, pitcherIndex, doublePlay, runsBefore, target);
- addDefense(context, fielder, 'errorAvoidance', previous - next);
- defensiveRuns += previous - next;
- previous = next;
-
- const participantCount = doublePlayParticipants(fielder, context.dpParticipants);
- for (let index = 0; index < participantCount; index++) {
-  const participant = context.dpParticipants[index];
-  context.dpEnabled[participant] = 1;
-  next = resolveContactValue(context, context.actualContact, outs, event, hitterIndex, pitcherIndex, doublePlay, runsBefore, target);
-  addDefense(context, participant, 'doublePlay', previous - next);
-  defensiveRuns += previous - next;
-  previous = next;
- }
-
- options.outfieldThrowing = true;
- next = resolveContactValue(context, context.actualContact, outs, event, hitterIndex, pitcherIndex, doublePlay, runsBefore, target);
- addDefense(context, context.actualContact.thrower, 'outfieldThrowing', previous - next);
- defensiveRuns += previous - next;
- return defensiveRuns;
 }
 
 function recordSteal(
@@ -248,7 +307,7 @@ function recordSteal(
  return outs;
 }
 
-export function playHalf(context: InningContext, target: number, random: () => number, observer?: InningObserver): void {
+export function playHalf(context: InningContext, target: number, streams: GameRandomStreams, observer?: InningObserver): void {
  const { bases, offense, defense, batting, pitching, workload } = context;
  bases.runners.fill(-1);
  bases.pitchers.fill(-1);
@@ -265,11 +324,11 @@ export function playHalf(context: InningContext, target: number, random: () => n
   if (bases.runners[0] !== -1 && bases.runners[1] === -1) {
    const runnerIndex = bases.runners[0];
    const runner = offense.hitters[runnerIndex];
-   if (random() < runner.stealAttempt) {
+   if (streams.advancement() < runner.stealAttempt) {
     const outsBefore = outs;
     const basesBefore = basesMask(bases);
     const runsBefore = batting.runs;
-    const stealOuts = recordSteal(context, outs, runnerIndex, stealPitcherIndex, random());
+    const stealOuts = recordSteal(context, outs, runnerIndex, stealPitcherIndex, streams.advancement());
     const outcome: SeasonMomentOutcome = stealOuts === outsBefore ? 'stolenBase' : 'caughtStealing';
     outs = stealOuts;
     observe(observer, context, outsBefore, basesBefore, runsBefore, runner.displayName, runner.seasonId,
@@ -290,8 +349,8 @@ export function playHalf(context: InningContext, target: number, random: () => n
   context.next = (context.next + 1) % 9;
   const outsBefore = outs;
   const basesBefore = basesMask(bases);
-  const offset = (hitterIndex * defense.pitchers.length + activeIndex) * 8;
-  const event = sampleEvent(context.matchups, offset, random());
+  const pair = hitterIndex * defense.pitchers.length + activeIndex;
+  const event = sampleNonContact(context.matchups, pair, streams.pa());
   hitter.PA++;
   const runsBefore = batting.runs;
   const runsNeeded = target === Infinity ? Infinity : target - runsBefore;
@@ -310,19 +369,11 @@ export function playHalf(context: InningContext, target: number, random: () => n
    outs++;
    addFieldingWorkload(context, 1);
    outcome = 'strikeout';
-  } else if (event === 6) {
-   homeRun(bases, hitterIndex, activeIndex);
-   hitter.AB++;
-   hitter.H++;
-   hitter.HR++;
-   active.H++;
-   hitter.RBI += batting.runs - runsBefore;
-   outcome = 'homeRun';
   } else {
-   fillContactPacket(context.packet, random);
-   matchupRatesAt(context.matchups, offset, context.matchupRates);
-   defensiveRuns = resolveDefensiveContact(context, outs, event, hitterIndex, activeIndex, profile.doublePlay, runsBefore, target);
-   const result = context.actualContact;
+   if (!sampleFairContact(context, pair, hitterIndex, streams)) throw new Error(`Contact exceeded ${MAX_CONTACT_RETRIES} foul or dead-ball retries`);
+   if (!context.trace.fair || context.trace.end === TRACE_DEAD_BALL) resolveFoulCatch(context, outs, hitterIndex, activeIndex, profile.doublePlay, runsBefore, target);
+   else defensiveRuns = resolveDefensiveContact(context, outs, hitterIndex, activeIndex, profile.doublePlay, runsBefore, target);
+   const result = context.contact;
    commitContact(context, result);
    const outsAdded = result.outsAfter - outs;
    outs = result.outsAfter;
@@ -334,7 +385,8 @@ export function playHalf(context: InningContext, target: number, random: () => n
     active.H++;
     if (result.creditedBases === 2) hitter.doubles++;
     else if (result.creditedBases === 3) hitter.triples++;
-    outcome = result.creditedBases === 1 ? 'single' : result.creditedBases === 2 ? 'double' : 'triple';
+    else if (result.creditedBases === 4) hitter.HR++;
+    outcome = result.creditedBases === 1 ? 'single' : result.creditedBases === 2 ? 'double' : result.creditedBases === 3 ? 'triple' : 'homeRun';
     hitter.RBI += batting.runs - runsBefore;
    } else if (result.error) {
     outcome = 'reachedOnError';

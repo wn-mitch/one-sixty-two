@@ -12,13 +12,24 @@ import { compileProfiles, percentile } from '../../../scripts/data/profiles.ts';
 import { POSITIONS, SLOTS, compareId, type DefensiveEnvironment, type Rates, type ShowcaseCard } from '../game/types.ts';
 import { validateProfile } from '../sim/validation.ts';
 import { syntheticAttribution, syntheticTables } from './compiler-fixtures.ts';
+import { readFileSync } from 'node:fs';
+import { loadContactModel } from '../../../scripts/data/contact-model.ts';
+import type { StadiumCatalog } from '../../../scripts/data/stadiums.ts';
+
+const STADIUMS = JSON.parse(readFileSync(new URL('../../../scripts/data/stadiums.json', import.meta.url), 'utf8')) as StadiumCatalog;
+/** The real stadium catalog relabelled onto the synthetic current franchises, plus the league contact model. */
+function references(tables: ReturnType<typeof syntheticTables>) {
+ const ids = [...new Set(tables.Teams.filter(row => row.yearID === '2025').map(row => row.franchID))].sort(compareId);
+ return { stadiums: { ...STADIUMS, venues: ids.map((franchiseId, index) => ({ ...STADIUMS.venues[index], franchiseId })) }, contactModel: loadContactModel() };
+}
 
 const DEFENSE_ENVIRONMENT: DefensiveEnvironment = {
  leagueRates: [0.08, 0.012, 0.225, 0.145, 0.044, 0.004, 0.033, 0.457] as Rates,
  leagueErrorRates: Object.fromEntries(POSITIONS.map(position => [position, 0.01])) as Record<typeof POSITIONS[number], number>,
  leagueStealAttempt: 0.03,
  leagueStealSuccess: 0.75,
- leagueDoublePlay: 0.08
+ leagueDoublePlay: 0.08,
+ contactModel: loadContactModel()
 };
 
 const UNMATCHED_REQUIRED_WAR_SOURCE: CsvRow[] = [{
@@ -276,9 +287,9 @@ describe('historical data compiler', () => {
  });
  it('compiles all thirty opponents, versioned chunks and exact slot assignments reproducibly', () => {
   const tables = syntheticTables();
-  expect(() => compileData(tables, syntheticAttribution, 'fixture', [])).toThrow('WAR');
-  const first = compileData(tables, syntheticAttribution, 'fixture', UNMATCHED_REQUIRED_WAR_SOURCE);
-  const second = compileData(tables, syntheticAttribution, 'fixture', UNMATCHED_REQUIRED_WAR_SOURCE);
+  expect(() => compileData(tables, syntheticAttribution, 'fixture', [], references(tables))).toThrow('WAR');
+  const first = compileData(tables, syntheticAttribution, 'fixture', UNMATCHED_REQUIRED_WAR_SOURCE, references(tables));
+  const second = compileData(tables, syntheticAttribution, 'fixture', UNMATCHED_REQUIRED_WAR_SOURCE, references(tables));
   expect(first.manifest.dataVersion).toBe(second.manifest.dataVersion);
   expect(first.manifest.franchises).toHaveLength(30);
   expect(first.manifest.showcaseUrl).toBe(`/data/${first.manifest.dataVersion}/showcase.json`);
@@ -300,7 +311,7 @@ describe('historical data compiler', () => {
    valuationVersion: string;
    opponents: { hitters: { eligibleSlots: string[]; defense: { positions: Record<string, unknown> } }[]; starters: unknown[] }[];
   };
-  expect(simulation).toMatchObject({ defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1' });
+  expect(simulation).toMatchObject({ defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2' });
   expect(first.manifest.candidates.some(candidate => candidate.seasonId === 'bullpen:1950:AL:OLD0' && candidate.eligibleSlots.includes('BP'))).toBe(true);
   expect((first.files['F0-1950.json'] as { eligibleSlots: string[] }[]).some(profile => profile.eligibleSlots.includes('BP'))).toBe(true);
   expect(simulation.opponents).toHaveLength(30);

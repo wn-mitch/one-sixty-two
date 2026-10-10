@@ -1,5 +1,5 @@
-import type { Rates } from '../game/types.ts';
-import { validateRates } from './validation.ts';
+import type { DefensiveEnvironment } from '../game/types.ts';
+import { getPhysicalReference, INFINITY_TARGET, type TransitionRows } from './physical-expectation.ts';
 
 const STATE_COUNT = 24;
 const MASS_TOLERANCE = 1e-13;
@@ -11,38 +11,13 @@ interface SignedDistribution {
  offset: number;
 }
 
-
-const OUT_TRANSITION = 64;
-
-export function neutralTransition(mask: number, event: number): number {
- if (event <= 1) {
-  if ((mask & 1) === 0) return mask | 1;
-  if ((mask & 2) === 0) return (mask & 4) | 3;
-  if ((mask & 4) === 0) return 7;
-  return 7 | (1 << 3);
- }
- if (event === 2 || event === 7) return mask | OUT_TRANSITION;
- if (event === 3) return 1 | ((mask & 1) << 1) | ((((mask >> 1) & 1) + ((mask >> 2) & 1)) << 3);
- if (event === 4) return 2 | ((mask & 1) << 2) | ((((mask >> 1) & 1) + ((mask >> 2) & 1)) << 3);
- if (event === 5) return 4 | (((mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1)) << 3);
- return ((mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + 1) << 3;
-}
-
 /**
- * Absorbing neutral half-inning Markov distribution. Future singles send runners
- * from second and third home, doubles score second and third while first takes
- * third, and outs do not advance runners. Steals, errors, double plays, and
- * sacrifice flies are intentionally omitted from future-state projections.
+ * Absorbing half-inning run distribution from the physical resolver's neutral league
+ * transitions (errors, double plays, tag-ups, and advancement included; steals omitted).
  */
-export function neutralRunDistribution(rates: Rates, outs = 0, bases = 0): Float64Array {
- validateRates(rates);
+export function neutralRunDistribution(rows: TransitionRows, outs = 0, bases = 0): Float64Array {
  if (!Number.isInteger(outs) || outs < 0 || outs > 3 || !Number.isInteger(bases) || bases < 0 || bases > 7) throw new Error('Invalid neutral inning state');
- const totalRate = rates.reduce((sum, rate) => sum + rate, 0);
- const normalized = rates.map(rate => rate / totalRate);
- const outRate = rates[2] + rates[7];
- if (outRate <= 0) throw new Error('Neutral win model requires a positive out rate');
  if (outs === 3) return Float64Array.of(1);
-
  let active = new Map<number, number>([[outs * 8 + bases, 1]]);
  const completed: number[] = [];
  let activeMass = 1;
@@ -51,18 +26,13 @@ export function neutralRunDistribution(rates: Rates, outs = 0, bases = 0): Float
   for (const [key, stateProbability] of active) {
    const runs = Math.floor(key / STATE_COUNT);
    const state = key % STATE_COUNT;
-   const stateOuts = Math.floor(state / 8);
-   const stateBases = state % 8;
-   for (let event = 0; event < rates.length; event++) {
-    const probability = stateProbability * normalized[event];
+   for (let index = rows.offsets[state]; index < rows.offsets[state + 1]; index++) {
+    const probability = stateProbability * rows.probability[index];
     if (probability === 0) continue;
-    const result = neutralTransition(stateBases, event);
-    const resultRuns = (result >> 3) & 7;
-    const resultOut = (result & OUT_TRANSITION) !== 0;
-    const nextRuns = runs + resultRuns;
-    if (resultOut && stateOuts === 2) completed[nextRuns] = (completed[nextRuns] ?? 0) + probability;
+    const nextRuns = runs + rows.runs[index];
+    const nextState = rows.next[index];
+    if (nextState < 0) completed[nextRuns] = (completed[nextRuns] ?? 0) + probability;
     else {
-     const nextState = (stateOuts + (resultOut ? 1 : 0)) * 8 + (result & 7);
      const nextKey = nextRuns * STATE_COUNT + nextState;
      next.set(nextKey, (next.get(nextKey) ?? 0) + probability);
     }
@@ -80,59 +50,6 @@ export function neutralRunDistribution(rates: Rates, outs = 0, bases = 0): Float
  const total = distribution.reduce((sum, probability) => sum + probability, 0);
  if (Math.abs(total - 1) > 1e-12) throw new Error('Invalid neutral run distribution');
  return distribution;
-}
-
-/** Expected future runs in each of the 24 transient base/out states. */
-export function neutralRunExpectancy(rates: Rates): Float64Array {
- validateRates(rates);
- const expectancy = new Float64Array(STATE_COUNT);
- for (let state = 0; state < STATE_COUNT; state++) {
-  const distribution = neutralRunDistribution(rates, Math.floor(state / 8), state & 7);
-  let value = 0;
-  for (let runs = 1; runs < distribution.length; runs++) value += runs * distribution[runs];
-  expectancy[state] = value;
- }
- return expectancy;
-}
-
-/**
- * Expected visits to every transient state in a neutral half inning beginning
- * empty with no outs. These are the fundamental-matrix row used by defensive
- * reference valuation; runs do not affect state visitation.
- */
-export function neutralStateVisits(rates: Rates): Float64Array {
- validateRates(rates);
- const totalRate = rates.reduce((sum, rate) => sum + rate, 0);
- const normalized = rates.map(rate => rate / totalRate);
- const active = new Float64Array(STATE_COUNT);
- const next = new Float64Array(STATE_COUNT);
- const visits = new Float64Array(STATE_COUNT);
- active[0] = 1;
- let activeMass = 1;
- for (let step = 0; step < MAX_TRANSITIONS && activeMass > MASS_TOLERANCE; step++) {
-  next.fill(0);
-  for (let state = 0; state < STATE_COUNT; state++) {
-   const stateProbability = active[state];
-   if (stateProbability === 0) continue;
-   visits[state] += stateProbability;
-   const outs = Math.floor(state / 8);
-   const bases = state & 7;
-   for (let event = 0; event < rates.length; event++) {
-    const probability = stateProbability * normalized[event];
-    if (probability === 0) continue;
-    const result = neutralTransition(bases, event);
-    const isOut = (result & OUT_TRANSITION) !== 0;
-    if (!isOut || outs < 2) next[(outs + (isOut ? 1 : 0)) * 8 + (result & 7)] += probability;
-   }
-  }
-  activeMass = 0;
-  for (let state = 0; state < STATE_COUNT; state++) {
-   active[state] = next[state];
-   activeMass += next[state];
-  }
- }
- if (activeMass > MASS_TOLERANCE || visits.some(value => !Number.isFinite(value))) throw new Error('Neutral state visits did not converge');
- return visits;
 }
 
 function convolve(left: Float64Array, right: Float64Array): Float64Array {
@@ -170,18 +87,16 @@ function expectedWin(distribution: SignedDistribution, scoreDifference: number):
  return distribution.upperTail[tieIndex + 1] + 0.5 * distribution.probabilities[tieIndex];
 }
 
-/** A deterministic, equal-strength win model built once and reused across games. */
+/** A deterministic, equal-strength neutral league-rate win model built once and reused across games. */
 export class WinExpectancyModel {
- readonly #rates: Rates;
+ readonly #rows: TransitionRows;
  readonly #runDistributions = new Map<number, Float64Array>();
  readonly #futureDifferentials = new Map<number, SignedDistribution>();
  readonly #topRemainders = new Map<number, SignedDistribution>();
  readonly #bottomRemainders = new Map<number, SignedDistribution>();
 
- constructor(rates: Rates) {
-  validateRates(rates);
-  if (rates[2] + rates[7] <= 0) throw new Error('Neutral win model requires a positive out rate');
-  this.#rates = [...rates] as Rates;
+ constructor(environment: DefensiveEnvironment) {
+  this.#rows = getPhysicalReference(environment).transitions[INFINITY_TARGET];
   this.#futureDifferentials.set(0, signed(Float64Array.of(1), 0));
  }
 
@@ -190,7 +105,7 @@ export class WinExpectancyModel {
   const key = outs * 8 + bases;
   let distribution = this.#runDistributions.get(key);
   if (!distribution) {
-   distribution = neutralRunDistribution(this.#rates, outs, bases);
+   distribution = neutralRunDistribution(this.#rows, outs, bases);
    this.#runDistributions.set(key, distribution);
   }
   return distribution;

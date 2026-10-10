@@ -1,3 +1,4 @@
+import { stadiumSummary } from '../sim/park.ts';
 import { describe, expect, it } from 'vitest';
 import { SLOTS, type Draft, type Manifest } from '../game/types.ts';
 import type { MediaManifest } from '../media/types.ts';
@@ -16,10 +17,12 @@ function fixture(): CreateShareRenderModelInput {
 		decade: Math.floor(profile.year / 10) * 10
 	}));
 	const draft: Draft = {
-		schemaVersion: 4,
-		modelVersion: 'pa-v3',
+		schemaVersion: 5,
+		modelVersion: 'contact-v1',
+		rulesVersion: 'classic-v1',
 		dataVersion: season.data.dataVersion,
 		seed: season.seed,
+		homeStadium: season.homeStadium,
 		picks,
 		battingOrder: [...season.battingOrder],
 		starterOrder: [...season.starterOrder],
@@ -39,6 +42,7 @@ function fixture(): CreateShareRenderModelInput {
 			eligibleSlots: [slot]
 		})),
 		chunks: {},
+		stadiums: season.data.stadiums.map(stadium => stadiumSummary(stadium, null)),
 		simulationUrl: '/synthetic/simulation.json',
 		showcaseUrl: '/synthetic/showcase.json',
 		attributionUrl: '/synthetic/attribution.json',
@@ -50,8 +54,8 @@ function fixture(): CreateShareRenderModelInput {
 	};
 	const games = Array.from({ length: 162 }, (_, index) => ({ number: index + 1 } as GameResult));
 	const result: SeasonResult = {
-		modelVersion: 'pa-v3', dataVersion: season.data.dataVersion, seed: season.seed,
-		defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1',
+		modelVersion: 'contact-v1', rulesVersion: 'classic-v1', dataVersion: season.data.dataVersion, seed: season.seed, homeStadium: season.homeStadium,
+		defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2',
 		wins: 100, losses: 62, firstLoss: 3, longestWinningStreak: 12, runsFor: 811, runsAgainst: 644,
 		games, batting: [], pitching: [], starterStarts: [54, 54, 54], highlight: null, lowlight: null
 	};

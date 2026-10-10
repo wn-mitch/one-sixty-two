@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { availableCandidates, commitPick, createDraft, legalSlots, replayInput, rollDraft } from '../game/draft.ts';
+import { stadiumSummary } from '../sim/park.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, replayInput, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { SLOTS, type Manifest, type Replay } from '../game/types.ts';
 import type { MediaManifest } from '../media/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
@@ -60,6 +61,7 @@ function fixture(): Fixture {
 		franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${index}`, name: `Club ${index}`, decades: [2020] })),
 		candidates,
 		chunks,
+		stadiums: season.data.stadiums.map(stadium => stadiumSummary(stadium, null)),
 		simulationUrl: `/data/${DATA_VERSION}/simulation.json`,
 		showcaseUrl: `/data/${DATA_VERSION}/showcase.json`,
 		attributionUrl: `/data/${DATA_VERSION}/attribution.json`,
@@ -73,7 +75,7 @@ function fixture(): Fixture {
 			changes: 'Synthetic test data.', fullNotice: 'Synthetic test data.'
 		}
 	} as Manifest;
-	let draft = createDraft(manifest, season.seed);
+	let draft = selectHomeStadium(createDraft(manifest, season.seed), manifest, season.homeStadium.id);
 	while (draft.picks.length < SLOTS.length) {
 		draft = rollDraft(draft, manifest);
 		const candidate = availableCandidates(draft, manifest)[0];
@@ -141,7 +143,7 @@ describe('trusted share data', () => {
 		expect(loaded.draft.actions).toEqual(test.replay.actions);
 		expect(loaded.profiles).toHaveLength(14);
 		expect(new Set(loaded.profiles.map(profile => profile.franchiseId)).size).toBe(14);
-		expect(loaded.simulation).toMatchObject({ dataVersion: DATA_VERSION, defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1' });
+		expect(loaded.simulation).toMatchObject({ dataVersion: DATA_VERSION, defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2' });
 	});
 
 	it('fails explicitly when a required current asset is unavailable', async () => {

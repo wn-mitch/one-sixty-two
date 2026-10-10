@@ -1,11 +1,12 @@
 import { validateReplay } from '../game/draft.ts';
-import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, SLOTS, type Draft, type Manifest, type Profile, type SimulationData } from '../game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, DEFENSE_METHOD_VERSION, MODEL_VERSION, RULES_VERSION, SLOTS, VALUATION_VERSION, type Draft, type Manifest, type Profile, type SimulationData } from '../game/types.ts';
 import { validateMedia } from '../media/client.ts';
 import type { MediaManifest, MediaPointer } from '../media/types.ts';
 import { validateRankings, validateRankingsPointer } from '../rankings/client.ts';
 import type { WarRankings, WarRankingsPointer } from '../rankings/types.ts';
 import type { ShareRenderModel } from '../share/types.ts';
-import { validateDefensiveEnvironment, validateProfile } from '../sim/validation.ts';
+import { ENVIRONMENT_VERSION, GEOMETRY_VERSION } from '../sim/park-types.ts';
+import { resolveStadium, validateDefensiveEnvironment, validateProfile, validateStadiumDeck } from '../sim/validation.ts';
 import { loadAuthoritativeManifest, loadReplay, type ReplayAssets, type ReplayBucket } from './replays.ts';
 
 const ASSET_ORIGIN = 'https://162-zero.internal';
@@ -156,7 +157,7 @@ function validateSimulation(value: unknown, manifest: Manifest): asserts value i
 	if (!value || typeof value !== 'object' || Array.isArray(value)) incompatible('The simulation dataset is invalid.');
 	const simulation = value as SimulationData;
 	if (simulation.schemaVersion !== 1 || simulation.dataVersion !== manifest.dataVersion ||
-		simulation.defenseMethodVersion !== 'defense-v1' || simulation.valuationVersion !== 'sim-war-v1' ||
+		simulation.defenseMethodVersion !== DEFENSE_METHOD_VERSION || simulation.valuationVersion !== VALUATION_VERSION ||
 		!Number.isFinite(simulation.observedRuns) || simulation.observedRuns <= 0 ||
 		!Array.isArray(simulation.opponents) || simulation.opponents.length !== 30 ||
 		new Set(simulation.opponents.map(team => team?.id)).size !== 30) {
@@ -164,12 +165,18 @@ function validateSimulation(value: unknown, manifest: Manifest): asserts value i
 	}
 	try {
 		validateDefensiveEnvironment(simulation);
+		validateStadiumDeck(simulation);
+		if (manifest.stadiums.length !== simulation.stadiums.length || simulation.stadiums.some(stadium =>
+			!manifest.stadiums.some(summary => summary.ref.id === stadium.id && summary.ref.version === stadium.version))) {
+			incompatible('The stadium deck does not match the manifest.');
+		}
 		validateProfile(simulation.bullpen);
 		for (const team of simulation.opponents) {
 			if (!team || !Array.isArray(team.hitters) || !Array.isArray(team.starters) || !team.closer || !team.bullpen) {
 				incompatible('The simulation dataset is incomplete.');
 			}
 			for (const profile of [...team.hitters, ...team.starters, team.closer, team.bullpen]) validateProfile(profile);
+			if (resolveStadium(simulation, team.homeStadium).franchiseId !== team.id) incompatible('An opponent home stadium is invalid.');
 		}
 	} catch (error) {
 		if (error instanceof ShareDataIncompatibleError) throw error;
@@ -187,7 +194,7 @@ export async function loadTrustedShareData(
 	const current = await loadCurrentShareAssets(assets);
 	const replay = await loadReplay(bucket, id, current.manifest);
 	const draft = validateReplay(replay, current.manifest);
-	if (draft.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION || draft.modelVersion !== MODEL_VERSION) {
+	if (draft.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION || draft.modelVersion !== MODEL_VERSION || draft.rulesVersion !== RULES_VERSION || !draft.homeStadium) {
 		incompatible('The replay uses an unsupported simulation model.');
 	}
 	const [profiles, simulationValue] = await Promise.all([
@@ -215,8 +222,10 @@ export function validateStoredShareModel(model: unknown, current: CurrentShareAs
 		record.runsAgainst
 	].every(number => Number.isInteger(number) && number >= 0);
 	if (!SHA256.test(digest) || value.schemaVersion !== 1 || value.replaySchemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION ||
-		value.modelVersion !== MODEL_VERSION || value.dataVersion !== current.manifest.dataVersion ||
-		value.defenseMethodVersion !== 'defense-v1' || value.valuationVersion !== 'sim-war-v1' ||
+		value.modelVersion !== MODEL_VERSION || value.rulesVersion !== RULES_VERSION || value.dataVersion !== current.manifest.dataVersion ||
+		value.defenseMethodVersion !== DEFENSE_METHOD_VERSION || value.valuationVersion !== VALUATION_VERSION ||
+		!value.homeStadium || value.homeStadium.geometryVersion !== GEOMETRY_VERSION || value.homeStadium.environmentVersion !== ENVIRONMENT_VERSION ||
+		!current.manifest.stadiums.some(summary => summary.ref.id === value.homeStadium.id && summary.ref.version === value.homeStadium.version && summary.name === value.homeStadium.name) ||
 		value.mediaVersion !== current.media.version || value.rankingVersion !== current.rankings.rankingVersion ||
 		value.rendererVersion !== current.rendererVersion || !value.replayId || !REPLAY_ID.test(value.replayId) ||
 		!wholeNonnegative || record.wins + record.losses !== 162 ||

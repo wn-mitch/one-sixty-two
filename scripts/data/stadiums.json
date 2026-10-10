@@ -1,0 +1,4271 @@
+{
+  "catalogVersion": "stadium-sources-v1",
+  "referenceYear": 2025,
+  "venues": [
+    {
+      "franchiseId": "ANA",
+      "name": "Angel Stadium",
+      "roof": "none",
+      "elevationFt": {
+        "value": 147,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-117.882685&y=33.80029&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 329.6,
+          "heightFt": 3.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 386.1,
+          "heightFt": 6.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 398.3,
+          "heightFt": 6.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 369,
+          "heightFt": 6.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 329.6,
+          "heightFt": 3.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast measures 3.2 ft at both foul lines; Wikipedia documents a 19 ft right-center wall with a scoreboard (1997), not located precisely enough to add as a point."
+      ]
+    },
+    {
+      "franchiseId": "ARI",
+      "name": "Chase Field",
+      "roof": "retractable",
+      "elevationFt": {
+        "value": 1086,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-112.066793&y=33.44542&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 328.7,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 388.7,
+          "heightFt": 7.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 406.3,
+          "heightFt": 24.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 389.3,
+          "heightFt": 6.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 333.7,
+          "heightFt": 8.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast CF height 24.5 ft is the high center-field wall. Posted deep alleys of 413 ft (Wikipedia) are not added because their bearings are unknown."
+      ]
+    },
+    {
+      "franchiseId": "ATL",
+      "name": "Truist Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 964,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-84.4681&y=33.89127&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 334.7,
+          "heightFt": 5.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 386.1,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 400,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 378.8,
+          "heightFt": 15.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 326,
+          "heightFt": 15.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast shows a 15.3 ft wall from the RF gap to the RF line."
+      ]
+    },
+    {
+      "franchiseId": "BAL",
+      "name": "Oriole Park at Camden Yards",
+      "roof": "none",
+      "elevationFt": {
+        "value": 17,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-76.621572&y=39.283944&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation; Wikipedia notes the playing field is 16 ft below street level"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 332.9,
+          "heightFt": 6.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 370.7,
+          "heightFt": 6.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "Deep LCF corner (Statcast deepest)",
+          "bearingDeg": -10,
+          "distanceFt": 408.5,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest"
+            },
+            "height": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "ordinary wall height not sourced; 8 ft estimate"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "deep left-center corner (Seamheads LCC 410 ft, Wikipedia \"Deep Left Center 410\") lies between LCF and CF; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 399.6,
+          "heightFt": 5.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 385.5,
+          "heightFt": 5.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 317.8,
+          "heightFt": 19.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "2025 configuration: Statcast flags 2025 as a changed configuration; its LF gap moved from 398.3 ft / 12.2 ft high (2024) to 370.7 ft / 6.3 ft high (2025).",
+        "SI (Nov 2024) reports the 2025 LF wall at 8 ft in some places and 6 ft 11 in in others, with deepest LF points of 374 and 376 ft: https://www.si.com/fannation/mlb/fastball/news/baltimore-orioles-adjust-dimensions-at-camden-yards-move-in-left-field-wall-walltimore-per-gm-mike-elias-01jctp6ftzdt",
+        "MASN (Nov 2024): the wall moved in by up to 20 ft and was lowered from 13 ft to 8 ft: https://masnsports.com/blog/orioles-moving-in-left-field-wall-for-2025-season",
+        "Seamheads 2025 row (LCF 364, LCC 410) and Andrew Clem dimensions do not reflect the 2025 change consistently; Statcast is used.",
+        "Statcast RF line height 19.9 ft is the RF scoreboard wall (Wikipedia: lowered from 25 ft to 21 ft)."
+      ]
+    },
+    {
+      "franchiseId": "BOS",
+      "name": "Fenway Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 7,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-71.097337&y=42.346561&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line (Green Monster)",
+          "bearingDeg": -45,
+          "distanceFt": 308.5,
+          "heightFt": 37.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap, Green Monster)",
+          "bearingDeg": -22.5,
+          "distanceFt": 344.8,
+          "heightFt": 37.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "Green Monster left-center end",
+          "bearingDeg": -13.5,
+          "distanceFt": 379,
+          "heightFt": 37.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Fenway_Park",
+              "note": "Wikipedia infobox \"Deep Left-Center 379 ft\""
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Fenway_Park",
+              "note": "Green Monster 37.167 ft (37 ft 2 in)"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "derived by extending the straight Green Monster line through the Statcast LF line and LF gap points to 379 ft"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 388.5,
+          "heightFt": 17.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "The Triangle (Statcast deepest)",
+          "bearingDeg": 10,
+          "distanceFt": 417.2,
+          "heightFt": 17.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest"
+            },
+            "height": {
+              "kind": "estimated",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Triangle sits at the right end of the CF wall; Statcast CF wall height applied"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "the Triangle is just right of straightaway center (Wikipedia \"Deep Right-Center 420\", far corner 420 ft); bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 377.8,
+          "heightFt": 4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line (Pesky Pole)",
+          "bearingDeg": 45,
+          "distanceFt": 299.3,
+          "heightFt": 3.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast measures the Green Monster at 37.3 ft; Wikipedia gives 37.167 ft (37 ft 2 in).",
+        "Pesky Pole: Statcast 299.3 ft; Wikipedia gives 302 ft (unposted).",
+        "Statcast RF gap (377.8 ft, 4.0 ft high) is on the low bullpen/bleacher wall; Wikipedia posts RF 380 ft."
+      ]
+    },
+    {
+      "franchiseId": "CHC",
+      "name": "Wrigley Field",
+      "roof": "none",
+      "elevationFt": {
+        "value": 600,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://en.wikipedia.org/wiki/Wrigley_Field",
+          "note": "playing field is 600 ft above sea level"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 354.2,
+          "heightFt": 11.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 356.2,
+          "heightFt": 11.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 397.2,
+          "heightFt": 10.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 378.9,
+          "heightFt": 11.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 349.2,
+          "heightFt": 11.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast LF gap (356.2 ft) is in the left-center \"well\"; Wikipedia gives the well at 357 ft and the RCF well notch at 363 ft.",
+        "Wikipedia infobox lists 15 ft corners but its body says corners were reduced to 11 ft; Statcast measures about 11 ft everywhere."
+      ]
+    },
+    {
+      "franchiseId": "CHW",
+      "name": "Rate Field",
+      "roof": "none",
+      "elevationFt": {
+        "value": 595,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-87.633703&y=41.829892&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 328.4,
+          "heightFt": 6.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 378.9,
+          "heightFt": 6.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 400,
+          "heightFt": 6.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 379.8,
+          "heightFt": 6.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 334.6,
+          "heightFt": 6.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Wikipedia lists an 8 ft outfield wall; Statcast measures 6.5–6.8 ft."
+      ]
+    },
+    {
+      "franchiseId": "CIN",
+      "name": "Great American Ball Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 490,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-84.506483&y=39.097213&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 327.8,
+          "heightFt": 11.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 376.1,
+          "heightFt": 11.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 403.6,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 368.3,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 324.4,
+          "heightFt": 11.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "franchiseId": "CLE",
+      "name": "Progressive Field",
+      "roof": "none",
+      "elevationFt": {
+        "value": 653,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-81.685326&y=41.496005&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line (Little Green Monster)",
+          "bearingDeg": -45,
+          "distanceFt": 324.8,
+          "heightFt": 20.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 367.8,
+          "heightFt": 20,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "Deep LCF corner (Statcast deepest)",
+          "bearingDeg": -10,
+          "distanceFt": 408.5,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest"
+            },
+            "height": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "ordinary wall height not sourced; 8 ft estimate"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Wikipedia lists deep center 410 ft and Seamheads LCC 410 ft left of CF; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 400,
+          "heightFt": 7.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 374.9,
+          "heightFt": 7.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 324.6,
+          "heightFt": 12,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast LF line/gap heights (20.1/20.0 ft) are the 19 ft \"Little Green Monster\" (Wikipedia)."
+      ]
+    },
+    {
+      "franchiseId": "COL",
+      "name": "Coors Field",
+      "roof": "none",
+      "elevationFt": {
+        "value": 5200,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://en.wikipedia.org/wiki/Coors_Field",
+          "note": "\"At 5,200 feet above sea level\""
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 346.9,
+          "heightFt": 12.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 407.5,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 414.7,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "Deep RCF corner (Statcast deepest)",
+          "bearingDeg": 10,
+          "distanceFt": 422.5,
+          "heightFt": 16.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Coors_Field",
+              "note": "right field to center field wall in front of the bullpens raised to 16 ft 6 in"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Seamheads 2025 lists RCC 424 ft right of CF; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 385.1,
+          "heightFt": 16.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 350.8,
+          "heightFt": 16.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "USGS ground elevation at the park coordinate is 5,180 ft."
+      ]
+    },
+    {
+      "franchiseId": "DET",
+      "name": "Comerica Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 577,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-83.048627&y=42.339063&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 342.7,
+          "heightFt": 7.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 383.8,
+          "heightFt": 6.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 412.3,
+          "heightFt": 6.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 390.9,
+          "heightFt": 6.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 327.4,
+          "heightFt": 9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "2023 changes apply (MLB.com, https://www.mlb.com/tigers/news/tigers-changing-outfield-dimensions-at-comerica-park): CF moved in from 422 to 412 ft and lowered from 8.5 to 7 ft; the RCF scoreboard wall lowered from 13 to 7 ft; LF relabeled 342 ft.",
+        "Statcast 2025 matches the 2023 configuration (CF 412.3 ft, 6.7 ft high). Seamheads and Andrew Clem still list pre-2023 values."
+      ]
+    },
+    {
+      "franchiseId": "FLA",
+      "name": "loanDepot park",
+      "roof": "retractable",
+      "elevationFt": {
+        "value": 8,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-80.219541&y=25.778165&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 343.8,
+          "heightFt": 11,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 387.2,
+          "heightFt": 11,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 396.3,
+          "heightFt": 8.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 384.3,
+          "heightFt": 8.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 334.6,
+          "heightFt": 11,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Wikipedia: CF moved in to 400 ft and RCF to 387 ft in 2020; Seamheads 2025 row still lists CF 407."
+      ]
+    },
+    {
+      "franchiseId": "HOU",
+      "name": "Daikin Park",
+      "roof": "retractable",
+      "elevationFt": {
+        "value": 44,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-95.355429&y=29.757041&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line (Crawford Boxes)",
+          "bearingDeg": -45,
+          "distanceFt": 314.7,
+          "heightFt": 18.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 367.3,
+          "heightFt": 24.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "Deep LCF",
+          "bearingDeg": -12,
+          "distanceFt": 399,
+          "heightFt": 25,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Daikin_Park",
+              "note": "Wikipedia \"Left-center (deep) 399 ft\""
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://www.seamheads.com/ballparks/ballpark.php?parkID=HOU03",
+              "note": "Seamheads 2025 LCF wall height 25 ft"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "deep left-center corner between LF gap and CF; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 409.1,
+          "heightFt": 9.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "Deep RCF",
+          "bearingDeg": 10,
+          "distanceFt": 408,
+          "heightFt": 9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Daikin_Park",
+              "note": "Wikipedia \"Right-center (deep) 408 ft\""
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://www.seamheads.com/ballparks/ballpark.php?parkID=HOU03",
+              "note": "Seamheads 2025 CF/RCF wall height 9 ft"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "deep right-center corner between CF and RF gap; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 377.6,
+          "heightFt": 9.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 325.5,
+          "heightFt": 6.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Crawford Boxes wall: Wikipedia gives 19 ft; Statcast measures 18.2 ft at the LF line and 24.2 ft at the LF gap (Seamheads LCF 25 ft).",
+        "Tal's Hill was removed before 2017; CF is 409 ft (Wikipedia). Statcast deepest point is 415.5 ft at an unpublished bearing and is not added."
+      ]
+    },
+    {
+      "franchiseId": "KCR",
+      "name": "Kauffman Stadium",
+      "roof": "none",
+      "elevationFt": {
+        "value": 888,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-94.480149&y=39.051604&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 324.4,
+          "heightFt": 8.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 393,
+          "heightFt": 9.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 410.1,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 392.7,
+          "heightFt": 9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 326.3,
+          "heightFt": 10.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "2025 configuration used. For 2026 the fences changed: Statcast 2026 LF gap 384.4 ft, RF gap 385.1 ft, gap heights 8.0 ft (2025: 393.0/392.7 ft, 9.2/9.0 ft high); Wikipedia lists posted LCF/RCF 387 ft (2009–2025) and 379 ft (2026–)."
+      ]
+    },
+    {
+      "franchiseId": "LAD",
+      "name": "Dodger Stadium",
+      "roof": "none",
+      "elevationFt": {
+        "value": 501,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-118.239951&y=34.073878&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 326.5,
+          "heightFt": 3.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 371.9,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 394.9,
+          "heightFt": 7.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 371.6,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 326.3,
+          "heightFt": 3.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast measures 3.5–3.6 ft at the foul lines (low corner walls) and about 7.5 ft elsewhere. Wikipedia: CF sign reads 395 ft; true CF 400 ft."
+      ]
+    },
+    {
+      "franchiseId": "MIL",
+      "name": "American Family Field",
+      "roof": "retractable",
+      "elevationFt": {
+        "value": 601,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-87.970966&y=43.028232&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 340.8,
+          "heightFt": 14.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 371.3,
+          "heightFt": 6.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 399.1,
+          "heightFt": 6.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 376.7,
+          "heightFt": 6.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 344.5,
+          "heightFt": 7.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast LF line height 14.8 ft is the highest outfield wall point."
+      ]
+    },
+    {
+      "franchiseId": "MIN",
+      "name": "Target Field",
+      "roof": "none",
+      "elevationFt": {
+        "value": 826,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-93.278026&y=44.981749&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 338.3,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 382.3,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "Deep LCF corner (Statcast deepest)",
+          "bearingDeg": -10,
+          "distanceFt": 409.9,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest"
+            },
+            "height": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "ordinary wall height not sourced; 8 ft estimate"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Seamheads 2025 lists LCC 411 ft left of CF; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 403.8,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 373.4,
+          "heightFt": 23,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 327.9,
+          "heightFt": 20.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast RF gap/RF line heights (23.0/20.4 ft) are the high right-field wall (Seamheads 23 ft)."
+      ]
+    },
+    {
+      "franchiseId": "NYM",
+      "name": "Citi Field",
+      "roof": "none",
+      "elevationFt": {
+        "value": 13,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-73.84584&y=40.757134&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 334.3,
+          "heightFt": 8.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 367.5,
+          "heightFt": 7.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 407.4,
+          "heightFt": 7.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 372.5,
+          "heightFt": 7.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 329.5,
+          "heightFt": 9.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "franchiseId": "NYY",
+      "name": "Yankee Stadium",
+      "roof": "none",
+      "elevationFt": {
+        "value": 15,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-73.926413&y=40.829586&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 317.5,
+          "heightFt": 8.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 391.8,
+          "heightFt": 8.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 408,
+          "heightFt": 8.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 363.7,
+          "heightFt": 8.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 313.4,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Wikipedia posted dimensions: LF 318, LCF 399, CF 408, RCF 385, RF 314 ft; walls 8 ft 5 in at the LF pole descending to 8 ft at the RF pole. Statcast measures 7.7–8.3 ft.",
+        "The short right-field porch shows in the Statcast RF gap (363.7 ft) versus LF gap (391.8 ft)."
+      ]
+    },
+    {
+      "franchiseId": "OAK",
+      "name": "Sutter Health Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 44,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-121.5147&y=38.58004&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 330.2,
+          "heightFt": 7.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 385.7,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 401.3,
+          "heightFt": 7.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 375.4,
+          "heightFt": 4.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 324.5,
+          "heightFt": 13.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Athletics' 2025 home in Sacramento. Seamheads lists only LF 330, CF 403 and RF 325 ft; Statcast RF line height is 13.3 ft."
+      ]
+    },
+    {
+      "franchiseId": "PHI",
+      "name": "Citizens Bank Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": -5,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-75.166485&y=39.906109&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation; the negative value is the USGS reading at the coordinate"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 328.3,
+          "heightFt": 10.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 375.5,
+          "heightFt": 9.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "Deep LCF corner (Statcast deepest)",
+          "bearingDeg": -10,
+          "distanceFt": 408.5,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest"
+            },
+            "height": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "ordinary wall height not sourced; 8 ft estimate"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Seamheads 2025 lists LCC 409 ft left of CF; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 401.8,
+          "heightFt": 5.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 369.9,
+          "heightFt": 12.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 329.6,
+          "heightFt": 12.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast highest wall point is 16.9 ft at an unpublished bearing."
+      ]
+    },
+    {
+      "franchiseId": "PIT",
+      "name": "PNC Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 725,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-80.005683&y=40.446835&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 324.4,
+          "heightFt": 4.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 399.9,
+          "heightFt": 4.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "Deep LCF corner (Statcast deepest)",
+          "bearingDeg": -12,
+          "distanceFt": 409.1,
+          "heightFt": 10,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://www.seamheads.com/ballparks/ballpark.php?parkID=PIT08",
+              "note": "Seamheads 2025 LCF wall height 10 ft"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Seamheads 2025 lists LCC 410 ft left of CF; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 398.3,
+          "heightFt": 9.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 377.9,
+          "heightFt": 9.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line (Clemente Wall)",
+          "bearingDeg": 45,
+          "distanceFt": 319.5,
+          "heightFt": 22.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast RF line height 22.1 ft is the 21 ft Clemente Wall (Seamheads RF 21 ft)."
+      ]
+    },
+    {
+      "franchiseId": "SDP",
+      "name": "Petco Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 16,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-117.157056&y=32.70753&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 334.6,
+          "heightFt": 4.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 380.5,
+          "heightFt": 6.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 395.9,
+          "heightFt": 7.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 388.7,
+          "heightFt": 7.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 321.8,
+          "heightFt": 10.5,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "franchiseId": "SEA",
+      "name": "T-Mobile Park",
+      "roof": "retractable",
+      "elevationFt": {
+        "value": 12,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-122.332283&y=47.591443&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 330.7,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 378.9,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 400.7,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 382,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 326.9,
+          "heightFt": 7.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "franchiseId": "SFG",
+      "name": "Oracle Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 12,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-122.389221&y=37.778324&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 339.8,
+          "heightFt": 8.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 376.9,
+          "heightFt": 8.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 391.2,
+          "heightFt": 9.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "Triples Alley (Statcast deepest)",
+          "bearingDeg": 15,
+          "distanceFt": 413.2,
+          "heightFt": 20,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_deepest; Wikipedia posts Triples Alley at 415 ft (trimmed from 421 ft in 2020)"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Oracle_Park",
+              "note": "Wikipedia fence heights: right-center field 20 ft"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Triples Alley is in right-center between CF and the RF gap; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 410.8,
+          "heightFt": 6.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF arcade wall corner",
+          "bearingDeg": 32,
+          "distanceFt": 365,
+          "heightFt": 24,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Oracle_Park",
+              "note": "Wikipedia \"Right field 365 ft\""
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://en.wikipedia.org/wiki/Oracle_Park",
+              "note": "\"The 24-foot high wall in right field\""
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "posted right-field point between the RF gap and the RF line; bearing estimated from diagrams"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 304.1,
+          "heightFt": 23.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "RF brick wall: Wikipedia 24 ft; Seamheads 25 ft; Statcast measures 23.8 ft at the RF line.",
+        "Statcast RF gap (410.8 ft) measures only 6.6 ft high, conflicting with the Wikipedia 20 ft right-center figure used at Triples Alley."
+      ]
+    },
+    {
+      "franchiseId": "STL",
+      "name": "Busch Stadium",
+      "roof": "none",
+      "elevationFt": {
+        "value": 438,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-90.192841&y=38.622622&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 334.8,
+          "heightFt": 7.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 390.4,
+          "heightFt": 7.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 399.6,
+          "heightFt": 7.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 390.7,
+          "heightFt": 7.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 334.9,
+          "heightFt": 7.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "franchiseId": "TBD",
+      "name": "George M. Steinbrenner Field",
+      "roof": "none",
+      "elevationFt": {
+        "value": 33,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-82.50667&y=27.98028&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 318.7,
+          "heightFt": 6.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 391,
+          "heightFt": 6.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 407.4,
+          "heightFt": 5.9,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 365.3,
+          "heightFt": 6.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 314,
+          "heightFt": 6.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Rays' temporary 2025 home (Tropicana Field roof damage); the Rays returned to Tropicana Field for 2026. Posted dimensions mirror Yankee Stadium (Wikipedia: 318/399/408/385/314)."
+      ]
+    },
+    {
+      "franchiseId": "TEX",
+      "name": "Globe Life Field",
+      "roof": "retractable",
+      "elevationFt": {
+        "value": 508,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-97.084167&y=32.747361&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 328.2,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 380.7,
+          "heightFt": 8.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 406.3,
+          "heightFt": 8.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 372.9,
+          "heightFt": 6.4,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 321.2,
+          "heightFt": 8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "franchiseId": "TOR",
+      "name": "Rogers Centre",
+      "roof": "retractable",
+      "elevationFt": {
+        "value": 280,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-79.389054&y=43.641256&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation; location is in Canada, outside 3DEP core coverage"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 328.1,
+          "heightFt": 14.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 381.2,
+          "heightFt": 10.2,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 400,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 373.3,
+          "heightFt": 10.8,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 328.3,
+          "heightFt": 12.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "2023 renovation dimensions: Statcast 2025 shows LF/RF gaps at 381.2/373.3 ft with 10.2/10.8 ft walls. Seamheads and Andrew Clem still list the pre-2023 symmetric configuration."
+      ]
+    },
+    {
+      "franchiseId": "WSN",
+      "name": "Nationals Park",
+      "roof": "none",
+      "elevationFt": {
+        "value": 23,
+        "provenance": {
+          "kind": "source",
+          "sourceUrl": "https://epqs.nationalmap.gov/v1/json?x=-77.007435&y=38.872987&units=Feet&wkid=4326&includeDate=false",
+          "note": "USGS 3DEP ground elevation at the park coordinate (Seamheads/Wikipedia lat/lon); not a surveyed field elevation"
+        }
+      },
+      "wall": [
+        {
+          "label": "LF line",
+          "bearingDeg": -45,
+          "distanceFt": 336.3,
+          "heightFt": 8.6,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        },
+        {
+          "label": "LCF (Statcast LF gap)",
+          "bearingDeg": -22.5,
+          "distanceFt": 377.5,
+          "heightFt": 7.7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_lf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_lf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "CF",
+          "bearingDeg": 0,
+          "distanceFt": 401.6,
+          "heightFt": 7,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_cf"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_cf"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast CF point is on the center-field line"
+            }
+          }
+        },
+        {
+          "label": "RCF (Statcast RF gap)",
+          "bearingDeg": 22.5,
+          "distanceFt": 370,
+          "heightFt": 14.1,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_gap"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_gap"
+            },
+            "bearing": {
+              "kind": "estimated",
+              "sourceUrl": null,
+              "note": "Statcast gap measurement; Baseball Savant does not publish the gap angle, so ±22.5° (midway between line and CF) is assumed"
+            }
+          }
+        },
+        {
+          "label": "RF line",
+          "bearingDeg": 45,
+          "distanceFt": 334.9,
+          "heightFt": 16.3,
+          "provenance": {
+            "distance": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured distance_rf_line"
+            },
+            "height": {
+              "kind": "source",
+              "sourceUrl": "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=dimensions&year=2025",
+              "note": "Statcast 2025 measured height_rf_line"
+            },
+            "bearing": {
+              "kind": "source",
+              "sourceUrl": null,
+              "note": "foul line by definition"
+            }
+          }
+        }
+      ],
+      "notes": [
+        "Statcast shows a 14.1–16.3 ft wall from the RF gap to the RF line."
+      ]
+    }
+  ]
+}

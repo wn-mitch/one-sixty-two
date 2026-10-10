@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { availableCandidates, commitPick, createDraft, legalSlots, replayInput, rollDraft } from '../game/draft.ts';
+import { describe, expect, it, vi } from 'vitest';
+
+// Full 162-game seasons run here; parallel suites can slow each one well past the default.
+vi.setConfig({ testTimeout: 60_000 });
+import { stadiumSummary } from '../sim/park.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, replayInput, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { SLOTS, type Manifest } from '../game/types.ts';
 import type { MediaManifest } from '../media/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
@@ -89,6 +93,7 @@ function fixture(): { bindings: ShareServerBindings; bucket: MemoryBucket; brows
 		sourceCommit: 'fixture',
 		franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${index}`, name: `Club ${index}`, decades: [2020] })),
 		candidates,
+		stadiums: season.data.stadiums.map(stadium => stadiumSummary(stadium, null)),
 		chunks: Object.fromEntries(candidates.map(candidate => [
 			`${candidate.franchiseId}-${candidate.decade}`,
 			`/data/${DATA_VERSION}/${candidate.franchiseId}-${candidate.decade}.json`
@@ -105,7 +110,7 @@ function fixture(): { bindings: ShareServerBindings; bucket: MemoryBucket; brows
 			changes: 'Synthetic test data.', fullNotice: 'Synthetic test data.'
 		}
 	} as Manifest;
-	let draft = createDraft(manifest, season.seed);
+	let draft = selectHomeStadium(createDraft(manifest, season.seed), manifest, season.homeStadium.id);
 	while (draft.picks.length < SLOTS.length) {
 		draft = rollDraft(draft, manifest);
 		const candidate = availableCandidates(draft, manifest)[0];

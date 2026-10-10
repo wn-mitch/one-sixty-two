@@ -1,5 +1,6 @@
 import type { CardViewModel } from '../cards/view-model.ts';
-import type { ReplaySchemaVersion, Slot } from '../game/types.ts';
+import type { DEFENSE_METHOD_VERSION, MODEL_VERSION, ReplaySchemaVersion, RULES_VERSION, Slot, VALUATION_VERSION } from '../game/types.ts';
+import type { ENVIRONMENT_VERSION, GEOMETRY_VERSION } from '../sim/park-types.ts';
 
 export const SHARE_FORMATS = ['scorecard', 'diamond', 'wide'] as const;
 export type ShareFormat = (typeof SHARE_FORMATS)[number];
@@ -25,6 +26,14 @@ export interface ShareRecord {
 	runsAgainst: number;
 }
 
+export interface ShareStadium {
+	id: string;
+	version: string;
+	name: string;
+	geometryVersion: typeof GEOMETRY_VERSION;
+	environmentVersion: typeof ENVIRONMENT_VERSION;
+}
+
 export interface ShareRenderCard {
 	seasonId: string;
 	slot: Slot;
@@ -39,10 +48,12 @@ export interface ShareRenderCard {
 export interface ShareRenderModel {
 	schemaVersion: 1;
 	replaySchemaVersion: ReplaySchemaVersion;
-	modelVersion: 'pa-v3';
+	modelVersion: typeof MODEL_VERSION;
+	rulesVersion: typeof RULES_VERSION;
 	dataVersion: string;
-	defenseMethodVersion: 'defense-v1';
-	valuationVersion: 'sim-war-v1';
+	defenseMethodVersion: typeof DEFENSE_METHOD_VERSION;
+	valuationVersion: typeof VALUATION_VERSION;
+	homeStadium: ShareStadium;
 	mediaVersion: string | null;
 	rankingVersion: string | null;
 	rendererVersion: string | null;

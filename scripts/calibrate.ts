@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { randomStream } from '../src/lib/game/random.ts';
-import { HITTER_SLOTS, MODEL_VERSION, POSITIONS, type DefensiveSkillName, type Position, type Profile, type Rates, type SimulationData, type Slot } from '../src/lib/game/types.ts';
+import { gameRandomStreams } from '../src/lib/game/random.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, MODEL_VERSION, POSITIONS, RULES_VERSION, type DefensiveSkillName, type Position, type Profile, type Rates, type SimulationData, type Slot } from '../src/lib/game/types.ts';
 import { createDefensiveReference, expectedDefensiveRuns, neutralDefensivePosition, type DefensiveReference } from '../src/lib/sim/defense.ts';
 import { simulateGame } from '../src/lib/sim/game.ts';
 import { simulateSeason } from '../src/lib/sim/season.ts';
 import { syntheticProfile } from '../src/lib/sim/fixtures.ts';
+import { neutralPark, stadiumRef } from '../src/lib/sim/park.ts';
 import type { GameInput, GameResult, SeasonInput, TeamInput } from '../src/lib/sim/types.ts';
 import { loadVerificationData } from './verification-data.ts';
 
@@ -92,7 +93,7 @@ function gameInput(number: number, challengeIsHome: boolean, data: SimulationDat
 		home: challengeIsHome ? challenge : opponent,
 		away: challengeIsHome ? opponent : challenge,
 		defenseEnvironment: data,
-		park: 1
+		stadium: neutralPark()
 	};
 }
 
@@ -102,7 +103,7 @@ function averageSeason(seed: number, data: SimulationData, hitterRates = data.le
 	const roster = [...team.hitters.map((profile, index) => ({ profile, slot: HITTER_SLOTS[index] })), ...starters.map((profile, index) => ({ profile, slot: `SP${index + 1}` as Slot })), { profile: team.pitchers[1], slot: 'CL' as Slot }, { profile: team.pitchers[2], slot: 'BP' as Slot }];
 	const opponents = data.opponents.map(source => {
 		const average = makeTeam(source.id, data);
-		return { id: source.id, name: source.id, park: 1, hitters: average.hitters,
+		return { id: source.id, name: source.id, homeStadium: source.homeStadium, hitters: average.hitters,
 			starters: Array.from({ length: 5 }, (_, index) => commonProfile(`${source.id}-sp${index}`, 'SP1', data.leagueRates, data)),
 			closer: average.pitchers[1], bullpen: average.pitchers[2] };
 	});
@@ -111,13 +112,13 @@ function averageSeason(seed: number, data: SimulationData, hitterRates = data.le
 	leagueBullpen.pitching!.G = 60;
 	leagueBullpen.pitching!.GS = 0;
 	leagueBullpen.pitching!.IPouts = 486;
-	return { schemaVersion: 4, modelVersion: MODEL_VERSION, seed, roster, battingOrder: team.hitters.map(profile => profile.seasonId), starterOrder: starters.map(profile => profile.seasonId),
+	return { schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed, homeStadium: stadiumRef(data.stadiums[0]), roster, battingOrder: team.hitters.map(profile => profile.seasonId), starterOrder: starters.map(profile => profile.seasonId),
 		data: { ...data, opponents, bullpen: leagueBullpen } };
 }
 
 function runGame(seed: number, index: number, data: SimulationData, hitterRates?: Rates, starterRates?: Rates): GameResult {
 	const challengeIsHome = index % 2 === 0;
-	return simulateGame(gameInput(index + 1, challengeIsHome, data, hitterRates, starterRates), randomStream((seed + index) >>> 0, 'simulation'), null);
+	return simulateGame(gameInput(index + 1, challengeIsHome, data, hitterRates, starterRates), gameRandomStreams((seed + index) >>> 0, 1), null);
 }
 
 interface DefenseIsolationResult {
@@ -207,8 +208,8 @@ function runDefenseIsolation(
 		}
 
 		const gameSeed = (seed + index) >>> 0;
-		const positive = simulateGame(positiveInput, randomStream(gameSeed, 'simulation'), null);
-		const negative = simulateGame(negativeInput, randomStream(gameSeed, 'simulation'), null);
+		const positive = simulateGame(positiveInput, gameRandomStreams(gameSeed, 1), null);
+		const negative = simulateGame(negativeInput, gameRandomStreams(gameSeed, 1), null);
 		assertGameValueConservation(positive, `${position} ${skill} positive game ${index + 1}`);
 		assertGameValueConservation(negative, `${position} ${skill} negative game ${index + 1}`);
 		const positiveBox = challengeIsHome ? positive.home : positive.away;

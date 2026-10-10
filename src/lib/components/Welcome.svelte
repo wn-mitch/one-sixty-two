@@ -30,7 +30,7 @@
 <section class="welcome" aria-labelledby="home-heading">
  <div class="welcome-copy">
   <h1 id="home-heading">Can you go <strong>162-0?</strong></h1>
-  <p class="intro">Roll a franchise and decade. Draft nine hitters, three starters, a closer, and a team-season bullpen remainder. One pick per franchise; each athlete only once. Take your team through all 162 games.</p>
+  <p class="intro">Pick your home stadium, then roll a franchise and decade. Draft nine hitters, three starters, a closer, and a team-season bullpen remainder. One pick per franchise; each athlete only once. Take your team through all 162 games.</p>
   <div class="actions">
    <button class="primary start" disabled={loading || !manifest} onclick={onStart}>Start draft <span aria-hidden="true">↗</span></button>
    {#if hasSavedDraft}<button class="secondary resume" disabled={loading} onclick={onResume}>Resume draft</button>{/if}

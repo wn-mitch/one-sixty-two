@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft } from '../src/lib/game/draft.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../src/lib/game/draft.ts';
 import { decodeReplay, encodeReplay } from '../src/lib/game/share.ts';
 import { compareId, HITTER_SLOTS, SLOTS, type Draft, type Manifest, type Profile, type Slot } from '../src/lib/game/types.ts';
 import { buildSchedule, prepareSeasonInput, simulateSeason } from '../src/lib/sim/season.ts';
@@ -11,19 +11,23 @@ type Policy = 'best' | 'worst';
 interface Options {
 	seed: number;
 	policy: Policy;
+	stadium: string | null;
 }
 
 function parseOptions(arguments_: string[]): Options {
 	let seed = 162;
 	let policy: Policy = 'best';
+	let stadium: string | null = null;
 	for (let index = 0; index < arguments_.length; index++) {
 		const argument = arguments_[index];
 		const [flag, inlineValue] = argument.split('=', 2);
-		if (flag !== '--seed' && flag !== '--policy') throw new Error(`Unknown argument: ${argument}`);
+		if (flag !== '--seed' && flag !== '--policy' && flag !== '--stadium') throw new Error(`Unknown argument: ${argument}`);
 		const value = inlineValue ?? arguments_[++index];
 		if (value === undefined) throw new Error(`${flag} requires a value`);
 		if (flag === '--seed') {
 			seed = Number(value);
+		} else if (flag === '--stadium') {
+			stadium = value;
 		} else if (value === 'best' || value === 'worst') {
 			policy = value;
 		} else {
@@ -31,7 +35,7 @@ function parseOptions(arguments_: string[]): Options {
 		}
 	}
 	if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Seed must be an unsigned 32-bit integer');
-	return { seed, policy };
+	return { seed, policy, stadium };
 }
 
 function hitterValue(profile: Profile): number {
@@ -62,8 +66,15 @@ function chooseProfile(profiles: Profile[], slot: Slot, policy: Policy): Profile
 	})[0];
 }
 
-async function draftRoster(manifest: Manifest, seed: number, policy: Policy, chunks: ProfileChunks): Promise<{ draft: Draft; profiles: Profile[] }> {
-	let draft = createDraft(manifest, seed);
+/** The named stadium, or the first manifest stadium in ID order. */
+function stadiumId(manifest: Manifest, requested: string | null): string {
+	const ids = manifest.stadiums.map(stadium => stadium.ref.id).sort(compareId);
+	if (requested !== null && !ids.includes(requested)) throw new Error(`Unknown stadium ${requested}; choose one of ${ids.join(', ')}`);
+	return requested ?? ids[0];
+}
+
+async function draftRoster(manifest: Manifest, seed: number, policy: Policy, stadium: string, chunks: ProfileChunks): Promise<{ draft: Draft; profiles: Profile[] }> {
+	let draft = selectHomeStadium(createDraft(manifest, seed), manifest, stadium);
 	const selectedProfiles: Profile[] = [];
 	while (draft.picks.length < SLOTS.length) {
 		draft = rollDraft(draft, manifest);
@@ -109,7 +120,8 @@ async function main(): Promise<void> {
 	const options = parseOptions(process.argv.slice(2));
 	assert.equal(SLOTS.length, 14, 'Current smoke contract requires fourteen roster slots');
 	const { manifest, simulation } = await loadVerificationData();
-	const { draft, profiles } = await draftRoster(manifest, options.seed, options.policy, new ProfileChunks(manifest));
+	const stadium = stadiumId(manifest, options.stadium);
+	const { draft, profiles } = await draftRoster(manifest, options.seed, options.policy, stadium, new ProfileChunks(manifest));
 	assert.equal(draft.picks.length, SLOTS.length, 'Smoke policy did not fill every roster slot');
 	assert.equal(new Set(profiles.map(profile => profile.playerId)).size, SLOTS.length, 'Smoke policy drafted a player more than once');
 	assert.deepStrictEqual(new Set(draft.picks.map(pick => pick.slot)), new Set(SLOTS), 'Smoke policy did not fill the declared slots exactly once');
@@ -138,11 +150,13 @@ async function main(): Promise<void> {
 		modelVersion: result.modelVersion,
 		seed: options.seed,
 		policy: options.policy,
+		homeStadium: draft.homeStadium,
 		picks: draft.picks.map(pick => ({ seasonId: pick.seasonId, slot: pick.slot, franchiseId: pick.franchiseId, decade: pick.decade })),
 		record: { wins: result.wins, losses: result.losses },
 		runs: { for: result.runsFor, against: result.runsAgainst },
 		firstLoss: result.firstLoss,
-		longestWinningStreak: result.longestWinningStreak
+		longestWinningStreak: result.longestWinningStreak,
+		homeRunsPerGame: result.batting.reduce((sum, line) => sum + line.HR, 0) / 162
 	}));
 }
 

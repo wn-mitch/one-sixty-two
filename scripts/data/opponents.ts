@@ -1,4 +1,6 @@
 import { compareId, POSITIONS, type Opponent, type PitchingCounts, type Profile, type Rates } from '../../src/lib/game/types.ts';
+import type { ParkRef } from '../../src/lib/sim/park-types.ts';
+import { contactRecord } from '../../src/lib/sim/contact-profile.ts';
 import { normalize } from '../../src/lib/sim/rates.ts';
 import type { CompiledProfiles } from './profiles.ts';
 import { opponentSlots } from './profiles.ts';
@@ -50,10 +52,13 @@ export function poolBullpen(profiles: Profile[], id: string): Profile {
   for (let i = 0; i < 8; i++) rates[i] += profile.pitchingRates![i] * source.BFP;
  }
  if (!counts.BFP) throw new Error(`Empty bullpen evidence: ${id}`);
- return { ...profiles[0], seasonId: id, playerId: id, displayName: 'Support bullpen', bats: '', throws: '', eligibleSlots: [], primaryHitterSlot: null, appearances: {}, batting: undefined, battingRates: undefined, pitching: counts, pitchingRates: normalize(rates), estimatedFields: ['pooledRelief.BFPWeighted', 'throws.neutral'], fielding: {}, defense: { positions: {} }, historicalTeam: id === 'league:bullpen' ? 'League relief pool' : profiles[0].historicalTeam };
+ const pooled: Profile = { ...profiles[0], seasonId: id, playerId: id, displayName: 'Support bullpen', bats: '', throws: '', eligibleSlots: [], primaryHitterSlot: null, appearances: {}, batting: undefined, battingRates: undefined, pitching: counts, pitchingRates: normalize(rates), estimatedFields: ['pooledRelief.BFPWeighted', 'throws.neutral'], fielding: {}, defense: { positions: {} }, historicalTeam: id === 'league:bullpen' ? 'League relief pool' : profiles[0].historicalTeam };
+ pooled.contact = contactRecord(pooled);
+ return pooled;
 }
 
-export function buildOpponents(compiled: CompiledProfiles): { opponents: Opponent[]; bullpen: Profile } {
+/** Current clubs; each plays home games in its own 2025 reference stadium. */
+export function buildOpponents(compiled: CompiledProfiles, homeStadiums: ReadonlyMap<string, ParkRef>): { opponents: Opponent[]; bullpen: Profile } {
  const contemporary = compiled.profiles.filter(profile => profile.year === 2025);
  const bullpen = poolBullpen(contemporary.filter(isReliefProfile), 'league:bullpen');
  const opponents = compiled.currentTeams.map(team => {
@@ -65,9 +70,9 @@ export function buildOpponents(compiled: CompiledProfiles): { opponents: Opponen
   if (starters.length !== 5) throw new Error(`Opponent lacks five starters: ${team.franchID}`);
   const relief = players.filter(isReliefProfile).sort((a, b) => b.pitching!.SV - a.pitching!.SV || b.pitching!.IPouts - a.pitching!.IPouts || compareId(a.seasonId, b.seasonId));
   if (relief.length < 2) throw new Error(`Opponent lacks closer/support relief: ${team.franchID}`);
-  const park = team.BPF?.trim() ? Number(team.BPF) : 100;
-  if (!Number.isFinite(park) || park <= 0) throw new Error(`Invalid opponent park: ${team.franchID}`);
-  return { id: team.franchID, name: team.name, park: Math.max(0.8, Math.min(1.2, park / 100)), hitters, starters, closer: relief[0], bullpen: poolBullpen(relief.slice(1), `${team.franchID}:bullpen`) };
+  const homeStadium = homeStadiums.get(team.franchID);
+  if (!homeStadium) throw new Error(`Missing opponent home stadium: ${team.franchID}`);
+  return { id: team.franchID, name: team.name, homeStadium, hitters, starters, closer: relief[0], bullpen: poolBullpen(relief.slice(1), `${team.franchID}:bullpen`) };
  });
  return { opponents, bullpen };
 }

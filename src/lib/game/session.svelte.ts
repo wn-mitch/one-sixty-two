@@ -1,6 +1,6 @@
 import { goto } from '$app/navigation';
 import { loadChunk, loadManifest, loadSimulation } from './data.ts';
-import { commitPick, createDraft, reassignPick, rollDraft, validateDraft, validateReplay } from './draft.ts';
+import { commitPick, createDraft, reassignPick, rollDraft, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
 import { persistDraft, restoreDraft, type SavedPhase } from './persistence.ts';
 import { newSeed } from './random.ts';
 import {
@@ -20,7 +20,7 @@ import { prepareSeasonInput } from '../sim/season.ts';
 import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts';
 import type { ShareAction, ShareFormat, SharePublication } from '../share/types.ts';
 
-export type Phase = 'start' | 'ready' | 'revealing' | 'choosing' | 'lineup' | 'simulating' | 'results';
+export type Phase = 'start' | 'stadium' | 'ready' | 'revealing' | 'choosing' | 'lineup' | 'simulating' | 'results';
 const SHARE_FORMAT_LABEL: Record<ShareFormat, string> = {
  scorecard: 'Scorecard',
  diamond: 'Diamond',
@@ -106,10 +106,9 @@ export class Session {
     this.shared = false;
     this.draft = createDraft(manifest, newSeed());
     this.savedDraft = null;
-    this.phase = 'ready';
-    this.save('draft');
+    this.phase = 'stadium';
+    this.save('stadium');
     this.loading = false;
-    await this.roll();
     return;
    }
    if (sharedPath) {
@@ -192,7 +191,8 @@ export class Session {
    await this.hydrateRoster();
    if (epoch !== this.epoch) return;
    this.retryAction = null;
-   if (this.draft.picks.length === draftRules(this.draft.schemaVersion).slots.length) {
+   if (!this.draft.homeStadium) this.phase = 'stadium';
+   else if (this.draft.picks.length === draftRules(this.draft.schemaVersion).slots.length) {
     this.phase = 'lineup';
     this.loading = false;
     if (this.savedPhase === 'simulating' || this.savedPhase === 'results' || this.shared) await this.simulate();
@@ -245,8 +245,23 @@ export class Session {
   this.error = '';
   this.incompatible = false;
   this.confirmNew = false;
-  this.phase = 'ready';
-  this.save('draft');
+  this.phase = 'stadium';
+  this.save('stadium');
+ }
+ /** Pins the home stadium, saves it, then takes the first roll. */
+ async selectStadium(stadiumId: string): Promise<void> {
+  if (this.busy || this.phase !== 'stadium' || !this.draft || !this.manifest) return;
+  try {
+   this.draft = selectHomeStadium(this.draft, this.manifest, stadiumId);
+   this.error = '';
+   this.phase = 'ready';
+   this.save('draft');
+   const name = this.manifest.stadiums.find(stadium => stadium.ref.id === stadiumId)?.name ?? 'Your stadium';
+   this.announce = `${name} is your home stadium.`;
+  } catch (error) {
+   this.error = error instanceof Error ? error.message : 'Could not choose the stadium';
+   return;
+  }
   await this.roll();
  }
  async roll(): Promise<void> {

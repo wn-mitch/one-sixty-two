@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import { neutralDefensivePosition } from '#lib/sim/defense.ts';
 import { syntheticProfile } from '#lib/sim/fixtures.ts';
 import { compareId, SLOTS, type Manifest, type Profile, type ShowcaseCard } from '#lib/game/types.ts';
@@ -46,6 +47,7 @@ function manifest(dataVersion: string, profiles: Profile[]): Manifest {
 		sourceCommit: 'fixture',
 		franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${String(index).padStart(2, '0')}`, name: `Club ${String(index).padStart(2, '0')}`, decades: [1950, 2020] })),
 		candidates,
+		stadiums: syntheticStadiumSummaries(Array.from({ length: 30 }, (_, index) => `F${String(index).padStart(2, '0')}`)),
 		chunks: Object.fromEntries(new Set(candidates.map(value => [
 			`${value.franchiseId}-${value.decade}`,
 			`/data/${dataVersion}/${value.franchiseId}-${value.decade}.json`

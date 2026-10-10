@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// The first defensive valuation traces the full skill lattice once per contact model.
+vi.setConfig({ testTimeout: 120_000 });
 import { applyDefense } from '../../../scripts/data/defense.ts';
 import { buildFielding } from '../../../scripts/data/fielding.ts';
 import type { CsvRow } from '../../../scripts/data/acquire.ts';

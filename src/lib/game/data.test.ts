@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import { neutralDefensivePosition } from '../sim/defense.ts';
 import { syntheticProfile } from '../sim/fixtures.ts';
 import { testSeason } from '../sim/test-fixtures.ts';
@@ -35,6 +36,7 @@ function manifest(version: string, profiles: Profile[] = []): Manifest {
   franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${index}`, name: `Club ${index}`, decades: [2020] })),
   candidates,
   chunks,
+  stadiums: syntheticStadiumSummaries(Array.from({ length: 30 }, (_, index) => `opponent-${index}`)),
   simulationUrl: `/data/${version}/simulation.json`,
   showcaseUrl: `/data/${version}/showcase.json`,
   attributionUrl: `/data/${version}/attribution.json`,
@@ -100,7 +102,7 @@ describe('canonical profile loading', () => {
 
   await expect(loadSimulation(manifest(version))).rejects.toThrow();
   const loaded = await loadSimulation(manifest(version));
-  expect(loaded).toMatchObject({ dataVersion: version, defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1' });
+  expect(loaded).toMatchObject({ dataVersion: version, defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2' });
   expect(loaded.opponents).toHaveLength(30);
   expect(reads).toBe(2);
  });

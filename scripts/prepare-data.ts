@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { acquireTables, CHECKSUMS, SOURCE_COMMIT } from './data/acquire.ts';
 import { acquireAttribution, writeArchive } from './data/attribution.ts';
 import { canonicalJSON, compileData } from './data/compile.ts';
+import { loadContactModel, STATCAST_SHAPE_FILE } from './data/contact-model.ts';
 import { acquireRankingsSource, RANKINGS_SOURCE_CHECKSUM, RANKINGS_SOURCE_COMMIT, RANKINGS_SOURCE_FILE } from './rankings/source.ts';
 
 interface PreparedCache { compilerHash: string; dataVersion: string; assets: Record<string, string>; gallery: string[] }
@@ -48,7 +49,7 @@ async function reusePrepared(compilerHash: string): Promise<boolean> {
 async function prepare(): Promise<void> {
  const attribution = await acquireAttribution(offline);
  const simulationFiles = (await readdir('src/lib/sim')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts')).sort().map(name => `src/lib/sim/${name}`);
- const compilerFiles = ['scripts/prepare-data.ts', 'scripts/rankings/source.ts', 'src/lib/cards/finish.ts', 'src/lib/game/types.ts', ...simulationFiles, ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
+ const compilerFiles = ['scripts/prepare-data.ts', 'scripts/data/stadiums.json', STATCAST_SHAPE_FILE, 'scripts/rankings/source.ts', 'src/lib/cards/finish.ts', 'src/lib/game/types.ts', ...simulationFiles, ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
  const hash = createHash('sha256').update(SOURCE_COMMIT).update(canonicalJSON(CHECKSUMS)).update(RANKINGS_SOURCE_COMMIT).update(RANKINGS_SOURCE_CHECKSUM).update(canonicalJSON(attribution));
  for (const filename of compilerFiles) hash.update(filename).update(await readFile(filename));
  const compilerHash = hash.digest('hex');
@@ -56,7 +57,8 @@ async function prepare(): Promise<void> {
  const [tables, sourceTables] = await Promise.all([acquireTables(offline), acquireRankingsSource(offline)]);
  const warRows = sourceTables[RANKINGS_SOURCE_FILE.replace(/\.csv$/, '')];
  if (!warRows) throw new Error(`Pinned defensive source ${RANKINGS_SOURCE_FILE} was not parsed.`);
- const compilation = compileData(tables, attribution, SOURCE_COMMIT, warRows);
+ const stadiums = JSON.parse(await readFile('scripts/data/stadiums.json', 'utf8'));
+ const compilation = compileData(tables, attribution, SOURCE_COMMIT, warRows, { stadiums, contactModel: loadContactModel() });
  const { dataVersion } = compilation.manifest;
  const dir = join(outputDir, dataVersion);
  await mkdir(dir, { recursive: true });
@@ -78,7 +80,7 @@ async function prepare(): Promise<void> {
  await writeFile(temporaryCache, canonicalJSON({ compilerHash, dataVersion, assets, gallery: Object.keys(compilation.files).filter(filename => filename.startsWith('gallery-')).map(filename => `${dataVersion}/${filename}`) } satisfies PreparedCache));
  await rename(temporaryCache, join(cacheDir, 'prepared.json'));
  const diagnostics = compilation.manifest.diagnostics;
- console.log(`Prepared ${compilation.manifest.candidates.length} candidates, 30 opponents and ${Object.keys(compilation.manifest.chunks).length} franchise-decade chunks: ${dataVersion}`);
+ console.log(`Prepared ${compilation.manifest.candidates.length} candidates, 30 opponents, ${compilation.manifest.stadiums.length} stadiums and ${Object.keys(compilation.manifest.chunks).length} franchise-decade chunks: ${dataVersion}`);
  console.log(`Diagnostics: ${diagnostics.excludedBatting} batting, ${diagnostics.excludedPitching} pitching, ${diagnostics.excludedProfiles} profile exclusions; ${diagnostics.estimatedProfiles} candidates have labelled estimates. Full identifier-only diagnostics: ${dir}/diagnostics.json`);
  for (const message of compilation.diagnostics.slice(0, 20)) console.warn(message);
  if (compilation.diagnostics.length > 20) console.warn(`${compilation.diagnostics.length - 20} additional diagnostics are recorded in diagnostics.json.`);

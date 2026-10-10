@@ -1,4 +1,5 @@
 import { compareId, HITTER_SLOTS, POSITIONS, type Franchise, type Position, type Profile, type Slot } from '../../src/lib/game/types.ts';
+import { contactRecord } from '../../src/lib/sim/contact-profile.ts';
 import { battingEvents, pitchingEvents, prepareRates } from '../../src/lib/sim/rates.ts';
 import { buildBaselines, type Baselines } from './baselines.ts';
 import { inEra, leagueKey, numberField, teamKey, type Row, type Tables } from './counts.ts';
@@ -93,6 +94,7 @@ export function compileProfiles(tables: Tables): CompiledProfiles {
    if (counts.GS >= 10 && counts.IPouts >= 180 && counts.GS / counts.G >= 0.6) profile.eligibleSlots.push('SP1', 'SP2', 'SP3');
    if (counts.IPouts >= 60 && counts.G > 0 && counts.GS / counts.G <= 0.2) profile.eligibleSlots.push('CL');
   }
+  profile.contact = contactRecord(profile);
   profiles.push(profile);
  }
  const speedPopulation = profiles.filter(profile => profile.batting && profile.batting.PA >= 200).map(profile => (profile.batting!.SB + profile.batting!.CS) / Math.max(1, profile.batting!.H + profile.batting!.BB + profile.batting!.HBP)).sort((a, b) => a - b);

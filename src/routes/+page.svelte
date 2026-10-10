@@ -13,6 +13,7 @@
  type GameSession = import('#lib/game/session.svelte.ts').Session;
 
  let session = $state.raw<GameSession | null>(null);
+ let StadiumDeck = $state<typeof import('#lib/components/StadiumDeck.svelte').default | null>(null);
  let DraftBoard = $state<typeof import('#lib/components/DraftBoard.svelte').default | null>(null);
  let Lineup = $state<typeof import('#lib/components/Lineup.svelte').default | null>(null);
  let Progress = $state<typeof import('#lib/components/Progress.svelte').default | null>(null);
@@ -62,7 +63,9 @@
  $effect(() => {
   const phase = session?.phase;
   const failed = () => { phaseLoadError = 'This stage could not load. Reload the page to try again.'; };
-  if ((phase === 'ready' || phase === 'revealing' || phase === 'choosing') && !DraftBoard) {
+  if (phase === 'stadium' && !StadiumDeck) {
+   void import('#lib/components/StadiumDeck.svelte').then(({ default: component }) => { StadiumDeck = component; }).catch(failed);
+  } else if ((phase === 'ready' || phase === 'revealing' || phase === 'choosing') && !DraftBoard) {
    void import('#lib/components/DraftBoard.svelte').then(({ default: component }) => { DraftBoard = component; }).catch(failed);
   } else if (phase === 'lineup' && !Lineup) {
    void import('#lib/components/Lineup.svelte').then(({ default: component }) => { Lineup = component; }).catch(failed);
@@ -106,6 +109,7 @@
   const phase = currentSession?.phase;
   if (!currentSession || !phase) return;
   const componentReady =
+   phase === 'stadium' ? StadiumDeck :
    phase === 'ready' || phase === 'revealing' || phase === 'choosing' ? DraftBoard :
    phase === 'lineup' ? Lineup :
    phase === 'simulating' ? Progress :
@@ -113,7 +117,7 @@
    true;
   if (!componentReady) return;
   const choosing = phase === 'choosing' && !currentSession.loading;
-  const target = phase === 'ready' ? '#roll-next' : choosing ? '.candidates input[type="search"]' : phase === 'lineup' ? '#lineup-heading' : phase === 'simulating' ? '#simulation-heading' : phase === 'results' ? '#results-heading' : null;
+  const target = phase === 'stadium' ? '#stadium-heading' : phase === 'ready' ? '#roll-next' : choosing ? '.candidates input[type="search"]' : phase === 'lineup' ? '#lineup-heading' : phase === 'simulating' ? '#simulation-heading' : phase === 'results' ? '#results-heading' : null;
   if (target) void tick().then(() => {
    if (session !== currentSession || currentSession.phase !== phase || (phase === 'choosing' && currentSession.loading)) return;
    document.querySelector<HTMLElement>(target)?.focus({ preventScroll: phase === 'results' });
@@ -151,7 +155,12 @@
   {#if currentSession.phase === 'start'}
    <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
   {:else if currentSession.draft && currentSession.manifest}
-   {#if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
+   {#if currentSession.phase === 'stadium'}
+    <div class="draft-top"><p class="eyebrow">Home stadium</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
+    {#if StadiumDeck}
+     <StadiumDeck manifest={currentSession.manifest} busy={currentSession.busy} onSelect={id => void currentSession.selectStadium(id)} />
+    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the stadiums…</span></div>{/if}
+   {:else if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
     <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {currentSession.draft.picks.length} of {draftRules(currentSession.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if DraftBoard}
      <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} error={currentSession.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />

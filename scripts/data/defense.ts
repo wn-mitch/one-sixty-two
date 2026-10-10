@@ -191,23 +191,29 @@ function residualizedPosition(
   return { ...skills, evidence, expectedRunsSaved162: null, residualClamped: false };
  }
  evidence.hitPrevention = { status: 'exact', exposure: aggregate.exposure };
- const neutral = expectedDefensiveRuns(reference, position, skills);
- const positive = expectedDefensiveRuns(reference, position, { ...skills, hitPrevention: 1 });
- const negative = expectedDefensiveRuns(reference, position, { ...skills, hitPrevention: -1 });
- let raw = 0;
- if (aggregate.budget > neutral) {
-  const slope = positive - neutral;
-  if (!Number.isFinite(slope) || slope <= 0) throw new Error(`Nonpositive defensive reference slope: ${profile.seasonId}:${position}:positive`);
-  raw = (aggregate.budget - neutral) / slope;
- } else if (aggregate.budget < neutral) {
-  const slope = neutral - negative;
-  if (!Number.isFinite(slope) || slope <= 0) throw new Error(`Nonpositive defensive reference slope: ${profile.seasonId}:${position}:negative`);
-  raw = -(neutral - aggregate.budget) / slope;
+ const runsAt = (hitPrevention: number) => expectedDefensiveRuns(reference, position, { ...skills, hitPrevention });
+ const negative = runsAt(-1);
+ const positive = runsAt(1);
+ if (!(positive > negative)) throw new Error(`Nonpositive defensive reference slope: ${profile.seasonId}:${position}`);
+ // Valuation is monotone but not linear in hit prevention, so bisect for the residual.
+ let hitPrevention = 0;
+ if (Math.abs(aggregate.budget - runsAt(0)) <= 1e-12) hitPrevention = 0;
+ else if (aggregate.budget >= positive) hitPrevention = 1;
+ else if (aggregate.budget <= negative) hitPrevention = -1;
+ else {
+  let low = -1, high = 1;
+  for (let iteration = 0; iteration < 60; iteration++) {
+   const middle = (low + high) / 2;
+   if (runsAt(middle) < aggregate.budget) low = middle;
+   else high = middle;
+  }
+  hitPrevention = (low + high) / 2;
  }
- const hitPrevention = clamp(raw, -1, 1);
- const expectedRunsSaved162 = expectedDefensiveRuns(reference, position, { ...skills, hitPrevention });
+ const residualClamped = aggregate.budget > positive || aggregate.budget < negative;
+ const raw = runsAt(hitPrevention);
+ const expectedRunsSaved162 = Math.abs(raw) < 1e-12 ? 0 : raw;
  if (!Number.isFinite(expectedRunsSaved162)) throw new Error(`Non-finite defensive estimate: ${profile.seasonId}:${position}`);
- return { ...skills, hitPrevention, evidence, expectedRunsSaved162: Object.is(expectedRunsSaved162, -0) ? 0 : expectedRunsSaved162, residualClamped: raw < -1 || raw > 1 };
+ return { ...skills, hitPrevention, evidence, expectedRunsSaved162, residualClamped };
 }
 
 /** Compiles all current defensive inputs onto canonical profiles in place. */

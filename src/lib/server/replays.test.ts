@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { availableCandidates, commitPick, createDraft, legalSlots, reassignPick, replayInput, rollDraft } from '../game/draft.ts';
+import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, reassignPick, replayInput, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { SLOTS, type Manifest, type Replay } from '../game/types.ts';
 import { loadReplay, loadAuthoritativeManifest, REPLAY_PREFIX, storeReplay } from './replays.ts';
 
@@ -19,6 +20,7 @@ const manifest = {
 	sourceCommit: 'synthetic',
 	franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${index}`, name: `Club ${index}`, decades: [1980] })),
 	candidates,
+	stadiums: syntheticStadiumSummaries(Array.from({ length: 30 }, (_, index) => `F${index}`)),
 	chunks: {}, simulationUrl: '', showcaseUrl: '', attributionUrl: '', archiveUrl: '', approximations: [], coverage: [],
 	diagnostics: { excludedBatting: 0, excludedPitching: 0, excludedProfiles: 0, estimatedProfiles: 0, reportUrl: '' },
 	attribution: { title: 'Synthetic', credit: 'Synthetic', sourceUrl: 'https://data.invalid', license: 'CC BY-SA 3.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/', sourceCommit: 'synthetic', changes: 'Synthetic.', fullNotice: 'Synthetic.' }
@@ -36,7 +38,7 @@ class MemoryBucket {
 }
 
 function finish(): Replay {
-	let draft = createDraft(manifest, 162);
+	let draft = selectHomeStadium(createDraft(manifest, 162), manifest, manifest.stadiums[0].ref.id);
 	while (draft.picks.length < SLOTS.length) {
 		draft = rollDraft(draft, manifest);
 		const candidate = availableCandidates(draft, manifest)[0];
@@ -67,7 +69,8 @@ describe('replay R2 storage', () => {
 		expect(first.key).toBe(`${REPLAY_PREFIX}${first.id}`);
 		expect(bucket.puts).toBe(1);
 		expect(await loadReplay(bucket, first.id, manifest)).toEqual(input);
-		expect(input.schemaVersion).toBe(4);
+		expect(input.schemaVersion).toBe(5);
+		expect(input.homeStadium).toEqual(manifest.stadiums[0].ref);
 		expect(input.actions.at(-1)?.type).toBe('reassign');
 	});
 
@@ -75,7 +78,8 @@ describe('replay R2 storage', () => {
 		const current = finish();
 		for (const incompatible of [
 			{ ...current, schemaVersion: 3, modelVersion: 'pa-v2' },
-			{ ...current, schemaVersion: 4, modelVersion: 'pa-v2' }
+			{ ...current, schemaVersion: 4, modelVersion: 'pa-v3' },
+			{ ...current, homeStadium: { id: manifest.stadiums[0].ref.id, version: 'retired-geometry' } }
 		]) {
 			const bucket = new MemoryBucket();
 			await expect(storeReplay(bucket, incompatible, manifest)).rejects.toThrow('incompatible');

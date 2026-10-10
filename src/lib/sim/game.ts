@@ -1,6 +1,8 @@
-import { buildMatchups } from './matchup.ts';
+import { buildMatchupInputs } from './contact-profile.ts';
+import { preparePark } from './flight.ts';
 import { createInningContext, playHalf, type InningEvent, type InningObserver } from './inning.ts';
-import type { GameInput, GameResult, SeasonMoment, TeamBox, TeamInput } from './types.ts';
+import { stadiumRef, validateStadium } from './park.ts';
+import type { GameInput, GameRandomStreams, GameResult, SeasonMoment, TeamBox, TeamInput } from './types.ts';
 import { validateDefensiveEnvironment, validateTeam } from './validation.ts';
 import { WinExpectancyModel } from './win-expectancy.ts';
 import { createDefensiveRunComponents } from './value.ts';
@@ -20,12 +22,13 @@ export function createBox(team: TeamInput): TeamBox {
  };
 }
 
-/** Full innings with no synthetic ties, ghost runners, or fallback winners. */
-export function simulateGame(input: GameInput, random: () => number, winExpectancy: WinExpectancyModel | null = new WinExpectancyModel(input.defenseEnvironment.leagueRates)): GameResult {
+/** Full innings in the home team's venue, with no synthetic ties, ghost runners, or fallback winners. */
+export function simulateGame(input: GameInput, streams: GameRandomStreams, winExpectancy: WinExpectancyModel | null = new WinExpectancyModel(input.defenseEnvironment)): GameResult {
  validateTeam(input.home);
  validateTeam(input.away);
  validateDefensiveEnvironment(input.defenseEnvironment);
- if (!Number.isFinite(input.park) || input.park <= 0) throw new Error('Invalid game environment');
+ validateStadium(input.stadium);
+ const park = preparePark(input.stadium);
  const maxPA = input.limits?.maxPA ?? 1000;
  const maxInnings = input.limits?.maxInnings ?? 100;
  if (!Number.isInteger(maxPA) || maxPA < 1 || maxPA > 1000 || !Number.isInteger(maxInnings) || maxInnings < 9 || maxInnings > 100) throw new Error('Invalid simulation safety limits');
@@ -33,12 +36,11 @@ export function simulateGame(input: GameInput, random: () => number, winExpectan
  const away = createBox(input.away);
  const homeWorkload = createWorkload(input.home);
  const awayWorkload = createWorkload(input.away);
- const rates = input.defenseEnvironment.leagueRates;
- const homeMatchups = input.homeMatchups ?? buildMatchups(input.home.hitters, input.away.pitchers, rates, input.park);
- const awayMatchups = input.awayMatchups ?? buildMatchups(input.away.hitters, input.home.pitchers, rates, input.park);
- if (homeMatchups.length !== 9 * input.away.pitchers.length * 8 || awayMatchups.length !== 9 * input.home.pitchers.length * 8) throw new Error('Invalid game matchup table');
- const top = createInningContext(input.away, input.home, away, home, homeWorkload, awayMatchups, input.defenseEnvironment, maxPA);
- const bottom = createInningContext(input.home, input.away, home, away, awayWorkload, homeMatchups, input.defenseEnvironment, maxPA);
+ const environment = input.defenseEnvironment;
+ const homeMatchups = input.homeMatchups ?? buildMatchupInputs(input.home.hitters, input.away.pitchers, environment.leagueRates, environment.contactModel);
+ const awayMatchups = input.awayMatchups ?? buildMatchupInputs(input.away.hitters, input.home.pitchers, environment.leagueRates, environment.contactModel);
+ const top = createInningContext(input.away, input.home, away, home, homeWorkload, awayMatchups, environment, park, maxPA);
+ const bottom = createInningContext(input.home, input.away, home, away, awayWorkload, homeMatchups, environment, park, maxPA);
  let highlight: SeasonMoment | null = null;
  let lowlight: SeasonMoment | null = null;
  let activeInning = 1;
@@ -79,7 +81,7 @@ export function simulateGame(input: GameInput, random: () => number, winExpectan
   activeHalf = 'top';
   beginHalf(input.home, home.pitching, homeWorkload, inning, home.runs - away.runs);
   const awayBefore = away.runs;
-  playHalf(top, Infinity, random, observer);
+  playHalf(top, Infinity, streams, observer);
   away.innings.push(away.runs - awayBefore);
   if (inning >= 9 && home.runs > away.runs) {
    home.innings.push(null);
@@ -89,12 +91,13 @@ export function simulateGame(input: GameInput, random: () => number, winExpectan
   activeHalf = 'bottom';
   beginHalf(input.away, away.pitching, awayWorkload, inning, away.runs - home.runs);
   const homeBefore = home.runs;
-  playHalf(bottom, inning >= 9 ? away.runs + 1 : Infinity, random, observer);
+  playHalf(bottom, inning >= 9 ? away.runs + 1 : Infinity, streams, observer);
   home.innings.push(home.runs - homeBefore);
   if (inning >= 9 && home.runs !== away.runs) { finished = true; break; }
  }
  if (!finished) throw new Error(`Simulation exceeded ${maxInnings} innings without a winner`);
  const challengeRuns = input.challengeIsHome ? home.runs : away.runs;
  const opponentRuns = input.challengeIsHome ? away.runs : home.runs;
- return { number: input.number, opponentId: input.opponentId, opponentName: input.opponentName, isHome: input.challengeIsHome, home, away, challengeRuns, opponentRuns, win: challengeRuns > opponentRuns, highlight, lowlight };
+ return { number: input.number, opponentId: input.opponentId, opponentName: input.opponentName, isHome: input.challengeIsHome,
+  stadium: stadiumRef(input.stadium), stadiumName: input.stadium.name, home, away, challengeRuns, opponentRuns, win: challengeRuns > opponentRuns, highlight, lowlight };
 }

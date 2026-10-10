@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
-import { compareId, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, POSITIONS, SLOTS, type Attribution, type DefensiveEnvironment, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../../src/lib/game/types.ts';
-import { validateDefensiveEnvironment, validateProfile } from '../../src/lib/sim/validation.ts';
+import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, POSITIONS, SLOTS, VALUATION_VERSION, type Attribution, type DefensiveEnvironment, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../../src/lib/game/types.ts';
+import { validateDefensiveEnvironment, validateProfile, validateStadiumDeck } from '../../src/lib/sim/validation.ts';
+import { battingSide, contactRecord, contactTargets, fitContact, FIT_TOLERANCE, leagueContactFit, matchup, type ContactModel } from '../../src/lib/sim/contact-profile.ts';
+import { stadiumRef } from '../../src/lib/sim/park.ts';
+import { compileStadiums, type StadiumCatalog } from './stadiums.ts';
 import { finishFor, type Finish, type FinishRole } from '../../src/lib/cards/finish.ts';
 import { applyDefense } from './defense.ts';
 import { numberField, type Tables } from './counts.ts';
@@ -21,7 +24,12 @@ import {
 
 export const APPROXIMATIONS = [
  'Historical rates use a 100-opportunity source-league prior and a common 2025 batting environment.',
- 'Three-year batting and pitching park factors are coarse run-park proxies, not event-specific measurements.',
+ 'Three-year batting and pitching park factors neutralize historical rates; they are coarse run-park proxies, not event-specific measurements. Simulated venues act only through ball flight in the 2025 reference stadiums.',
+ 'Batted balls are drawn from the 2025 Statcast exit-velocity, launch-angle and spray distribution. Each player-season\'s contact mix and power shift are estimated so neutral-park outcomes reproduce its hit rates; they are not measured batted-ball data.',
+ 'Ball flight uses a declared drag-and-lift approximation fitted to 2025 Statcast distances, with fixed calm air at each venue\'s elevation; weather and roof variation are not modelled.',
+ 'Stadium walls interpolate Statcast line, gap and center distances and heights; foul territory and wall shapes between measured points are estimated.',
+ 'Fielders start from fixed positions and use a fitted reach, catch and throw model; defensive skills adjust speed, reaction and arm strength.',
+ 'Triples are matched only as closely as the physical batted-ball regions allow, and a few slow, doubles-heavy seasons play with their closest contact fit; the compiled diagnostics count them.',
  'Pitcher allowed doubles and triples are inferred from source-league non-home-run hit proportions.',
  'Fielding uses position-specific historical error, double-play, outfield-assist and catcher caught-stealing evidence. Double-play and assist rates are context-affected opportunity proxies.',
  'Aggregate fielding runs are residualized into estimated hit prevention so component effects are not double counted; missing aggregate evidence leaves DEF unavailable without erasing independently supported skills.',
@@ -45,7 +53,7 @@ export function canonicalJSON(value: unknown): string {
 
 export interface Compilation { manifest: Manifest; files: Record<string, unknown>; payload: Record<string, unknown>; diagnostics: string[] }
 const DEFENSE_METHOD = {
- version: 'defense-v1',
+ version: DEFENSE_METHOD_VERSION,
  cohortMinimums: { inningOuts: 4374, handledChances: 1000, catcherAttempts: 100 },
  smoothing: { rateInningOuts: 2700, errorChances: 300, catcherAttempts: 50 },
  normalization: { rateRelativeScale: 0.5, errorRateScale: 0.02, catcherCaughtStealingScale: 0.2, genericOutfieldStrength: 0.5 },
@@ -170,9 +178,13 @@ export function buildGallery(chunks: Record<string, Profile[]>): Record<string, 
 }
 
 
-export function compileData(tables: Tables, attribution: Attribution, sourceCommit: string, warRows: CsvRow[]): Compilation {
+/** Cited non-Lahman references: the stadium catalog and the league contact model. */
+export interface References { stadiums: StadiumCatalog; contactModel: ContactModel }
+
+export function compileData(tables: Tables, attribution: Attribution, sourceCommit: string, warRows: CsvRow[], references: References): Compilation {
  if (!warRows.length) throw new Error('Pinned defensive/WAR source is required for core data compilation.');
  const compiled = compileProfiles(tables);
+ const stadiums = compileStadiums(references.stadiums, compiled.currentTeams.map(team => team.franchID));
  const targetFielding = leagueFielding(compiled.fielding, '2025:ALL');
  const currentBatting = [...compiled.baselines.batters.values()].filter(item => item.group.row.yearID === '2025');
  let sb = 0, cs = 0, onBase = 0, gidp = 0, nonStrikeoutOuts = 0;
@@ -195,21 +207,27 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
   leagueErrorRates: targetFielding.errors,
   leagueStealAttempt: Math.min(0.25, (sb + cs) / Math.max(1, onBase)),
   leagueStealSuccess: sb / Math.max(1, sb + cs),
-  leagueDoublePlay: nonStrikeoutOuts > 0 ? Math.min(0.4, 4 * gidp / nonStrikeoutOuts) : 0
+  leagueDoublePlay: nonStrikeoutOuts > 0 ? Math.min(0.4, 4 * gidp / nonStrikeoutOuts) : 0,
+  contactModel: references.contactModel
  };
  const joinedWar = groupJoinedWarRows(warRows, { people: tables.People, teams: tables.Teams });
  const defenseDiagnostics = applyDefense(compiled.profiles, compiled.fielding, joinedWar, defenseEnvironment);
  compiled.candidates.push(...buildBullpenCandidates(compiled));
  const candidates = compiled.candidates;
- const { opponents, bullpen } = buildOpponents(compiled);
+ const { opponents, bullpen } = buildOpponents(compiled, new Map(stadiums.configs.map(stadium => [stadium.franchiseId, stadiumRef(stadium)])));
+ for (const profile of [...candidates, bullpen, ...opponents.flatMap(team => [...team.hitters, ...team.starters, team.closer, team.bullpen])]) {
+  if (profile.battingRates || profile.pitchingRates) profile.contact = contactRecord(profile);
+ }
+ const contactFits = contactFitDiagnostics(candidates, defenseEnvironment);
  const simulationBase = {
   schemaVersion: 1 as const,
   ...defenseEnvironment,
   bullpen,
   opponents,
+  stadiums: stadiums.configs,
   observedRuns: runs / games,
-  defenseMethodVersion: 'defense-v1' as const,
-  valuationVersion: 'sim-war-v1' as const
+  defenseMethodVersion: DEFENSE_METHOD_VERSION,
+  valuationVersion: VALUATION_VERSION
  };
  validateCompiled(candidates, simulationBase);
  const chunks: Record<string, Profile[]> = {};
@@ -241,7 +259,7 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
   excludedProfiles: compiled.diagnostics.filter(message => message.includes(': profile excluded:')).length,
   estimatedProfiles: candidates.filter(profile => profile.estimatedFields.length > 0).length
  };
- const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, messages: compiled.diagnostics };
+ const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, contactFits, messages: compiled.diagnostics };
  const showcase = buildShowcase(candidates, joinedWar);
  const gallery = buildGallery(chunks);
  const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
@@ -252,7 +270,8 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
   candidates: candidates.map(profile => ({ seasonId: profile.seasonId, playerId: profile.playerId, franchiseId: profile.franchiseId, decade: Math.floor(profile.year / 10) * 10, eligibleSlots: profile.eligibleSlots })),
   chunks: Object.fromEntries(Object.keys(chunks).sort(compareId).map(key => [key, `${prefix}/${key}.json`])),
   simulationUrl: `${prefix}/simulation.json`, showcaseUrl: `${prefix}/showcase.json`, attributionUrl: `${prefix}/attribution.json`, archiveUrl: `${prefix}/transformed-data.tar.gz`, attribution, approximations: APPROXIMATIONS,
-  diagnostics: { ...diagnosticCounts, reportUrl: `${prefix}/diagnostics.json` }
+  diagnostics: { ...diagnosticCounts, reportUrl: `${prefix}/diagnostics.json` },
+  stadiums: stadiums.summaries
  };
  const simulation: SimulationData = { ...simulationBase, dataVersion };
  const files: Record<string, unknown> = { 'manifest.json': manifest, 'simulation.json': simulation, 'showcase.json': showcase, 'attribution.json': attribution, 'defense-source.json': DEFENSE_METHOD, 'diagnostics.json': diagnostics };
@@ -261,8 +280,38 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  return { manifest, files, payload, diagnostics: compiled.diagnostics };
 }
 
+/**
+ * Fits every candidate against a league-average opponent. Fits that cannot reproduce singles,
+ * extra-base hits, home runs and outs within FIT_TOLERANCE play with their closest fit; they are
+ * counted here rather than silently accepted.
+ */
+function contactFitDiagnostics(candidates: Profile[], environment: DefensiveEnvironment) {
+ const league = environment.leagueRates;
+ const prior = leagueContactFit(environment.contactModel, league).regionWeights;
+ const average = { seasonId: 'league', bats: '', throws: '', battingRates: league, pitchingRates: league, speed: 0.5 } as unknown as Profile;
+ let fits = 0, outsideTolerance = 0, maxError = 0, maxTripleError = 0;
+ const examples: string[] = [];
+ for (const profile of candidates) {
+  const pairs: [Profile, Profile][] = [];
+  if (profile.battingRates) pairs.push([profile, average]);
+  if (profile.pitchingRates) pairs.push([average, profile]);
+  for (const [batter, pitcher] of pairs) {
+   const fit = fitContact(environment.contactModel.basis, prior, contactTargets(matchup(batter, pitcher, league)), battingSide(batter, pitcher), batter.speed, profile.seasonId);
+   fits++;
+   maxError = Math.max(maxError, fit.error);
+   maxTripleError = Math.max(maxTripleError, fit.tripleError);
+   if (fit.error > FIT_TOLERANCE) {
+    outsideTolerance++;
+    if (examples.length < 20) examples.push(`${profile.seasonId}:${batter === profile ? 'batting' : 'pitching'}:${fit.error.toFixed(4)}`);
+   }
+  }
+ }
+ return { tolerance: FIT_TOLERANCE, fits, outsideTolerance, maxError, maxTripleError, examples };
+}
+
 function validateCompiled(candidates: Profile[], simulation: Omit<SimulationData, 'dataVersion'>): void {
  validateDefensiveEnvironment(simulation);
+ validateStadiumDeck(simulation);
  if (simulation.opponents.length !== 30 || new Set(simulation.opponents.map(team => team.id)).size !== 30) throw new Error('Expected thirty opponents');
  if (new Set(candidates.map(profile => profile.seasonId)).size !== candidates.length) throw new Error('Duplicate season identity');
  for (const slot of SLOTS) if (!candidates.some(profile => profile.eligibleSlots.includes(slot))) throw new Error(`Unfillable global slot: ${slot}`);

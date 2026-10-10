@@ -53,6 +53,8 @@ function finalGame(overrides: Partial<GameResult> = {}): GameResult {
   opponentId: 'TST',
   opponentName: 'Test Rivals',
   isHome: true,
+  stadium: { id: 'TST-2025', version: 'synthetic' },
+  stadiumName: 'Test Park',
   home: neutralTeamBox('challenge', 'Your club', 5),
   away: neutralTeamBox('TST', 'Test Rivals', 3),
   challengeRuns: 5,

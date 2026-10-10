@@ -1,4 +1,5 @@
 import { commitPick, createDraft, legalSlots, rollDraft } from '../game/draft.ts';
+import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import { HITTER_SLOTS, POSITIONS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
 import type { WarSeasonRanking, WarRankings } from '../rankings/types.ts';
 import { neutralDefensivePosition } from '../sim/defense.ts';
@@ -167,6 +168,7 @@ function buildManifest(profiles: Profile[], candidates: Candidate[], dataVersion
   candidates,
   franchises,
   chunks: {},
+  stadiums: syntheticStadiumSummaries(franchises.map(franchise => franchise.id)),
   simulationUrl: '',
   attributionUrl: '',
   showcaseUrl: '',

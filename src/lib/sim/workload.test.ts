@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createBox, simulateGame } from './game.ts';
 import { beginHalf, closerBudget, closerReady, createWorkload, recordCloser, starterBudget } from './workload.ts';
-import { EVENT as E, scripted, testGame, testTeam } from './test-fixtures.ts';
+import { PA, eventStreams, testGame, testTeam } from './test-fixtures.ts';
+
+const E = { SO: PA.SO, HR: 'HR' as const };
 
 describe('pitching workload', () => {
  it('rounds and bounds starter outs per start', () => {
@@ -14,12 +16,12 @@ describe('pitching workload', () => {
   expect(starterBudget(pitcher)).toBe(24);
  });
  it('replaces a six-run starter at the next inning boundary', () => {
-  const game = simulateGame(testGame(), scripted([...Array<number>(6).fill(E.HR)]));
+  const game = simulateGame(testGame(), eventStreams([...Array<number | 'HR'>(6).fill(E.HR)]));
   expect(game.home.pitching[0]).toMatchObject({ R: 6, outs: 3, starts: 1 });
   expect(game.home.pitching[2]).toMatchObject({ outs: 24, appearances: 1, starts: 0 });
  });
  it('uses the closer for exactly one half inning then returns to support', () => {
-  const game = simulateGame(testGame(), scripted([...Array<number>(48).fill(E.SO), E.HR, E.SO, E.SO, E.SO,
+  const game = simulateGame(testGame(), eventStreams([...Array<number | 'HR'>(48).fill(E.SO), E.HR, E.SO, E.SO, E.SO,
    E.HR, E.SO, E.SO, E.SO, E.SO, E.SO, E.SO, E.HR]));
   expect(game.home.pitching[1]).toMatchObject({ outs: 3, R: 1, appearances: 1, starts: 0 });
   expect(game.away.pitching[1]).toMatchObject({ outs: 3, R: 1, appearances: 1, starts: 0 });
@@ -29,14 +31,14 @@ describe('pitching workload', () => {
  it('uses support when fewer than three closer outs remain', () => {
   const input = testGame();
   input.home.closerOutsRemaining = 2;
-  const game = simulateGame(input, scripted([...Array<number>(48).fill(E.SO), E.HR]));
+  const game = simulateGame(input, eventStreams([...Array<number | 'HR'>(48).fill(E.SO), E.HR]));
   expect(game.home.pitching[1]).toMatchObject({ outs: 0, appearances: 0 });
   expect(game.home.pitching[2].outs).toBe(9);
  });
  it('uses support when the closer is resting', () => {
   const input = testGame();
   input.home.closerAvailable = false;
-  const game = simulateGame(input, scripted([...Array<number>(48).fill(E.SO), E.HR]));
+  const game = simulateGame(input, eventStreams([...Array<number | 'HR'>(48).fill(E.SO), E.HR]));
   expect(game.home.pitching[1].appearances).toBe(0);
  });
  it('does not insert a closer mid-inning or in an ineligible score', () => {

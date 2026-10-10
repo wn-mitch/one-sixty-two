@@ -1,29 +1,91 @@
-import { POSITIONS, type DefensiveEnvironment, type Rates } from '../game/types.ts';
+import { POSITIONS, type DefensiveEnvironment } from '../game/types.ts';
 import type { Bases } from './advancement.ts';
 import {
  advancementAttemptProbability,
  advancementOutProbability,
  doublePlayParticipants,
  doublePlayProbability,
- fieldingErrorProbability,
- hitConversionProbability,
- responsibleOutfielder,
- responsiblePosition
+ fieldingErrorProbability
 } from './defense-rules.ts';
+import {
+ OUTCOME_AUTOMATIC_DOUBLE,
+ OUTCOME_CAUGHT,
+ OUTCOME_GROUND_OUT,
+ OUTCOME_HIT,
+ OUTCOME_HOME_RUN,
+ OUTCOME_INFIELD_HIT
+} from './fielding.ts';
 import type { TeamInput } from './types.ts';
 
-export const CONTACT_UNIFORM_COUNT = 11;
-export const CONTACT_RESPONSIBILITY = 0;
-export const CONTACT_HIT_CONVERSION = 1;
-export const CONTACT_ERROR = 2;
-export const CONTACT_DOUBLE_PLAY = 3;
-export const CONTACT_OUTFIELD = 4;
-export const CONTACT_THIRD_ATTEMPT = 5;
-export const CONTACT_THIRD_OUT = 6;
-export const CONTACT_SECOND_ATTEMPT = 7;
-export const CONTACT_SECOND_OUT = 8;
-export const CONTACT_FIRST_ATTEMPT = 9;
-export const CONTACT_FIRST_OUT = 10;
+/** Legal decision slots; error and double play come from the fielding stream, the rest from advancement. */
+export const DECISION_ERROR = 0;
+export const DECISION_DOUBLE_PLAY = 1;
+export const DECISION_THIRD_ATTEMPT = 2;
+export const DECISION_THIRD_OUT = 3;
+export const DECISION_SECOND_ATTEMPT = 4;
+export const DECISION_SECOND_OUT = 5;
+export const DECISION_FIRST_ATTEMPT = 6;
+export const DECISION_FIRST_OUT = 7;
+export const DECISION_COUNT = 8;
+const MAX_DECISIONS = 8;
+
+/**
+ * Live play compares a packet uniform with each probability. Enumeration replays the same
+ * adapter with scripted choices and records each decision's probability.
+ */
+export interface Decisions {
+ enumerate: boolean;
+ packet: Float64Array;
+ script: Uint8Array; scriptLength: number;
+ taken: number; probabilities: Float64Array; choices: Uint8Array;
+}
+
+export function createDecisions(): Decisions {
+ return {
+  enumerate: false, packet: new Float64Array(DECISION_COUNT),
+  script: new Uint8Array(MAX_DECISIONS), scriptLength: 0,
+  taken: 0, probabilities: new Float64Array(MAX_DECISIONS), choices: new Uint8Array(MAX_DECISIONS)
+ };
+}
+
+function decide(decisions: Decisions, slot: number, probability: number): boolean {
+ if (!decisions.enumerate) return decisions.packet[slot] < probability;
+ const index = decisions.taken++;
+ if (index >= MAX_DECISIONS) throw new Error('Too many legal decisions in one play');
+ const choice = index < decisions.scriptLength ? decisions.script[index] === 1 : false;
+ decisions.probabilities[index] = probability;
+ decisions.choices[index] = choice ? 1 : 0;
+ return choice;
+}
+
+/** Visits every decision path of `run` with its probability; zero-probability branches are skipped. */
+export function enumerateDecisions(decisions: Decisions, run: () => void, visit: (probability: number) => void): void {
+ const explore = (prefix: Uint8Array, length: number): void => {
+  decisions.enumerate = true;
+  decisions.script.set(prefix.subarray(0, length));
+  decisions.scriptLength = length;
+  decisions.taken = 0;
+  run();
+  const taken = decisions.taken;
+  const probabilities = decisions.probabilities.slice(0, taken);
+  const choices = decisions.choices.slice(0, taken);
+  let probability = 1;
+  for (let index = 0; index < taken; index++) probability *= choices[index] ? probabilities[index] : 1 - probabilities[index];
+  if (probability > 0) visit(probability);
+  for (let index = length; index < taken; index++) {
+   if (probabilities[index] <= 0) continue;
+   let prefixProbability = 1;
+   for (let earlier = 0; earlier < index; earlier++) prefixProbability *= choices[earlier] ? probabilities[earlier] : 1 - probabilities[earlier];
+   if (prefixProbability <= 0) continue;
+   const next = new Uint8Array(MAX_DECISIONS);
+   next.set(choices.subarray(0, index));
+   next[index] = 1;
+   explore(next, index + 1);
+  }
+ };
+ try { explore(new Uint8Array(MAX_DECISIONS), 0); }
+ finally { decisions.enumerate = false; }
+}
 
 export interface PreparedDefense {
  hitterByPosition: Int8Array;
@@ -56,23 +118,19 @@ export interface ContactResult {
  winningAdvance: number;
 }
 
+/** Per-position error and double-play enablement plus the outfield-arm switch. */
 export interface ContactOptions {
- hitPrevention: boolean;
- errorAvoidance: boolean;
+ errorPositions: Uint8Array;
  doublePlayPositions: Uint8Array;
  outfieldThrowing: boolean;
 }
 
+export function createContactOptions(): ContactOptions {
+ return { errorPositions: new Uint8Array(POSITIONS.length), doublePlayPositions: new Uint8Array(POSITIONS.length), outfieldThrowing: false };
+}
+
 export function createPreparedDefense(team: TeamInput, environment: DefensiveEnvironment): PreparedDefense {
- const prepared: PreparedDefense = {
-  hitterByPosition: new Int8Array(POSITIONS.length),
-  hitPrevention: new Float64Array(POSITIONS.length),
-  doublePlay: new Float64Array(POSITIONS.length),
-  outfieldThrowing: new Float64Array(POSITIONS.length),
-  errorAvoidance: new Float64Array(POSITIONS.length),
-  catcherThrowing: new Float64Array(POSITIONS.length),
-  errorBaseline: new Float64Array(POSITIONS.length)
- };
+ const prepared = createNeutralDefense(environment);
  for (let position = 0; position < POSITIONS.length; position++) {
   const name = POSITIONS[position];
   const hitter = team.defense[name];
@@ -84,8 +142,22 @@ export function createPreparedDefense(team: TeamInput, environment: DefensiveEnv
   prepared.outfieldThrowing[position] = skills.outfieldThrowing;
   prepared.errorAvoidance[position] = skills.errorAvoidance;
   prepared.catcherThrowing[position] = skills.catcherThrowing;
-  prepared.errorBaseline[position] = environment.leagueErrorRates[name];
  }
+ return prepared;
+}
+
+/** Zero-skill defenders with the league position error baselines. */
+export function createNeutralDefense(environment: DefensiveEnvironment): PreparedDefense {
+ const prepared: PreparedDefense = {
+  hitterByPosition: new Int8Array(POSITIONS.length),
+  hitPrevention: new Float64Array(POSITIONS.length),
+  doublePlay: new Float64Array(POSITIONS.length),
+  outfieldThrowing: new Float64Array(POSITIONS.length),
+  errorAvoidance: new Float64Array(POSITIONS.length),
+  catcherThrowing: new Float64Array(POSITIONS.length),
+  errorBaseline: new Float64Array(POSITIONS.length)
+ };
+ for (let position = 0; position < POSITIONS.length; position++) prepared.errorBaseline[position] = environment.leagueErrorRates[POSITIONS[position]];
  return prepared;
 }
 
@@ -101,8 +173,8 @@ export function createContactResult(): ContactResult {
   caughtCount: 0,
   scoreCount: 0,
   creditedBases: 0,
-  fielder: 0,
-  thrower: 5,
+  fielder: -1,
+  thrower: -1,
   error: false,
   doublePlay: false,
   sacrificeFly: false,
@@ -112,16 +184,7 @@ export function createContactResult(): ContactResult {
  };
 }
 
-export function fillContactPacket(packet: Float64Array, random: () => number): void {
- if (packet.length !== CONTACT_UNIFORM_COUNT) throw new Error('Invalid contact packet');
- for (let index = 0; index < CONTACT_UNIFORM_COUNT; index++) {
-  const value = random();
-  if (!Number.isFinite(value) || value < 0 || value >= 1) throw new Error('Invalid contact random sample');
-  packet[index] = value;
- }
-}
-
-function resetResult(result: ContactResult, bases: Pick<Bases, 'runners' | 'pitchers'>, outs: number, event: number): void {
+function resetResult(result: ContactResult, bases: Pick<Bases, 'runners' | 'pitchers'>, outs: number, credited: number): void {
  result.runners.set(bases.runners);
  result.caughtAdvancing = -1;
  result.pitchers.set(bases.pitchers);
@@ -132,7 +195,9 @@ function resetResult(result: ContactResult, bases: Pick<Bases, 'runners' | 'pitc
  result.runs = 0;
  result.scoreCount = 0;
  result.caughtCount = 0;
- result.creditedBases = event >= 3 && event <= 5 ? event - 2 : 0;
+ result.creditedBases = credited;
+ result.fielder = -1;
+ result.thrower = -1;
  result.error = false;
  result.doublePlay = false;
  result.sacrificeFly = false;
@@ -151,13 +216,14 @@ function moveRunner(result: ContactResult, from: number, to: number): void {
  removeRunner(result, from);
 }
 
-function scoreRunner(result: ContactResult, base: number, advance: number, offenseRuns: number, target: number): boolean {
+/** Scores a runner; a non-home-run walkoff truncates credited bases to the winning advance. */
+function scoreRunner(result: ContactResult, base: number, advance: number, offenseRuns: number, target: number, stop = true): boolean {
  result.scoredRunners[result.scoreCount] = result.runners[base];
  result.scoredPitchers[result.scoreCount] = result.pitchers[base];
  result.scoreCount++;
  result.runs++;
  removeRunner(result, base);
- if (offenseRuns + result.runs >= target) {
+ if (stop && offenseRuns + result.runs >= target) {
   result.ended = true;
   result.winningAdvance = advance;
   result.creditedBases = Math.min(result.creditedBases, advance);
@@ -167,24 +233,24 @@ function scoreRunner(result: ContactResult, base: number, advance: number, offen
 
 function attemptAdvance(
  result: ContactResult,
+ decisions: Decisions,
  from: number,
  heldBase: number,
  safeBase: number,
  baseline: number,
  arm: number,
- attemptUniform: number,
- outUniform: number,
+ attemptSlot: number,
+ outSlot: number,
  offenseRuns: number,
  target: number
 ): void {
  const runner = result.runners[from];
  if (runner < 0 || result.outsAfter >= 3 || result.ended) return;
- const attempt = advancementAttemptProbability(baseline, arm);
- if (attemptUniform >= attempt) {
+ if (!decide(decisions, attemptSlot, advancementAttemptProbability(baseline, arm))) {
   if (heldBase !== from) moveRunner(result, from, heldBase);
   return;
  }
- if (outUniform < advancementOutProbability(arm)) {
+ if (decide(decisions, outSlot, advancementOutProbability(arm))) {
   removeRunner(result, from);
   result.outsAfter++;
   result.caughtAdvancing = runner;
@@ -207,14 +273,15 @@ function forceOneBase(result: ContactResult, hitter: number, pitcher: number, of
  result.pitchers[0] = pitcher;
 }
 
+/** Lead runners move first; trailing runners on singles and doubles may try for an extra base. */
 function resolveHit(
  result: ContactResult,
+ decisions: Decisions,
  basesTaken: number,
  hitter: number,
  pitcher: number,
  offense: readonly { speed: number }[],
  arm: number,
- packet: Float64Array,
  offenseRuns: number,
  target: number
 ): void {
@@ -228,7 +295,7 @@ function resolveHit(
   for (let base = 2; base >= 1; base--) if (result.runners[base] >= 0 && scoreRunner(result, base, 3 - base, offenseRuns, target)) return;
   if (result.runners[0] >= 0) {
    const speed = offense[result.runners[0]].speed;
-   attemptAdvance(result, 0, 2, -1, 0.35 + 0.40 * speed, arm, packet[CONTACT_FIRST_ATTEMPT], packet[CONTACT_FIRST_OUT], offenseRuns, target);
+   attemptAdvance(result, decisions, 0, 2, -1, 0.35 + 0.40 * speed, arm, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT, offenseRuns, target);
    if (result.outsAfter >= 3 || result.ended) return;
   }
   result.runners[1] = hitter;
@@ -238,14 +305,14 @@ function resolveHit(
  if (result.runners[2] >= 0 && scoreRunner(result, 2, 1, offenseRuns, target)) return;
  if (result.runners[1] >= 0) {
   const speed = offense[result.runners[1]].speed;
-  attemptAdvance(result, 1, 2, -1, 0.45 + 0.40 * speed, arm, packet[CONTACT_SECOND_ATTEMPT], packet[CONTACT_SECOND_OUT], offenseRuns, target);
+  attemptAdvance(result, decisions, 1, 2, -1, 0.45 + 0.40 * speed, arm, DECISION_SECOND_ATTEMPT, DECISION_SECOND_OUT, offenseRuns, target);
   if (result.outsAfter >= 3 || result.ended) return;
  }
  if (result.runners[0] >= 0) {
   if (result.runners[2] >= 0) moveRunner(result, 0, 1);
   else {
    const speed = offense[result.runners[0]].speed;
-   attemptAdvance(result, 0, 1, 2, 0.15 + 0.35 * speed, arm, packet[CONTACT_FIRST_ATTEMPT], packet[CONTACT_FIRST_OUT], offenseRuns, target);
+   attemptAdvance(result, decisions, 0, 1, 2, 0.15 + 0.35 * speed, arm, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT, offenseRuns, target);
    if (result.outsAfter >= 3 || result.ended) return;
   }
  }
@@ -269,58 +336,71 @@ function teamDoublePlaySkill(prepared: PreparedDefense, fielder: number, enabled
  return skill;
 }
 
+/** Fielded balls: an error puts the batter on first; otherwise the play is an out. */
+function fieldingError(result: ContactResult, decisions: Decisions, prepared: PreparedDefense, options: ContactOptions, fielder: number, hitter: number, pitcher: number, offenseRuns: number, target: number): boolean {
+ const skill = options.errorPositions[fielder] ? prepared.errorAvoidance[fielder] : 0;
+ if (!decide(decisions, DECISION_ERROR, fieldingErrorProbability(prepared.errorBaseline[fielder], skill))) return false;
+ result.error = true;
+ forceOneBase(result, hitter, pitcher, offenseRuns, target);
+ return true;
+}
+
+/**
+ * Converts one physical fielding outcome into the legal base/out/score transition. Geometry
+ * chooses the fielder, retriever, and batter bases; this adapter applies errors, double plays,
+ * tag-ups, runner advancement, and walkoff stopping.
+ */
 export function resolveContact(
  result: ContactResult,
  bases: Pick<Bases, 'runners' | 'pitchers'>,
  outs: number,
- event: number,
- rates: Rates | Float64Array,
+ kind: number,
+ fielder: number,
+ basesTaken: number,
  hitter: number,
  pitcher: number,
  offense: readonly { speed: number }[],
  batterDoublePlay: number,
  prepared: PreparedDefense,
  options: ContactOptions,
- packet: Float64Array,
+ decisions: Decisions,
  offenseRuns: number,
  target: number,
  participants: Uint8Array
 ): void {
- if (packet.length !== CONTACT_UNIFORM_COUNT || (event !== 3 && event !== 4 && event !== 5 && event !== 7)) throw new Error('Invalid contact resolution input');
- resetResult(result, bases, outs, event);
- const fielder = responsiblePosition(packet[CONTACT_RESPONSIBILITY]);
- const thrower = responsibleOutfielder(packet[CONTACT_OUTFIELD]);
+ resetResult(result, bases, outs, kind === OUTCOME_HOME_RUN ? 4 : kind === OUTCOME_HIT || kind === OUTCOME_INFIELD_HIT || kind === OUTCOME_AUTOMATIC_DOUBLE ? basesTaken : 0);
  result.fielder = fielder;
- result.thrower = event === 7 && fielder >= 5 ? fielder : thrower;
- const hp = options.hitPrevention ? prepared.hitPrevention[fielder] : 0;
- const conversion = hitConversionProbability(rates, event, hp);
- if (event >= 3 && event <= 5) {
-  if (conversion > 0 && packet[CONTACT_HIT_CONVERSION] < conversion) {
-   result.creditedBases = 0;
-   result.outsAfter++;
-   return;
-  }
-  const arm = options.outfieldThrowing ? prepared.outfieldThrowing[thrower] : 0;
-  resolveHit(result, event - 2, hitter, pitcher, offense, arm, packet, offenseRuns, target);
+ if (kind === OUTCOME_HOME_RUN) {
+  for (let base = 2; base >= 0; base--) if (result.runners[base] >= 0) scoreRunner(result, base, 3 - base, offenseRuns, target, false);
+  result.scoredRunners[result.scoreCount] = hitter;
+  result.scoredPitchers[result.scoreCount] = pitcher;
+  result.scoreCount++;
+  result.runs++;
+  if (offenseRuns + result.runs >= target) { result.ended = true; result.winningAdvance = 4; }
   return;
  }
- if (conversion > 0 && packet[CONTACT_HIT_CONVERSION] < conversion) {
-  result.creditedBases = 1;
-  result.thrower = thrower;
-  const arm = options.outfieldThrowing ? prepared.outfieldThrowing[thrower] : 0;
-  resolveHit(result, 1, hitter, pitcher, offense, arm, packet, offenseRuns, target);
+ if (kind === OUTCOME_AUTOMATIC_DOUBLE) {
+  for (let base = 2; base >= 1; base--) if (result.runners[base] >= 0 && scoreRunner(result, base, 2, offenseRuns, target)) return;
+  if (result.runners[0] >= 0) moveRunner(result, 0, 2);
+  result.runners[1] = hitter;
+  result.pitchers[1] = pitcher;
   return;
  }
- const errorSkill = options.errorAvoidance ? prepared.errorAvoidance[fielder] : 0;
- const error = fieldingErrorProbability(prepared.errorBaseline[fielder], errorSkill);
- if (packet[CONTACT_ERROR] < error) {
-  result.error = true;
+ if (kind === OUTCOME_HIT) {
+  result.thrower = fielder;
+  const arm = options.outfieldThrowing && fielder >= 5 ? prepared.outfieldThrowing[fielder] : 0;
+  resolveHit(result, decisions, basesTaken, hitter, pitcher, offense, arm, offenseRuns, target);
+  return;
+ }
+ if (kind === OUTCOME_INFIELD_HIT) {
   forceOneBase(result, hitter, pitcher, offenseRuns, target);
   return;
  }
- if (fielder >= 1 && fielder <= 4 && result.runners[0] >= 0 && outs < 2) {
+ if (kind !== OUTCOME_CAUGHT && kind !== OUTCOME_GROUND_OUT) throw new Error('Invalid physical contact outcome');
+ if (fieldingError(result, decisions, prepared, options, fielder, hitter, pitcher, offenseRuns, target)) return;
+ if (kind === OUTCOME_GROUND_OUT && fielder >= 1 && fielder <= 4 && result.runners[0] >= 0 && outs < 2) {
   const teamSkill = teamDoublePlaySkill(prepared, fielder, options.doublePlayPositions, participants);
-  if (packet[CONTACT_DOUBLE_PLAY] < doublePlayProbability(batterDoublePlay, teamSkill)) {
+  if (decide(decisions, DECISION_DOUBLE_PLAY, doublePlayProbability(batterDoublePlay, teamSkill))) {
    result.doublePlay = true;
    removeRunner(result, 0);
    result.outsAfter += 2;
@@ -328,12 +408,12 @@ export function resolveContact(
   }
  }
  result.outsAfter++;
- if (fielder >= 5 && result.runners[2] >= 0 && outs < 2) {
+ if (kind === OUTCOME_CAUGHT && fielder >= 5 && result.runners[2] >= 0 && outs < 2) {
+  result.thrower = fielder;
   const arm = options.outfieldThrowing ? prepared.outfieldThrowing[fielder] : 0;
-  const attempt = advancementAttemptProbability(0.625, arm);
-  if (packet[CONTACT_THIRD_ATTEMPT] < attempt) {
+  if (decide(decisions, DECISION_THIRD_ATTEMPT, advancementAttemptProbability(0.625, arm))) {
    const runner = result.runners[2];
-   if (packet[CONTACT_THIRD_OUT] < advancementOutProbability(arm)) {
+   if (decide(decisions, DECISION_THIRD_OUT, advancementOutProbability(arm))) {
     removeRunner(result, 2);
     result.outsAfter++;
     result.caughtAdvancing = runner;
@@ -344,229 +424,4 @@ export function resolveContact(
    }
   }
  }
-}
-
-export function matchupRatesAt(table: Float64Array, offset: number, output: Float64Array): void {
- let previous = 0;
- for (let event = 0; event < 8; event++) {
-  const cumulative = table[offset + event];
-  output[event] = cumulative - previous;
-  previous = cumulative;
- }
-}
-
-const ARM_NODES = [-1, -0.5, 0, 0.5, 1] as const;
-const EXPECTATION_TARGETS = [1, 2, 3, 4, Infinity] as const;
-const FIELD_SAMPLES = [0.025, 0.10, 0.225, 0.35, 0.50, 0.665, 0.80, 0.935] as const;
-const OUTFIELD_SAMPLES = [0.16, 0.50, 0.84] as const;
-
-/**
- * Exact coefficients come from replaying the live resolver at every finite
- * advancement outcome, avoiding a second transition implementation.
- */
-export interface ContactExpectationKernel {
- readonly hitValues: Float64Array;
- readonly routineOutValues: Float64Array;
- readonly outfieldOutValues: Float64Array;
- readonly errorValues: Float64Array;
- readonly doublePlayValues: Float64Array;
-}
-
-function hitValueIndex(target: number, state: number, event: number, armNode: number): number {
- return (((target * 24 + state) * 3 + (event - 3)) * ARM_NODES.length) + armNode;
-}
-
-function outfieldValueIndex(target: number, state: number, armNode: number): number {
- return ((target * 24 + state) * ARM_NODES.length) + armNode;
-}
-
-function stateValue(expectancy: Float64Array, result: ContactResult): number {
- const bases = (result.runners[0] >= 0 ? 1 : 0) | (result.runners[1] >= 0 ? 2 : 0) | (result.runners[2] >= 0 ? 4 : 0);
- return result.runs + (result.ended || result.outsAfter >= 3 ? 0 : expectancy[result.outsAfter * 8 + bases]);
-}
-
-function choiceProbability(choice: number, attempt: number, thrownOut: number): number {
- if (choice === 0) return 1 - attempt;
- if (choice === 1) return attempt * thrownOut;
- return attempt * (1 - thrownOut);
-}
-
-function setAdvanceChoice(packet: Float64Array, attemptIndex: number, outIndex: number, choice: number, attempt: number, thrownOut: number): void {
- packet[attemptIndex] = choice === 0 ? (1 + attempt) / 2 : attempt / 2;
- packet[outIndex] = choice === 1 ? thrownOut / 2 : (1 + thrownOut) / 2;
-}
-
-function setState(base: Pick<Bases, 'runners' | 'pitchers'>, mask: number): void {
- for (let index = 0; index < 3; index++) {
-  const occupied = (mask & (1 << index)) !== 0;
-  base.runners[index] = occupied ? index + 1 : -1;
-  base.pitchers[index] = occupied ? 0 : -1;
- }
-}
-
-function expectedHitKernelValue(
- result: ContactResult,
- base: Pick<Bases, 'runners' | 'pitchers'>,
- profiles: readonly { speed: number }[],
- prepared: PreparedDefense,
- options: ContactOptions,
- participants: Uint8Array,
- packet: Float64Array,
- rates: Rates,
- expectancy: Float64Array,
- state: number,
- event: number,
- arm: number,
- target: number
-): number {
- const outs = Math.floor(state / 8);
- const mask = state & 7;
- prepared.outfieldThrowing[5] = arm;
- packet[CONTACT_RESPONSIBILITY] = FIELD_SAMPLES[0];
- packet[CONTACT_OUTFIELD] = OUTFIELD_SAMPLES[0];
- options.outfieldThrowing = true;
- let expected = 0;
- const secondAttempt = advancementAttemptProbability(0.65, arm);
- const firstAttempt = advancementAttemptProbability(event === 3 ? 0.325 : 0.55, arm);
- const thrownOut = advancementOutProbability(arm);
- const secondChoices = event === 3 ? 3 : 1;
- const firstChoices = event === 5 ? 1 : 3;
- for (let second = 0; second < secondChoices; second++) for (let first = 0; first < firstChoices; first++) {
-  const secondWeight = event === 3 ? choiceProbability(second, secondAttempt, thrownOut) : 1;
-  const firstWeight = event === 5 ? 1 : choiceProbability(first, firstAttempt, thrownOut);
-  const weight = secondWeight * firstWeight;
-  if (weight === 0) continue;
-  packet.fill(0.99, CONTACT_THIRD_ATTEMPT);
-  if (event === 3) setAdvanceChoice(packet, CONTACT_SECOND_ATTEMPT, CONTACT_SECOND_OUT, second, secondAttempt, thrownOut);
-  if (event !== 5) setAdvanceChoice(packet, CONTACT_FIRST_ATTEMPT, CONTACT_FIRST_OUT, first, firstAttempt, thrownOut);
-  setState(base, mask);
-  resolveContact(result, base, outs, event, rates, 0, 0, profiles, 0, prepared, options, packet, 0, target, participants);
-  expected += weight * stateValue(expectancy, result);
- }
- prepared.outfieldThrowing[5] = 0;
- return expected;
-}
-
-function expectedOutfieldOutKernelValue(
- result: ContactResult,
- base: Pick<Bases, 'runners' | 'pitchers'>,
- profiles: readonly { speed: number }[],
- prepared: PreparedDefense,
- options: ContactOptions,
- participants: Uint8Array,
- packet: Float64Array,
- rates: Rates,
- expectancy: Float64Array,
- state: number,
- arm: number,
- target: number
-): number {
- const outs = Math.floor(state / 8);
- const mask = state & 7;
- prepared.outfieldThrowing[5] = arm;
- options.outfieldThrowing = true;
- packet[CONTACT_RESPONSIBILITY] = FIELD_SAMPLES[5];
- packet[CONTACT_OUTFIELD] = OUTFIELD_SAMPLES[0];
- packet[CONTACT_ERROR] = 0.99;
- packet[CONTACT_DOUBLE_PLAY] = 0.99;
- const attempt = advancementAttemptProbability(0.625, arm);
- const thrownOut = advancementOutProbability(arm);
- let expected = 0;
- for (let choice = 0; choice < 3; choice++) {
-  const weight = choiceProbability(choice, attempt, thrownOut);
-  if (weight === 0) continue;
-  setAdvanceChoice(packet, CONTACT_THIRD_ATTEMPT, CONTACT_THIRD_OUT, choice, attempt, thrownOut);
-  setState(base, mask);
-  resolveContact(result, base, outs, 7, rates, 0, 0, profiles, 0, prepared, options, packet, 0, target, participants);
-  expected += weight * stateValue(expectancy, result);
- }
- prepared.outfieldThrowing[5] = 0;
- return expected;
-}
-
-export function createContactExpectationKernel(rates: Rates, expectancy: Float64Array): ContactExpectationKernel {
- const hitValues = new Float64Array(EXPECTATION_TARGETS.length * 24 * 3 * ARM_NODES.length);
- const routineOutValues = new Float64Array(EXPECTATION_TARGETS.length * 24);
- const outfieldOutValues = new Float64Array(EXPECTATION_TARGETS.length * 24 * ARM_NODES.length);
- const errorValues = new Float64Array(EXPECTATION_TARGETS.length * 24);
- const doublePlayValues = new Float64Array(EXPECTATION_TARGETS.length * 24);
- const prepared: PreparedDefense = {
-  hitterByPosition: new Int8Array(8), hitPrevention: new Float64Array(8), doublePlay: new Float64Array(8),
-  outfieldThrowing: new Float64Array(8), errorAvoidance: new Float64Array(8), catcherThrowing: new Float64Array(8), errorBaseline: new Float64Array(8)
- };
- const enabled = new Uint8Array(8);
- const options: ContactOptions = { hitPrevention: false, errorAvoidance: false, doublePlayPositions: enabled, outfieldThrowing: false };
- const participants = new Uint8Array(3);
- const packet = new Float64Array(CONTACT_UNIFORM_COUNT).fill(0.99);
- const result = createContactResult();
- const base = { runners: new Int16Array(3), pitchers: new Int16Array(3) };
- const profiles = Array.from({ length: 4 }, () => ({ speed: 0.5 }));
- for (let targetIndex = 0; targetIndex < EXPECTATION_TARGETS.length; targetIndex++) {
-  const target = EXPECTATION_TARGETS[targetIndex];
-  for (let state = 0; state < 24; state++) {
-   const outs = Math.floor(state / 8);
-   const mask = state & 7;
-   for (let event = 3; event <= 5; event++) for (let armNode = 0; armNode < ARM_NODES.length; armNode++) {
-    hitValues[hitValueIndex(targetIndex, state, event, armNode)] = expectedHitKernelValue(result, base, profiles, prepared, options, participants, packet, rates, expectancy, state, event, ARM_NODES[armNode], target);
-   }
-   packet.fill(0.99);
-   packet[CONTACT_RESPONSIBILITY] = FIELD_SAMPLES[0];
-   setState(base, mask);
-   resolveContact(result, base, outs, 7, rates, 0, 0, profiles, 0, prepared, options, packet, 0, target, participants);
-   routineOutValues[targetIndex * 24 + state] = stateValue(expectancy, result);
-
-   prepared.errorBaseline[0] = 0.12;
-   packet[CONTACT_ERROR] = 0;
-   setState(base, mask);
-   resolveContact(result, base, outs, 7, rates, 0, 0, profiles, 0, prepared, options, packet, 0, target, participants);
-   errorValues[targetIndex * 24 + state] = stateValue(expectancy, result);
-   prepared.errorBaseline[0] = 0;
-
-   enabled.fill(1);
-   packet.fill(0.99);
-   packet[CONTACT_RESPONSIBILITY] = FIELD_SAMPLES[1];
-   packet[CONTACT_DOUBLE_PLAY] = 0;
-   setState(base, mask);
-   resolveContact(result, base, outs, 7, rates, 0, 0, profiles, 0.55, prepared, options, packet, 0, target, participants);
-   doublePlayValues[targetIndex * 24 + state] = stateValue(expectancy, result);
-   enabled.fill(0);
-
-   for (let armNode = 0; armNode < ARM_NODES.length; armNode++) {
-    outfieldOutValues[outfieldValueIndex(targetIndex, state, armNode)] = expectedOutfieldOutKernelValue(result, base, profiles, prepared, options, participants, packet, rates, expectancy, state, ARM_NODES[armNode], target);
-   }
-  }
- }
- return { hitValues, routineOutValues, outfieldOutValues, errorValues, doublePlayValues };
-}
-
-function interpolateArm(values: Float64Array, offset: number, arm: number): number {
- if (arm <= -1) return values[offset];
- if (arm === -0.5) return values[offset + 1];
- if (arm === 0) return values[offset + 2];
- if (arm === 0.5) return values[offset + 3];
- if (arm >= 1) return values[offset + 4];
- let result = 0;
- for (let node = 0; node < ARM_NODES.length; node++) {
-  let weight = 1;
-  for (let other = 0; other < ARM_NODES.length; other++) if (other !== node) weight *= (arm - ARM_NODES[other]) / (ARM_NODES[node] - ARM_NODES[other]);
-  result += weight * values[offset + node];
- }
- return result;
-}
-
-export function contactKernelHitValue(kernel: ContactExpectationKernel, target: number, state: number, event: number, arm: number): number {
- return interpolateArm(kernel.hitValues, hitValueIndex(target, state, event, 0), arm);
-}
-
-export function contactKernelOutValue(kernel: ContactExpectationKernel, target: number, state: number, outfield: boolean, arm: number): number {
- if (!outfield) return kernel.routineOutValues[target * 24 + state];
- return interpolateArm(kernel.outfieldOutValues, outfieldValueIndex(target, state, 0), arm);
-}
-
-export function contactKernelErrorValue(kernel: ContactExpectationKernel, target: number, state: number): number {
- return kernel.errorValues[target * 24 + state];
-}
-
-export function contactKernelDoublePlayValue(kernel: ContactExpectationKernel, target: number, state: number): number {
- return kernel.doublePlayValues[target * 24 + state];
 }

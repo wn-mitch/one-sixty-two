@@ -1,5 +1,5 @@
-import { POSITIONS, SLOTS, compareId, type Manifest, type Position, type Profile, type Roll, type ShowcaseCard, type SimulationData } from './types.ts';
-import { validateDefensiveEnvironment, validateProfile, validateTeam } from '../sim/validation.ts';
+import { DEFENSE_METHOD_VERSION, POSITIONS, SLOTS, VALUATION_VERSION, compareId, type Manifest, type Position, type Profile, type Roll, type ShowcaseCard, type SimulationData } from './types.ts';
+import { resolveStadium, validateDefensiveEnvironment, validateProfile, validateStadiumDeck, validateTeam } from '../sim/validation.ts';
 
 const DATA_VERSION = /^[a-f0-9]{64}$/;
 const SHOWCASE_ERAS = [1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020] as const;
@@ -53,7 +53,8 @@ export async function loadManifest(): Promise<Manifest> {
   if (!value || value.schemaVersion !== 1 || !DATA_VERSION.test(value.dataVersion) || value.manifestUrl !== `/data/${value.dataVersion}/manifest.json`) throw new Error('Dataset version is incompatible');
  });
  return fetchJson<Manifest>(current.manifestUrl, manifest => {
-  if (!manifest || manifest.schemaVersion !== 1 || manifest.dataVersion !== current.dataVersion || !Array.isArray(manifest.franchises) || manifest.franchises.length !== 30 || !Array.isArray(manifest.candidates)) throw new Error('Dataset manifest is incompatible');
+  if (!manifest || manifest.schemaVersion !== 1 || manifest.dataVersion !== current.dataVersion || !Array.isArray(manifest.franchises) || manifest.franchises.length !== 30 || !Array.isArray(manifest.candidates) ||
+   !Array.isArray(manifest.stadiums) || manifest.stadiums.length !== 30 || new Set(manifest.stadiums.map(stadium => stadium?.ref?.id)).size !== 30) throw new Error('Dataset manifest is incompatible');
   validateShowcaseUrl(manifest);
  });
 }
@@ -131,23 +132,28 @@ export async function loadShowcase(manifest: Manifest): Promise<ShowcaseCard[]> 
 export async function loadSimulation(manifest: Manifest): Promise<SimulationData> {
  return fetchJson<SimulationData>(manifest.simulationUrl, data => {
   if (!data || data.schemaVersion !== 1 || data.dataVersion !== manifest.dataVersion ||
-   data.defenseMethodVersion !== 'defense-v1' || data.valuationVersion !== 'sim-war-v1' ||
+   data.defenseMethodVersion !== DEFENSE_METHOD_VERSION || data.valuationVersion !== VALUATION_VERSION ||
    !Number.isFinite(data.observedRuns) || data.observedRuns <= 0 ||
    !Array.isArray(data.opponents) || data.opponents.length !== 30 ||
    new Set(data.opponents.map(opponent => opponent?.id)).size !== 30) {
    throw new Error('Simulation dataset is incompatible');
   }
   validateDefensiveEnvironment(data);
+  validateStadiumDeck(data);
+  if (manifest.stadiums.length !== data.stadiums.length || data.stadiums.some(stadium => {
+   const summary = manifest.stadiums.find(item => item.ref.id === stadium.id);
+   return !summary || summary.ref.version !== stadium.version;
+  })) throw new Error('Simulation dataset is incompatible');
   validateCanonicalProfile(data.bullpen);
   for (const opponent of data.opponents) {
    if (!opponent || typeof opponent.id !== 'string' || !opponent.id ||
     typeof opponent.name !== 'string' || !opponent.name ||
-    !Number.isFinite(opponent.park) || opponent.park <= 0 ||
     !Array.isArray(opponent.hitters) || opponent.hitters.length !== 9 ||
     !Array.isArray(opponent.starters) || opponent.starters.length !== 5 ||
     !opponent.closer || !opponent.bullpen) {
     throw new Error('Simulation dataset is incompatible');
    }
+   if (resolveStadium(data, opponent.homeStadium).franchiseId !== opponent.id) throw new Error('Simulation dataset is incompatible');
    const pitchers = [...opponent.starters, opponent.closer, opponent.bullpen];
    for (const profile of [...opponent.hitters, ...pitchers]) validateCanonicalProfile(profile);
    if (opponent.starters.some(profile => !profile.pitching || profile.pitching.GS <= 0)) {

@@ -1,4 +1,5 @@
 import { compareId, type Profile } from '../../src/lib/game/types.ts';
+import { contactRecord } from '../../src/lib/sim/contact-profile.ts';
 import { isReliefProfile, poolBullpen } from './opponents.ts';
 import type { CompiledProfiles } from './profiles.ts';
 
@@ -36,7 +37,7 @@ export function buildBullpenCandidates(compiled: CompiledProfiles): Profile[] {
   const propagatedEstimates = members.flatMap(profile => profile.estimatedFields.filter(field =>
    field.startsWith('pitching.') || field.startsWith('PPF.')
   ));
-  candidates.push({
+  const candidate: Profile = {
    ...pooled,
    seasonId: id,
    playerId: `bullpen:${source.franchiseId}`,
@@ -54,7 +55,9 @@ export function buildBullpenCandidates(compiled: CompiledProfiles): Profile[] {
     members: members.map(profile => ({ seasonId: profile.seasonId, playerId: profile.playerId, displayName: profile.displayName })),
     excluded: { seasonId: excluded.seasonId, playerId: excluded.playerId, displayName: excluded.displayName }
    }
-  });
+  };
+  candidate.contact = contactRecord(candidate);
+  candidates.push(candidate);
  }
  return candidates;
 }

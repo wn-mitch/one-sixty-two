@@ -7,12 +7,21 @@ export function mulberry32(seed: number): () => number {
   return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
  };
 }
-export function streamSeed(seed: number, stream: 'draft' | 'schedule' | 'simulation'): number {
+export function streamSeed(seed: number, stream: string): number {
  let hash = 2166136261;
  for (const char of `${seed}:${stream}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
  return hash;
 }
-export const randomStream = (seed: number, stream: 'draft' | 'schedule' | 'simulation') => mulberry32(streamSeed(seed, stream));
+export const randomStream = (seed: number, stream: string) => mulberry32(streamSeed(seed, stream));
+/** Per-game streams named `game:{n}:pa|contact|fielding|advancement`. */
+export function gameRandomStreams(seed: number, gameNumber: number): { pa: () => number; contact: () => number; fielding: () => number; advancement: () => number } {
+ return {
+  pa: randomStream(seed, `game:${gameNumber}:pa`),
+  contact: randomStream(seed, `game:${gameNumber}:contact`),
+  fielding: randomStream(seed, `game:${gameNumber}:fielding`),
+  advancement: randomStream(seed, `game:${gameNumber}:advancement`)
+ };
+}
 export function newSeed(): number { return crypto.getRandomValues(new Uint32Array(1))[0]; }
 export function shuffle<T>(items: T[], random: () => number): T[] {
  for (let i = items.length - 1; i > 0; i--) {

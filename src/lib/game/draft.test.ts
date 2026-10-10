@@ -8,6 +8,7 @@ import {
  reassignPick,
  replayInput,
  rollDraft,
+ selectHomeStadium,
  validateDraft,
  validateReplay
 } from './draft.ts';
@@ -15,6 +16,7 @@ import { decodeReplay, encodeReplay } from './share.ts';
 import { persistDraft, restoreDraft, STORAGE_KEY } from './persistence.ts';
 import { SLOTS, type Candidate, type Draft, type Manifest, type Slot } from './types.ts';
 import { randomStream } from './random.ts';
+import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 
 function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Manifest {
  const franchiseIds = [...new Set(candidates.map(candidate => candidate.franchiseId))].sort();
@@ -25,6 +27,7 @@ function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Ma
   candidates,
   franchises: franchiseIds.map(id => ({ id, name: `Club ${id}`, decades: [1980, 1990, 2020] })),
   chunks: {},
+  stadiums: syntheticStadiumSummaries(franchiseIds),
   simulationUrl: '',
   attributionUrl: '',
   showcaseUrl: '',
@@ -58,8 +61,44 @@ candidates[12].seasonId = 'anon12:2022:NL:T12';
 candidates.push({ ...candidates[0], seasonId: 'anon0:1983:AL:T0' });
 const manifest = makeManifest(candidates);
 
+/** A new draft with its home stadium pinned, ready to roll. */
+function startDraft(source: Manifest, seed: number): Draft {
+ return selectHomeStadium(createDraft(source, seed), source, source.stadiums[0].ref.id);
+}
+
+describe('home stadium selection', () => {
+ it('must precede the first roll and is recorded as the sole first action', () => {
+  const draft = createDraft(manifest, 7);
+  expect(() => rollDraft(draft, manifest)).toThrow('home stadium');
+  const pinned = selectHomeStadium(draft, manifest, manifest.stadiums[1].ref.id);
+  expect(pinned.homeStadium).toEqual(manifest.stadiums[1].ref);
+  expect(pinned.actions).toEqual([{ type: 'select-stadium', stadiumId: manifest.stadiums[1].ref.id, stadiumVersion: manifest.stadiums[1].ref.version }]);
+  expect(() => selectHomeStadium(pinned, manifest, manifest.stadiums[2].ref.id)).toThrow('already chosen');
+  expect(() => selectHomeStadium(draft, manifest, 'nowhere-2025')).toThrow('current deck');
+ });
+ it('does not change the draft rolls for a seed', () => {
+  const first = rollDraft(selectHomeStadium(createDraft(manifest, 9), manifest, manifest.stadiums[0].ref.id), manifest);
+  const second = rollDraft(selectHomeStadium(createDraft(manifest, 9), manifest, manifest.stadiums[3].ref.id), manifest);
+  expect(first.currentRoll).toEqual(second.currentRoll);
+ });
+ it('rejects a forged stadium snapshot or an unknown stadium version on replay', () => {
+  const saved = rollDraft(startDraft(manifest, 11), manifest);
+  expect(() => validateDraft({ ...saved, homeStadium: manifest.stadiums[2].ref }, manifest)).toThrow('snapshot');
+  const forged = { ...saved, actions: [{ type: 'select-stadium', stadiumId: manifest.stadiums[0].ref.id, stadiumVersion: 'old' }, ...saved.actions.slice(1)] };
+  expect(() => validateDraft(forged, manifest)).toThrow();
+ });
+ it('saves and resumes an unselected run in the stadium phase only', () => {
+  const store = new Map<string, string>();
+  const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value), removeItem: (key: string) => void store.delete(key) };
+  persistDraft(storage, createDraft(manifest, 3), 'stadium');
+  expect(restoreDraft(storage, manifest)).toMatchObject({ kind: 'valid', phase: 'stadium' });
+  persistDraft(storage, createDraft(manifest, 3), 'draft');
+  expect(restoreDraft(storage, manifest).kind).toBe('incompatible');
+ });
+});
+
 function finish(seed = 162, source = manifest): Draft {
- let draft = createDraft(source, seed);
+ let draft = startDraft(source, seed);
  while (draft.picks.length < SLOTS.length) {
   draft = rollDraft(draft, source);
   const candidate = availableCandidates(draft, source)[0];
@@ -83,7 +122,7 @@ function draftWithOnlySlotsOpen(pool: Manifest, open: Slot[]): Draft {
   const candidate = pool.candidates.find(item => item.eligibleSlots.includes(slot) && item.playerId === `filled-${index}`)!;
   return { seasonId: candidate.seasonId, slot, franchiseId: candidate.franchiseId, decade: candidate.decade };
  });
- return { ...createDraft(pool, 1), picks };
+ return { ...startDraft(pool, 1), picks };
 }
 
 function scarcePool(openCandidates: Candidate[], open: Slot[]): Manifest {
@@ -104,7 +143,8 @@ function scarcePool(openCandidates: Candidate[], open: Slot[]): Manifest {
 describe('permanent deterministic drafting', () => {
  it.each(Array.from({ length: 32 }, (_, seed) => seed))('finishes seed %i with fourteen distinct identities and franchises', seed => {
   const initial = createDraft(manifest, seed);
-  expect(initial.schemaVersion).toBe(4);
+  expect(initial.homeStadium).toBeNull();
+  expect(initial.schemaVersion).toBe(5);
   expect(legalSlots(initial, candidates[0], manifest)).toEqual(['C']);
   const draft = finish(seed);
   const selected = draft.picks.map(pick => manifest.candidates.find(item => item.seasonId === pick.seasonId)!);
@@ -134,7 +174,7 @@ describe('permanent deterministic drafting', () => {
     eligibleSlots: candidate.eligibleSlots
    }
   ]));
-  const rolled = rollDraft(createDraft(expanded, 19), expanded);
+  const rolled = rollDraft(startDraft(expanded, 19), expanded);
   const selected = availableCandidates(rolled, expanded)[0];
   const next = commitPick(rolled, expanded, selected.seasonId, legalSlots(rolled, selected, expanded)[0]);
   const unused = availableCandidates(next, expanded, null);
@@ -168,14 +208,14 @@ describe('permanent deterministic drafting', () => {
  });
 
  it('does not invent early decades for a newer franchise', () => {
-  const rolls = Array.from({ length: 64 }, (_, seed) => rollDraft(createDraft(manifest, seed), manifest).currentRoll!);
+  const rolls = Array.from({ length: 64 }, (_, seed) => rollDraft(startDraft(manifest, seed), manifest).currentRoll!);
   expect(rolls.some(roll => roll.franchiseId === 'F12')).toBe(true);
   expect(rolls.filter(roll => roll.franchiseId === 'F12').every(roll => roll.decade === 2020)).toBe(true);
  });
 
  it('keeps an unresolved roll across saves and rejects double assignment', () => {
   const storage = memoryStorage();
-  const draft = rollDraft(createDraft(manifest, 162), manifest);
+  const draft = rollDraft(startDraft(manifest, 162), manifest);
   expect(persistDraft(storage, draft, 'draft')).toBeNull();
   expect(restoreDraft(storage, manifest)).toEqual({ kind: 'valid', draft, phase: 'draft' });
   expect(rollDraft(draft, manifest)).toBe(draft);
@@ -191,7 +231,7 @@ describe('permanent deterministic drafting', () => {
  });
 
  it('preserves a closing-pitcher-only final roll', () => {
-  let finalDraft = createDraft(manifest, 25);
+  let finalDraft = startDraft(manifest, 25);
   while (finalDraft.picks.length < SLOTS.length - 1) {
    finalDraft = rollDraft(finalDraft, manifest);
    const candidate = availableCandidates(finalDraft, manifest)[0];
@@ -229,7 +269,7 @@ describe('permanent deterministic drafting', () => {
   const old = makeManifest(oldCandidates, 'old');
   const candidate = oldCandidates[0];
   const rolled = {
-   ...createDraft(old, 0),
+   ...startDraft(old, 0),
    currentRoll: { franchiseId: candidate.franchiseId, decade: candidate.decade }
   };
   expect(() => commitPick(rolled, old, candidate.seasonId, 'C')).toThrow('supported era');
@@ -264,7 +304,7 @@ describe('permanent deterministic drafting', () => {
   }), 'flexible-v1');
   let pending: Draft | undefined;
   for (let seed = 0; seed < 256 && !pending; seed++) {
-   let draft = createDraft(flexible, seed);
+   let draft = startDraft(flexible, seed);
    while (draft.picks.length < SLOTS.length) {
     draft = rollDraft(draft, flexible);
     const options = availableCandidates(draft, flexible);
@@ -285,7 +325,7 @@ describe('permanent deterministic drafting', () => {
   const roll = pending!.currentRoll;
   const pickCount = pending!.picks.length;
   const moved = reassignPick(pending!, flexible, original.seasonId, 'DH');
-  if (moved.schemaVersion !== 4) throw new Error('Expected current draft');
+  if (moved.schemaVersion !== 5) throw new Error('Expected current draft');
   expect(moved.currentRoll).toEqual(roll);
   expect(moved.seed).toBe(pending!.seed);
   expect(moved.picks).toHaveLength(pickCount);
@@ -357,13 +397,13 @@ describe('permanent deterministic drafting', () => {
    franchiseId: candidate.franchiseId,
    decade: candidate.decade
   }));
-  const draft = { ...createDraft(source, 1), picks: picked };
+  const draft = { ...startDraft(source, 1), picks: picked };
   expect(() => reassignPick(draft, source, selected.seasonId, '1B')).toThrow('prevent completing');
 
   const reciprocal = makeManifest([selected, remaining, ...fillers], 'incompatible-swap-v1');
   const starter = fillers.find(candidate => candidate.eligibleSlots.includes('SP1'))!;
   const occupied = {
-   ...createDraft(reciprocal, 1),
+   ...startDraft(reciprocal, 1),
    picks: [
     { seasonId: selected.seasonId, slot: 'C' as const, franchiseId: 'A', decade: 1980 },
     { seasonId: remaining.seasonId, slot: '1B' as const, franchiseId: 'B', decade: 1980 },
@@ -407,7 +447,7 @@ describe('permanent deterministic drafting', () => {
   } satisfies Candidate));
   const source = makeManifest([selected, pendingCandidate, rescue, ...fillers], 'pending-stranding-v1');
   const draft = {
-   ...createDraft(source, 1),
+   ...startDraft(source, 1),
    picks: [selected, ...fillers].map(candidate => ({
     seasonId: candidate.seasonId,
     slot: candidate === selected ? 'C' as const : candidate.eligibleSlots[0],
@@ -441,9 +481,9 @@ describe('permanent deterministic drafting', () => {
   const complete = finish(162, flexible);
   const catcher = complete.picks.find(pick => pick.slot === 'C')!;
   const moved = reassignPick(complete, flexible, catcher.seasonId, '1B');
-  if (moved.schemaVersion !== 4) throw new Error('Expected current replay');
+  if (moved.schemaVersion !== 5) throw new Error('Expected current replay');
   const input = replayInput(moved);
-  if (input.schemaVersion !== 4) throw new Error('Expected current replay');
+  if (input.schemaVersion !== 5) throw new Error('Expected current replay');
   const forgedPick = {
    ...input,
    picks: input.picks.map((pick, index) => index === 0 ? { ...pick, slot: 'DH' as const } : pick)

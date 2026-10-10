@@ -1,41 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import type { Rates } from '../game/types.ts';
-import { AVERAGE_RATES } from './fixtures.ts';
+import { getPhysicalReference, INFINITY_TARGET } from './physical-expectation.ts';
+import { testDefenseEnvironment } from './test-fixtures.ts';
 import { neutralRunDistribution, WinExpectancyModel } from './win-expectancy.ts';
 
+const environment = testDefenseEnvironment();
+const rows = getPhysicalReference(environment).transitions[INFINITY_TARGET];
+
 describe('neutral inning run distributions', () => {
- it('matches the negative-binomial distribution for strikeout-or-homer plate appearances', () => {
-  const rates: Rates = [0, 0, 0.5, 0, 0, 0, 0.5, 0];
-  const distribution = neutralRunDistribution(rates);
-  expect(distribution.reduce((sum, probability) => sum + probability, 0)).toBeCloseTo(1, 12);
-  expect(distribution[0]).toBeCloseTo(0.125, 12);
-  expect(distribution[1]).toBeCloseTo(0.1875, 12);
-  expect(distribution[2]).toBeCloseTo(0.1875, 12);
-  expect(distribution[3]).toBeCloseTo(0.15625, 12);
+ it('is a probability distribution whose mean is the inning run expectancy', () => {
+  const distribution = neutralRunDistribution(rows);
+  expect(distribution.reduce((sum, probability) => sum + probability, 0)).toBeCloseTo(1, 9);
+  const mean = distribution.reduce((sum, probability, runs) => sum + runs * probability, 0);
+  expect(mean).toBeCloseTo(getPhysicalReference(environment).runExpectancy[0], 3);
+  expect(mean).toBeGreaterThan(0.3);
+  expect(mean).toBeLessThan(0.8);
  });
-
- it('normalizes accepted roundoff above and below unit event-rate mass', () => {
-  for (const delta of [-5e-9, 5e-9]) {
-   const rates: Rates = [0, 0, 1 + delta, 0, 0, 0, 0, 0];
-   expect(Array.from(neutralRunDistribution(rates))).toEqual([1]);
-   const perturbed = [...AVERAGE_RATES] as Rates;
-   perturbed[2] += delta;
-   const distribution = neutralRunDistribution(perturbed);
-   expect(distribution.reduce((sum, probability) => sum + probability, 0)).toBeCloseTo(1, 12);
-   expect(new WinExpectancyModel(perturbed).homeWinProbability(1, 'top', 0, 0, 0, 0)).toBeCloseTo(0.5, 12);
-  }
- });
-
- it('rejects a non-absorbing event model rather than inventing a distribution', () => {
-  expect(() => neutralRunDistribution([0, 0, 0, 0, 0, 0, 1, 0])).toThrow('positive out rate');
+ it('gives occupied bases more scoring than empty bases at the same outs', () => {
+  const empty = neutralRunDistribution(rows, 0, 0);
+  const loaded = neutralRunDistribution(rows, 0, 7);
+  expect(loaded[0]).toBeLessThan(empty[0]);
  });
 });
 
 describe('neutral win expectancy', () => {
- const model = new WinExpectancyModel(AVERAGE_RATES);
+ const model = new WinExpectancyModel(environment);
 
  it('is symmetric at the start and values occupied bases without changing the score', () => {
-  expect(model.homeWinProbability(1, 'top', 0, 0, 0, 0)).toBeCloseTo(0.5, 12);
+  expect(model.homeWinProbability(1, 'top', 0, 0, 0, 0)).toBeCloseTo(0.5, 9);
   const empty = model.homeWinProbability(9, 'bottom', 0, 0, 3, 4);
   const loaded = model.homeWinProbability(9, 'bottom', 0, 7, 3, 4);
   expect(loaded).toBeGreaterThan(empty);

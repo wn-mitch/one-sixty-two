@@ -45,10 +45,12 @@ function publication(): SharePublication {
 
 function draft(): Draft {
 	return {
-		schemaVersion: 4,
+		schemaVersion: 5,
 		dataVersion: 'data-version',
-		modelVersion: 'pa-v3',
+		modelVersion: 'contact-v1',
+		rulesVersion: 'classic-v1',
 		seed: 162,
+		homeStadium: { id: 'F00-2025', version: 'synthetic-F00' },
 		picks: [],
 		battingOrder: [],
 		starterOrder: [],

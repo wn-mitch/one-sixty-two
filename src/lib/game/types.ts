@@ -1,3 +1,6 @@
+import type { ContactModel, ContactRecord } from '../sim/contact-profile.ts';
+import type { ParkRef, StadiumConfig, StadiumSummary } from '../sim/park-types.ts';
+
 export const HITTER_SLOTS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const;
 export const STARTER_SLOTS = ['SP1', 'SP2', 'SP3'] as const;
 export const SLOTS = [...HITTER_SLOTS, ...STARTER_SLOTS, 'CL', 'BP'] as const;
@@ -42,6 +45,8 @@ export interface Profile {
  defense: { positions: Partial<Record<Position, DefensivePosition>> };
  speed: number; stealAttempt: number; stealSuccess: number; doublePlay: number;
  estimatedFields: string[];
+ /** Estimated contact targets for the applicable roles; never measured batted-ball data. */
+ contact?: ContactRecord;
  bullpen?: {
   members: { seasonId: string; playerId: string; displayName: string }[];
   excluded: { seasonId: string; playerId: string; displayName: string };
@@ -57,27 +62,36 @@ export interface Manifest {
  attributionUrl: string; archiveUrl: string; attribution: Attribution; approximations: string[];
  coverage: { decade: number; firstYear: number; lastYear: number; label: string }[];
  diagnostics: { excludedBatting: number; excludedPitching: number; excludedProfiles: number; estimatedProfiles: number; reportUrl: string };
+ /** The 2025 reference stadium deck, one per current franchise. */
+ stadiums: StadiumSummary[];
 }
-export interface Opponent { id: string; name: string; park: number; hitters: Profile[]; starters: Profile[]; closer: Profile; bullpen: Profile }
+export interface Opponent { id: string; name: string; homeStadium: ParkRef; hitters: Profile[]; starters: Profile[]; closer: Profile; bullpen: Profile }
 export interface DefensiveEnvironment {
  leagueRates: Rates;
  leagueErrorRates: Record<Position, number>;
  leagueStealAttempt: number;
  leagueStealSuccess: number;
  leagueDoublePlay: number;
+ /** League 2025 Statcast shape and the neutral-park response basis. */
+ contactModel: ContactModel;
 }
 export interface SimulationData extends DefensiveEnvironment {
  schemaVersion: 1; dataVersion: string; bullpen: Profile;
  opponents: Opponent[]; observedRuns: number;
- defenseMethodVersion: 'defense-v1';
- valuationVersion: 'sim-war-v1';
+ stadiums: StadiumConfig[];
+ defenseMethodVersion: typeof DEFENSE_METHOD_VERSION;
+ valuationVersion: typeof VALUATION_VERSION;
 }
 export interface Roll { franchiseId: string; decade: number }
 export interface Pick extends Roll { seasonId: string; slot: Slot }
-export const CURRENT_REPLAY_SCHEMA_VERSION = 4 as const;
+export const CURRENT_REPLAY_SCHEMA_VERSION = 5 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
-export const MODEL_VERSION = 'pa-v3' as const;
+export const MODEL_VERSION = 'contact-v1' as const;
+export const RULES_VERSION = 'classic-v1' as const;
+export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
+export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =
+ | { type: 'select-stadium'; stadiumId: string; stadiumVersion: string }
  | { type: 'roll' }
  | { type: 'pick'; seasonId: string; slot: Slot }
  | { type: 'reassign'; seasonId: string; slot: HitterSlot };
@@ -85,7 +99,10 @@ export interface Replay {
  schemaVersion: ReplaySchemaVersion;
  dataVersion: string;
  modelVersion: typeof MODEL_VERSION;
+ rulesVersion: typeof RULES_VERSION;
  seed: number;
+ /** Pinned before the first roll; null only while an unselected run is in progress. */
+ homeStadium: ParkRef | null;
  picks: Pick[];
  battingOrder: string[];
  starterOrder: string[];

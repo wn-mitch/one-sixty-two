@@ -16,6 +16,9 @@ media-review *args:
 media-prepare *args:
     npm run media:prepare -- {{args}}
 
+statcast *args:
+    npm run data:statcast -- {{args}}
+
 smoke *args:
     npm run smoke -- {{args}}
 

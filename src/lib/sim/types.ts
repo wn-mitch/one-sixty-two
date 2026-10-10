@@ -1,5 +1,10 @@
+import type { PreparedMatchups } from './contact-profile.ts';
+import type { ParkRef, StadiumConfig } from './park-types.ts';
 import {
+ DEFENSE_METHOD_VERSION,
  MODEL_VERSION,
+ RULES_VERSION,
+ VALUATION_VERSION,
  type DefensiveEnvironment,
  type Position,
  type Profile,
@@ -48,24 +53,31 @@ export interface SeasonMoment {
  outcome: SeasonMomentOutcome; runsScored: number;
  winBefore: number; winAfter: number; swing: number;
 }
+/** Independent named streams: plate-appearance events, contact samples, fielding, and runner decisions. */
+export interface GameRandomStreams { pa: () => number; contact: () => number; fielding: () => number; advancement: () => number }
 export interface GameInput {
  number: number; opponentId: string; opponentName: string; challengeIsHome: boolean;
- home: TeamInput; away: TeamInput; defenseEnvironment: DefensiveEnvironment; park: number;
- homeMatchups?: Float64Array; awayMatchups?: Float64Array;
+ home: TeamInput; away: TeamInput; defenseEnvironment: DefensiveEnvironment;
+ /** The home team's venue; both clubs play in it. */
+ stadium: StadiumConfig;
+ /** Home hitters against away pitchers, and the reverse; built when omitted. */
+ homeMatchups?: PreparedMatchups; awayMatchups?: PreparedMatchups;
  limits?: { maxPA?: number; maxInnings?: number };
 }
 export interface GameResult {
  number: number; opponentId: string; opponentName: string; isHome: boolean;
+ stadium: ParkRef; stadiumName: string;
  home: TeamBox; away: TeamBox; challengeRuns: number; opponentRuns: number; win: boolean;
  highlight: SeasonMoment | null; lowlight: SeasonMoment | null;
 }
 export interface SeasonInput {
- schemaVersion: ReplaySchemaVersion; modelVersion: typeof MODEL_VERSION;
- seed: number; roster: { profile: Profile; slot: Slot }[]; battingOrder: string[]; starterOrder: string[]; data: SimulationData;
+ schemaVersion: ReplaySchemaVersion; modelVersion: typeof MODEL_VERSION; rulesVersion: typeof RULES_VERSION;
+ seed: number; homeStadium: ParkRef; roster: { profile: Profile; slot: Slot }[]; battingOrder: string[]; starterOrder: string[]; data: SimulationData;
 }
 export interface SeasonResult {
- modelVersion: typeof MODEL_VERSION; dataVersion: string; seed: number;
- defenseMethodVersion: 'defense-v1'; valuationVersion: 'sim-war-v1';
+ modelVersion: typeof MODEL_VERSION; rulesVersion: typeof RULES_VERSION; dataVersion: string; seed: number;
+ homeStadium: ParkRef;
+ defenseMethodVersion: typeof DEFENSE_METHOD_VERSION; valuationVersion: typeof VALUATION_VERSION;
  wins: number; losses: number; firstLoss: number | null; longestWinningStreak: number; runsFor: number; runsAgainst: number;
  games: GameResult[]; batting: BatterLine[]; pitching: PitcherLine[]; starterStarts: number[];
  highlight: SeasonMoment | null; lowlight: SeasonMoment | null;

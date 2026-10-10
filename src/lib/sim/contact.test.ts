@@ -2,227 +2,165 @@ import { describe, expect, it } from 'vitest';
 import { POSITIONS } from '../game/types.ts';
 import { createBases } from './advancement.ts';
 import {
- CONTACT_DOUBLE_PLAY,
- CONTACT_ERROR,
- CONTACT_FIRST_ATTEMPT,
- CONTACT_FIRST_OUT,
- CONTACT_HIT_CONVERSION,
- CONTACT_OUTFIELD,
- CONTACT_RESPONSIBILITY,
- CONTACT_SECOND_ATTEMPT,
- CONTACT_SECOND_OUT,
- CONTACT_THIRD_ATTEMPT,
- CONTACT_THIRD_OUT,
- CONTACT_UNIFORM_COUNT,
+ DECISION_DOUBLE_PLAY,
+ DECISION_ERROR,
+ DECISION_FIRST_ATTEMPT,
+ DECISION_FIRST_OUT,
+ DECISION_SECOND_ATTEMPT,
+ DECISION_SECOND_OUT,
+ DECISION_THIRD_ATTEMPT,
+ DECISION_THIRD_OUT,
+ createContactOptions,
  createContactResult,
+ createDecisions,
  createPreparedDefense,
- fillContactPacket,
- resolveContact,
- type ContactOptions
+ enumerateDecisions,
+ resolveContact
 } from './contact.ts';
+import { OUTCOME_AUTOMATIC_DOUBLE, OUTCOME_CAUGHT, OUTCOME_GROUND_OUT, OUTCOME_HIT, OUTCOME_HOME_RUN, OUTCOME_INFIELD_HIT } from './fielding.ts';
 import { createBox } from './game.ts';
-import { AVERAGE_RATES } from './fixtures.ts';
 import { testDefenseEnvironment, testTeam } from './test-fixtures.ts';
 
-const ALL_SKILLS: ContactOptions = {
- hitPrevention: true,
- errorAvoidance: true,
- doublePlayPositions: new Uint8Array(POSITIONS.length).fill(1),
- outfieldThrowing: true
-};
+const SS = POSITIONS.indexOf('SS');
+const CF = POSITIONS.indexOf('CF');
 
-function contactFixture() {
+function fixture() {
  const offense = testTeam('batting');
  const defense = testTeam('fielding');
  const batting = createBox(offense);
  const pitching = createBox(defense);
  const bases = createBases(batting, pitching);
- const result = createContactResult();
- const packet = new Float64Array(CONTACT_UNIFORM_COUNT).fill(0.99);
- return { offense, defense, batting, pitching, bases, result, packet, participants: new Uint8Array(3) };
+ const decisions = createDecisions();
+ decisions.packet.fill(0.99);
+ const options = createContactOptions();
+ options.errorPositions.fill(1);
+ options.doublePlayPositions.fill(1);
+ options.outfieldThrowing = true;
+ return { offense, defense, bases, result: createContactResult(), decisions, options, participants: new Uint8Array(3) };
 }
 
-describe('contact transition kernel', () => {
- it('fills one fixed packet and performs repeated counterfactual resolution without RNG or box mutation', () => {
-  const game = contactFixture();
-  let calls = 0;
-  fillContactPacket(game.packet, () => {
-   calls++;
-   return 0.5;
-  });
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-  resolveContact(game.result, game.bases, 0, 7, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  resolveContact(game.result, game.bases, 0, 7, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
+type Fixture = ReturnType<typeof fixture>;
+function resolve(game: Fixture, kind: number, fielder: number, basesTaken: number, outs = 0, target = Infinity, batterDoublePlay = 0) {
+ const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
+ resolveContact(game.result, game.bases, outs, kind, fielder, basesTaken, 0, 0, game.offense.hitters, batterDoublePlay, prepared,
+  game.options, game.decisions, 0, target, game.participants);
+ return game.result;
+}
 
-  expect(calls).toBe(CONTACT_UNIFORM_COUNT);
-  expect([...game.bases.runners]).toEqual([-1, -1, -1]);
-  expect(game.batting.batting.reduce((sum, line) => sum + line.PA, 0)).toBe(0);
-  expect(game.pitching.pitching.reduce((sum, line) => sum + line.BF, 0)).toBe(0);
- });
-
- it('turns a non-HR hit into a clean catch without advancing existing runners', () => {
-  const game = contactFixture();
+describe('legal contact adapter', () => {
+ it('resolves repeatedly from the same bases without mutating them', () => {
+  const game = fixture();
   game.bases.runners.set([1, -1, 2]);
-  game.bases.pitchers.set([0, -1, 0]);
-  game.packet[CONTACT_RESPONSIBILITY] = 0.45;
-  game.packet[CONTACT_HIT_CONVERSION] = 0;
-  game.defense.hitters[game.defense.defense.SS].defense.positions.SS!.hitPrevention = 1;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-
-  resolveContact(game.result, game.bases, 0, 3, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect(game.result).toMatchObject({ creditedBases: 0, outsAfter: 1, runs: 0, error: false, doublePlay: false, caughtAdvancing: -1 });
-  expect([...game.result.runners]).toEqual([1, -1, 2]);
+  resolve(game, OUTCOME_HIT, CF, 2);
+  resolve(game, OUTCOME_HIT, CF, 2);
+  expect([...game.bases.runners]).toEqual([1, -1, 2]);
  });
-
- it('turns an ordinary out into a single for negative hit prevention without changing another category', () => {
-  const game = contactFixture();
-  game.packet[CONTACT_RESPONSIBILITY] = 0.45;
-  game.packet[CONTACT_HIT_CONVERSION] = 0;
-  game.packet[CONTACT_OUTFIELD] = 0.9;
-  game.defense.hitters[game.defense.defense.SS].defense.positions.SS!.hitPrevention = -1;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-
-  resolveContact(game.result, game.bases, 0, 7, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect(game.result).toMatchObject({ creditedBases: 1, outsAfter: 0, runs: 0, error: false, doublePlay: false });
-  expect(game.result.fielder).toBe(POSITIONS.indexOf('SS'));
-  expect(game.result.thrower).toBe(POSITIONS.indexOf('RF'));
-  expect([...game.result.runners]).toEqual([0, -1, -1]);
+ it('scores every runner and the batter on a home run, even past a walkoff target', () => {
+  const game = fixture();
+  game.bases.runners.set([1, 2, 3]);
+  const result = resolve(game, OUTCOME_HOME_RUN, -1, 4, 0, 1);
+  expect(result).toMatchObject({ creditedBases: 4, runs: 4, ended: true, winningAdvance: 4 });
  });
-
+ it('advances runners two bases on an automatic double', () => {
+  const game = fixture();
+  game.bases.runners.set([1, -1, -1]);
+  const result = resolve(game, OUTCOME_AUTOMATIC_DOUBLE, -1, 2);
+  expect([...result.runners]).toEqual([-1, 0, 1]);
+  expect(result.creditedBases).toBe(2);
+ });
+ it('forces runners on an infield hit', () => {
+  const game = fixture();
+  game.bases.runners.set([1, 2, -1]);
+  const result = resolve(game, OUTCOME_INFIELD_HIT, SS, 1);
+  expect([...result.runners]).toEqual([0, 1, 2]);
+  expect(result.runs).toBe(0);
+ });
  it('uses all distinct infield participants for a double play and never permits one with two outs', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners[0] = 1;
-  game.bases.pitchers[0] = 0;
-  game.packet[CONTACT_RESPONSIBILITY] = 0.06;
-  game.packet[CONTACT_ERROR] = 0.99;
-  game.packet[CONTACT_DOUBLE_PLAY] = 0.05;
-  game.defense.hitters[game.defense.defense['1B']].defense.positions['1B']!.doublePlay = 1;
-  game.defense.hitters[game.defense.defense.SS].defense.positions.SS!.doublePlay = 1;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-
-  resolveContact(game.result, game.bases, 1, 7, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect(game.result).toMatchObject({ doublePlay: true, outsAfter: 3, runs: 0 });
+  game.decisions.packet[DECISION_DOUBLE_PLAY] = 0.05;
+  expect(resolve(game, OUTCOME_GROUND_OUT, SS, 0, 1, Infinity, 0.08)).toMatchObject({ doublePlay: true, outsAfter: 3, runs: 0 });
   expect(game.result.runners[0]).toBe(-1);
-
-  resolveContact(game.result, game.bases, 2, 7, AVERAGE_RATES, 0, 0, game.offense.hitters, 1, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect(game.result).toMatchObject({ doublePlay: false, outsAfter: 3 });
+  expect(resolve(game, OUTCOME_GROUND_OUT, SS, 0, 2, Infinity, 0.08)).toMatchObject({ doublePlay: false, outsAfter: 3 });
   expect(game.result.runners[0]).toBe(1);
  });
-
+ it('puts the batter on first on an error without an out or a hit', () => {
+  const game = fixture();
+  game.decisions.packet[DECISION_ERROR] = 0;
+  expect(resolve(game, OUTCOME_GROUND_OUT, SS, 0)).toMatchObject({ error: true, outsAfter: 0, creditedBases: 0 });
+  expect(game.result.runners[0]).toBe(0);
+ });
  it('resolves lead runners first, records a caught advance, and stops at the third out', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners.set([1, 2, 3]);
-  game.bases.pitchers.set([0, 0, 0]);
-  game.packet[CONTACT_RESPONSIBILITY] = 0.45;
-  game.packet[CONTACT_OUTFIELD] = 0.5;
-  game.packet[CONTACT_SECOND_ATTEMPT] = 0;
-  game.packet[CONTACT_SECOND_OUT] = 0;
-  game.packet[CONTACT_FIRST_ATTEMPT] = 0;
-  game.packet[CONTACT_FIRST_OUT] = 0.99;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-
-  resolveContact(game.result, game.bases, 2, 3, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect(game.result).toMatchObject({ creditedBases: 1, runs: 1, outsAfter: 3, caughtAdvancing: 2, scoreCount: 1 });
-  expect(game.result.scoredRunners[0]).toBe(3);
-  expect([...game.result.runners]).toEqual([1, -1, -1]);
+  game.decisions.packet.set([0.99, 0.99, 0.99, 0.99, 0, 0, 0, 0.99]);
+  const result = resolve(game, OUTCOME_HIT, CF, 1, 2);
+  expect(result).toMatchObject({ creditedBases: 1, runs: 1, outsAfter: 3, caughtAdvancing: 2, scoreCount: 1 });
+  expect(result.scoredRunners[0]).toBe(3);
  });
-
  it('retains every caught-advancing runner when multiple attempts fail on one hit', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners.set([1, 2, -1]);
-  game.bases.pitchers.set([0, 0, -1]);
-  game.packet[CONTACT_RESPONSIBILITY] = 0.45;
-  game.packet[CONTACT_OUTFIELD] = 0.5;
-  game.packet[CONTACT_SECOND_ATTEMPT] = 0;
-  game.packet[CONTACT_SECOND_OUT] = 0;
-  game.packet[CONTACT_FIRST_ATTEMPT] = 0;
-  game.packet[CONTACT_FIRST_OUT] = 0;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-
-  resolveContact(game.result, game.bases, 0, 3, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect(game.result).toMatchObject({ creditedBases: 1, runs: 0, outsAfter: 2, caughtCount: 2, caughtAdvancing: 1 });
-  expect([...game.result.caughtRunners.slice(0, 2)]).toEqual([2, 1]);
-  expect([...game.result.runners]).toEqual([0, -1, -1]);
+  game.decisions.packet[DECISION_SECOND_ATTEMPT] = 0;
+  game.decisions.packet[DECISION_SECOND_OUT] = 0;
+  game.decisions.packet[DECISION_FIRST_ATTEMPT] = 0;
+  game.decisions.packet[DECISION_FIRST_OUT] = 0;
+  const result = resolve(game, OUTCOME_HIT, CF, 1);
+  expect(result).toMatchObject({ creditedBases: 1, runs: 0, outsAfter: 2, caughtCount: 2, caughtAdvancing: 1 });
+  expect([...result.caughtRunners.slice(0, 2)]).toEqual([2, 1]);
+  expect([...result.runners]).toEqual([0, -1, -1]);
  });
-
  it('preserves every occupied lead base when extra-base attempts are declined', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners.set([1, 2, -1]);
-  game.bases.pitchers.set([0, 0, -1]);
-  game.packet[CONTACT_SECOND_ATTEMPT] = 0.99;
-  game.packet[CONTACT_FIRST_ATTEMPT] = 0.99;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-  resolveContact(game.result, game.bases, 0, 3, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect([...game.result.runners]).toEqual([0, 1, 2]);
-  expect(game.result.runs).toBe(0);
+  const result = resolve(game, OUTCOME_HIT, CF, 1);
+  expect([...result.runners]).toEqual([0, 1, 2]);
+  expect(result.runs).toBe(0);
  });
-
  it('lets the trailing runner take third only after the lead runner scores', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners.set([1, 2, -1]);
-  game.bases.pitchers.set([0, 0, -1]);
-  game.packet[CONTACT_SECOND_ATTEMPT] = 0;
-  game.packet[CONTACT_SECOND_OUT] = 0.99;
-  game.packet[CONTACT_FIRST_ATTEMPT] = 0;
-  game.packet[CONTACT_FIRST_OUT] = 0.99;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-  resolveContact(game.result, game.bases, 0, 3, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect([...game.result.runners]).toEqual([0, -1, 1]);
-  expect(game.result.runs).toBe(1);
-  expect(game.result.scoredRunners[0]).toBe(2);
+  game.decisions.packet[DECISION_SECOND_ATTEMPT] = 0;
+  game.decisions.packet[DECISION_FIRST_ATTEMPT] = 0;
+  const result = resolve(game, OUTCOME_HIT, CF, 1);
+  expect([...result.runners]).toEqual([0, -1, 1]);
+  expect(result.runs).toBe(1);
+  expect(result.scoredRunners[0]).toBe(2);
  });
-
  it('scores second and third on a double while retaining the original first-base runner', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners.set([1, 2, 3]);
-  game.bases.pitchers.set([0, 0, 0]);
-  game.packet[CONTACT_FIRST_ATTEMPT] = 0.99;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-  resolveContact(game.result, game.bases, 0, 4, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect([...game.result.runners]).toEqual([-1, 0, 1]);
-  expect(game.result.runs).toBe(2);
-  expect([...game.result.scoredRunners.slice(0, 2)]).toEqual([3, 2]);
+  const result = resolve(game, OUTCOME_HIT, CF, 2);
+  expect([...result.runners]).toEqual([-1, 0, 1]);
+  expect(result.runs).toBe(2);
+  expect([...result.scoredRunners.slice(0, 2)]).toEqual([3, 2]);
  });
-
  it('ends a non-HR walkoff on the winning runner and truncates the credited hit', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners.set([-1, 1, 2]);
-  game.bases.pitchers.set([-1, 0, 0]);
-  game.packet[CONTACT_RESPONSIBILITY] = 0.45;
-  const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-
-  resolveContact(game.result, game.bases, 0, 4, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, 1, game.participants);
-  expect(game.result).toMatchObject({ creditedBases: 1, runs: 1, scoreCount: 1, ended: true, winningAdvance: 1, caughtAdvancing: -1 });
-  expect(game.result.scoredRunners[0]).toBe(2);
-  expect(game.result.runners[1]).toBe(1);
+  const result = resolve(game, OUTCOME_HIT, CF, 2, 0, 1);
+  expect(result).toMatchObject({ creditedBases: 1, runs: 1, scoreCount: 1, ended: true, winningAdvance: 1, caughtAdvancing: -1 });
+  expect(result.scoredRunners[0]).toBe(2);
+  expect(result.runners[1]).toBe(1);
  });
-
  it('makes a thrown-out tag the third out without a run or sacrifice fly', () => {
-  const game = contactFixture();
+  const game = fixture();
   game.bases.runners[2] = 3;
-  game.bases.pitchers[2] = 0;
-  game.packet[CONTACT_RESPONSIBILITY] = 0.65;
-  game.packet[CONTACT_ERROR] = 0.99;
-  game.packet[CONTACT_DOUBLE_PLAY] = 0.99;
-  game.packet[CONTACT_THIRD_ATTEMPT] = 0;
-  game.packet[CONTACT_THIRD_OUT] = 0;
+  game.decisions.packet[DECISION_THIRD_ATTEMPT] = 0;
+  game.decisions.packet[DECISION_THIRD_OUT] = 0;
+  const result = resolve(game, OUTCOME_CAUGHT, CF, 0, 1);
+  expect(result).toMatchObject({ outsAfter: 3, runs: 0, sacrificeFly: false, caughtAdvancing: 3 });
+  expect(result.runners[2]).toBe(-1);
+ });
+ it('enumerates every decision path with probabilities that sum to one', () => {
+  const game = fixture();
+  game.bases.runners.set([1, 2, 3]);
   const prepared = createPreparedDefense(game.defense, testDefenseEnvironment());
-
-  resolveContact(game.result, game.bases, 1, 7, AVERAGE_RATES, 0, 0, game.offense.hitters, 0, prepared, ALL_SKILLS,
-   game.packet, 0, Infinity, game.participants);
-  expect(game.result).toMatchObject({ outsAfter: 3, runs: 0, sacrificeFly: false, caughtAdvancing: 3 });
-  expect(game.result.runners[2]).toBe(-1);
+  let total = 0;
+  let paths = 0;
+  enumerateDecisions(game.decisions, () => resolveContact(game.result, game.bases, 0, OUTCOME_HIT, CF, 1, 0, 0, game.offense.hitters, 0, prepared,
+   game.options, game.decisions, 0, Infinity, game.participants), probability => { total += probability; paths++; });
+  expect(paths).toBeGreaterThan(2);
+  expect(total).toBeCloseTo(1, 12);
  });
 });

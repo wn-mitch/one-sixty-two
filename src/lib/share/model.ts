@@ -1,11 +1,12 @@
 import { createCardViewModel } from '../cards/view-model.ts';
-import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, MODEL_VERSION, SLOTS, STARTER_SLOTS } from '../game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, DEFENSE_METHOD_VERSION, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, SLOTS, STARTER_SLOTS, VALUATION_VERSION } from '../game/types.ts';
+import { ENVIRONMENT_VERSION, GEOMETRY_VERSION } from '../sim/park-types.ts';
 import type { Candidate, Draft, Manifest, Profile, Slot } from '../game/types.ts';
 import type { MediaManifest } from '../media/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 import type { SeasonResult } from '../sim/types.ts';
 import { validateProfile } from '../sim/validation.ts';
-import type { ShareRecord, ShareRenderModel } from './types.ts';
+import type { ShareRecord, ShareRenderModel, ShareStadium } from './types.ts';
 
 export interface CreateShareRenderModelInput {
 	draft: Draft;
@@ -70,7 +71,7 @@ interface ValidatedShareDraft {
 function validateDraftShape(draft: Draft, manifest: Manifest): ValidatedShareDraft {
 	if (manifest.schemaVersion !== 1 || !manifest.dataVersion ||
 		draft.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION || draft.modelVersion !== MODEL_VERSION ||
-		draft.dataVersion !== manifest.dataVersion) {
+		draft.rulesVersion !== RULES_VERSION || draft.dataVersion !== manifest.dataVersion) {
 		throw new Error('Share draft is incompatible with the current dataset');
 	}
 	if (draft.picks.length !== SLOTS.length) throw new Error('Share roster must contain all 14 slots');
@@ -171,13 +172,21 @@ function publicationPins(input: CreateShareRenderModelInput): {
 	};
 }
 
+function shareStadium(draft: Draft, manifest: Manifest): ShareStadium {
+	const summary = manifest.stadiums.find(item => item.ref.id === draft.homeStadium?.id && item.ref.version === draft.homeStadium?.version);
+	if (!summary) throw new Error('Share stadium does not match the current dataset');
+	return { id: summary.ref.id, version: summary.ref.version, name: summary.name, geometryVersion: GEOMETRY_VERSION, environmentVersion: ENVIRONMENT_VERSION };
+}
+
 /** Build the sole render model used by local previews and trusted captures. */
 export function createShareRenderModel(input: CreateShareRenderModelInput): ShareRenderModel {
 	const { draft, result, manifest, media, rankings } = input;
-	if (result.modelVersion !== draft.modelVersion || result.dataVersion !== draft.dataVersion || result.seed !== draft.seed ||
-		result.defenseMethodVersion !== 'defense-v1' || result.valuationVersion !== 'sim-war-v1') {
+	if (result.modelVersion !== draft.modelVersion || result.rulesVersion !== draft.rulesVersion || result.dataVersion !== draft.dataVersion || result.seed !== draft.seed ||
+		result.defenseMethodVersion !== DEFENSE_METHOD_VERSION || result.valuationVersion !== VALUATION_VERSION ||
+		!draft.homeStadium || result.homeStadium.id !== draft.homeStadium.id || result.homeStadium.version !== draft.homeStadium.version) {
 		throw new Error('Share result does not match the drafted season');
 	}
+	const homeStadium = shareStadium(draft, manifest);
 	const record = validateRecord(result);
 	const picks = validateDraftShape(draft, manifest);
 	const profiles = validateProfiles(input.profiles, picks);
@@ -204,9 +213,11 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		schemaVersion: 1,
 		replaySchemaVersion: draft.schemaVersion,
 		modelVersion: result.modelVersion,
+		rulesVersion: result.rulesVersion,
 		dataVersion: result.dataVersion,
 		defenseMethodVersion: result.defenseMethodVersion,
 		valuationVersion: result.valuationVersion,
+		homeStadium,
 		mediaVersion: media?.version ?? null,
 		rankingVersion: rankings?.rankingVersion ?? null,
 		rendererVersion: pins.rendererVersion,

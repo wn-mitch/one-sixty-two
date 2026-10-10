@@ -1,9 +1,5 @@
 import type { DefensiveEnvironment } from '../game/types.ts';
-import {
- createDefensiveReference,
- expectedNeutralPlateAppearanceValue,
- type DefensiveReference
-} from './defense.ts';
+import { createDefensiveReference, expectedNeutralPlateAppearanceValue, type DefensiveReference } from './defense.ts';
 import { stealSuccessProbability } from './defense-rules.ts';
 import type { BatterLine, DefensiveRunComponents, PitcherLine } from './types.ts';
 

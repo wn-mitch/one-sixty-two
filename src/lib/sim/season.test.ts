@@ -1,13 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { MODEL_VERSION, type Draft, type Rates } from '../game/types.ts';
+import { describe, expect, it, vi } from 'vitest';
+
+// Full 162-game seasons run here; parallel suites can slow each one well past the default.
+vi.setConfig({ testTimeout: 60_000 });
+import { MODEL_VERSION, RULES_VERSION, type Draft, type Rates } from '../game/types.ts';
 import { buildSchedule, prepareSeasonInput, simulateSeason } from './season.ts';
+import { contactRecord } from './contact-profile.ts';
 import { testSeason } from './test-fixtures.ts';
 import { validateSeason } from './validation.ts';
 import type { SeasonInput } from './types.ts';
 
 function draftInput() {
  const input = testSeason();
- const draft: Draft = { schemaVersion: 4, dataVersion: input.data.dataVersion, modelVersion: MODEL_VERSION, seed: input.seed,
+ const draft: Draft = { schemaVersion: 5, dataVersion: input.data.dataVersion, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed: input.seed, homeStadium: input.homeStadium,
   picks: input.roster.map(({ profile, slot }) => ({ seasonId: profile.seasonId, slot, franchiseId: profile.franchiseId, decade: 2020 })),
   battingOrder: [...input.battingOrder], starterOrder: [...input.starterOrder], actions: [], currentRoll: null };
  return { input, draft, profiles: input.roster.map(pick => pick.profile) };
@@ -37,7 +41,8 @@ describe('season inputs', () => {
   draft.battingOrder.reverse();
   draft.starterOrder.reverse();
   const prepared = prepareSeasonInput(draft, profiles, input.data);
-  expect(prepared.schemaVersion).toBe(4);
+  expect(prepared.schemaVersion).toBe(5);
+  expect(prepared.homeStadium).toEqual(input.homeStadium);
   expect(prepared.modelVersion).toBe(MODEL_VERSION);
   expect(prepared.battingOrder).toEqual(draft.battingOrder);
   expect(prepared.starterOrder).toEqual(draft.starterOrder);
@@ -186,21 +191,23 @@ describe('full seasons', () => {
  it('uses the drafted bullpen rates and identity for current seasons', () => {
   const strongInput = testSeason(914);
   const weakInput = testSeason(914);
-  const strongRates: Rates = [0, 0, 1, 0, 0, 0, 0, 0];
-  const weakRates: Rates = [0, 0, 0.4, 0, 0, 0, 0.5, 0.1];
+  const strongRates: Rates = [0.02, 0, 0.45, 0.1, 0.02, 0, 0.005, 0.405];
+  const weakRates: Rates = [0.15, 0.02, 0.1, 0.22, 0.08, 0.01, 0.07, 0.35];
   const strongSupport = strongInput.roster.find(pick => pick.slot === 'BP')!.profile;
   const weakSupport = weakInput.roster.find(pick => pick.slot === 'BP')!.profile;
   strongSupport.displayName = 'Strong drafted bullpen';
   strongSupport.pitchingRates = strongRates;
+  strongSupport.contact = contactRecord(strongSupport);
   weakSupport.displayName = 'Weak drafted bullpen';
   weakSupport.pitchingRates = weakRates;
+  weakSupport.contact = contactRecord(weakSupport);
   strongInput.roster.find(pick => pick.slot === 'CL')!.profile.pitching!.IPouts = 0;
   weakInput.roster.find(pick => pick.slot === 'CL')!.profile.pitching!.IPouts = 0;
 
   const strong = simulateSeason(strongInput);
   const weak = simulateSeason(weakInput);
   expect(strong.modelVersion).toBe(MODEL_VERSION);
-  expect(strong).toMatchObject({ defenseMethodVersion: 'defense-v1', valuationVersion: 'sim-war-v1' });
+  expect(strong).toMatchObject({ defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2' });
   expect(strong.pitching[4]).toMatchObject({
    seasonId: strongSupport.seasonId,
    playerId: strongSupport.playerId,

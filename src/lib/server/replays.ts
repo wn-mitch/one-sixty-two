@@ -60,7 +60,7 @@ function isManifest(value: unknown, dataVersion: string): value is Manifest {
 	const manifest = value as Record<string, unknown>;
 	return manifest.schemaVersion === 1 && manifest.dataVersion === dataVersion
 		&& Array.isArray(manifest.franchises) && manifest.franchises.length === 30
-		&& Array.isArray(manifest.candidates);
+		&& Array.isArray(manifest.candidates) && Array.isArray(manifest.stadiums) && manifest.stadiums.length === 30;
 }
 
 /** Load the dataset manifest from the deployed immutable asset binding. */
