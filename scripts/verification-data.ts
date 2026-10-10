@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compareId, SLOTS, type Manifest, type Profile, type ShowcaseCard, type SimulationData } from '../src/lib/game/types.ts';
+import { validateDefensiveEnvironment, validateProfile } from '../src/lib/sim/validation.ts';
 
 export interface CurrentData {
 	schemaVersion: 1;

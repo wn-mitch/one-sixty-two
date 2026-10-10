@@ -19,15 +19,19 @@ export interface StoredReplay {
 }
 
 export class ShareRequestError extends Error {
-	constructor(message: string, readonly status: number) {
+	readonly status: number;
+	constructor(message: string, status: number) {
 		super(message);
+		this.status = status;
 		this.name = 'ShareRequestError';
 	}
 }
 
 export class ShareCapabilityError extends Error {
-	constructor(readonly capability: 'text-clipboard' | 'image-clipboard' | 'native-share') {
+	readonly capability: 'text-clipboard' | 'image-clipboard' | 'native-share';
+	constructor(capability: 'text-clipboard' | 'image-clipboard' | 'native-share') {
 		super(`${capability} is unavailable`);
+		this.capability = capability;
 		this.name = 'ShareCapabilityError';
 	}
 }
