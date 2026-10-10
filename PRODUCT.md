@@ -39,7 +39,9 @@ Brown or sepia surfaces, generic SaaS cards, copied sports artwork, fabricated p
 
 Home leads with a real-profile card wall, an eight-era strip, and all thirty franchise marks. Field, staff, and Results-hand cards use the canonical eight compact plates at a 72px minimum; full candidate and award cards keep the complete era artwork. User-controlled ambient motion is shared by Home and Results, pauses when hidden or offscreen, and yields immediately to the operating system's reduced-motion preference.
 
-Hitter fronts show historical WAR/162, OPS, and a position-specific pre-season `DEF est.`; assigned DH keeps HR, and pitchers keep historical WAR/162, ERA, and SO. Historical WAR/162 controls list order and cosmetic finish, while separate defensive evidence can affect play. Results inspection clearly separates the actual historical season from the simulated 162-0 season and the app's realized `sim-war-v1` estimate.
+Hitter fronts show historical WAR/162, OPS, and a position-specific pre-season `DEF est.`; assigned DH keeps HR, and pitchers keep historical WAR/162, ERA, and SO. Historical WAR/162 controls list order and cosmetic finish, while separate defensive evidence can affect play. Results inspection clearly separates the actual historical season from the simulated 162-0 season and the app's realized `sim-war-v2` estimate.
+
+Completed seasons are saved in a device-local library (`/seasons`). Any two current-version replay links can meet in a deterministic best-of-five head-to-head series (`/h2h`) that recomputes both seasons for seeding; a series is shared as a link and never stored on the server.
 
 Sharing publishes scorecard, diamond, and wide PNGs only after a trusted server validates the current authoritative action history, pins the current assets, and deterministically recomputes the season. A local preview is not presented as the stored publication. Links are released only when all three immutable images exist; preparation errors preserve the replay and leave an explicit retry or download/copy alternative.
 

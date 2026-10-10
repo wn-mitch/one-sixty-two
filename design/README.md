@@ -1,6 +1,6 @@
 # Game design
 
-Status: decisions consolidated through Q59. These documents specify intended behavior, not completed implementation. The phase breakdown is a proposed implementation plan; unresolved mechanics and numerical values remain explicit gates.
+Status: decisions consolidated through Q59. These documents specify intended behavior, not completed implementation. Classic runs a first implementation of S01–S03 (model `contact-v1`, rules `classic-v1`): stadium choice before the first roll, fitted contact profiles, physical flight, and time-based fielding. [README](../README.md) and `/about` describe that current behavior; the remaining phases are a proposed implementation plan, and unresolved mechanics and numerical values remain explicit gates.
 
 ## Start here
 
@@ -46,7 +46,7 @@ Stadium cards do not consume player slots or give extra bonuses on top of their 
 
 ## Readiness and next implementation preparation
 
-Begin with [S01](simulation/phases/01-contact-profiles.md): inventory available evidence, define inferred-profile and matchup contracts, and set calibration criteria before treating any inferred values as ready. Physics equations, distribution fitting, defender reach curves and numeric tolerances are still decisions, not secretly chosen defaults.
+S01–S03 have a first Classic implementation. Its physics equations, distribution fitting, defender reach curves and tolerances are declared in `src/lib/sim/` and the compiler's approximation list; Draft Mode and later phases must consume that model rather than treat it as undecided. Phase documents still define acceptance evidence for future changes to it.
 
 The [Draft open-decision register](draft-mode/open-decisions.md) assigns downstream questions to their owning systems and earliest dependent phases. Do not require answers to the entire catalog before working on the shared simulation.
 

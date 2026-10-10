@@ -18,7 +18,7 @@ This directory owns the shared baseball simulation used by Classic and Draft Mod
 4. [`phases/04-rule-extensions.md`](phases/04-rule-extensions.md) — add prerequisite pitch/count, checked-swing, batting-position, and selected unusual-rule semantics without making every decree a Draft prerequisite.
 5. [`phases/05-weather.md`](phases/05-weather.md) — add variable weather using the existing air/wind inputs after Classic integration. Weather mechanics remain open.
 
-Each phase is a plan with a purpose, usable result, dependencies, in-scope deliverables, named decisions, measurable evidence, and explicit deferrals. “Proposed” means sequencing is accepted as a design direction, not that an algorithm, parameter, or implementation exists.
+Classic runs a first implementation of phases 01–03 as model `contact-v1`; [the project README](../../README.md) describes its current behavior. Each phase is a plan with a purpose, usable result, dependencies, in-scope deliverables, named decisions, measurable evidence, and explicit deferrals. “Proposed” means sequencing is accepted as a design direction, not that an algorithm, parameter, or implementation exists.
 
 ## Shared boundaries
 

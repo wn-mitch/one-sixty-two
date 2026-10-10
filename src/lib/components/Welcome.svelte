@@ -35,6 +35,7 @@
    <button class="primary start" disabled={loading || !manifest} onclick={onStart}>Start draft <span aria-hidden="true">↗</span></button>
    {#if hasSavedDraft}<button class="secondary resume" disabled={loading} onclick={onResume}>Resume draft</button>{/if}
   </div>
+  <p class="library-link"><a href="/seasons">My seasons</a> · <a href="/h2h">Head-to-head</a></p>
   {#if loading}
    <p class="start-status muted" role="status">Loading the historical player pool…</p>
   {:else if showcaseStatus === 'loading'}
@@ -101,6 +102,8 @@
   font-size: var(--text-base);
  }
  .resume { min-height: 3.5rem; white-space: nowrap; }
+ .library-link { margin: var(--space-4) 0 0; font-size: var(--text-sm); }
+ .library-link a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--muted); font-weight: 650; }
  .start-status { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); }
  .era-strip {
   display: flex;

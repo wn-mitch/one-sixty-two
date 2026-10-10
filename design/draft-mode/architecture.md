@@ -10,10 +10,10 @@ Suggested effect families:
 
 | Family | Example configurable fields | Consumer |
 |---|---|---|
-| Plate appearance | BB/SO/1B/2B/3B/HR/OUT weights, optional explicit event redistribution | `matchup.ts` / `rates.ts` |
+| Plate appearance | BB/SO/1B/2B/3B/HR/OUT weights, optional explicit event redistribution | `contact-profile.ts` (`matchup`) / `rates.ts` |
 | Contact and environment | estimated exit-velocity, launch-angle and spray distributions; wind vector, air conditions, fence and roof geometry, terrain | shared contact/flight resolution and fielding |
 | Baserunning | speed multiplier, steal-attempt multiplier, steal-success delta, advancement delta | `advancement.ts` / `inning.ts` |
-| Fielding | position-aware error-rate multiplier, double-play modifier | `inning.ts` |
+| Fielding | position-aware error-rate multiplier, double-play modifier | `contact.ts` / `inning.ts` |
 | Game rules | regulation innings, outs per half-inning, extra-inning rules, closer-entry window, advancement limits, base route, steal permission, force chains, bunt awards, ring rulings | game/inning rules, workload and win expectancy |
 | Pitch and batting position | count thresholds, foul/check-swing rules, legal batting positions and their contact effects | a disclosed pitch/count and positioning model or calibrated abstraction |
 | Economy | full-roster salary cap, obligations, cap progression, banked cash, nine-game minimum/ticket/win payouts, franchise rewards and price modifiers | draft, checkpoint, shop and roster rules |
@@ -40,7 +40,7 @@ Not every comic premise warrants a simulation effect. Flavor-only stadium jokes 
 - **Opening recovery:** generate finite common-only cleanup packs with role/affordability coverage and exclusive ownership, integrated with post-draft trades/cuts before legal submission.
 
 
-Classic continues to use its fixed-opponent data path. Draft constructs opponents from the seven other cube rosters rather than the fixed opponent compiler. Integration candidates from the source design include `src/lib/sim/season.ts`, `game.ts`, `inning.ts`, `matchup.ts`, `workload.ts`, `win-expectancy.ts`, `src/lib/game/draft.ts`, `session.svelte.ts`, and replay serialization; confirm current locations before implementation.
+Classic continues to use its fixed-opponent data path. Draft constructs opponents from the seven other cube rosters rather than the fixed opponent compiler. Integration candidates from the source design include `src/lib/sim/season.ts`, `game.ts`, `inning.ts`, `contact-profile.ts`, `contact.ts`, `fielding.ts`, `flight.ts`, `park.ts`, `workload.ts`, `win-expectancy.ts`, `src/lib/game/draft.ts`, `session.svelte.ts`, and replay serialization; confirm current locations before implementation.
 
 ## Replayability, collecting, and sharing
 

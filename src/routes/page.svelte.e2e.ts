@@ -4,10 +4,10 @@ import { expect, test } from '@playwright/test';
 import type { APIRequestContext, BrowserContext, Page, TestInfo } from '@playwright/test';
 import { TEST_SHARE_CAPTURE_TOKEN } from '../../scripts/test-capture-contract.ts';
 import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.ts';
-import type { Draft, Slot } from '../lib/game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, type Draft, type Slot } from '../lib/game/types.ts';
 import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
 import type { ShareFormat, SharePublication } from '../lib/share/types.ts';
-import { currentManifest, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { chooseStadium, currentManifest, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
 import { verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
 
@@ -199,6 +199,7 @@ async function pickFirstSeason(page: Page, request: APIRequestContext) {
 async function finishRoster(page: Page, request: APIRequestContext) {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
+	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	for (let index = 0; index < 14; index++) {
 		await pickFirstSeason(page, request);
@@ -232,6 +233,7 @@ test('renders complete decodable franchise marks without substituting a wordmark
 test('keeps the slot choice and draft action reachable after choosing a season', async ({ page, request }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
+	await chooseStadium(page);
 	const { target, sheet } = await selectExactSeason(page, request);
 	await sheet.locator(`[data-slot="${target.slot}"]`).click();
 	const confirmation = sheet.locator('.pick-confirmation');
@@ -254,6 +256,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	page.on('pageerror', error => errors.push(error.message));
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
+	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeFocused();
 	const savedRoll = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll);
@@ -391,18 +394,21 @@ test('starts a clean draft from a replay link without touching the local save', 
 	expect(payload.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
 	await page.goto(payload.url);
 	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1'))).toBe(local);
+	// The replay recomputes first; New draft only skips its confirmation once results are showing.
+	await expect(page.getByRole('heading', { name: /^Final record/ })).toBeVisible({ timeout: 120000 });
 	await page.getByRole('button', { name: 'New draft', exact: true }).click();
 	await expect(page).toHaveURL(/\/\?new=1$/);
+	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).picks.length)).toBe(0);
-	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).schemaVersion)).toBe(4);
+	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).schemaVersion)).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
 });
 
 test('rejects invalid replay uploads and unknown replay ids', async ({ request }) => {
 	const notJson = await request.post('/api/replays', { headers: { 'content-type': 'application/json' }, data: 'not json' });
 	expect(notJson.status()).toBe(400);
 	const current = await (await request.get('/data/current.json')).json() as { dataVersion: string };
-	const envelope = { schemaVersion: 4, modelVersion: 'pa-v3', seed: 1, actions: [], picks: [], battingOrder: [], starterOrder: [] };
+	const envelope = { schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, homeStadium: null, seed: 1, actions: [], picks: [], battingOrder: [], starterOrder: [] };
 	const wrongDataset = await request.post('/api/replays', { data: { ...envelope, dataVersion: 'f'.repeat(64) } });
 	expect(wrongDataset.status()).toBe(409);
 	// A structurally incomplete but version-compatible snapshot is invalid, not incompatible.
@@ -427,6 +433,7 @@ test('retries a failed chunk without rerolling the committed draft', async ({ pa
 		return route.continue();
 	});
 	await page.getByRole('button', { name: /Start draft/ }).click();
+	await chooseStadium(page);
 	await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
 	const committed = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll);
 	await page.getByRole('button', { name: 'Retry', exact: true }).click();
@@ -443,8 +450,9 @@ test('preserves incompatible saved bytes until an explicit new draft', async ({ 
 	await expect(page.getByRole('alert')).toContainText('Saved draft is incompatible');
 	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1'))).toBe('{"schemaVersion":0}');
 	await page.getByRole('button', { name: 'Start new draft', exact: true }).click();
+	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).schemaVersion)).toBe(4);
+	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).schemaVersion)).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
 });
 
 test('permits in-memory play when storage is blocked', async ({ page }) => {
@@ -453,6 +461,7 @@ test('permits in-memory play when storage is blocked', async ({ page }) => {
 	await page.goto('/');
 	await expect(page.getByText('Resume unavailable: browser storage is blocked. You can still play.')).toBeVisible();
 	await page.getByRole('button', { name: /Start draft/ }).click();
+	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 });
 
@@ -479,6 +488,7 @@ for (const invalid of ['empty', 'wrong-roll']) {
 			return route.continue();
 		});
 		await page.getByRole('button', { name: /Start draft/ }).click();
+		await chooseStadium(page);
 		await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible({ timeout: 5000 });
 		const committed = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll);
 		await page.getByRole('button', { name: 'Retry', exact: true }).click();
@@ -491,6 +501,7 @@ for (const invalid of ['empty', 'wrong-roll']) {
 test('route teardown cancels resumed hydration without overwriting a completed save', async ({ page, request }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
+	await chooseStadium(page);
 	for (let index = 0; index < 14; index++) {
 		await pickFirstSeason(page, request);
 		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();

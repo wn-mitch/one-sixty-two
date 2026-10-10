@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
-import { availableCandidates, createDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
+import { availableCandidates, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import type { Candidate, Draft, Manifest, Profile, Slot } from '../lib/game/types.ts';
 import type { MediaManifest, MediaPointer } from '../lib/media/types.ts';
 import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
@@ -48,7 +48,7 @@ export async function cardScenario(
 ): Promise<CardScenario> {
  const profilesByChunk = new Map<string, Profile[]>();
  for (let seed = 1; seed <= 500; seed++) {
-  const draft = rollDraft(createDraft(manifest, seed), manifest);
+  const draft = rollDraft(selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id), manifest);
   if (!draft.currentRoll) continue;
   const chunkUrl = manifest.chunks[`${draft.currentRoll.franchiseId}-${draft.currentRoll.decade}`];
   let profiles = profilesByChunk.get(chunkUrl);
@@ -75,4 +75,11 @@ export async function openSavedDraft(page: Page, draft: Draft): Promise<void> {
  await page.goto('/');
  await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
  await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+}
+
+/** Picks the first stadium in the deck; the session rolls the first franchise right after. */
+export async function chooseStadium(page: Page): Promise<void> {
+ const deck = page.getByRole('region', { name: 'Choose your home stadium' });
+ await deck.getByRole('radio').first().check();
+ await deck.getByRole('button', { name: 'Draft at this stadium', exact: true }).click();
 }

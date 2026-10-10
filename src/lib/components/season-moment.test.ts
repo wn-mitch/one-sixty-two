@@ -125,4 +125,13 @@ describe('season moment copy', () => {
   expect(copy.action).toContain('doubled');
   expect(copy.action).not.toContain('walk-off');
  });
+ it('names both head-to-head teams instead of "your club" and "Opponent hitter"', () => {
+  const labels = { challenge: 'Aces', opponent: 'Bombers' };
+  const copy = formatSeasonMoment(moment({ challengeBatting: false, isHome: false, challengeRunsAfter: 1, opponentRunsAfter: 7 }), finalGame({ challengeRuns: 1, opponentRuns: 7, win: false }), labels);
+  expect(copy.matchup).toBe('Game 42 · Aces at Bombers');
+  expect(copy.action).toMatch(/^Bombers hitter Example Batter /);
+  expect(copy.score).toBe('Before the play, Aces trailed 1–3; after it, Aces trailed 1–7.');
+  expect(copy.final).toBe('Final: Aces 1–7 Bombers');
+  expect(JSON.stringify(copy)).not.toMatch(/your club|Opponent hitter/);
+ });
 });

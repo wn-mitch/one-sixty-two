@@ -7,9 +7,10 @@ import {
 	legalSlots,
 	reassignPick,
 	rollDraft,
+	selectHomeStadium,
 	type LegalReassignment
 } from '../lib/game/draft.ts';
-import { HITTER_SLOTS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Profile } from '../lib/game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Profile } from '../lib/game/types.ts';
 import { currentManifest, openSavedDraft, STORAGE_KEY } from './draft-test-fixtures.ts';
 
 const FIXTURE_SEED = 2;
@@ -44,7 +45,7 @@ function displayedCandidates(draft: Draft, manifest: Manifest): Candidate[] {
 }
 
 function pendingAssignmentScenario(manifest: Manifest): AssignmentScenario {
-	let draft = createDraft(manifest, FIXTURE_SEED);
+	let draft = selectHomeStadium(createDraft(manifest, FIXTURE_SEED), manifest, manifest.stadiums[0].ref.id);
 	while (draft.picks.length < SLOTS.length - 1) {
 		draft = rollDraft(draft, manifest);
 		for (const target of displayedCandidates(draft, manifest)) {
@@ -257,7 +258,7 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await expect.poll(async () => (await savedDraft(page)).actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
 	const completed = await savedDraft(page);
 	expect(completed.picks.at(-1)?.seasonId).toBe(scenario.target.seasonId);
-	expect(completed.schemaVersion).toBe(4);
+	expect(completed.schemaVersion).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
 	expect(completed.actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
 });
 

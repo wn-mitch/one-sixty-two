@@ -76,6 +76,10 @@ Permanent exact-season picks, qualification-aware browsing, local resume, lineup
 
 Move first selects a committed hitter on the first click and raises its front for review on the second click. Review first opens the front immediately and offers Move card on the reverse. Movement highlights only engine-approved moves or reciprocal swaps. These assignments apply immediately, preserving the current roll and any unaffected legal candidate destination. Pitching tiles review rather than reassign; rotation order stays in the lineup editor. Inspection never replaces a pending candidate or shifts the field. After fourteen picks the existing lineup editor takes over.
 
+### Stadium choice
+
+A new draft opens on the stadium deck before the first roll. The deck shows all thirty current parks alphabetically as radio cards: two columns on phones, three from 48rem, four from 72rem. Each StadiumCard shows the franchise mark, name and reference year, a field-outline SVG with the diamond, LF/CF/RF distances, wall-height range, roof, and elevation. Estimated distances carry `est.` and unsourced elevation says so. A sticky footer names the selection and holds Draft at this stadium, disabled until a park is chosen. Stadium cards show physical facts only, never ratings or bonuses.
+
 ### Desktop drafting
 
 Wide mode starts at 1100px, or 1024px in landscape. The draft shell has a 1440px maximum width and 24px horizontal gutters. A single sticky header combines the wordmark, compact team-colour roll identity and bounded year range, pick count, Rules & model, and New draft. The team mark and roll identity share a 44px height, with 10px padding above and below. Do not stack a second global header, progress toolbar, and large roll banner above the desktop cards.
@@ -126,11 +130,17 @@ Statistics use semantic tables, aligned numeric columns, and labelled internal h
 
 Season in review and game boxes share the dense `.stat-table` scorebook treatment in `src/routes/layout.css`: 12px tabular data, 36px baseline rows that grow for complete identities, striped grounds, grouped columns, and a sticky name/year column. Portrait date labels do not appear inside statistical rows. Horizontal scrolling stays within labelled regions and joins the tab order only when necessary. The wide game log has two columns, with expanded details spanning both; narrow screens retain one chronological list. Every existing statistic and all 162 game boxes remain accessible.
 
+### Saved seasons and head-to-head
+
+`/seasons` and `/h2h` use the narrow page shell (48rem and 56rem) with a muted back link, a large heading, and a one-sentence lede. Each saved season shows its name or record, home stadium, save date, and MVP, with the roster in a collapsible text list. Playable entries offer Play head-to-head and Copy challenge link; Rename edits inline and Delete removes the entry. Retired entries are dimmed, carry a Retired notice, and keep their roster and record without play actions. Copy status is announced in a live region; a denied clipboard shows the link as text.
+
+Head-to-head setup is two Team A/Team B fieldsets, side by side from 48rem, each with a replay-link field, an optional saved-season select, and an optional team name. Field errors are attached to their input and the first invalid field takes focus. Progress reports both regular seasons and the current series game, with Cancel while running. Series results lead with the champion and score, both seeds with records and home stadiums, and Copy series link. The series MVP card, series swings from Team A's side, every game with its stadium, running score and MVP, and series totals follow. The seeding tie rule appears only when records are equal.
+
 ### Sharing and publication
 
 Results offers scorecard 1080×1350, diamond 1080×1350, and wide 1200×630 compositions through one `ShareArtwork` component built from real Card fronts. Until publication, the responsive preview is explicitly local and carries no fabricated public URL. The published preview, download, clipboard image, replay metadata, and crawler image all resolve to the same stored PNG bytes; capture uses a fixed readable finish-light pose and no ambient animation.
 
-The first Challenge, Copy link, Download PNG, or Copy image action stores the current replay and requests publication. The server accepts only its replay ID, validates schema 4 / `pa-v3` action history and pinned core/media/ranking/renderer versions, recomputes the full season, and captures all three authenticated internal surfaces. Content-addressed model and PNG objects are written before a conditional immutable replay manifest, so a failed partial capture exposes no completed publication and retry can safely reuse immutable work. The public link is not distributed until the wide crawler image also exists. Native sharing may need a second tap after preparation; denied/unsupported clipboards expose a selected readonly link or Download PNG instead of reporting success.
+The first Challenge, Copy link, Download PNG, or Copy image action stores the current replay and requests publication. The server accepts only its replay ID, validates schema 5 / `contact-v1` / `classic-v1` action history and pinned core/media/ranking/renderer versions, recomputes the full season, and captures all three authenticated internal surfaces. Content-addressed model and PNG objects are written before a conditional immutable replay manifest, so a failed partial capture exposes no completed publication and retry can safely reuse immutable work. The public link is not distributed until the wide crawler image also exists. Native sharing may need a second tap after preparation; denied/unsupported clipboards expose a selected readonly link or Download PNG instead of reporting success.
 
 ## Verification
 

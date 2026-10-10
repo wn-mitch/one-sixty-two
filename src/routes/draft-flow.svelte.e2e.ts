@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
 import { STORAGE_KEY, cardScenario, currentManifest, openSavedDraft, type CardScenario } from './draft-test-fixtures.ts';
 
@@ -33,7 +33,7 @@ async function expectNoPersistenceChange(page: Page, before: Draft): Promise<voi
 async function findPitcherScenario(request: APIRequestContext, manifest: Manifest): Promise<CardScenario> {
 	const chunks = new Map<string, Profile[]>();
 	for (let seed = 1; seed <= 500; seed++) {
-		const draft = rollDraft(createDraft(manifest, seed), manifest);
+		const draft = rollDraft(selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id), manifest);
 		const roll = draft.currentRoll;
 		if (!roll) continue;
 		const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
@@ -60,7 +60,7 @@ async function retentionScenario(request: APIRequestContext, manifest: Manifest)
 	const bySeason = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
 
 	for (let seed = 1; seed <= 500; seed++) {
-		const draft = rollDraft(createDraft(manifest, seed), manifest);
+		const draft = rollDraft(selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id), manifest);
 		const roll = draft.currentRoll;
 		if (!roll) continue;
 		const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
@@ -101,7 +101,7 @@ async function blockedScenario(request: APIRequestContext, manifest: Manifest): 
 	const profilesByChunk = new Map<string, Profile[]>();
 	const bySeason = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
 	for (let seed = 1; seed <= 20; seed++) {
-		let draft = createDraft(manifest, seed);
+		let draft = selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id);
 		for (let pick = 0; pick < 13; pick++) {
 			draft = rollDraft(draft, manifest);
 			const roll = draft.currentRoll!;

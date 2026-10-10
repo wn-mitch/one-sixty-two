@@ -4,7 +4,7 @@ import { createBox } from './game.ts';
 import { testDefenseEnvironment, testTeam } from './test-fixtures.ts';
 import { centeredPlateAppearanceValue, createRunValueModel, estimatedHitterWar, estimatedPitcherWar } from './value.ts';
 
-describe('sim-war-v1 replacement accounting', () => {
+describe('sim-war-v2 replacement accounting', () => {
  it('combines batting, running, defense and 20 replacement runs per 600 PA without clamping negatives', () => {
   const line = createBox(testTeam('hitter-war')).batting[0];
   Object.assign(line, { PA: 600, battingRuns: -30, stealRuns: -5, defensiveRuns: -6 });

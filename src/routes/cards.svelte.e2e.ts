@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { createDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
+import { createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import type { Draft, Manifest, Profile, Slot } from '../lib/game/types.ts';
 import { selectLogo, selectPhoto } from '../lib/media/client.ts';
 import { rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
@@ -316,7 +316,7 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 test('orders displayed exact seasons after a lower-ranked season is chosen', async ({ page, request }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	const [manifest, rankings] = await Promise.all([currentManifest(request), currentRankings(request)]);
-	const draft = rollDraft(createDraft(manifest, 13), manifest);
+	const draft = rollDraft(selectHomeStadium(createDraft(manifest, 13), manifest, manifest.stadiums[0].ref.id), manifest);
 	const roll = draft.currentRoll!;
 	const response = await request.get(manifest.chunks[`${roll.franchiseId}-${roll.decade}`]);
 	expect(response.ok()).toBe(true);
@@ -349,7 +349,7 @@ test('orders displayed exact seasons after a lower-ranked season is chosen', asy
 
 test('fits complete candidate names after phone and desktop resizing with reduced motion', async ({ page, request }) => {
 	const manifest = await currentManifest(request);
-	await openSavedDraft(page, rollDraft(createDraft(manifest, 13), manifest));
+	await openSavedDraft(page, rollDraft(selectHomeStadium(createDraft(manifest, 13), manifest, manifest.stadiums[0].ref.id), manifest));
 	await page.locator('.candidate-card').first().scrollIntoViewIfNeeded();
 	await expect(page.locator('.candidate-content [data-layer="name.family"]').first()).toBeVisible();
 	await page.evaluate(() => document.fonts.ready);

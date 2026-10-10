@@ -68,9 +68,12 @@ function outcome(moment: SeasonMoment): string {
  }
 }
 
-function scoreState(challenge: number, opponent: number): string {
+/** Team names for head-to-head copy; season copy uses the default "your club" wording. */
+export interface MomentLabels { challenge: string; opponent: string }
+
+function scoreState(challenge: number, opponent: number, labels?: MomentLabels): string {
  if (challenge === opponent) return `the score was tied ${challenge}–${opponent}`;
- return `your club ${challenge > opponent ? 'led' : 'trailed'} ${challenge}–${opponent}`;
+ return `${labels?.challenge ?? 'your club'} ${challenge > opponent ? 'led' : 'trailed'} ${challenge}–${opponent}`;
 }
 
 function isWalkOff(moment: SeasonMoment): boolean {
@@ -93,16 +96,23 @@ function percentagePoints(value: number): string {
  return `${points > 0 ? '+' : '−'}${Math.abs(points).toFixed(1)} pp`;
 }
 
-export function formatSeasonMoment(moment: SeasonMoment, game?: GameResult): SeasonMomentCopy {
- const actor = moment.challengeBatting ? moment.batterName : `Opponent hitter ${moment.batterName}`;
+export function formatSeasonMoment(moment: SeasonMoment, game?: GameResult, labels?: MomentLabels): SeasonMomentCopy {
+ const actor = labels
+  ? `${moment.challengeBatting ? labels.challenge : labels.opponent} hitter ${moment.batterName}`
+  : moment.challengeBatting ? moment.batterName : `Opponent hitter ${moment.batterName}`;
  const walkOff = isWalkOff(moment) ? ' It was a walk-off.' : '';
+ const final = !game ? null : labels
+  ? `Final: ${labels.challenge} ${game.challengeRuns}–${game.opponentRuns} ${labels.opponent}`
+  : `Final: ${game.win ? 'W' : 'L'}, ${game.challengeRuns}–${game.opponentRuns}`;
  return {
-  matchup: `Game ${moment.gameNumber} · ${moment.isHome ? 'vs.' : 'at'} ${moment.opponentName}`,
+  matchup: labels
+   ? `Game ${moment.gameNumber} · ${labels.challenge} ${moment.isHome ? 'vs.' : 'at'} ${labels.opponent}`
+   : `Game ${moment.gameNumber} · ${moment.isHome ? 'vs.' : 'at'} ${moment.opponentName}`,
   situation: `${moment.half === 'top' ? 'Top' : 'Bottom'} of the ${ordinal(moment.inning)} · ${outs(moment.outsBefore)} · ${bases(moment.basesBefore)}`,
   action: `${actor} ${outcome(moment)} against ${moment.pitcherName}.${walkOff}`,
-  score: `Before the play, ${scoreState(moment.challengeRunsBefore, moment.opponentRunsBefore)}; after it, ${scoreState(moment.challengeRunsAfter, moment.opponentRunsAfter)}.`,
+  score: `Before the play, ${scoreState(moment.challengeRunsBefore, moment.opponentRunsBefore, labels)}; after it, ${scoreState(moment.challengeRunsAfter, moment.opponentRunsAfter, labels)}.`,
   winChance: `${percentage(moment.winBefore)} → ${percentage(moment.winAfter)}`,
   swing: percentagePoints(moment.swing),
-  final: game ? `Final: ${game.win ? 'W' : 'L'}, ${game.challengeRuns}–${game.opponentRuns}` : null
+  final
  };
 }

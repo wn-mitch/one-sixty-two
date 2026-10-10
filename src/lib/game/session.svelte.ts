@@ -1,6 +1,7 @@
 import { goto } from '$app/navigation';
-import { loadChunk, loadManifest, loadSimulation } from './data.ts';
+import { loadChunk, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
 import { commitPick, createDraft, reassignPick, rollDraft, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
+import { saveSeason } from './library.ts';
 import { persistDraft, restoreDraft, type SavedPhase } from './persistence.ts';
 import { newSeed } from './random.ts';
 import {
@@ -154,6 +155,14 @@ export class Session {
    if (!this.incompatible) this.retryAction = this.draft ? 'resume' : 'initialize';
   } finally { if (epoch === this.epoch) this.loading = false; }
  }
+ /** Every completed season of the player's own draft joins the device library; viewed replays do not. */
+ private async saveToLibrary(result: SeasonResult, epoch: number): Promise<void> {
+  if (this.shared || !this.draft || !this.manifest) return;
+  let notice: string | null;
+  try { notice = await saveSeason(localStorage, this.draft, result, this.profiles, this.manifest); }
+  catch { notice = 'Your season library is unavailable: browser storage is blocked or full.'; }
+  if (notice && epoch === this.epoch) this.storageNotice = notice;
+ }
  private save(phase: SavedPhase): void {
   if (!this.draft || this.shared) return;
   try { this.storageNotice = persistDraft(localStorage, this.draft, phase, this.result ?? undefined) ?? ''; }
@@ -164,16 +173,10 @@ export class Session {
   const manifest = this.manifest;
   const draft = this.draft;
   const epoch = this.epoch;
-  const chunks = new Map(draft.picks.map(pick => [`${pick.franchiseId}-${pick.decade}`, pick]));
-  const pools = await Promise.all([...chunks.values()].map(roll => loadChunk(manifest, roll)));
+  const profiles = await loadDraftProfiles(manifest, draft);
   if (epoch !== this.epoch) return;
-  const available = new Map(pools.flat().map(profile => [profile.seasonId, profile]));
   this.selected.clear();
-  for (const pick of draft.picks) {
-   const profile = available.get(pick.seasonId);
-   if (!profile) throw new Error('Saved roster profile is missing from the dataset');
-   this.selected.set(profile.seasonId, profile);
-  }
+  for (const profile of profiles) this.selected.set(profile.seasonId, profile);
   this.profiles = [...this.selected.values()];
  }
  async resume(): Promise<void> {
@@ -370,6 +373,7 @@ export class Session {
      this.worker?.terminate();
      this.worker = null;
      this.save('results');
+     void this.saveToLibrary(message.result, epoch);
      if (this.skipReveal) this.showResults();
      else this.revealTimer = window.setInterval(() => {
       this.revealed = Math.min(162, this.revealed + 1);

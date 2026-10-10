@@ -1,4 +1,4 @@
-import { commitPick, createDraft, legalSlots, rollDraft } from '../game/draft.ts';
+import { commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import { HITTER_SLOTS, POSITIONS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
 import type { WarSeasonRanking, WarRankings } from '../rankings/types.ts';
@@ -198,7 +198,7 @@ function canonicalForRoll(draft: Draft, roster: RosterProfile[]): RosterProfile 
 }
 
 function draftStates(manifest: Manifest, roster: RosterProfile[]): Pick<ExampleFixtures, 'initialDraft' | 'choosingDraft' | 'partialDraft' | 'completeDraft'> {
- const initialDraft = createDraft(manifest, SEED);
+ const initialDraft = selectHomeStadium(createDraft(manifest, SEED), manifest, manifest.stadiums[0].ref.id);
  let draft = rollDraft(initialDraft, manifest);
  const choosingDraft = draft;
  let partialDraft: Draft | null = null;

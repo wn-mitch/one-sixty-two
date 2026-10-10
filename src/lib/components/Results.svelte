@@ -148,7 +148,10 @@
 				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'scorecard')}>{sharing ? 'Preparing…' : 'Challenge a friend'}</button>
 				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'scorecard')}>{sharing ? 'Preparing…' : 'Copy link'}</button>
 			</div>
-			<button class="quiet new-draft" type="button" onclick={onNew}>New draft</button>
+			<div class="more-actions">
+				<a class="button quiet" href="/seasons">Play head-to-head</a>
+				<button class="quiet new-draft" type="button" onclick={onNew}>New draft</button>
+			</div>
 		</div>
 
 		<dl class="season-ledger">
@@ -360,7 +363,8 @@
 	.season-ledger dd.perfect { color: var(--success); }
 	.score-actions { display: grid; align-content: center; gap: var(--space-3); }
 	.share-shortcuts { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-	.new-draft { justify-self: start; }
+	.more-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-self: start; }
+	.more-actions a { display: inline-flex; align-items: center; text-decoration: none; }
 	.season-review { display: grid; gap: var(--space-6); min-width: 0; }
 	.review-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--border); }
 	.review-heading h3 { font-size: var(--text-xl); }
@@ -402,7 +406,7 @@
 		.season-ledger { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 		.score-actions { justify-items: end; }
 		.share-shortcuts { justify-content: end; }
-		.new-draft { justify-self: end; }
+		.more-actions { justify-self: end; }
 	}
 	@media (max-width: 40rem) {
 		.results { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }

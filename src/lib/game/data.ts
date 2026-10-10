@@ -1,4 +1,4 @@
-import { DEFENSE_METHOD_VERSION, POSITIONS, SLOTS, VALUATION_VERSION, compareId, type Manifest, type Position, type Profile, type Roll, type ShowcaseCard, type SimulationData } from './types.ts';
+import { DEFENSE_METHOD_VERSION, POSITIONS, SLOTS, VALUATION_VERSION, compareId, type Draft, type Manifest, type Position, type Profile, type Roll, type ShowcaseCard, type SimulationData } from './types.ts';
 import { resolveStadium, validateDefensiveEnvironment, validateProfile, validateStadiumDeck, validateTeam } from '../sim/validation.ts';
 
 const DATA_VERSION = /^[a-f0-9]{64}$/;
@@ -71,6 +71,17 @@ export async function loadChunk(manifest: Manifest, roll: Roll): Promise<Profile
    const candidate = expected.get(profile.seasonId);
    return !candidate || !matchesCandidate(profile, candidate);
   })) throw new Error('Dataset error: the loaded seasons do not match this roll. Your draft is preserved. Please retry.');
+ });
+}
+/** The drafted profiles in pick order, loading each roster chunk once. */
+export async function loadDraftProfiles(manifest: Manifest, draft: Pick<Draft, 'picks'>): Promise<Profile[]> {
+ const chunks = new Map(draft.picks.map(pick => [`${pick.franchiseId}-${pick.decade}`, pick]));
+ const pools = await Promise.all([...chunks.values()].map(roll => loadChunk(manifest, roll)));
+ const available = new Map(pools.flat().map(profile => [profile.seasonId, profile]));
+ return draft.picks.map(pick => {
+  const profile = available.get(pick.seasonId);
+  if (!profile) throw new Error('Saved roster profile is missing from the dataset');
+  return profile;
  });
 }
 /** Read one compiler-selected card, preserving its canonical identity and slot. */

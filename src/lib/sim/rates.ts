@@ -40,7 +40,7 @@ export function prepareRates(events: Rates, source: Rates, target: Rates, park =
  return normalize(weights);
 }
 
-/** Neutral categorical matchup; gameplay adds platoon and home-park modifiers. */
+/** Neutral categorical matchup; gameplay adds platoon, and venues act through batted-ball flight. */
 export function matchupRates(batter: Rates, pitcher: Rates, league: Rates): Rates {
  if (league.some(value => value <= 0)) throw new Error('Invalid matchup league rates');
  return normalize(batter.map((value, index) => value * pitcher[index] / league[index]));
