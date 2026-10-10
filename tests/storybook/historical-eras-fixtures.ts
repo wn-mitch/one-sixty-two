@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test';
-import { syntheticProfile } from '../../src/lib/sim/fixtures.ts';
+import { syntheticProfile, syntheticStadiumSummaries } from '../../src/lib/sim/fixtures.ts';
 import type { Manifest, Profile, ShowcaseCard } from '../../src/lib/game/types.ts';
 import { SLOTS } from '../../src/lib/game/types.ts';
 
@@ -48,6 +48,7 @@ function buildManifest(decade: number, profiles: Profile[]): Manifest {
 		sourceCommit: 'fixture',
 		franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${String(index).padStart(2, '0')}`, name: `Fixture Club ${String(index).padStart(2, '0')}`, decades: [decade] })),
 		candidates,
+		stadiums: syntheticStadiumSummaries(Array.from({ length: 30 }, (_, index) => `F${String(index).padStart(2, '0')}`)),
 		chunks: Object.fromEntries(profiles.map(profile => [
 			`${profile.franchiseId}-${decade}`,
 			`/data/${DATA_VERSION}/${profile.franchiseId}-${decade}.json`

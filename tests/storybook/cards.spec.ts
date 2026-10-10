@@ -224,7 +224,7 @@ test.describe('Cards workshop with system reduced motion', () => {
 		await openStory(page, 'cards-motion--idle-drift');
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
-		await expect(settings.getByRole('status')).toContainText('system preference reduces motion');
+		await expect(settings.getByRole('status').filter({ hasText: 'system preference reduces motion' })).toBeVisible();
 		await expect(settings.getByRole('switch', { name: 'Motion', exact: true })).toBeDisabled();
 		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
 		await expect.poll(() => inlineTransform(page)).toBe('');

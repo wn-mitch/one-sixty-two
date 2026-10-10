@@ -22,7 +22,7 @@
 	let agentationHost: HTMLDivElement;
 	let normalDialHost: HTMLDivElement;
 	let agentationRoot = $state.raw<Root | null>(null);
-	let portalContainer = $state<HTMLDialogElement | null>(null);
+	let portalContainer = $state<HTMLElement | null>(null);
 
 	$effect(() => {
 		agentationRoot?.render(createElement<AgentationProps>(Agentation, {
@@ -44,6 +44,7 @@
 		let dialGeneration = 0;
 		let dialQueue = Promise.resolve();
 		const panelOpenBeforeSheet = new Map<string, boolean>();
+		let currentSheet: HTMLDialogElement | null = null;
 		let observedShadow: ShadowRoot | null = null;
 		const observerOptions: MutationObserverInit = { attributes: true, attributeFilter: ['open'], childList: true, subtree: true };
 
@@ -85,7 +86,7 @@
 
 		function synchronizeTools(): void {
 			const sheet = document.querySelector<HTMLDialogElement>('.settings-dialog[open]') ?? document.querySelector<HTMLDialogElement>('.draft-sheet[open]');
-			if (portalContainer !== sheet) {
+			if (currentSheet !== sheet) {
 				for (const panel of DialStore.getPanels('panel')) {
 					const previous = panelOpenBeforeSheet.get(panel.id);
 					if (previous !== undefined) DialStore.setPanelOpen(panel.id, previous);
@@ -98,8 +99,11 @@
 						DialStore.setPanelOpen(panel.id, true);
 					}
 				}
-				portalContainer = sheet;
+				currentSheet = sheet;
 			}
+			// A raised card reader sits in the top layer above the sheet, so the toolbar follows it there.
+			const layer = document.querySelector<HTMLElement>('[data-card-reader]:popover-open') ?? sheet;
+			if (portalContainer !== layer) portalContainer = layer;
 
 			const sheetContent = sheet?.querySelector<HTMLElement>('.sheet-content');
 			relocateDial(sheetContent ?? normalDialHost, sheetContent != null);
@@ -118,10 +122,13 @@
 
 		const observer = new MutationObserver(synchronizeTools);
 		observer.observe(document.documentElement, observerOptions);
+		// Popover toggles change no attributes, so the observer cannot see a card reader open.
+		document.addEventListener('toggle', synchronizeTools, true);
 		synchronizeTools();
 
 		return () => {
 			destroyed = true;
+			document.removeEventListener('toggle', synchronizeTools, true);
 			++dialGeneration;
 			observer.disconnect();
 			for (const panel of DialStore.getPanels('panel')) {
@@ -130,6 +137,7 @@
 			}
 			panelOpenBeforeSheet.clear();
 			portalContainer = null;
+			currentSheet = null;
 			agentationRoot = null;
 			root.unmount();
 

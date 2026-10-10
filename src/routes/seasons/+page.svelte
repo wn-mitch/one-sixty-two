@@ -1,13 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import SeasonLibrary from '#lib/components/SeasonLibrary.svelte';
-	import { loadManifest } from '#lib/game/data.ts';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
 	import { deleteSeason, loadLibrary, renameSeason, type LibraryView } from '#lib/game/library.ts';
 	import { copyShareLink, decodeReplay, storeReplay } from '#lib/game/share.ts';
-	import type { Manifest } from '#lib/game/types.ts';
+	import { loadSeriesHistory, type SeriesRecord } from '#lib/game/series-history.ts';
+	import type { Manifest, Profile } from '#lib/game/types.ts';
 
 	let manifest = $state.raw<Manifest | null>(null);
 	let entries = $state.raw<LibraryView[]>([]);
+	let history = $state.raw<SeriesRecord[]>([]);
+	const profiles = new SvelteMap<string, readonly Profile[]>();
 	let loading = $state(true);
 	let error = $state('');
 	let status = $state('');
@@ -18,7 +22,19 @@
 			const library = loadLibrary(localStorage, manifest);
 			entries = library.entries;
 			if (library.notice) status = library.notice;
+			history = loadSeriesHistory(localStorage);
 		} catch { status = 'Your season library is unavailable: browser storage is blocked or full.'; }
+		void loadCards();
+	}
+
+	/** Loads each playable club's season profiles, one club at a time, so tiles fill in with cards. */
+	async function loadCards(): Promise<void> {
+		if (!manifest) return;
+		for (const entry of entries) {
+			if (entry.status !== 'playable' || profiles.has(entry.key)) continue;
+			try { profiles.set(entry.key, await loadDraftProfiles(manifest, decodeReplay(entry.token, manifest))); }
+			catch { /* the tile keeps its slot placeholders */ }
+		}
 	}
 
 	/** Publishes a short `/r/{id}` link; the inline link is the fallback when storage is unreachable. */
@@ -61,22 +77,28 @@
 
 <main class="page">
 	<a class="back-link" href="/">← Back to the draft</a>
-	<h1>My seasons</h1>
-	<p class="lede muted">Every season you finish is saved in this browser. Send a challenge link to a friend, or pit two of your teams against each other in a best-of-five.</p>
-	<a class="button secondary h2h-link" href="/h2h">Set up a head-to-head series</a>
+	<header class="intro">
+		<div>
+			<h1>My seasons</h1>
+			<p class="lede muted">Every season you finish is saved in this browser. Pick a club for its cards and stats, or pick two for the tale of the tape and a best-of-five.</p>
+		</div>
+		<a class="h2h-link" href="/h2h">Head-to-head with any replay link →</a>
+	</header>
 	{#if loading}
 		<p class="muted" role="status">Loading your seasons…</p>
 	{:else if error}
 		<p class="error" role="alert">{error}</p>
 	{:else}
-		<SeasonLibrary {entries} {status} onCopy={entry => void copyChallenge(entry)} onRename={rename} onDelete={remove} />
+		<SeasonLibrary {entries} {history} {profiles} {manifest} {status} onCopy={entry => void copyChallenge(entry)} onRename={rename} onDelete={remove} />
 	{/if}
 </main>
 
 <style>
-	.page { display: grid; gap: var(--space-4); width: min(100%, 48rem); padding-block: var(--space-8); }
+	.page { display: grid; gap: var(--space-4); width: min(100%, 84rem); padding-block: var(--space-8); }
 	.back-link { color: var(--muted); font-weight: 700; text-decoration: none; }
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
 	.lede { margin: 0; max-width: 52ch; }
-	.h2h-link { justify-self: start; display: inline-flex; align-items: center; text-decoration: none; }
+	.intro { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-2) var(--space-6); }
+	.h2h-link { color: var(--muted); font-size: var(--text-sm); font-weight: 650; }
+	.h2h-link:hover { color: var(--text); }
 </style>

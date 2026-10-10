@@ -69,7 +69,7 @@
 
 <div class="image-credits" aria-busy={loading}>
  <p>Reviewed portraits prefer an MLB playing photo from the card’s decade, then another MLB playing photo, a minor-league photo, another baseball playing uniform, and finally a later coaching or old-timers uniform. Within each group, the nearest evidenced date wins, followed by the matching team and image quality. Approximate and unknown dates are labelled. Previously published career photos remain available while their uniform classifications are reviewed.</p>
- <p>Atmosphere photographs are context only. They do not identify the simulated venue or season. Marks without a verified historical year range are labelled as current franchise marks.</p>
+ <p>Atmosphere photographs are context only. Stadium cards show a photo of each franchise's current park, sometimes taken before later renovations or renaming; photos never affect the simulation. Marks without a verified historical year range are labelled as current franchise marks.</p>
  <p>Image copyright licences are separate from the statistical-data licence and do not grant trademark, privacy, publicity, or likeness rights. All club marks identify actual franchises in this game and its season share images. Some reviewed marks rely on an asserted fair-use basis; their copyright disclosure is not a reuse licence or established permission. This game is not affiliated with or endorsed by the clubs or league.</p>
  <p>Display files are auto-oriented, stripped of metadata, resized, and re-encoded as WebP. Portraits may be cropped to fit the layout. Source files, creator credits, licences or rights disclosures, and available evidence are linked below. Portraits and atmosphere photographs require documented reusable sources.</p>
  {#if loading}

@@ -15,30 +15,83 @@ async function openChoosing(page: Page, args = ''): Promise<void> {
 }
 
 test.describe('Draft board browsing', () => {
-	test('keeps loading cards readable and honors live reduced motion', async ({ page }) => {
-		await openStory(page, 'draft-board--loading');
-		await expect(page.getByRole('status', { name: 'Loading available player seasons' })).toBeVisible();
-		await expect(page.locator('.loading-card.flying')).toBeVisible({ timeout: 6000 });
-		await page.emulateMedia({ reducedMotion: 'reduce' });
-		await expect(page.locator('.loading-card.flying')).toHaveCount(0);
-		for (const width of [320, 1100, 1440]) {
-			await page.setViewportSize({ width, height: 900 });
-			await page.evaluate(() => document.fonts.ready);
-			await expect.poll(() => page.locator('.loading-cards').evaluate(root => root.getAnimations({ subtree: true }).length)).toBe(0);
-			const layout = await page.locator('.loading-cards').evaluate(root => ({
-				overflow: document.documentElement.scrollWidth > innerWidth,
-				labelsFit: [...root.querySelectorAll('.team-word')].every(label => {
-					const range = document.createRange();
-					range.selectNodeContents(label);
-					const text = range.getBoundingClientRect();
-					const card = label.closest('.loading-card')!.getBoundingClientRect();
-					return text.left >= card.left && text.right <= card.right;
-				})
-			}));
-			expect(layout).toEqual({ overflow: false, labelsFit: true });
-		}
-		await expect(page.locator('.picked-count')).toContainText('0 / 14');
+	test('deals the rolled franchise from the foil pack into the header', async ({ page }) => {
+		await page.setViewportSize({ width: 1212, height: 788 });
+		await openStoryByName(page, 'Draft/Board', 'Partial roster');
+		const pack = page.getByRole('button', { name: 'Roll next franchise', exact: true });
+		await expect(page.locator('.reveal [data-roll-mark]')).toHaveCount(0);
+		await pack.click();
+		await expect(pack).toBeDisabled();
+		// The dealt card names the roll before the header does.
+		const dealt = page.locator('.dealt-card .front strong');
+		await expect(dealt).toBeVisible();
+		await expect(page.locator('.reveal.concealed .roll-copy')).toBeHidden();
+		const franchise = await dealt.textContent();
+		// The card waits face up until the player takes it.
+		const take = page.getByRole('button', { name: /^Take / });
+		await expect(take).toBeFocused();
+		await page.waitForTimeout(500);
+		await expect(page.locator('.candidates')).toHaveCount(0);
+		await take.click();
+		await expect(page.locator('.candidates')).toBeVisible({ timeout: 6000 });
+		await expect(page.locator('.reveal h2')).toHaveText(franchise!);
+		await expect(page.locator('.reveal')).not.toHaveClass(/concealed/);
+		// Then the candidate cards deal out of the team card into the grid, in reading order.
+		const flight = await page.locator('[data-candidate-group]').first().evaluate(node => {
+			const animation = node.getAnimations()[0];
+			if (!animation) return null;
+			const start = String((animation.effect as KeyframeEffect).getKeyframes()[0].transform);
+			const [, dx, dy] = start.match(/translate\((-?[\d.]+)px, (-?[\d.]+)px\)/)!.map(Number);
+			// Measure the card's resting slot, without the flight's transform.
+			animation.cancel();
+			const card = node.getBoundingClientRect();
+			const mark = document.querySelector('[data-roll-mark]')!.getBoundingClientRect();
+			return { x: card.left + card.width / 2 + dx - (mark.left + mark.width / 2), y: card.top + card.height / 2 + dy - (mark.top + mark.height / 2) };
+		});
+		expect(flight).not.toBeNull();
+		expect(Math.abs(flight!.x)).toBeLessThan(2);
+		expect(Math.abs(flight!.y)).toBeLessThan(2);
+		const delays = await page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.slice(1, 4).map(node => node.getAnimations()[0]?.effect?.getTiming().delay ?? null));
+		expect(delays.every((delay, index) => delay !== null && (index === 0 || delay > delays[index - 1]!))).toBe(true);
+		await expect.poll(() => page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.reduce((count, node) => count + node.getAnimations().length, 0))).toBe(0);
 	});
+
+	test('skips the deal choreography with reduced motion', async ({ page }) => {
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await openStoryByName(page, 'Draft/Board', 'Partial roster');
+		await page.getByRole('button', { name: 'Roll next franchise', exact: true }).click();
+		await page.getByRole('button', { name: /^Take / }).click();
+		await expect(page.locator('.candidates')).toBeVisible({ timeout: 2000 });
+		await expect(page.locator('.foil-pack')).toHaveCount(0);
+		expect(await page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.reduce((count, node) => count + node.getAnimations().length, 0))).toBe(0);
+	});
+
+	for (const width of [1212, 390, 360]) {
+		test(`keeps hitter cards on distinct field positions at ${width}px`, async ({ page }) => {
+			await page.setViewportSize({ width, height: 844 });
+			await openStoryByName(page, 'Draft/Board', 'Partial roster');
+			if (width < 1024) await page.getByRole('button', { name: /^Open your field/ }).click();
+			const field = page.locator(width < 1024 ? 'dialog.draft-sheet[open] .field-card .front' : '.field-panel .field-card .front');
+			await expect(field.locator('.field-slot')).toHaveCount(9);
+			const boxes = await field.locator('.field-slot').evaluateAll(slots => slots.map(slot => {
+				const rect = slot.querySelector('.card-frame')!.getBoundingClientRect();
+				return { slot: (slot as HTMLElement).dataset.slot!, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+			}));
+			const overlaps = boxes.flatMap((a, index) => boxes.slice(index + 1)
+				.filter(b => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom)
+				.map(b => `${a.slot}/${b.slot}`));
+			expect(overlaps).toEqual([]);
+			const at = (slot: string) => boxes.find(box => box.slot === slot)!;
+			// Middle infielders sit inside the corners, and every hitter stays on the field card.
+			expect(at('2B').right).toBeLessThan(at('1B').left);
+			expect(at('SS').left).toBeGreaterThan(at('3B').right);
+			const bounds = await field.boundingBox();
+			for (const box of boxes) {
+				expect(box.left).toBeGreaterThanOrEqual(bounds!.x);
+				expect(box.right).toBeLessThanOrEqual(bounds!.x + bounds!.width);
+			}
+		});
+	}
 
 	test('returns a partly covered card without a scrollbar landing jump', async ({ page }) => {
 		await page.setViewportSize({ width: 1212, height: 788 });
@@ -356,6 +409,7 @@ test.describe('Draft board field sheet', () => {
 		await openStoryByName(page, 'Draft/Board', 'Partial roster');
 		const stored = await page.evaluate(() => ['162-zero:v1', '162-zero:settings:v1'].map(key => localStorage.getItem(key)));
 		await page.getByRole('button', { name: /Roll next franchise/ }).click();
+		await page.getByRole('button', { name: /^Take / }).click();
 		await page.locator('.candidate-card').first().getByRole('button', { name: /^Select / }).click();
 		let owner = page.locator('dialog.draft-sheet[open]');
 		const selected = await owner.locator('.pick-confirmation').getAttribute('data-selected-season');
@@ -449,3 +503,42 @@ test('Review first opens from the field and offers an explicit move without anim
 	await expect(slot).toBeFocused();
 });
 
+
+test('picks a home stadium from the real park deck', async ({ page }) => {
+	await openStory(page, 'draft-stadium--choosing');
+	const deck = page.getByRole('region', { name: 'Choose your home stadium' });
+	await expect(deck.locator('.stadium-card')).toHaveCount(30);
+	const submit = deck.getByRole('button', { name: 'Draft at this stadium', exact: true });
+	await expect(submit).toBeDisabled();
+	// Turning a card over shows its geometry without choosing the park.
+	const third = deck.locator('.choice').nth(2);
+	await third.getByRole('button', { name: /^Turn over: .+ geometry$/ }).click();
+	await expect(third.locator('.venue-card')).toHaveClass(/turned/);
+	await expect(deck.getByRole('radio', { checked: true })).toHaveCount(0);
+	await third.getByRole('button', { name: /^Turn over: .+ photo$/ }).click();
+	await expect(third.locator('.venue-card')).not.toHaveClass(/turned/);
+	await third.locator('.photo').click();
+	await expect(deck.getByRole('radio').nth(2)).toBeChecked();
+	const name = await deck.locator('.choice.selected .front h3').textContent();
+	await expect(deck.locator('.commit p')).toHaveText(name!);
+	await submit.click();
+	await expect(page.getByRole('status').filter({ hasText: 'Drafting at' })).toHaveText(`Drafting at ${name}`);
+	await expect(submit).toBeDisabled();
+});
+
+test('the compact stadium card mirrors the DH and turns the field to the park details', async ({ page }) => {
+	await page.setViewportSize({ width: 1212, height: 788 });
+	await openStory(page, 'draft-board--ready');
+	const stadium = page.getByRole('button', { name: /\. Turn over for stadium details\.$/ });
+	const dh = page.locator('.field-slot[data-slot="DH"]');
+	const catcher = page.locator('.field-slot[data-slot="C"]');
+	const [stadiumBox, dhBox, catcherBox] = await Promise.all([stadium.boundingBox(), dh.boundingBox(), catcher.boundingBox()]);
+	// Same row as the DH, the same distance from the catcher on the other side.
+	expect(Math.abs(stadiumBox!.y - dhBox!.y)).toBeLessThan(2);
+	const centre = (box: { x: number; width: number }) => box.x + box.width / 2;
+	expect(Math.abs((centre(catcherBox!) - centre(stadiumBox!)) - (centre(dhBox!) - centre(catcherBox!)))).toBeLessThan(2);
+	await stadium.click();
+	await expect(page.locator('.field-card')).toHaveClass(/turned/);
+	await page.getByRole('button', { name: 'Show field', exact: true }).click();
+	await expect(page.locator('.field-card')).not.toHaveClass(/turned/);
+});

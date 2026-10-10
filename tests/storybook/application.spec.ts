@@ -92,7 +92,7 @@ test.describe('application workshop stories', () => {
 		await firstGame.locator('summary').click();
 		const game = expected.games[0];
 		const challenge = game.isHome ? game.home : game.away;
-		await expect(firstGame.getByRole('region', { name: `${challenge.name} batting box score for game ${game.number}`, exact: true })
+		await expect(firstGame.getByRole('region', { name: `${challenge.name} batting box score for Game ${game.number}`, exact: true })
 			.locator('tbody th[scope="row"]')).toHaveText(challenge.batting.map(line => line.displayName));
 	});
 

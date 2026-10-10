@@ -57,12 +57,12 @@ async function expectCompactGeometry(page: Page): Promise<void> {
 
 async function setPreviewDials(page: Page, role: 'Two-Way' | 'Bullpen', finish: 'Gem' | 'Emboss'): Promise<void> {
 	const root = page.locator('.dialkit-root');
-	await root.getByRole('button', { name: 'DialKit', exact: true }).click();
+	await root.getByRole('button', { name: 'Card preview', exact: true }).press('Enter');
 	await root.getByRole('button', { name: /^Role / }).click();
 	await page.getByRole('listbox', { name: 'Role', exact: true }).getByRole('option', { name: role, exact: true }).click();
 	await root.getByRole('button', { name: /^Finish / }).click();
 	await page.getByRole('listbox', { name: 'Finish', exact: true }).getByRole('option', { name: finish, exact: true }).click();
-	await root.getByRole('button', { name: 'DialKit', exact: true }).click();
+	await root.getByRole('button', { name: 'Card preview', exact: true }).press('Enter');
 }
 
 test('reviews every canonical compact era at exact field and collection sizes', async ({ page }) => {

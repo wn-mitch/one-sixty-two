@@ -6,7 +6,7 @@ test('previews card width, finish, and reverse text without changing game or mot
  await openStoryByName(page, 'Cards/States', 'Interactive');
  const stored = await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), storageKeys);
  const root = page.locator('.dialkit-root');
- await root.getByRole('button', { name: 'DialKit', exact: true }).click();
+ await root.getByRole('button', { name: 'Card preview', exact: true }).press('Enter');
  const width = root.getByRole('slider', { name: 'Width', exact: true });
  await width.focus();
  await width.press('End');
@@ -19,7 +19,7 @@ test('previews card width, finish, and reverse text without changing game or mot
  await expect(page.locator('.card-review [data-cardbox]')).toHaveAttribute('data-face', 'back');
  await expect(page.locator('.card-review .back .inspection-back.simplified')).toBeVisible();
  await expect(front).toHaveAttribute('data-finish', 'gem');
- await root.getByRole('button', { name: 'DialKit', exact: true }).click();
+ await root.getByRole('button', { name: 'Card preview', exact: true }).press('Enter');
  await page.getByRole('button', { name: 'Reset story', exact: true }).click();
  await expect(page.locator('.card-review [data-cardbox]')).toHaveAttribute('data-face', 'front');
  await expect(front).toHaveJSProperty('clientWidth', 280);
@@ -30,10 +30,10 @@ test('previews card width, finish, and reverse text without changing game or mot
 test('unregisters old panels and restores declared story values after navigation and Reset', async ({ page }) => {
  await openStoryByName(page, 'Cards/States', 'Interactive');
  const root = page.locator('.dialkit-root');
- await root.getByRole('button', { name: 'DialKit', exact: true }).click();
+ await root.getByRole('button', { name: 'Card preview', exact: true }).press('Enter');
  await root.getByRole('slider', { name: 'Width', exact: true }).press('End');
  await openStoryByName(page, 'Application/Welcome', 'Start');
- await root.getByRole('button', { name: 'DialKit', exact: true }).click();
+ await root.getByRole('button', { name: 'Home showcase', exact: true }).press('Enter');
  await expect(root.getByRole('button', { name: 'Card preview', exact: true })).toHaveCount(0);
  await expect(root.getByRole('button', { name: 'Home showcase', exact: true })).toBeVisible();
  await openStoryByName(page, 'Interactions/Cards', 'Text back');
@@ -46,7 +46,7 @@ test('unregisters old panels and restores declared story values after navigation
  await expect(page.locator('.card-review .back .inspection-back.simplified')).toBeVisible();
  await openStoryByName(page, 'Cards/States', 'Interactive');
  await expect(page.locator('.card-review .front .card')).toHaveJSProperty('clientWidth', 280);
- await root.getByRole('button', { name: 'DialKit', exact: true }).click();
+ await root.getByRole('button', { name: 'Card preview', exact: true }).press('Enter');
  await expect(root.getByRole('button', { name: 'Home showcase', exact: true })).toHaveCount(0);
  await expect(root.getByRole('slider', { name: 'Width', exact: true })).toHaveAttribute('aria-valuenow', '280');
 });

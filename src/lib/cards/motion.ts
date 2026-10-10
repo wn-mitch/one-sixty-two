@@ -1,5 +1,6 @@
 import { animate, type JSAnimation } from 'animejs';
 import { appSettings } from '../game/settings.svelte.ts';
+import { MOTION } from '../motion-timing.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
 
 const LIGHT = { x: -0.45, y: -0.75 } as const;
@@ -503,6 +504,19 @@ export function flip(node: HTMLElement, options: FlipOptions = {}) {
 		clone.style.opacity = full ? '0' : '1';
 		fullFront.style.opacity = full ? frontOpacity : '0';
 	};
+	/** Fades between the compact source and the full front as the card travels; `amount` 1 shows the full front. */
+	const blendFronts = (amount: number) => {
+		if (!clone || !fullFront) return;
+		fullFront.style.transition = 'none';
+		clone.style.opacity = (1 - amount).toFixed(3);
+		fullFront.style.opacity = amount >= 1 ? frontOpacity : amount.toFixed(3);
+	};
+	const crossfade = (progress: number, opening: boolean) => {
+		// The swap happens mid-flight so the compact art reads at the source and the full front at the destination.
+		const t = Math.min(1, Math.max(0, (progress - .12) / .5));
+		const eased = t * t * (3 - 2 * t);
+		blendFronts(opening ? eased : 1 - eased);
+	};
 	const settleFront = () => {
 		hideReader();
 		restoreSource();
@@ -528,7 +542,8 @@ export function flip(node: HTMLElement, options: FlipOptions = {}) {
 		const pose = readerPose();
 		if (opened && !alreadyRaised) state = { angle: state.angle, ...offsetFrom(sourceRect, pose) };
 		const flying = !opened || !wasOpened;
-		showFullFront(!flying, !wasOpened);
+		if (flying) blendFronts(opened ? 0 : 1);
+		else showFullFront(true, !wasOpened);
 		if (flying) clipFlight(sourceRect, pose);
 		const destination: FlipState = opened
 			? { angle: turned ? 180 : 0, x: 0, y: 0, scale: 1 }
@@ -546,11 +561,15 @@ export function flip(node: HTMLElement, options: FlipOptions = {}) {
 			return;
 		}
 		apply();
+		const opening = opened;
 		animation = animate(state, {
 			...destination,
-			duration: 780 / settings.cardSpeed,
+			duration: MOTION.cardFlight / settings.cardSpeed,
 			ease: 'outQuint',
-			onUpdate: apply,
+			onUpdate: self => {
+				apply();
+				if (flying) crossfade(self.progress, opening);
+			},
 			onComplete: finish
 		});
 	};

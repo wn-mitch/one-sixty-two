@@ -1,8 +1,8 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
  import Welcome from '#lib/components/Welcome.svelte';
+ import ConfirmNewDraft from '#lib/components/ConfirmNewDraft.svelte';
  import { createCardViewModel, type CardMediaStatus } from '#lib/cards/view-model.ts';
- import { draftRules } from '#lib/game/rules.ts';
  import { loadShowcase } from '#lib/game/data.ts';
  import type { ShowcaseCard } from '#lib/game/types.ts';
  import { loadMedia } from '#lib/media/client.ts';
@@ -143,13 +143,7 @@
      {#if currentSession.incompatible}<button class="secondary" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>Start new draft</button>{/if}
     </div>
    {/if}
-   {#if currentSession.confirmNew}
-    <section class="confirmation" aria-label="Confirm new draft">
-     <h2>Leave this roster behind?</h2>
-     <p>Your picks are permanent. Starting a new draft replaces this saved run with a new seed.</p>
-     <div class="actions"><button class="secondary" onclick={() => currentSession.confirmNew = false}>Keep draft</button><button class="primary" onclick={() => void currentSession.startNew()}>Discard and start new</button></div>
-    </section>
-   {/if}
+   <ConfirmNewDraft open={currentSession.confirmNew} onKeep={() => currentSession.confirmNew = false} onDiscard={() => void currentSession.startNew()} />
   </div>
 
   {#if currentSession.phase === 'start'}
@@ -161,7 +155,7 @@
      <StadiumDeck manifest={currentSession.manifest} busy={currentSession.busy} onSelect={id => void currentSession.selectStadium(id)} />
     {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the stadiums…</span></div>{/if}
    {:else if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
-    <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft <span class="stage-divider">/</span> {currentSession.draft.picks.length} of {draftRules(currentSession.draft.schemaVersion).slots.length} picked</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
+    <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if DraftBoard}
      <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} error={currentSession.error} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
     {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the draft…</span></div>{/if}
@@ -199,11 +193,8 @@
   margin-inline: auto;
   padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right));
  }
- .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
  .draft-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
- .stage-divider { padding-inline: var(--space-2); color: var(--border); }
- .confirmation { border: 1px solid var(--accent); background: var(--surface); padding: var(--space-5); border-radius: var(--radius); margin-bottom: var(--space-6); }
- .confirmation h2 { font-size: var(--text-xl); }
+ .draft-top button { flex: none; white-space: nowrap; }
  .error p { margin: 0 0 var(--space-3); }
  .error button + button { margin-left: var(--space-2); }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -78,8 +78,21 @@ export async function openSavedDraft(page: Page, draft: Draft): Promise<void> {
 }
 
 /** Picks the first stadium in the deck; the session rolls the first franchise right after. */
+/** Opens the foil pack and takes the dealt team card into the roll rail. */
+export async function openPack(page: Page): Promise<void> {
+ await page.getByRole('button', { name: 'Roll next franchise', exact: true }).click();
+ const dealt = page.getByRole('button', { name: /^Take / });
+ await expect(dealt).toBeFocused();
+ await dealt.click();
+}
+
+/** Chooses the first stadium, then opens the foil pack that deals the first franchise. */
 export async function chooseStadium(page: Page): Promise<void> {
  const deck = page.getByRole('region', { name: 'Choose your home stadium' });
- await deck.getByRole('radio').first().check();
+ // The radio sits under its venue card; players choose by clicking the card's photo.
+ await deck.locator('.choice').first().locator('.photo').click();
+ await expect(deck.getByRole('radio').first()).toBeChecked();
  await deck.getByRole('button', { name: 'Draft at this stadium', exact: true }).click();
+ await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeFocused();
+ await openPack(page);
 }

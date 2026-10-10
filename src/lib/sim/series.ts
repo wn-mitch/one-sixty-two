@@ -9,7 +9,12 @@ import {
  SERIES_HOME_SEEDS,
  SERIES_RULES_VERSION,
  SERIES_SEED_POLICY,
+ SUPERLATIVE_KINDS,
+ SUPERLATIVE_MIN_RUNS,
+ SUPERLATIVES_VERSION,
  type SeriesAward,
+ type SeriesSuperlative,
+ type SeriesSuperlativeKind,
  type SeriesGame,
  type SeriesInput,
  type SeriesMoment,
@@ -19,7 +24,7 @@ import {
  type SeriesTeamResult
 } from './series-types.ts';
 import { accumulateBox, createDraftTeam, createTotalsBox } from './team.ts';
-import type { SeasonMoment, TeamBox } from './types.ts';
+import type { SeasonMoment, TeamBox, WinPoint } from './types.ts';
 import { resolveStadium, validateSeason, validateTeam } from './validation.ts';
 import { closerBudget, closerReady, recordCloser, type CloserUsage } from './workload.ts';
 import { WinExpectancyModel } from './win-expectancy.ts';
@@ -40,7 +45,7 @@ export function seedOrder(records: readonly { id: SeriesTeamId; key: string; win
  return a.id === 'team-a' ? [a.id, b.id] : [b.id, a.id];
 }
 
-interface AwardCandidate extends SeriesAward { key: string }
+interface AwardCandidate extends SeriesAward { key: string; batted: boolean; fielded: boolean; pitched: boolean }
 
 /** Every individual with recorded participation, excluding the composite support bullpen. */
 function awardCandidates(boxes: readonly { teamId: SeriesTeamId; key: string; box: TeamBox }[]): AwardCandidate[] {
@@ -49,7 +54,7 @@ function awardCandidates(boxes: readonly { teamId: SeriesTeamId; key: string; bo
   const id = `${teamId}\0${seasonId}`;
   let value = merged.get(id);
   if (!value) {
-   value = { teamId, key, seasonId, displayName, runs: 0, batting: 0, running: 0, defense: 0, pitching: 0 };
+   value = { teamId, key, seasonId, displayName, runs: 0, batting: 0, running: 0, defense: 0, pitching: 0, batted: false, fielded: false, pitched: false };
    merged.set(id, value);
   }
   return value;
@@ -58,26 +63,51 @@ function awardCandidates(boxes: readonly { teamId: SeriesTeamId; key: string; bo
   for (const line of box.batting) {
    if (line.PA <= 0 && line.fieldingOuts <= 0) continue;
    const value = entry(teamId, key, line.seasonId, line.displayName);
+   value.batted ||= line.PA > 0;
+   value.fielded ||= line.fieldingOuts > 0;
    value.batting += line.battingRuns;
    value.running += line.stealRuns;
    value.defense += line.defensiveRuns;
   }
   for (const line of box.pitching) {
    if (line.role === 'support' || (line.BF <= 0 && line.outs <= 0)) continue;
-   entry(teamId, key, line.seasonId, line.displayName).pitching += line.pitchingRunsAboveNeutral;
+   const value = entry(teamId, key, line.seasonId, line.displayName);
+   value.pitched = true;
+   value.pitching += line.pitchingRunsAboveNeutral;
   }
  }
  for (const value of merged.values()) value.runs = value.batting + value.running + value.defense + value.pitching;
  return [...merged.values()];
 }
 
+/** The best candidate by `value` (highest, or lowest when `lowest`); ties use the canonical replay key, season id, then team id. */
+function rankAward(candidates: readonly AwardCandidate[], value: (candidate: AwardCandidate) => number, lowest = false): SeriesAward | null {
+ const direction = lowest ? -1 : 1;
+ const ranked = [...candidates].sort((a, b) =>
+  direction * (value(b) - value(a)) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) || compareId(a.seasonId, b.seasonId) || compareId(a.teamId, b.teamId));
+ if (!ranked.length) return null;
+ const { key: _key, batted: _batted, fielded: _fielded, pitched: _pitched, ...award } = ranked[0];
+ return award;
+}
+
 /** Highest unrounded run value; ties use the canonical replay key, season id, then team id. */
 export function selectMvp(boxes: readonly { teamId: SeriesTeamId; key: string; box: TeamBox }[]): SeriesAward | null {
- const ranked = awardCandidates(boxes).sort((a, b) =>
-  b.runs - a.runs || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) || compareId(a.seasonId, b.seasonId) || compareId(a.teamId, b.teamId));
- if (!ranked.length) return null;
- const { key: _key, ...award } = ranked[0];
- return award;
+ return rankAward(awardCandidates(boxes), candidate => candidate.runs);
+}
+
+/** Top bat, Ace, Glove, Wheels, and LVP over the given boxes; see `SeriesResult.superlatives`. */
+export function selectSuperlatives(boxes: readonly { teamId: SeriesTeamId; key: string; box: TeamBox }[]): SeriesSuperlative[] {
+ const candidates = awardCandidates(boxes);
+ const awards: Record<SeriesSuperlativeKind, SeriesAward | null> = {
+  'top-bat': rankAward(candidates.filter(candidate => candidate.batted), candidate => candidate.batting),
+  ace: rankAward(candidates.filter(candidate => candidate.pitched), candidate => candidate.pitching),
+  glove: rankAward(candidates.filter(candidate => candidate.fielded), candidate => candidate.defense),
+  wheels: rankAward(candidates.filter(candidate => candidate.batted), candidate => candidate.running),
+  lvp: rankAward(candidates, candidate => candidate.runs, true)
+ };
+ if (awards.glove && awards.glove.defense < SUPERLATIVE_MIN_RUNS) awards.glove = null;
+ if (awards.wheels && awards.wheels.running < SUPERLATIVE_MIN_RUNS) awards.wheels = null;
+ return SUPERLATIVE_KINDS.flatMap(kind => awards[kind] ? [{ kind, award: awards[kind] }] : []);
 }
 
 function seriesMoment(moment: SeasonMoment | null): SeriesMoment | null {
@@ -137,11 +167,12 @@ export function simulateSeries(input: SeriesInput, onProgress?: (progress: Serie
    club.closerOutsRemaining = caps[id] - usage[id].outs;
    club.closerAvailable = closerReady(usage[id], day, caps[id]);
   }
+  const winTrace: WinPoint[] = [];
   const game = simulateGame({
    number, opponentId: 'team-b', opponentName: teams['team-b'].name, challengeIsHome: homeId === 'team-a',
    home: clubs[homeId], away: clubs[awayId], defenseEnvironment: data, stadium: stadiums[homeId],
    homeMatchups: batting[homeId], awayMatchups: batting[awayId]
-  }, gameRandomStreams(seed, number), winExpectancy);
+  }, gameRandomStreams(seed, number), winExpectancy, winTrace);
   const boxes = { [homeId]: game.home, [awayId]: game.away } as Record<SeriesTeamId, TeamBox>;
   for (const id of ['team-a', 'team-b'] as const) {
    const closer = boxes[id].pitching[clubs[id].closerIndex];
@@ -158,7 +189,7 @@ export function simulateSeries(input: SeriesInput, onProgress?: (progress: Serie
    number, day, homeTeamId: homeId, awayTeamId: awayId, winnerId, stadium: game.stadium, stadiumName: game.stadiumName,
    score: { ...score }, result: game,
    mvp: selectMvp((['team-a', 'team-b'] as const).map(teamId => ({ teamId, key: keys[teamId], box: boxes[teamId] }))),
-   highlight: gameHighlight, lowlight: gameLowlight
+   highlight: gameHighlight, lowlight: gameLowlight, winTrace
   });
   onProgress?.({ stage: 'series', completed: number });
  }
@@ -172,8 +203,10 @@ export function simulateSeries(input: SeriesInput, onProgress?: (progress: Serie
   };
  };
  return {
-  seriesRulesVersion: SERIES_RULES_VERSION, seedPolicy: SERIES_SEED_POLICY, mvpVersion: MVP_VERSION,
+  seriesRulesVersion: SERIES_RULES_VERSION, seedPolicy: SERIES_SEED_POLICY, mvpVersion: MVP_VERSION, superlativesVersion: SUPERLATIVES_VERSION,
   dataVersion: data.dataVersion, seed, teams: [teamResult('team-a'), teamResult('team-b')], games, championId, score: { ...score },
-  mvp: totalsAward(totals, keys), highlight, lowlight
+  mvp: totalsAward(totals, keys),
+  superlatives: selectSuperlatives((['team-a', 'team-b'] as const).map(teamId => ({ teamId, key: keys[teamId], box: totals[teamId] }))),
+  highlight, lowlight
  };
 }

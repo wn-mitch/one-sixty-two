@@ -97,9 +97,9 @@ test('reserves equal face slots for present, absent, and failed seasons at each 
 	await expect(gallery.locator('[data-franchise-id="F02"]').getByRole('button', { name: 'Retry historical season', exact: true })).toBeVisible();
 	for (const dial of [null, 'Home', 'End']) {
 		if (dial) {
-			await page.getByRole('button', { name: 'DialKit', exact: true }).click();
+			await page.getByRole('button', { name: 'Historical era gallery', exact: true }).press('Enter');
 			await page.getByRole('slider', { name: 'Card Width', exact: true }).press(dial);
-			await page.getByRole('button', { name: 'DialKit', exact: true }).click();
+			await page.getByRole('button', { name: 'Historical era gallery', exact: true }).press('Enter');
 		}
 		for (const width of [1212, 320]) {
 			await page.setViewportSize({ width, height: 788 });

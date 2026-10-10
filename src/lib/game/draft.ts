@@ -11,6 +11,7 @@ import {
  type Pick,
  RULES_VERSION,
  type Replay,
+ type ReplaySchemaVersion,
  type Roll,
  type Slot
 } from './types.ts';
@@ -52,10 +53,20 @@ export function openSlots(draft: Draft): Slot[] {
 
 export function legalSlots(draft: Draft, candidate: Candidate, manifest: Manifest): Slot[] {
  const analysis = analyzeDraft(draft, manifest);
- if (!analysis.unused.some(item => item.seasonId === candidate.seasonId)) return [];
+ if (!analysis.unusedSeasons.has(candidate.seasonId)) return [];
  return analysis.slots.filter(slot =>
   candidate.eligibleSlots.includes(slot) && isViableForSlot(analysis, candidate, slot)
  );
+}
+
+/** The roll's era, bounded by the decade's data coverage and the draft's year limits. */
+export function rollYears(roll: Roll, manifest: Manifest, schemaVersion: ReplaySchemaVersion): { first: number; last: number } {
+ const policy = draftRules(schemaVersion);
+ const coverage = manifest.coverage.find(item => item.decade === roll.decade);
+ return {
+  first: Math.max(policy.minYear, coverage?.firstYear ?? roll.decade),
+  last: Math.min(policy.maxYear, coverage?.lastYear ?? roll.decade + 9)
+ };
 }
 
 export function availableCandidates(draft: Draft, manifest: Manifest, roll: Roll | null = draft.currentRoll): Candidate[] {

@@ -1,6 +1,7 @@
 import { loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
 import { replayInput } from './draft.ts';
 import { loadLibrary, type LibraryView } from './library.ts';
+import { recordSeries, seriesRecord } from './series-history.ts';
 import { loadReplayLink, parseSeriesHash, ReplayLinkError, replayLinkPath, seriesHash, type SeriesField } from './replay-link.ts';
 import type { Draft, Manifest, Profile } from './types.ts';
 import { prepareSeasonInput } from '../sim/season.ts';
@@ -23,6 +24,8 @@ export class SeriesSession {
  phase = $state<SeriesPhase>('setup');
  loading = $state(true);
  error = $state('');
+ /** Set when a finished series could not join the head-to-head history. */
+ historyNotice = $state('');
  stage = $state('');
  progress = $state<Record<SeriesTeamId | 'series', number>>({ 'team-a': 0, 'team-b': 0, series: 0 });
  result = $state.raw<SeriesResult | null>(null);
@@ -123,6 +126,7 @@ export class SeriesSession {
      this.phase = 'results';
      this.stage = '';
      history.replaceState(history.state, '', `${location.pathname}${this.seriesHash()}`);
+     void this.record(message.result);
     }
    };
    worker.onerror = () => { if (current()) this.fail('The series worker failed. Retry replays the identical series.'); };
@@ -132,6 +136,12 @@ export class SeriesSession {
    if (!current() || abort.signal.aborted) return;
    this.fail(error instanceof Error ? error.message : 'The series could not start.');
   }
+ }
+
+ /** Adds a finished series to this device's head-to-head history for the season library. */
+ private async record(result: SeriesResult): Promise<void> {
+  try { this.historyNotice = recordSeries(localStorage, await seriesRecord(result, `${location.pathname}${this.seriesHash()}`, new Date().toISOString())) ?? ''; }
+  catch { this.historyNotice = 'This series could not be added to your head-to-head history: browser storage is blocked or full.'; }
  }
 
  private applyProgress(progress: SeriesProgress): void {

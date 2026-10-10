@@ -36,7 +36,10 @@
  --text-score: 4rem;
  --radius: .25rem;
  --radius-lg: .5rem;
+ /* Motion timing mirrors src/lib/motion-timing.ts (CSS_MOTION). */
  --ease-out: cubic-bezier(.16, 1, .3, 1);
+ --motion-deal: 600ms;
+ --motion-field-flip: 640ms;
  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
  font-variant-numeric: tabular-nums;
  font-synthesis: none;

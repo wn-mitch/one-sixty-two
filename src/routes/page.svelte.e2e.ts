@@ -7,7 +7,7 @@ import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.
 import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, type Draft, type Slot } from '../lib/game/types.ts';
 import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
 import type { ShareFormat, SharePublication } from '../lib/share/types.ts';
-import { chooseStadium, currentManifest, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { chooseStadium, currentManifest, openPack, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
 import { verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
 
@@ -203,7 +203,7 @@ async function finishRoster(page: Page, request: APIRequestContext) {
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	for (let index = 0; index < 14; index++) {
 		await pickFirstSeason(page, request);
-		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();
+		if (index < 13) await openPack(page);
 	}
 }
 
@@ -266,7 +266,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll)).toEqual(savedRoll);
 	for (let index = 0; index < 14; index++) {
 		await pickFirstSeason(page, request);
-		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();
+		if (index < 13) await openPack(page);
 	}
 	// One franchise can be drafted only once per roster.
 	const franchises: string[] = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).picks.map((pick: { franchiseId: string }) => pick.franchiseId));
@@ -504,7 +504,7 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 	await chooseStadium(page);
 	for (let index = 0; index < 14; index++) {
 		await pickFirstSeason(page, request);
-		if (index < 13) await page.getByRole('button', { name: /Roll next franchise/ }).click();
+		if (index < 13) await openPack(page);
 	}
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('details')).toHaveCount(162);
@@ -541,4 +541,33 @@ test('keeps the Home copy width when centering on ultrawide screens', async ({ p
 	await page.setViewportSize({ width: 2560, height: 1440 });
 	await expect.poll(() => intro.evaluate(node => node.getBoundingClientRect().width)).toBe(readableWidth);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(2560);
+});
+
+test('confirms a new draft in a modal without moving the page', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: /Start draft/ }).click();
+	await chooseStadium(page);
+	await expect(page.locator('.player-card').first()).toBeVisible();
+	const savedSeed = () => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).seed as number, STORAGE_KEY);
+	const seed = await savedSeed();
+	const newDraft = page.getByRole('button', { name: 'New draft', exact: true }).first();
+	const before = await newDraft.boundingBox();
+
+	await newDraft.click();
+	const confirm = page.getByRole('dialog', { name: 'Leave this roster behind?' });
+	await expect(confirm).toBeVisible();
+	expect(await confirm.evaluate(dialog => dialog.matches(':modal'))).toBe(true);
+	await expect(confirm.getByRole('button', { name: 'Keep draft', exact: true })).toBeFocused();
+	expect(await newDraft.boundingBox()).toEqual(before);
+
+	await page.keyboard.press('Escape');
+	await expect(confirm).toBeHidden();
+	await expect(page.locator('.player-card').first()).toBeVisible();
+	expect(await savedSeed()).toBe(seed);
+
+	await newDraft.click();
+	await confirm.getByRole('button', { name: 'Discard and start new', exact: true }).click();
+	await expect(confirm).toBeHidden();
+	await expect(page.getByRole('region', { name: 'Choose your home stadium' })).toBeVisible();
+	expect(await savedSeed()).not.toBe(seed);
 });

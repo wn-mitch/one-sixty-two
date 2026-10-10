@@ -1,8 +1,9 @@
 import { animate, type JSAnimation } from 'animejs';
 import { appSettings } from '../game/settings.svelte.ts';
+import { MOTION } from '../motion-timing.ts';
 
-const SHIFT_MS = 180;
-const SETTLE_MS = 260;
+const SHIFT_MS = MOTION.rowShift;
+const SETTLE_MS = MOTION.rowSettle;
 
 export interface OrderMotion {
 	/** Places a row at a vertical offset immediately, as direct pointer manipulation. */

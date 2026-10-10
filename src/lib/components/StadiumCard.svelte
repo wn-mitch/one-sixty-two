@@ -1,8 +1,15 @@
 <script lang="ts">
+ import type { AtmospherePhoto } from '../media/types.ts';
  import type { StadiumSummary } from '../sim/park-types.ts';
  import TeamLogo from './TeamLogo.svelte';
 
- let { stadium, franchiseName }: { stadium: StadiumSummary; franchiseName: string } = $props();
+ let { stadium, franchiseName, photo = null, compact = false }: {
+  stadium: StadiumSummary;
+  franchiseName: string;
+  photo?: AtmospherePhoto | null;
+  /** Sized from the containing card's width, without the header, for a card back. */
+  compact?: boolean;
+ } = $props();
 
  const BASE_M = 27.432;
  const diagonal = BASE_M / Math.SQRT2;
@@ -11,12 +18,12 @@
  const field = $derived([[0, 0] as const, ...stadium.outline, [0, 0] as const].map(point).join(' '));
  const diamond = [[0, 0], [diagonal, diagonal], [0, 2 * diagonal], [-diagonal, diagonal]].map(value => point(value as [number, number])).join(' ');
  const key = $derived(([['LF', -45], ['CF', 0], ['RF', 45]] as const).map(([label, bearing]) => ({ label, dimension: stadium.dimensions.find(item => item.bearingDeg === bearing) })));
- const estimated = $derived(stadium.dimensions.some(item => item.distanceEstimated || item.heightEstimated));
  const roof = $derived(stadium.roofState === 'open' ? 'Retractable roof, open' : stadium.roofState === 'closed' ? 'Closed roof' : 'Open air');
  const feet = (value: number) => `${Math.round(value)} ft`;
 </script>
 
-<article class="stadium-card">
+<article class="stadium-card" class:compact>
+ {#if !compact}
  <header>
   <TeamLogo franchiseId={stadium.franchiseId} label={franchiseName} size="small" />
   <div>
@@ -24,6 +31,7 @@
    <p class="muted">{franchiseName} · {stadium.referenceYear}</p>
   </div>
  </header>
+ {/if}
  <svg viewBox={`${-reach} ${-reach} ${2 * reach} ${reach + 8}`} role="img" aria-label={`Field outline of ${stadium.name}`}>
   <polygon class="grass" points={field} />
   <polygon class="infield" points={diamond} />
@@ -37,19 +45,9 @@
   <div><dt>Wall</dt><dd>{stadium.wallHeightFt.min === stadium.wallHeightFt.max ? feet(stadium.wallHeightFt.max) : `${Math.round(stadium.wallHeightFt.min)}–${feet(stadium.wallHeightFt.max)}`}</dd></div>
  </dl>
  <p class="conditions muted">{roof}{stadium.elevationFt === null ? ' · sea level (estimated)' : ` · ${stadium.elevationFt.toLocaleString('en-US')} ft elevation`}</p>
- <details>
-  <summary>Measurements and sources</summary>
-  <table>
-   <thead><tr><th scope="col">Point</th><th scope="col">Distance</th><th scope="col">Wall</th></tr></thead>
-   <tbody>
-    {#each stadium.dimensions as dimension (dimension.label + dimension.bearingDeg)}
-     <tr><th scope="row">{dimension.label}</th><td>{feet(dimension.distanceFt)}{dimension.distanceEstimated ? ' (est.)' : ''}</td><td>{feet(dimension.heightFt)}{dimension.heightEstimated ? ' (est.)' : ''}</td></tr>
-    {/each}
-   </tbody>
-  </table>
-  <p>Statcast 2025 measured distances and heights; the wall between measured points is interpolated.{estimated ? ' Points marked est. are estimates.' : ''} Calm air at the venue's elevation; weather is not modelled.</p>
-  {#each stadium.notices as notice, index (index)}<p>{notice}</p>{/each}
- </details>
+ {#if photo}
+  <p class="credit muted">Photo {photo.year} · <a href={photo.sourceUrl} target="_blank" rel="noreferrer">{photo.credit}</a> · <a href={photo.licenseUrl} target="_blank" rel="noreferrer">{photo.license}</a></p>
+ {/if}
 </article>
 
 <style>
@@ -65,10 +63,12 @@
  dt { font-size: var(--text-xs); color: var(--muted); }
  dd { margin: 0; font-size: var(--text-xs); font-weight: 700; }
  .conditions { margin: 0; font-size: var(--text-xs); }
- details { font-size: var(--text-xs); }
- summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--muted); }
- details p { margin: var(--space-2) 0 0; max-width: 68ch; }
- table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
- th, td { text-align: left; padding: 2px var(--space-1) 2px 0; font-weight: 400; }
- thead th { color: var(--muted); }
+ .credit { margin: 0; font-size: var(--text-xs); overflow-wrap: anywhere; }
+ .credit a { color: inherit; }
+ .compact { gap: calc(100cqi * 3 / 100); }
+ .compact svg { width: 82%; justify-self: center; }
+ .compact .dimensions { gap: calc(100cqi * 1.5 / 100); }
+ .compact dt { font-size: calc(100cqi * 4 / 100); }
+ .compact dd { font-size: calc(100cqi * 5.2 / 100); }
+ .compact .conditions, .compact .credit { font-size: calc(100cqi * 3.8 / 100); line-height: 1.3; }
 </style>

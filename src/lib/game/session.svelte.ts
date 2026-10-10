@@ -260,12 +260,10 @@ export class Session {
    this.phase = 'ready';
    this.save('draft');
    const name = this.manifest.stadiums.find(stadium => stadium.ref.id === stadiumId)?.name ?? 'Your stadium';
-   this.announce = `${name} is your home stadium.`;
+   this.announce = `${name} is your home stadium. Open the pack for your first franchise.`;
   } catch (error) {
    this.error = error instanceof Error ? error.message : 'Could not choose the stadium';
-   return;
   }
-  await this.roll();
  }
  async roll(): Promise<void> {
   if (this.busy || this.phase !== 'ready' || !this.draft || !this.manifest) return;
@@ -276,10 +274,7 @@ export class Session {
    this.save('draft'); // The committed roll survives reload before any reveal choreography.
    this.phase = 'revealing';
    this.pool = [];
-   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-   const reveal = Promise.withResolvers<void>();
-   setTimeout(reveal.resolve, reduced ? 0 : 550);
-   await Promise.all([this.loadPool(), reveal.promise]);
+   await this.loadPool();
    if (epoch !== this.epoch) return;
    this.phase = 'choosing';
    const roll = this.draft.currentRoll!;

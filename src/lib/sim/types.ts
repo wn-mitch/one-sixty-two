@@ -45,6 +45,8 @@ export interface TeamBox {
 export type SeasonMomentOutcome =
  'walk' | 'hitByPitch' | 'strikeout' | 'single' | 'double' | 'triple' | 'homeRun' |
  'groundedIntoDoublePlay' | 'sacrificeFly' | 'out' | 'reachedOnError' | 'stolenBase' | 'caughtStealing';
+/** Challenge-side win chance after one play; `half` counts half-innings from 0 (top of the 1st). */
+export interface WinPoint { half: number; win: number }
 export interface SeasonMoment {
  gameNumber: number; opponentName: string; isHome: boolean;
  inning: number; half: 'top' | 'bottom'; outsBefore: number; basesBefore: number;

@@ -27,7 +27,7 @@ function complete(seed: number): Draft {
  }
  return draft;
 }
-const result = (wins: number) => ({ wins, losses: 162 - wins, batting: [], pitching: [] }) as unknown as SeasonResult;
+const result = (wins: number) => ({ wins, losses: 162 - wins, runsFor: 700, runsAgainst: 600, batting: [], pitching: [] }) as unknown as SeasonResult;
 
 function memory() {
  const store = new Map<string, string>();

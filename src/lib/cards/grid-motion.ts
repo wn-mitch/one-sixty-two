@@ -1,6 +1,7 @@
 import { animate, type JSAnimation } from 'animejs';
 import { autonomousMotion } from './motion-runtime.ts';
 import { appSettings } from '../game/settings.svelte.ts';
+import { MOTION } from '../motion-timing.ts';
 
 interface Snapshot {
 	clone: HTMLElement;
@@ -173,18 +174,18 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 				});
 			};
 			stage(departures, (node, complete) => {
-				run(node, { opacity: [1, 0], duration: 180, ease: 'outQuart' }, () => {
+				run(node, { opacity: [1, 0], duration: MOTION.gridExit, ease: 'outQuart' }, () => {
 					ghosts.delete(node);
 					node.remove();
 					complete();
 				});
 			}, () => stage(survivors, ({ node, x, y }, complete) => {
-				run(node, { translateX: [x, 0], translateY: [y, 0], duration: 320, ease: 'outQuart' }, () => {
+				run(node, { translateX: [x, 0], translateY: [y, 0], duration: MOTION.gridMove, ease: 'outQuart' }, () => {
 					restore(node);
 					complete();
 				});
 			}, () => stage(entrants, (node, complete) => {
-				run(node, { opacity: [0, 1], duration: 240, ease: 'outQuart' }, () => {
+				run(node, { opacity: [0, 1], duration: MOTION.gridEnter, ease: 'outQuart' }, () => {
 					restore(node);
 					complete();
 				});

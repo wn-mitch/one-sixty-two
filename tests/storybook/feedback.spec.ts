@@ -101,7 +101,7 @@ test.describe('Agentation feedback integration', () => {
 			await expect(sheet.locator('agentation-toolbar')).toHaveCount(1);
 			await expect(page.locator('agentation-toolbar')).toHaveCount(1);
 			await expect(sheet.locator('[data-feedback-dial-host="inline"]')).toHaveCount(1);
-			await expect(page.locator('.dialkit-root')).toHaveCount(1);
+			await expect(page.locator('.dialkit-root')).toHaveCount(0);
 
 
 			const raisedReview = sheet.locator('.card-review.raised-only');
@@ -116,10 +116,14 @@ test.describe('Agentation feedback integration', () => {
 			expect(synced.url).toBe(page.url());
 
 			await exitFeedbackMode(page);
+			// The raised reader covers the sheet header until it is put down.
+			await page.keyboard.press('Escape');
+			await expect(page.locator('[data-card-reader]:popover-open')).toHaveCount(0);
+			await expect(sheet).toBeVisible();
 			await sheet.getByRole('button', { name: 'Close field', exact: true }).click();
 			await expect(sheet).toBeHidden();
 			await expect(page.locator('[data-feedback-dial-host="inline"]')).toHaveCount(0);
-			await expect(page.locator('.dialkit-root')).toHaveCount(1);
+			await expect(page.locator('.dialkit-root')).toHaveCount(0);
 
 			await page.getByRole('button', { name: /Open your field/ }).click();
 			sheet = page.getByRole('dialog', { name: 'Your field', exact: true });
@@ -127,7 +131,7 @@ test.describe('Agentation feedback integration', () => {
 			await expect(sheet.locator('agentation-toolbar')).toHaveCount(1);
 			await expect(page.locator('agentation-toolbar')).toHaveCount(1);
 			await expect(sheet.locator('[data-feedback-dial-host="inline"]')).toHaveCount(1);
-			await expect(page.locator('.dialkit-root')).toHaveCount(1);
+			await expect(page.locator('.dialkit-root')).toHaveCount(0);
 			expect(new URL(page.url()).hash).toBe(storyHash);
 			expect((await mcp.getAllPending()).annotations.some(entry => entry.id === synced.id)).toBe(true);
 

@@ -1,6 +1,6 @@
 <script lang="ts">
  import { onMount, tick, untrack } from 'svelte';
- import { legalSlots, legalReassignments } from '../game/draft.ts';
+ import { legalSlots, legalReassignments, rollYears } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
  import { HITTER_SLOTS, compareId, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../game/types.ts';
  import { loadMedia } from '../media/client.ts';
@@ -10,10 +10,11 @@
  import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import CandidateList from './CandidateList.svelte';
+ import { dealIntoGrid } from './deal-motion.ts';
  import Roster from './Roster.svelte';
  import Reveal from './Reveal.svelte';
  import DraftSheet from './DraftSheet.svelte';
- import DraftLoadingCards from './DraftLoadingCards.svelte';
+ import FoilPack from './FoilPack.svelte';
  import Settings from './Settings.svelte';
  let { draft, manifest, pool, profiles, phase, loading, busy, error, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onDraft, onReassign, onNew }: {
   draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
@@ -32,6 +33,12 @@
  let movingSeasonId = $state<string | null>(null);
  let inspectedSeasonId = $state<string | null>(null);
  let sheetOpen = $state(false);
+ /** The foil pack is still dealing the committed roll; candidates wait for it to land. */
+ let dealing = $state(false);
+ /** The dealt card has reached the rail, which may show the roll before the deal finishes. */
+ let dealtArrived = $state(false);
+ /** A finished deal still owes the candidate grid its deal-out, played when the grid first renders. */
+ let dealOutPending = $state(false);
  let sheetTab = $state<'field' | 'back'>('field');
  let trigger = $state<HTMLElement | null>(null);
  let selectionTrigger: HTMLElement | null = null;
@@ -43,6 +50,16 @@
  let returningSourceClick = false;
  let preserveSheetCancel = false;
  let draftBoard = $state<HTMLElement>();
+ const showingCandidates = $derived(!(phase === 'ready' || dealing) && !(loading || phase === 'revealing') && pool.length > 0);
+ $effect(() => {
+  if (!dealOutPending || !showingCandidates) return;
+  dealOutPending = false;
+  void tick().then(() => {
+   const grid = draftBoard?.querySelector<HTMLElement>('.candidates');
+   const mark = draftBoard?.querySelector<HTMLElement>('[data-roll-mark]');
+   if (grid) dealIntoGrid(grid, mark?.getBoundingClientRect() ?? null);
+  });
+ });
  let fieldHeading = $state<HTMLHeadingElement>();
  let candidateReview = $state<CardReview>();
  let candidateTurned = $state(true);
@@ -72,6 +89,11 @@
  const occupiedSlots = $derived(new Set(draft.picks.map(pick => pick.slot)));
  const lastPick = $derived(draft.picks.at(-1));
  const lastProfile = $derived(lastPick ? rosterBySeason.get(lastPick.seasonId) : undefined);
+ const lastPickLabel = $derived(lastProfile && lastPick ? `${lastProfile.displayName} · ${lastProfile.year} · ${lastPick.slot}` : undefined);
+ const roll = $derived(draft.currentRoll);
+ const rollColor = $derived(roll ? media?.teams[roll.franchiseId]?.color : undefined);
+ const homeStadium = $derived(draft.homeStadium ? manifest.stadiums.find(stadium => stadium.ref.id === draft.homeStadium!.id) ?? null : null);
+ const rollFranchise = $derived(roll ? manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name : undefined);
  const canConfirm = $derived(phase === 'choosing' && !busy && !movingSeasonId && !!selectedProfile && !!pendingSlot && destinations.includes(pendingSlot));
 
  function clearTransient(): void {
@@ -440,7 +462,7 @@
     <span class="picked-count" aria-hidden="true">{draft.picks.length} / {rosterSlots.length}</span>
    </div>
   </div>
-  {#if !wide}<button type="button" class="quiet" onclick={dismissSheet}>Close field</button>{/if}
+  {#if !wide}<button type="button" class="quiet close-field" aria-label="Close field" onclick={dismissSheet}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>{/if}
  </div>
  {#if !wide && selectedProfile}
   <label class="sheet-season">Exact season for {selectedProfile.displayName}
@@ -482,6 +504,9 @@
    {mediaStatus}
    {preview}
    compact={wide}
+   stadium={homeStadium}
+   stadiumFranchise={homeStadium ? manifest.franchises.find(franchise => franchise.id === homeStadium.franchiseId)?.name : undefined}
+   stadiumColor={homeStadium ? media?.teams[homeStadium.franchiseId]?.color : undefined}
    legalSlots={movingSeasonId ? [] : destinations}
    {movingSeasonId}
    {moveTargets}
@@ -532,7 +557,7 @@
 <div bind:this={draftBoard} class="draft-board" class:wide>
  <header class="draft-header">
   {#if wide}<a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>{/if}
-  <Reveal roll={draft.currentRoll} {manifest} compact={wide} revealing={phase === 'revealing'} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={draft.currentRoll ? media?.teams[draft.currentRoll.franchiseId]?.color : undefined} />
+  <Reveal {roll} {manifest} compact={wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} lastPick={wide ? undefined : lastPickLabel} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
   {#if wide}
    <a class="rules-link" href="/about">Rules &amp; model</a>
    <Settings />
@@ -540,23 +565,33 @@
   {/if}
  </header>
  <div class="draft-toolbar">
-  <p class="eyebrow">{phase === 'ready' ? 'Pick locked in' : 'Select · Place · Confirm'}</p>
-  {#if !wide}<button type="button" class="secondary open-field" onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>Open your field <span>{draft.picks.length} / {draftRules(draft.schemaVersion).slots.length}</span></button>{/if}
+  {#if !wide}
+   <button type="button" class="secondary open-field" aria-label={`Open your field ${draft.picks.length} / ${rosterSlots.length}`} onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>
+    Your field
+    <span class="field-count">{draft.picks.length} / {rosterSlots.length}</span>
+   </button>
+  {/if}
  </div>
  <div class="board-columns">
   <section class="draft-browser" aria-label="Make your next pick">
-   {#if phase === 'ready'}
-    <div class="next-roll">
-     {#if lastProfile && lastPick}<p class="last-pick"><strong>{lastProfile.displayName}</strong> · {lastProfile.year} · {lastPick.slot}</p>{/if}
-     <p class="muted">{draft.picks.length ? "Pick locked in. Who's next?" : 'Your roster starts with one roll.'}</p>
-     <button id="roll-next" class="primary" disabled={busy} onclick={onRoll}>Roll next franchise <span aria-hidden="true">↗</span></button>
-    </div>
+   {#if phase === 'ready' || dealing}
+    <FoilPack
+     {roll}
+     franchiseName={rollFranchise}
+     years={roll ? rollYears(roll, manifest, draft.schemaVersion) : null}
+     teamColor={rollColor}
+     pickNumber={draft.picks.length + 1}
+     pickCount={rosterSlots.length}
+     disabled={busy && !dealing}
+     flyTarget={() => draftBoard?.querySelector<HTMLElement>('[data-roll-mark]') ?? null}
+     onOpen={() => { dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
+     onArrive={() => dealtArrived = true}
+     onDealt={() => { dealing = false; dealOutPending = true; }}
+    />
+    {#if wide && lastPickLabel}<p class="last-pick muted">Last pick: <strong>{lastPickLabel}</strong></p>{/if}
    {:else if loading || phase === 'revealing'}
-    <div class="loading-stack" role="status" aria-label="Loading available player seasons">
-     <DraftLoadingCards />
-     <span class="muted">Finding eligible seasons…</span>
-    </div>
-   {:else if pool.length}
+    <p class="loading-copy muted" role="status">Finding eligible seasons…</p>
+   {:else if showingCandidates}
     <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
@@ -573,10 +608,9 @@
 
 <style>
  .draft-board, .draft-browser { min-width: 0; }
- .draft-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .75rem; }
- .draft-toolbar p { margin: 0; }
- .open-field { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-height: 44px; }
- .open-field span { color: var(--muted); font-size: .8rem; }
+ .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .75rem; }
+ .open-field { display: flex; align-items: center; gap: .625rem; min-height: 44px; white-space: nowrap; }
+ .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
  .board-columns { display: grid; min-width: 0; }
  .wide .board-columns { grid-template-columns: minmax(0, 1fr) 452px; gap: 28px; align-items: start; padding-top: 16px; }
  .wide .draft-toolbar { display: none; }
@@ -584,7 +618,8 @@
  .panel-header { padding-inline: 1rem; }
  .field-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 0 1rem 1rem; }
  .field-footer { padding: .75rem 1rem; border-top: 1px solid var(--border); background: var(--background); }
- .field-header { display: flex; align-items: start; justify-content: space-between; gap: .75rem; padding-block: 1rem .5rem; }
+ .field-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-block: 1rem .5rem; }
+ .close-field { display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; margin-right: -.5rem; }
  .field-header > div { min-width: 0; width: 100%; }
  .field-title { display: flex; align-items: center; gap: .75rem; }
  h2 { margin: 0; font: 800 1.7rem/1.1 'Barlow Condensed', sans-serif; }
@@ -603,8 +638,8 @@
  .pick-confirmation p, .move-controls p { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
  .preview-label { color: var(--accent); font-weight: 750; }
  .sheet-error { color: var(--error); margin: 0 0 .75rem; }
- .next-roll { padding-block: 2rem; }
- .last-pick { overflow-wrap: anywhere; }
+ .last-pick { margin: 0; text-align: center; overflow-wrap: anywhere; }
+ .loading-copy { padding-block: var(--space-8); text-align: center; }
  .placement-hint { display: block; color: var(--muted); margin-top: .25rem; font-size: .75rem; }
  .wide .move-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
  .wide .move-controls p { flex-basis: 100%; }
@@ -619,5 +654,4 @@
  .rules-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; min-height: 44px; font-size: .875rem; color: var(--muted); text-decoration: none; }
  .new-draft { flex: none; padding-inline: .75rem; font-size: .875rem; }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
- @media (max-width: 374px) { .draft-toolbar { align-items: start; } .draft-toolbar .eyebrow { max-width: 6rem; font-size: .65rem; } }
 </style>

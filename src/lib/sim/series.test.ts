@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createBox } from './game.ts';
 import { stadiumRef } from './park.ts';
-import { seedOrder, selectMvp, seriesSeed, simulateSeries } from './series.ts';
+import { seedOrder, selectMvp, selectSuperlatives, seriesSeed, simulateSeries } from './series.ts';
 import { SERIES_HOME_SEEDS, type SeriesInput, type SeriesResult, type SeriesTeamId } from './series-types.ts';
 import { accumulateBox, createDraftTeam } from './team.ts';
 import { testSeason, testTeam } from './test-fixtures.ts';
@@ -72,10 +72,31 @@ describe('best-of-five series', () => {
   expect(result.mvp).not.toBeNull();
   expect(['team-a', 'team-b']).toContain(result.mvp!.teamId);
   expect(result.mvp!.runs).toBeCloseTo(result.mvp!.batting + result.mvp!.running + result.mvp!.defense + result.mvp!.pitching, 12);
+  expect(result.superlatives.map(item => item.kind)).toEqual(expect.arrayContaining(['top-bat', 'ace', 'lvp']));
+  const lvp = result.superlatives.find(item => item.kind === 'lvp')!.award;
+  expect(lvp.runs).toBeLessThanOrEqual(result.mvp!.runs);
   for (const game of result.games) {
    if (!game.highlight) continue;
    expect(game.highlight.battingTeamId).not.toBe(game.highlight.pitchingTeamId);
    expect(game.highlight.swing).toBeGreaterThan(0);
+  }
+ });
+ it('traces Team A\'s win chance through every game, ending on the result and passing through both swings', () => {
+  for (const game of result.games) {
+   const trace = game.winTrace;
+   const halves = game.result.away.innings.length + game.result.home.innings.filter(runs => runs !== null).length;
+   expect(trace[0].half).toBe(0);
+   expect(trace.at(-1)).toEqual({ half: halves - 1, win: game.winnerId === 'team-a' ? 1 : 0 });
+   trace.forEach((point, index) => {
+    expect(point.win).toBeGreaterThanOrEqual(0);
+    expect(point.win).toBeLessThanOrEqual(1);
+    if (index) expect(point.half).toBeGreaterThanOrEqual(trace[index - 1].half);
+   });
+   for (const moment of [game.highlight, game.lowlight]) {
+    if (!moment) continue;
+    const half = (moment.inning - 1) * 2 + (moment.half === 'bottom' ? 1 : 0);
+    expect(trace.some((point, index) => index > 0 && point.half === half && point.win === moment.winAfter && trace[index - 1].win === moment.winBefore)).toBe(true);
+   }
   }
  });
  it('is deterministic and keeps each source team\'s results when the links are swapped', () => {
@@ -117,6 +138,31 @@ describe('series rules', () => {
   Object.assign(box.batting[1], { PA: 1, battingRuns: 0.1 });
   box.batting[2].battingRuns = 5;
   expect(selectMvp([{ teamId: 'team-a', key: 'k', box }])).toMatchObject({ seasonId: box.batting[1].seasonId });
+ });
+ it('ranks each superlative on its own component, only among players who did that job', () => {
+  const a = createBox(testTeam('a'));
+  const b = createBox(testTeam('b'));
+  for (const line of [...a.batting, ...b.batting]) Object.assign(line, { PA: 4, fieldingOuts: 3 });
+  Object.assign(a.batting[0], { battingRuns: 2, defensiveRuns: -1.5 });
+  Object.assign(b.batting[3], { battingRuns: 0.5, defensiveRuns: 0.8, stealRuns: 0.3 });
+  Object.assign(a.pitching[0], { BF: 20, outs: 18, pitchingRunsAboveNeutral: 1.2 });
+  Object.assign(b.pitching[0], { BF: 25, outs: 15, pitchingRunsAboveNeutral: -2.5 });
+  // A non-batter's baserunning value cannot make him Wheels.
+  Object.assign(b.batting[5], { PA: 0, stealRuns: 4 });
+  const awards = Object.fromEntries(selectSuperlatives([{ teamId: 'team-a', key: 'k1', box: a }, { teamId: 'team-b', key: 'k2', box: b }])
+   .map(({ kind, award }) => [kind, `${award.teamId}:${award.seasonId}`]));
+  expect(awards).toEqual({
+   'top-bat': `team-a:${a.batting[0].seasonId}`,
+   ace: `team-a:${a.pitching[0].seasonId}`,
+   glove: `team-b:${b.batting[3].seasonId}`,
+   wheels: `team-b:${b.batting[3].seasonId}`,
+   lvp: `team-b:${b.pitching[0].seasonId}`
+  });
+ });
+ it('omits Glove and Wheels when no one reaches the minimum, but always names an LVP', () => {
+  const box = createBox(testTeam('quiet'));
+  Object.assign(box.batting[0], { PA: 4, fieldingOuts: 3, battingRuns: 0.2, defensiveRuns: 0.04, stealRuns: 0.01 });
+  expect(selectSuperlatives([{ teamId: 'team-a', key: 'k', box }]).map(item => item.kind)).toEqual(['top-bat', 'lvp']);
  });
  it('keeps overlapping seasons separate in team totals', () => {
   const season = testSeason(5);

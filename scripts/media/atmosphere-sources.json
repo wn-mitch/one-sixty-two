@@ -12,5 +12,194 @@
     "caption": "Oriole Park at Camden Yards",
     "franchiseId": "BAL",
     "year": 2017
+  },
+  {
+    "id": "angel-stadium-field",
+    "title": "Angel Stadium of Anaheim (31714556991).jpg",
+    "caption": "Angel Stadium",
+    "franchiseId": "ANA",
+    "year": 2016
+  },
+  {
+    "id": "chase-field",
+    "title": "Chase Field, July 3, 2021.jpg",
+    "caption": "Chase Field",
+    "franchiseId": "ARI",
+    "year": 2021
+  },
+  {
+    "id": "truist-park-field",
+    "title": "Truist Park 2025.jpg",
+    "caption": "Truist Park",
+    "franchiseId": "ATL",
+    "year": 2025
+  },
+  {
+    "id": "wrigley-field",
+    "title": "Wrigley Field 2018 - 42195054760.jpg",
+    "caption": "Wrigley Field",
+    "franchiseId": "CHC",
+    "year": 2018
+  },
+  {
+    "id": "rate-field",
+    "title": "Guaranteed Rate Field White Sox vs NY Mets 01.jpg",
+    "caption": "Rate Field",
+    "franchiseId": "CHW",
+    "year": 2019
+  },
+  {
+    "id": "great-american-ball-park-field",
+    "title": "Great American Ball Park (20718178689).jpg",
+    "caption": "Great American Ball Park",
+    "franchiseId": "CIN",
+    "year": 2015
+  },
+  {
+    "id": "progressive-field",
+    "title": "Progressive Field (26647182372).jpg",
+    "caption": "Progressive Field",
+    "franchiseId": "CLE",
+    "year": 2016
+  },
+  {
+    "id": "coors-field",
+    "title": "Coors Field July 2015.jpg",
+    "caption": "Coors Field",
+    "franchiseId": "COL",
+    "year": 2015
+  },
+  {
+    "id": "comerica-park-field",
+    "title": "Comerica Park, Home of the Detroit Tigers Baseball Team.jpg",
+    "caption": "Comerica Park",
+    "franchiseId": "DET",
+    "year": 2016
+  },
+  {
+    "id": "loandepot-park-field",
+    "title": "Florida Marlins Park May 16th 2015 by Don Ramey Logan.jpg",
+    "caption": "loanDepot park",
+    "franchiseId": "FLA",
+    "year": 2015
+  },
+  {
+    "id": "daikin-park-field",
+    "title": "Daikin Park in August 2025.jpg",
+    "caption": "Daikin Park",
+    "franchiseId": "HOU",
+    "year": 2025
+  },
+  {
+    "id": "kauffman-stadium-field",
+    "title": "Kauffman Stadium, Upper Deck seats.JPG",
+    "caption": "Kauffman Stadium",
+    "franchiseId": "KCR",
+    "year": 2014
+  },
+  {
+    "id": "dodger-stadium-field",
+    "title": "Dodger Stadium Field.jpg",
+    "caption": "Dodger Stadium",
+    "franchiseId": "LAD",
+    "year": 2018
+  },
+  {
+    "id": "american-family-field",
+    "title": "American Family Field panoramic view.jpg",
+    "caption": "American Family Field",
+    "franchiseId": "MIL",
+    "year": 2021
+  },
+  {
+    "id": "target-field",
+    "title": "Target Field (2017).jpg",
+    "caption": "Target Field",
+    "franchiseId": "MIN",
+    "year": 2017
+  },
+  {
+    "id": "citi-field",
+    "title": "Citi Field Night Game.jpg",
+    "caption": "Citi Field",
+    "franchiseId": "NYM",
+    "year": 2019
+  },
+  {
+    "id": "yankee-stadium-field",
+    "title": "Yankee Stadium Sunset.jpg",
+    "caption": "Yankee Stadium",
+    "franchiseId": "NYY",
+    "year": 2018
+  },
+  {
+    "id": "sutter-health-park-field",
+    "title": "Sutter Health Park view on an off-day.jpg",
+    "caption": "Sutter Health Park",
+    "franchiseId": "OAK",
+    "year": 2024
+  },
+  {
+    "id": "citizens-bank-park-field",
+    "title": "Citizens Bank Park 2021.jpg",
+    "caption": "Citizens Bank Park",
+    "franchiseId": "PHI",
+    "year": 2021
+  },
+  {
+    "id": "pnc-park-field",
+    "title": "PNC Park (25509297558).jpg",
+    "caption": "PNC Park",
+    "franchiseId": "PIT",
+    "year": 2017
+  },
+  {
+    "id": "petco-park-field",
+    "title": "Petco park.jpg",
+    "caption": "Petco Park",
+    "franchiseId": "SDP",
+    "year": 2015
+  },
+  {
+    "id": "t-mobile-park-field",
+    "title": "T-Mobile Park 2026.jpg",
+    "caption": "T-Mobile Park",
+    "franchiseId": "SEA",
+    "year": 2026
+  },
+  {
+    "id": "oracle-park-field",
+    "title": "Oracle Park 2021.jpg",
+    "caption": "Oracle Park",
+    "franchiseId": "SFG",
+    "year": 2021
+  },
+  {
+    "id": "busch-stadium-field",
+    "title": "Ballpark Village from Busch 2021.jpg",
+    "caption": "Busch Stadium",
+    "franchiseId": "STL",
+    "year": 2021
+  },
+  {
+    "id": "globe-life-field",
+    "title": "GlobeLifeField2021.jpg",
+    "caption": "Globe Life Field",
+    "franchiseId": "TEX",
+    "year": 2021
+  },
+  {
+    "id": "rogers-centre-field",
+    "title": "The Blue Jays host the Orioles in the AL Wild Card Game (30243609181).jpg",
+    "caption": "Rogers Centre",
+    "franchiseId": "TOR",
+    "year": 2016
+  },
+  {
+    "id": "nationals-park-field",
+    "title": "Nationals Park 8.16.19 - 7.jpg",
+    "caption": "Nationals Park",
+    "franchiseId": "WSN",
+    "year": 2019
   }
 ]

@@ -1,108 +1,151 @@
 <script lang="ts">
+	import { onMount, tick, untrack } from 'svelte';
+	import { createCardViewModel, type CardMediaStatus, type CardViewModel } from '../cards/view-model.ts';
 	import type { LibraryView } from '../game/library.ts';
+	import { libraryLeaders, stars } from '../game/library-stats.ts';
+	import { seriesTally, type SeriesRecord } from '../game/series-history.ts';
+	import type { Manifest, Profile } from '../game/types.ts';
+	import { loadMedia } from '../media/client.ts';
+	import type { MediaManifest } from '../media/types.ts';
+	import LibraryCompare from './library/LibraryCompare.svelte';
+	import LibraryLeaders from './library/LibraryLeaders.svelte';
+	import LibraryTeam from './library/LibraryTeam.svelte';
+	import LibraryTile from './library/LibraryTile.svelte';
 
 	interface Props {
 		entries: readonly LibraryView[];
+		history: readonly SeriesRecord[];
+		/** Profiles by entry key, for playable clubs whose seasons have loaded. */
+		profiles: ReadonlyMap<string, readonly Profile[]>;
+		manifest: Manifest | null;
 		status: string;
 		onCopy: (entry: LibraryView) => void;
 		onRename: (entry: LibraryView, nickname: string) => void;
 		onDelete: (entry: LibraryView) => void;
+		/** Clubs selected on first render; one shows that club, two compare them. */
+		initialSelection?: readonly string[];
 	}
-	let { entries, status, onCopy, onRename, onDelete }: Props = $props();
+	let { entries, history, profiles, manifest, status, onCopy, onRename, onDelete, initialSelection = [] }: Props = $props();
 
 	let sort = $state<'wins' | 'date'>('wins');
-	let editing = $state<string | null>(null);
-	let draftName = $state('');
-	let sorted = $derived([...entries].sort((a, b) => sort === 'wins'
+	let comparing = $state(false);
+	let chosen = $state<string[]>(untrack(() => initialSelection.slice(0, 2)));
+	let panel = $state<HTMLElement>();
+	let media = $state.raw<MediaManifest | null>(null);
+	let mediaStatus = $state<CardMediaStatus>('loading');
+
+	onMount(() => {
+		let live = true;
+		loadMedia().then(value => { if (live) { media = value; mediaStatus = 'ready'; } }).catch(() => { if (live) mediaStatus = 'unavailable'; });
+		return () => { live = false; };
+	});
+
+	const sorted = $derived([...entries].sort((a, b) => sort === 'wins'
 		? b.record.wins - a.record.wins || b.savedAt.localeCompare(a.savedAt)
 		: b.savedAt.localeCompare(a.savedAt)));
+	const selected = $derived(chosen.map(key => entries.find(entry => entry.key === key)).filter((entry): entry is LibraryView => !!entry));
+	const leaders = $derived(libraryLeaders(entries));
+	const cards = $derived.by(() => {
+		const byEntry = new Map<string, Map<string, CardViewModel>>();
+		for (const entry of entries) {
+			const loaded = profiles.get(entry.key);
+			if (!loaded) continue;
+			const slots = new Map(entry.roster.map(pick => [pick.seasonId, pick.slot]));
+			byEntry.set(entry.key, new Map(loaded.map(profile => [profile.seasonId, createCardViewModel({ profile, slot: slots.get(profile.seasonId) ?? null, media, manifest, mediaStatus })])));
+		}
+		return byEntry;
+	});
+	const fan = (entry: LibraryView) => {
+		const views = cards.get(entry.key);
+		if (!views) return [];
+		return stars(entry, 6).flatMap(seasonId => { const view = views.get(seasonId); return view ? [{ seasonId, view }] : []; });
+	};
 
-	const title = (entry: LibraryView) => entry.nickname ?? `${entry.record.wins}–${entry.record.losses}${entry.stadium ? ` at ${entry.stadium.name}` : ''}`;
-	const meta = (entry: LibraryView) => [
-		...(entry.nickname ? [`${entry.record.wins}–${entry.record.losses}`, ...(entry.stadium ? [entry.stadium.name] : [])] : []),
-		`Saved ${date(entry.savedAt)}`,
-		...(entry.mvp ? [`MVP ${entry.mvp.label}`] : [])
-	].join(' · ');
-	const date = (value: string) => new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-
-	function startRename(entry: LibraryView): void {
-		editing = entry.key;
-		draftName = entry.nickname ?? '';
+	/** Plain click shows one club; Ctrl/Cmd-click, or any click while comparing, builds a pair. */
+	async function select(key: string, event: MouseEvent | KeyboardEvent): Promise<void> {
+		const additive = comparing || event.ctrlKey || event.metaKey;
+		const current = selected.map(entry => entry.key);
+		if (additive) chosen = current.includes(key) ? current.filter(item => item !== key) : [...current, key].slice(-2);
+		else chosen = current.length === 1 && current[0] === key ? [] : [key];
+		await tick();
+		// Single-column layouts put the panel below the tiles.
+		if (panel && chosen.length && panel.getBoundingClientRect().top > innerHeight) panel.scrollIntoView({ block: 'start' });
 	}
-	function submitRename(event: SubmitEvent, entry: LibraryView): void {
-		event.preventDefault();
-		onRename(entry, draftName);
-		editing = null;
+	function pick(key: string): void {
+		chosen = [key];
+		panel?.scrollIntoView({ block: 'nearest' });
+	}
+	function remove(entry: LibraryView): void {
+		chosen = chosen.filter(key => key !== entry.key);
+		onDelete(entry);
 	}
 </script>
 
 <div class="library">
-	<fieldset class="sort">
-		<legend>Sort by</legend>
-		<label><input type="radio" bind:group={sort} value="wins" /> Wins</label>
-		<label><input type="radio" bind:group={sort} value="date" /> Date</label>
-	</fieldset>
+	<div class="toolbar">
+		<div class="toggle" role="group" aria-label="Sort clubs">
+			<button type="button" aria-pressed={sort === 'wins'} onclick={() => sort = 'wins'}>Most wins</button>
+			<button type="button" aria-pressed={sort === 'date'} onclick={() => sort = 'date'}>Most recent</button>
+		</div>
+		<button type="button" class="compare-toggle" aria-pressed={comparing} onclick={() => comparing = !comparing}>Compare</button>
+		<p class="hint">{comparing ? 'Choose two clubs to compare.' : 'Ctrl- or ⌘-click two clubs to compare.'}</p>
+	</div>
 	<p class="status muted" role="status">{status}</p>
+
 	{#if !sorted.length}
-		<p class="muted">Finish a season and it is saved here automatically, on this device only.</p>
+		<p class="empty muted">Finish a season and it is saved here automatically, on this device only.</p>
 	{:else}
-		<ol class="entries">
-			{#each sorted as entry (entry.key)}
-				<li class:retired={entry.status === 'retired'}>
-					<div class="summary">
-						<h2>{title(entry)}</h2>
-						<p class="muted">{meta(entry)}</p>
-						{#if entry.status === 'retired'}
-							<p class="badge">Retired: made with an older version of the game. It can no longer play head-to-head.</p>
-						{/if}
-						<details>
-							<summary>Roster</summary>
-							<ul class="roster">
-								{#each entry.roster as pick (pick.seasonId)}<li><span class="slot">{pick.slot}</span> {pick.label}</li>{/each}
-							</ul>
-						</details>
-					</div>
-					{#if editing === entry.key}
-						<form class="rename" onsubmit={event => submitRename(event, entry)}>
-							<label for={`name-${entry.key}`}>Nickname</label>
-							<input id={`name-${entry.key}`} bind:value={draftName} maxlength="60" />
-							<button class="primary" type="submit">Save</button>
-							<button type="button" onclick={() => { editing = null; }}>Cancel</button>
-						</form>
-					{:else}
-						<div class="actions">
-							{#if entry.status === 'playable'}
-								<a class="button primary" href={`/h2h#a=${encodeURIComponent(`/#replay=${entry.token}`)}${entry.nickname ? `&an=${encodeURIComponent(entry.nickname)}` : ''}`}>Play head-to-head</a>
-								<button class="secondary" type="button" onclick={() => onCopy(entry)}>Copy challenge link</button>
-							{/if}
-							<button type="button" onclick={() => startRename(entry)} aria-label={`Rename ${title(entry)}`}>Rename</button>
-							<button type="button" onclick={() => onDelete(entry)} aria-label={`Delete ${title(entry)}`}>Delete</button>
-						</div>
-					{/if}
-				</li>
-			{/each}
-		</ol>
+		<div class="columns">
+			<ol class="tiles" aria-label="Saved clubs">
+				{#each sorted as entry (entry.key)}
+					<li>
+						<LibraryTile {entry} stars={fan(entry)} tally={seriesTally(history, entry.key)} selected={chosen.includes(entry.key)} onSelect={event => void select(entry.key, event)} />
+					</li>
+				{/each}
+			</ol>
+			<div class="panel" bind:this={panel}>
+				{#if selected.length === 2}
+					<LibraryCompare a={selected[0]} b={selected[1]} {cards} {history} onClose={() => chosen = []} />
+				{:else if selected.length === 1}
+					{@const entry = selected[0]}
+					<LibraryTeam
+						{entry}
+						cards={cards.get(entry.key) ?? new Map()}
+						history={history.filter(record => record.teams.some(side => side.libraryKey === entry.key))}
+						tally={seriesTally(history, entry.key)}
+						{onCopy}
+						{onRename}
+						onDelete={remove}
+						onClose={() => chosen = []}
+					/>
+				{:else}
+					<LibraryLeaders groups={leaders} onPick={pick} />
+				{/if}
+			</div>
+		</div>
 	{/if}
 </div>
 
 <style>
-	.library { display: grid; gap: var(--space-4); }
-	.sort { display: flex; gap: var(--space-4); align-items: center; margin: 0; padding: 0; border: 0; }
-	.sort legend { float: left; margin-right: var(--space-3); color: var(--muted); font-size: var(--text-sm); }
-	.sort label { display: inline-flex; gap: var(--space-2); align-items: center; min-height: 2.75rem; }
-	.sort input { min-height: 0; }
+	.library { display: grid; gap: var(--space-3); }
+	.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+	.toggle { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+	.toggle button, .compare-toggle { min-height: 2.25rem; padding: .25rem .9rem; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: var(--text-sm); }
+	.toggle button[aria-pressed='true'] { background: var(--surface-raised); color: var(--text); box-shadow: 0 1px 0 color-mix(in oklch, var(--text) 12%, transparent); }
+	.compare-toggle { border: 1px solid var(--border); }
+	.compare-toggle[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+	.hint { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	.status { min-height: 1.25rem; margin: 0; font-size: var(--text-xs); }
-	.entries { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-	.entries > li { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); min-width: 0; }
-	.retired { opacity: .75; }
-	h2 { margin: 0; font-size: var(--text-lg); overflow-wrap: anywhere; }
-	.summary p { margin: var(--space-1) 0; font-size: var(--text-sm); }
-	.badge { color: var(--muted); font-size: var(--text-xs) !important; font-weight: 650; }
-	summary { min-height: 2.75rem; display: flex; align-items: center; cursor: pointer; color: var(--muted); font-size: var(--text-sm); }
-	.roster { columns: 2 12rem; margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); }
-	.slot { display: inline-block; min-width: 2.5rem; color: var(--muted); font-size: var(--text-xs); font-weight: 700; }
-	.actions, .rename { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-	.button { display: inline-flex; align-items: center; text-decoration: none; }
-	.rename label { width: 100%; font-size: var(--text-sm); }
-	.rename input { flex: 1 1 12rem; }
+	.empty { margin: 0; }
+	.columns { display: grid; gap: var(--space-6); align-items: start; }
+	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+	.panel { min-width: 0; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); scroll-margin-top: var(--space-4); }
+	@media (min-width: 64rem) {
+		.columns { grid-template-columns: minmax(0, 1fr) minmax(24rem, 30rem); }
+		.panel { position: sticky; top: var(--space-4); max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; }
+	}
+	@media (max-width: 40rem) {
+		.tiles { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+		.panel { padding: var(--space-4); }
+	}
 </style>

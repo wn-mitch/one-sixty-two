@@ -1,5 +1,5 @@
 import { commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../game/draft.ts';
-import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
+import { stadiumSummary } from '../sim/park.ts';
 import { HITTER_SLOTS, POSITIONS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
 import type { WarSeasonRanking, WarRankings } from '../rankings/types.ts';
 import { neutralDefensivePosition } from '../sim/defense.ts';
@@ -149,7 +149,8 @@ function f2Candidates(canonical: Profile): Profile[] {
  return [alternate, ...candidates];
 }
 
-function buildManifest(profiles: Profile[], candidates: Candidate[], dataVersion: string): Manifest {
+function buildManifest(profiles: Profile[], candidates: Candidate[], simulationData: SimulationData): Manifest {
+ const { dataVersion } = simulationData;
  const franchises = [...new Set(candidates.map(candidate => candidate.franchiseId))].sort().map(id => ({
   id,
   name: `Example Club ${id}`,
@@ -168,7 +169,8 @@ function buildManifest(profiles: Profile[], candidates: Candidate[], dataVersion
   candidates,
   franchises,
   chunks: {},
-  stadiums: syntheticStadiumSummaries(franchises.map(franchise => franchise.id)),
+  // The deck mirrors the simulation stadiums so a chosen park resolves when the season runs.
+  stadiums: simulationData.stadiums.map(stadium => stadiumSummary(stadium, null)),
   simulationUrl: '',
   attributionUrl: '',
   showcaseUrl: '',
@@ -258,7 +260,7 @@ export function createExampleFixtures(): ExampleFixtures {
  const extraProfiles = f2Candidates(f2Canonical);
  const profiles = [...canonical, ...extraProfiles];
  const candidates = profiles.map(profile => candidateFor(profile));
- const manifest = buildManifest(profiles, candidates, simulationData.dataVersion);
+ const manifest = buildManifest(profiles, candidates, simulationData);
  const states = draftStates(manifest, roster);
  if (states.choosingDraft.currentRoll?.franchiseId !== F2 || states.choosingDraft.currentRoll.decade !== F2_DECADE) {
   throw new Error('Example fixture seed no longer rolls F2/2020 first');

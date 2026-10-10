@@ -1,9 +1,10 @@
 <script lang="ts">
+ import { untrack } from 'svelte';
  import type { Manifest } from '#lib/game/types.ts';
- import StadiumCard from './StadiumCard.svelte';
+ import VenueCard from './VenueCard.svelte';
 
- let { manifest, busy, onSelect }: { manifest: Manifest; busy: boolean; onSelect: (stadiumId: string) => void } = $props();
- let selected = $state('');
+ let { manifest, busy, initialSelected = '', onSelect }: { manifest: Manifest; busy: boolean; initialSelected?: string; onSelect: (stadiumId: string) => void } = $props();
+ let selected = $state(untrack(() => initialSelected));
  const franchiseName = (id: string) => manifest.franchises.find(franchise => franchise.id === id)?.name ?? id;
  const stadiums = $derived([...manifest.stadiums].sort((a, b) => a.name.localeCompare(b.name)));
  const chosen = $derived(stadiums.find(stadium => stadium.ref.id === selected));
@@ -19,7 +20,7 @@
     {#each stadiums as stadium (stadium.ref.id)}
      <label class="choice" class:selected={selected === stadium.ref.id}>
       <input type="radio" name="stadium" value={stadium.ref.id} bind:group={selected} disabled={busy} />
-      <StadiumCard {stadium} franchiseName={franchiseName(stadium.franchiseId)} />
+      <VenueCard {stadium} franchiseName={franchiseName(stadium.franchiseId)} />
      </label>
     {/each}
    </div>
@@ -39,13 +40,13 @@
  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
  @media (min-width: 48rem) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
  @media (min-width: 72rem) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
- .choice { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); align-items: start; padding: var(--space-3); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; min-width: 0; }
- .choice:hover { background: var(--surface-raised); }
- .choice.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+ .grid { gap: var(--space-5) var(--space-4); }
+ .choice { position: relative; display: block; min-width: 0; border-radius: calc(var(--radius-lg) + 4px); cursor: pointer; transition: transform 180ms var(--ease-out); }
+ .choice:hover { transform: translateY(-2px); }
+ .choice.selected { outline: 3px solid var(--accent); outline-offset: 4px; }
+ .choice.selected::after { content: 'Selected'; position: absolute; top: -.6rem; left: .75rem; padding: .1rem .5rem; border-radius: var(--radius); color: var(--background); background: var(--accent); font-size: var(--text-xs); font-weight: 750; letter-spacing: .04em; }
  .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 4px; }
- input { margin: 4px 0 0; width: 18px; height: 18px; accent-color: var(--accent); }
- input:focus-visible { outline: none; }
- @media (max-width: 26rem) { .choice { grid-template-columns: minmax(0, 1fr); } input { position: absolute; top: var(--space-3); right: var(--space-3); } }
+ input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
  .commit { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; background: var(--background); border-top: 1px solid var(--border); margin-top: var(--space-4); }
  .commit p { margin: 0; }
 </style>

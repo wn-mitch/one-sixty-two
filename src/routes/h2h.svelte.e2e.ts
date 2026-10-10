@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import type { LibraryEntry } from '../lib/game/library.ts';
+import { LIBRARY_KEY, libraryKey, type LibraryEntry } from '../lib/game/library.ts';
 import { encodeReplay } from '../lib/game/share.ts';
 import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
 import { currentManifest, STORAGE_KEY } from './draft-test-fixtures.ts';
@@ -32,7 +32,7 @@ function entry(manifest: Manifest, draft: Draft, key: string, wins: number, nick
  return {
   key, savedAt: new Date(2026, 0, wins).toISOString(), token: encodeReplay(draft),
   schemaVersion: draft.schemaVersion, modelVersion: draft.modelVersion, dataVersion: draft.dataVersion,
-  record: { wins, losses: 162 - wins }, stadium: { id: stadium.ref.id, name: stadium.name },
+  record: { wins, losses: 162 - wins }, runs: { scored: 700 + wins, allowed: 700 }, batting: [], pitching: [], stadium: { id: stadium.ref.id, name: stadium.name },
   roster: draft.picks.map(pick => ({ seasonId: pick.seasonId, slot: pick.slot, label: pick.seasonId })),
   ...(nickname ? { nickname } : {})
  };
@@ -40,7 +40,7 @@ function entry(manifest: Manifest, draft: Draft, key: string, wins: number, nick
 
 async function gameSummaries(page: Page): Promise<string[]> {
  await expect(page.getByRole('heading', { level: 1, name: /win 3–[012]$/ })).toBeVisible({ timeout: 240000 });
- return page.locator('.games summary').allInnerTexts();
+ return page.locator('.games .game-head').allInnerTexts();
 }
 
 test('plays a best-of-five from two saved seasons, shares it, and never touches the active save', async ({ page, browser, request, baseURL }) => {
@@ -48,8 +48,9 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
  const aces = completeDraft(manifest, 1, 0);
  const bombers = completeDraft(manifest, 101, 5);
  const library = [
-  entry(manifest, aces, 'k-aces', 91, 'Aces'),
-  entry(manifest, bombers, 'k-bombers', 99, 'Bombers'),
+  // Real library keys, so the recorded series finds both clubs.
+  entry(manifest, aces, await libraryKey(aces), 91, 'Aces'),
+  entry(manifest, bombers, await libraryKey(bombers), 99, 'Bombers'),
   { ...entry(manifest, aces, 'k-old', 120, 'Old timers'), schemaVersion: 4, modelVersion: 'pa-v3' }
  ];
  await page.addInitScript(({ key, active, libraryKey, value }) => {
@@ -57,15 +58,13 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
    localStorage.setItem(key, active);
    localStorage.setItem(libraryKey, value);
   }
- }, { key: STORAGE_KEY, active: ACTIVE_SAVE, libraryKey: '162-zero:library:v1', value: JSON.stringify(library) });
+ }, { key: STORAGE_KEY, active: ACTIVE_SAVE, libraryKey: LIBRARY_KEY, value: JSON.stringify(library) });
 
  await page.goto('/seasons');
- const rows = page.locator('.entries > li');
- await expect(rows).toHaveCount(3);
- await expect(rows.locator('h2')).toHaveText(['Old timers', 'Bombers', 'Aces']);
- await expect(rows.nth(0)).toContainText('Retired');
- await expect(rows.nth(0).getByRole('link', { name: 'Play head-to-head' })).toHaveCount(0);
- await expect(rows.nth(1).getByRole('link', { name: 'Play head-to-head' })).toBeVisible();
+ const tiles = page.getByRole('list', { name: 'Saved clubs' }).getByRole('button');
+ await expect(tiles).toHaveCount(3);
+ await expect(tiles.locator('.title')).toHaveText(['Old timers', 'Bombers', 'Aces']);
+ await expect(tiles.nth(0)).toContainText('Retired');
 
  await page.goto('/h2h');
  const pickerA = page.getByRole('combobox', { name: 'Choose from my seasons' }).first();
@@ -92,6 +91,18 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
  await other.goto(seriesUrl);
  expect(await gameSummaries(other)).toEqual(played);
  await fresh.close();
+
+ // The finished series joins this device's head-to-head history.
+ const champion = (await page.getByRole('heading', { level: 1 }).innerText()).startsWith('Aces') ? 'Aces' : 'Bombers';
+ await page.goto('/seasons');
+ const tile = (name: string) => page.getByRole('list', { name: 'Saved clubs' }).getByRole('button').filter({ hasText: name });
+ await expect(tile(champion)).toContainText('H2H 1–0');
+ await expect(tile(champion === 'Aces' ? 'Bombers' : 'Aces')).toContainText('H2H 0–1');
+ await tile('Aces').click();
+ await tile('Bombers').click({ modifiers: ['ControlOrMeta'] });
+ const tape = page.getByRole('region', { name: /Aces vs Bombers/ });
+ await expect(tape.getByRole('row', { name: /Series won head-to-head/ })).toContainText(champion === 'Aces' ? /1\s*Series won head-to-head\s*0/ : /0\s*Series won head-to-head\s*1/);
+ await expect(tape.getByRole('link', { name: 'Play best-of-five' })).toHaveAttribute('href', /^\/h2h#a=.+&an=Aces&b=.+&bn=Bombers$/);
 });
 
 test('names the broken link instead of starting a series', async ({ page }) => {

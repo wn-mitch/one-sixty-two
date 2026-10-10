@@ -2,7 +2,7 @@ import { buildMatchupInputs } from './contact-profile.ts';
 import { preparePark } from './flight.ts';
 import { createInningContext, playHalf, type InningEvent, type InningObserver } from './inning.ts';
 import { stadiumRef, validateStadium } from './park.ts';
-import type { GameInput, GameRandomStreams, GameResult, SeasonMoment, TeamBox, TeamInput } from './types.ts';
+import type { GameInput, GameRandomStreams, GameResult, SeasonMoment, TeamBox, TeamInput, WinPoint } from './types.ts';
 import { validateDefensiveEnvironment, validateTeam } from './validation.ts';
 import { WinExpectancyModel } from './win-expectancy.ts';
 import { createDefensiveRunComponents } from './value.ts';
@@ -22,8 +22,11 @@ export function createBox(team: TeamInput): TeamBox {
  };
 }
 
-/** Full innings in the home team's venue, with no synthetic ties, ghost runners, or fallback winners. */
-export function simulateGame(input: GameInput, streams: GameRandomStreams, winExpectancy: WinExpectancyModel | null = new WinExpectancyModel(input.defenseEnvironment)): GameResult {
+/**
+ * Full innings in the home team's venue, with no synthetic ties, ghost runners, or fallback winners.
+ * A `trace` receives the pre-game win chance, the chance after every play, and the final 1 or 0, all from the challenge side.
+ */
+export function simulateGame(input: GameInput, streams: GameRandomStreams, winExpectancy: WinExpectancyModel | null = new WinExpectancyModel(input.defenseEnvironment), trace?: WinPoint[]): GameResult {
  validateTeam(input.home);
  validateTeam(input.away);
  validateDefensiveEnvironment(input.defenseEnvironment);
@@ -46,16 +49,24 @@ export function simulateGame(input: GameInput, streams: GameRandomStreams, winEx
  let activeInning = 1;
  let activeHalf: 'top' | 'bottom' = 'top';
  const model = winExpectancy;
+ /** Each play starts from the previous play's chance, so the trace and swings share one sequence across half-inning boundaries. */
+ let previousWin = 0;
+ if (model) {
+  const homeWin = model.homeWinProbability(1, 'top', 0, 0, 0, 0);
+  previousWin = input.challengeIsHome ? homeWin : 1 - homeWin;
+  trace?.push({ half: 0, win: previousWin });
+ }
  const observer: InningObserver | undefined = model ? (event: InningEvent) => {
   const homeRunsBefore = activeHalf === 'top' ? event.defenseRunsBefore : event.offenseRunsBefore;
   const awayRunsBefore = activeHalf === 'top' ? event.offenseRunsBefore : event.defenseRunsBefore;
   const homeRunsAfter = activeHalf === 'top' ? event.defenseRunsAfter : event.offenseRunsAfter;
   const awayRunsAfter = activeHalf === 'top' ? event.offenseRunsAfter : event.defenseRunsAfter;
-  const homeWinBefore = model.homeWinProbability(activeInning, activeHalf, event.outsBefore, event.basesBefore, homeRunsBefore, awayRunsBefore);
   const homeWinAfter = model.homeWinProbability(activeInning, activeHalf, event.outsAfter, event.basesAfter, homeRunsAfter, awayRunsAfter);
-  const winBefore = input.challengeIsHome ? homeWinBefore : 1 - homeWinBefore;
+  const winBefore = previousWin;
   const winAfter = input.challengeIsHome ? homeWinAfter : 1 - homeWinAfter;
+  previousWin = winAfter;
   const swing = winAfter - winBefore;
+  trace?.push({ half: (activeInning - 1) * 2 + (activeHalf === 'bottom' ? 1 : 0), win: winAfter });
   const replacesHighlight = swing > 0 && (!highlight || swing > highlight.swing);
   const replacesLowlight = swing < 0 && (!lowlight || swing < lowlight.swing);
   if (!replacesHighlight && !replacesLowlight) return;
@@ -98,6 +109,7 @@ export function simulateGame(input: GameInput, streams: GameRandomStreams, winEx
  if (!finished) throw new Error(`Simulation exceeded ${maxInnings} innings without a winner`);
  const challengeRuns = input.challengeIsHome ? home.runs : away.runs;
  const opponentRuns = input.challengeIsHome ? away.runs : home.runs;
+ if (trace && model) trace.push({ half: (activeInning - 1) * 2 + (activeHalf === 'bottom' ? 1 : 0), win: challengeRuns > opponentRuns ? 1 : 0 });
  return { number: input.number, opponentId: input.opponentId, opponentName: input.opponentName, isHome: input.challengeIsHome,
   stadium: stadiumRef(input.stadium), stadiumName: input.stadium.name, home, away, challengeRuns, opponentRuns, win: challengeRuns > opponentRuns, highlight, lowlight };
 }

@@ -1,23 +1,35 @@
 <script lang="ts">
 	import { STOCK, roles } from '../cards/tokens.ts';
 	import type { Manifest, ReplaySchemaVersion, Roll } from '../game/types.ts';
+	import { rollYears } from '../game/draft.ts';
 	import { draftRules } from '../game/rules.ts';
 	import TeamLogo from './TeamLogo.svelte';
 
-	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor, compact = false }: {
+	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor, lastPick, concealed = false, compact = false }: {
 		roll: Roll | null;
 		manifest: Manifest;
 		revealing: boolean;
 		pickNumber: number;
 		schemaVersion: ReplaySchemaVersion;
 		teamColor?: string;
+		/** Summary of the previous pick, shown while no roll is pending. */
+		lastPick?: string;
+		/** Holds the roll's space without showing it while the pack deals it. */
+		concealed?: boolean;
 		compact?: boolean;
 	} = $props();
 
 	const franchise = $derived(manifest.franchises.find(item => item.id === roll?.franchiseId));
-	const coverage = $derived(manifest.coverage.find(item => item.decade === roll?.decade));
+	const years = $derived(roll ? rollYears(roll, manifest, schemaVersion) : null);
 	const policy = $derived(draftRules(schemaVersion));
-	const palette = $derived(teamColor ? roles({ primary: teamColor, secondary: STOCK }) : null);
+	const palette = $derived(teamColor && !concealed ? roles({ primary: teamColor, secondary: STOCK }) : null);
+	// The roll copy grows sideways out of the team mark when a concealed roll lands, on the foil pack's deal tempo.
+	let unveiling = $state(false);
+	let wasConcealed = false;
+	$effect(() => {
+		if (wasConcealed && !concealed && roll) unveiling = true;
+		wasConcealed = concealed;
+	});
 	const bannerStyle = $derived(
 		palette ? `--reveal-ground: ${palette.field}; --reveal-ink: ${palette.onField};` : undefined
 	);
@@ -28,28 +40,30 @@
 	class:team-colored={palette !== null}
 	class:revealing
 	class:compact
+	class:concealed
+	class:unveiling
 	style={bannerStyle}
 	aria-label="Current draft roll"
-	aria-busy={revealing}
+	aria-busy={revealing || concealed}
 	aria-live="polite"
 	aria-atomic="true"
 >
 	{#if roll}
-		<div class="team-mark">
+		<div class="team-mark" data-roll-mark>
 			<TeamLogo franchiseId={roll.franchiseId} label={franchise?.name ?? roll.franchiseId} size={compact ? 'small' : 'medium'} />
 		</div>
 	{/if}
-	<div class="reveal-copy">
+	<div class="reveal-copy" onanimationend={event => { if (event.animationName.endsWith('grow-sideways')) unveiling = false; }}>
 		<p class="eyebrow">Pick {pickNumber} of {policy.slots.length}</p>
 		{#if roll}
 			<div class="roll-copy">
 				<h2>{franchise?.name ?? roll.franchiseId}</h2>
-				<p class="era">{Math.max(policy.minYear, coverage?.firstYear ?? roll.decade)}–{Math.min(policy.maxYear, coverage?.lastYear ?? roll.decade + 9)}</p>
+				<p class="era">{years?.first}–{years?.last}</p>
 			</div>
-			<p class="status">{revealing ? 'Revealing your player pool…' : 'Choose one exact season from this franchise.'}</p>
+			<p class="status">{concealed ? 'Dealing a franchise…' : revealing ? 'Revealing your player pool…' : 'Choose one exact season from this franchise.'}</p>
 		{:else}
 			<h2>Your next great pick.</h2>
-			<p class="status">Roll a franchise and an era, then choose the exact season.</p>
+			<p class="status">{lastPick ? `Last pick: ${lastPick}` : 'Open a pack to deal a franchise and an era.'}</p>
 		{/if}
 	</div>
 </section>
@@ -107,7 +121,19 @@
 	.compact .era { font-size: 1.25rem; }
 	.compact .eyebrow { margin: 0; color: var(--muted); font-size: .75rem; white-space: nowrap; }
 	.compact .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+	.concealed .team-mark, .concealed .roll-copy { visibility: hidden; }
+	.unveiling .roll-copy { animation: grow-sideways var(--motion-deal) var(--ease-out) both; }
+	.unveiling .roll-copy > * { animation: slide-in var(--motion-deal) var(--ease-out) both; }
+	@keyframes grow-sideways {
+		from { clip-path: inset(0 100% 0 0); }
+		to { clip-path: inset(0 0 0 0); }
+	}
+	@keyframes slide-in {
+		from { opacity: 0; transform: translateX(-1.5rem); }
+		to { opacity: 1; transform: none; }
+	}
+	:global([data-motion='off']) .unveiling .roll-copy, :global([data-motion='off']) .unveiling .roll-copy > * { animation: none; }
 	@media (prefers-reduced-motion: reduce) {
-		.revealing .roll-copy { animation: none; }
+		.revealing .roll-copy, .unveiling .roll-copy, .unveiling .roll-copy > * { animation: none; }
 	}
 </style>

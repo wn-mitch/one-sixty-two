@@ -14,7 +14,7 @@ export interface FinishMaterial {
 export const HITTER_STARTER_CUTS = Object.freeze([2, 4, 6] as const);
 export const CLOSER_CUTS = Object.freeze([0.5, 1.5, 2.5] as const);
 
-const SILVER = 'linear-gradient(115deg, #8f99a4 0%, #f4f6f8 16%, #aeb7c0 30%, #ffffff 44%, #a3adb7 58%, #e9edf1 74%, #8a949f 100%) var(--mx) var(--my) / 300% 300%';
+export const SILVER = 'linear-gradient(115deg, #8f99a4 0%, #f4f6f8 16%, #aeb7c0 30%, #ffffff 44%, #a3adb7 58%, #e9edf1 74%, #8a949f 100%) var(--mx) var(--my) / 300% 300%';
 const GOLD = 'linear-gradient(115deg, #9a6c22 0%, #f7df9a 15%, #c4953a 29%, #fff3c8 43%, #b5832d 57%, #f2d58a 73%, #8f6420 100%) var(--mx) var(--my) / 300% 300%';
 const GEMHOLO = 'linear-gradient(115deg, #ffd0ee 0%, #ffffff 9%, #8fe6ff 19%, #ffe07a 30%, #a8ffc0 41%, #e2b0ff 52%, #ffffff 62%, #ffc2a8 74%, #9fe0ff 87%, #ffd0ee 100%) var(--mx) var(--my) / 300% 300%';
 const EMB = 'calc(var(--lx) * 0.22cqw) calc(var(--ly) * 0.22cqw) 0 rgba(255,255,255,0.5), calc(var(--lx) * -0.32cqw) calc(var(--ly) * -0.32cqw) 0.18cqw rgba(0,0,0,0.5)';
