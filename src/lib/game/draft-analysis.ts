@@ -10,11 +10,34 @@ export interface DraftAnalysis {
  policy: DraftRulePolicy;
  slots: Slot[];
  unused: Candidate[];
+ unusedSeasons: Set<string>;
  plentiful: boolean;
  viability: Map<string, boolean>;
 }
 
-const analysisCache = new WeakMap<Draft, WeakMap<Manifest, DraftAnalysis>>();
+/**
+ * Analyses depend only on the rules version and the picks, so drafts that differ only by roll or
+ * action history (every step of a replay) share one entry. Bounded because each draft adds at most
+ * one entry per pick.
+ */
+const analysisCache = new WeakMap<Manifest, Map<string, DraftAnalysis>>();
+const ANALYSIS_CACHE_LIMIT = 512;
+const candidateIndexes = new WeakMap<Manifest, { bySeason: Map<string, Candidate>; years: Int32Array }>();
+
+function candidateIndex(manifest: Manifest): { bySeason: Map<string, Candidate>; years: Int32Array } {
+ let index = candidateIndexes.get(manifest);
+ if (!index) {
+  index = {
+   bySeason: new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])),
+   years: Int32Array.from(manifest.candidates, candidate => {
+    const year = Number(candidate.seasonId.split(':')[1]);
+    return Number.isInteger(year) ? year : -1;
+   })
+  };
+  candidateIndexes.set(manifest, index);
+ }
+ return index;
+}
 
 
 function openSlots(draft: Draft, policy: DraftRulePolicy): Slot[] {
@@ -23,7 +46,7 @@ function openSlots(draft: Draft, policy: DraftRulePolicy): Slot[] {
 }
 
 function unusedCandidates(draft: Draft, manifest: Manifest, policy: DraftRulePolicy, slots: Slot[]): Candidate[] {
- const candidatesBySeason = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
+ const { bySeason: candidatesBySeason, years } = candidateIndex(manifest);
  const usedPlayers = new Set<string>();
  const usedFranchises = new Set<string>();
  for (const pick of draft.picks) {
@@ -32,9 +55,9 @@ function unusedCandidates(draft: Draft, manifest: Manifest, policy: DraftRulePol
   if (policy.uniqueFranchises) usedFranchises.add(pick.franchiseId);
  }
  const openSlotSet = new Set(slots);
- return manifest.candidates.filter(candidate => {
-  const year = Number(candidate.seasonId.split(':')[1]);
-  return Number.isInteger(year) && year >= policy.minYear && year <= policy.maxYear &&
+ return manifest.candidates.filter((candidate, index) => {
+  const year = years[index];
+  return year >= 0 && year >= policy.minYear && year <= policy.maxYear &&
    !usedPlayers.has(candidate.playerId) &&
    !usedFranchises.has(candidate.franchiseId) &&
    candidate.eligibleSlots.some(slot => openSlotSet.has(slot));
@@ -186,13 +209,15 @@ function canFinishAfterPick(candidates: Candidate[], slots: Slot[], candidate: C
 }
 
 export function analyzeDraft(draft: Draft, manifest: Manifest): DraftAnalysis {
- let byManifest = analysisCache.get(draft);
- if (!byManifest) {
-  byManifest = new WeakMap();
-  analysisCache.set(draft, byManifest);
+ let byPicks = analysisCache.get(manifest);
+ if (!byPicks) {
+  byPicks = new Map();
+  analysisCache.set(manifest, byPicks);
  }
- const cached = byManifest.get(manifest);
+ const key = JSON.stringify([draft.schemaVersion, draft.picks.map(pick => [pick.slot, pick.seasonId, pick.franchiseId])]);
+ const cached = byPicks.get(key);
  if (cached) return cached;
+ if (byPicks.size >= ANALYSIS_CACHE_LIMIT) byPicks.clear();
  const policy = draftRules(draft.schemaVersion);
  const slots = openSlots(draft, policy);
  const unused = unusedCandidates(draft, manifest, policy, slots);
@@ -200,12 +225,13 @@ export function analyzeDraft(draft: Draft, manifest: Manifest): DraftAnalysis {
   policy,
   slots,
   unused,
+  unusedSeasons: new Set(unused.map(candidate => candidate.seasonId)),
   plentiful: policy.uniqueFranchises
    ? jointPoolIsPlentiful(unused, slots)
    : playerPoolIsPlentiful(unused, slots),
   viability: new Map<string, boolean>()
  };
- byManifest.set(manifest, analysis);
+ byPicks.set(key, analysis);
  return analysis;
 }
 

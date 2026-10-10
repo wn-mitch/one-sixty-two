@@ -1,4 +1,5 @@
 import { TRACE_AUTOMATIC_DOUBLE, TRACE_DEAD_BALL, TRACE_HOME_RUN, type FlightTrace } from './flight.ts';
+import { planarDistance } from './park.ts';
 
 /** Fixed starting coordinates (meters) in POSITIONS order: C, 1B, 2B, 3B, SS, LF, CF, RF. */
 export const DEFENDER_START: readonly (readonly [number, number])[] = [
@@ -61,36 +62,42 @@ export function createFieldingCandidates(): FieldingCandidates {
  };
 }
 
+/**
+ * `reach` is non-decreasing in `ballTime - arrival`, so a point whose margin does not beat the
+ * chosen point's margin cannot have a higher probability; only margin improvements evaluate it.
+ */
 function fillCandidate(trace: FlightTrace, position: number, hitPrevention: number, candidates: FieldingCandidates, slot: number): void {
  const speed = defenderSpeed(position, hitPrevention);
  const reaction = defenderReaction(position, hitPrevention);
  const [sx, sy] = DEFENDER_START[position];
  const airborneEnd = trace.landing < 0 ? trace.count : trace.landing;
- let airIndex = -1, airProbability = 0;
+ let airIndex = -1, airProbability = 0, airMargin = -Infinity;
  for (let index = 1; index < airborneEnd; index++) {
   const time = trace.t[index];
   if (time < reaction || trace.z[index] > FIELDING_MODEL.catchHeightM) continue;
-  const probability = reach(time, reaction + Math.hypot(trace.x[index] - sx, trace.y[index] - sy) / speed);
-  if (probability > airProbability) { airProbability = probability; airIndex = index; }
+  const arrival = reaction + planarDistance(trace.x[index] - sx, trace.y[index] - sy) / speed;
+  if (time - arrival <= airMargin) continue;
+  const probability = reach(time, arrival);
+  if (probability > airProbability) { airProbability = probability; airIndex = index; airMargin = time - arrival; }
  }
  candidates.airIndex[slot] = airIndex;
  candidates.airProbability[slot] = airProbability;
- let groundIndex = -1, groundProbability = 0, groundPickup = 0;
+ let groundIndex = -1, groundProbability = 0, groundPickup = 0, groundMargin = -Infinity;
  let retrievalTime = Infinity, retrievalX = 0, retrievalY = 0;
  if (trace.landing >= 0) {
   for (let index = trace.landing; index < trace.count; index++) {
    const time = trace.t[index];
-   const arrival = reaction + Math.hypot(trace.x[index] - sx, trace.y[index] - sy) / speed;
-   if (position < INFIELDERS && time >= reaction && groundProbability < FIELDING_MODEL.sureReach && Math.hypot(trace.x[index], trace.y[index]) <= FIELDING_MODEL.infieldAttemptRadiusM) {
+   const arrival = reaction + planarDistance(trace.x[index] - sx, trace.y[index] - sy) / speed;
+   if (position < INFIELDERS && time >= reaction && time - arrival > groundMargin && groundProbability < FIELDING_MODEL.sureReach && planarDistance(trace.x[index], trace.y[index]) <= FIELDING_MODEL.infieldAttemptRadiusM) {
     const probability = reach(time, arrival);
-    if (probability > groundProbability) { groundProbability = probability; groundIndex = index; groundPickup = Math.max(time, arrival); }
+    if (probability > groundProbability) { groundProbability = probability; groundIndex = index; groundPickup = Math.max(time, arrival); groundMargin = time - arrival; }
    }
    if (retrievalTime === Infinity && arrival <= time) { retrievalTime = time; retrievalX = trace.x[index]; retrievalY = trace.y[index]; }
   }
   if (retrievalTime === Infinity) {
    const last = trace.count - 1;
    retrievalX = trace.x[last]; retrievalY = trace.y[last];
-   retrievalTime = Math.max(trace.t[last], reaction + Math.hypot(retrievalX - sx, retrievalY - sy) / speed);
+   retrievalTime = Math.max(trace.t[last], reaction + planarDistance(retrievalX - sx, retrievalY - sy) / speed);
   }
  }
  candidates.groundIndex[slot] = groundIndex;
@@ -201,7 +208,7 @@ export function buildFieldingPlan(
   plan.groundFielder[insert] = position;
   plan.groundProbability[insert] = candidates.groundProbability[slot];
   plan.groundThrow[insert] = candidates.groundPickup[slot] + FIELDING_MODEL.transferS[position] +
-   Math.hypot(trace.x[index] - BASES[0][0], trace.y[index] - BASES[0][1]) / throwSpeed(position, outfieldThrowing[position]);
+   planarDistance(trace.x[index] - BASES[0][0], trace.y[index] - BASES[0][1]) / throwSpeed(position, outfieldThrowing[position]);
  }
  let bestTime = Infinity;
  for (let position = 0; position < 8; position++) {
@@ -212,7 +219,7 @@ export function buildFieldingPlan(
  const speed = throwSpeed(plan.retriever, outfieldThrowing[plan.retriever]);
  for (let base = 0; base < 3; base++) {
   plan.retrievalThrow[base] = bestTime + FIELDING_MODEL.transferS[plan.retriever] +
-   Math.hypot(candidates.retrievalX[slot] - BASES[base][0], candidates.retrievalY[slot] - BASES[base][1]) / speed;
+   planarDistance(candidates.retrievalX[slot] - BASES[base][0], candidates.retrievalY[slot] - BASES[base][1]) / speed;
  }
 }
 

@@ -55,6 +55,7 @@ Use Node >=24.12 and npm. Prefer existing `just` recipes.
 - `npm run test:e2e -- <test-file>`: targeted browser tests.
 - `just test`: unit and application browser suites.
 - `just smoke --seed 162 --policy best`: draft and full-season smoke run.
+- `just bench`: draft, matchup-fit, and season timings with a result fingerprint.
 - `just storybook`: isolated component workshop.
 - `just storybook-test`: workshop browser suite when relevant.
 

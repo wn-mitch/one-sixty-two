@@ -1,7 +1,9 @@
+import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compareId, DEFENSE_METHOD_VERSION, SLOTS, VALUATION_VERSION, type Manifest, type Profile, type ShowcaseCard, type SimulationData } from '../src/lib/game/types.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../src/lib/game/draft.ts';
+import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, SLOTS, VALUATION_VERSION, type Draft, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../src/lib/game/types.ts';
 import { validateDefensiveEnvironment, validateProfile } from '../src/lib/sim/validation.ts';
 
 export interface CurrentData {
@@ -144,4 +146,74 @@ export class ProfileChunks {
 		this.#chunks.set(key, profiles);
 		return profiles;
 	}
+}
+
+/** Deterministic drafting policy for smoke and benchmark runs: the best or worst modeled profile for the first fillable slot. */
+export type Policy = 'best' | 'worst';
+
+function hitterValue(profile: Profile): number {
+	const rates = profile.battingRates;
+	if (!rates) throw new Error(`Hitter profile ${profile.seasonId} has no prepared batting rates`);
+	const expectedObp = rates[0] + rates[1] + rates[3] + rates[4] + rates[5] + rates[6];
+	const atBatRate = 1 - rates[0] - rates[1];
+	if (atBatRate <= 0) throw new Error(`Hitter profile ${profile.seasonId} has no modeled at-bats`);
+	const expectedSlg = (rates[3] + 2 * rates[4] + 3 * rates[5] + 4 * rates[6]) / atBatRate;
+	return expectedObp + expectedSlg;
+}
+
+function pitcherValue(profile: Profile): number {
+	const rates = profile.pitchingRates;
+	if (!rates) throw new Error(`Pitcher profile ${profile.seasonId} has no prepared pitching rates`);
+	return rates[0] + rates[1] + rates[3] + rates[4] + rates[5] + rates[6];
+}
+
+function chooseProfile(profiles: Profile[], slot: Slot, policy: Policy): Profile {
+	const hitter = (HITTER_SLOTS as readonly Slot[]).includes(slot);
+	return profiles.toSorted((left, right) => {
+		const difference = (hitter ? hitterValue(left) : pitcherValue(left)) - (hitter ? hitterValue(right) : pitcherValue(right));
+		if (difference !== 0) {
+			const bestDirection = hitter ? -1 : 1;
+			return difference * (policy === 'best' ? bestDirection : -bestDirection);
+		}
+		return compareId(left.seasonId, right.seasonId);
+	})[0];
+}
+
+/** The named stadium, or the first manifest stadium in ID order. */
+export function stadiumId(manifest: Manifest, requested: string | null): string {
+	const ids = manifest.stadiums.map(stadium => stadium.ref.id).sort(compareId);
+	if (requested !== null && !ids.includes(requested)) throw new Error(`Unknown stadium ${requested}; choose one of ${ids.join(', ')}`);
+	return requested ?? ids[0];
+}
+
+export async function draftRoster(manifest: Manifest, seed: number, policy: Policy, stadium: string, chunks: ProfileChunks): Promise<{ draft: Draft; profiles: Profile[] }> {
+	let draft = selectHomeStadium(createDraft(manifest, seed), manifest, stadium);
+	const selectedProfiles: Profile[] = [];
+	while (draft.picks.length < SLOTS.length) {
+		draft = rollDraft(draft, manifest);
+		const roll = draft.currentRoll;
+		assert.ok(roll, 'A draft roll must be present before candidate selection');
+		const chunk = await chunks.forRoll(roll.franchiseId, roll.decade);
+		const profilesBySeason = new Map(chunk.map(profile => [profile.seasonId, profile]));
+		const available = availableCandidates(draft, manifest);
+		let slot: Slot | undefined;
+		let eligibleProfiles: Profile[] = [];
+		for (const openSlot of SLOTS) {
+			if (draft.picks.some(pick => pick.slot === openSlot)) continue;
+			const candidates = available.filter(candidate => legalSlots(draft, candidate, manifest).includes(openSlot));
+			if (!candidates.length) continue;
+			slot = openSlot;
+			eligibleProfiles = candidates.map(candidate => {
+				const profile = profilesBySeason.get(candidate.seasonId);
+				if (!profile) throw new Error(`Profile chunk is missing candidate ${candidate.seasonId}`);
+				return profile;
+			});
+			break;
+		}
+		if (!slot || !eligibleProfiles.length) throw new Error('Current legal roll has no selectable profile for an open slot');
+		const profile = chooseProfile(eligibleProfiles, slot, policy);
+		draft = commitPick(draft, manifest, profile.seasonId, slot);
+		selectedProfiles.push(profile);
+	}
+	return { draft, profiles: selectedProfiles };
 }

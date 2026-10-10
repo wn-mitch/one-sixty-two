@@ -214,6 +214,9 @@ export function simplePolygon(polygon: Vec2[]): boolean {
  return true;
 }
 
+/** Euclidean length of (x, y). Unlike `Math.hypot`, this is correctly rounded in every engine. */
+export const planarDistance = (x: number, y: number): number => Math.sqrt(x * x + y * y);
+
 export function pointInPolygon(x: number, y: number, polygon: readonly Vec2[]): boolean {
  let inside = false;
  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {

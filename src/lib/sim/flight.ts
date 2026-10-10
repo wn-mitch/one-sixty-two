@@ -1,4 +1,4 @@
-import { INFIELD_CENTER, INFIELD_RADIUS_M, pointInPolygon } from './park.ts';
+import { INFIELD_CENTER, INFIELD_RADIUS_M, planarDistance, pointInPolygon } from './park.ts';
 import type { StadiumConfig } from './park-types.ts';
 
 export const FLIGHT_DT = 1 / 60;
@@ -77,24 +77,33 @@ export interface PreparedPark {
  stadium: StadiumConfig;
  /** Per fence: ax, ay, bx, by, height, fair, unit normal x, unit normal y. */
  fences: Float64Array;
+ /** Per fence: min x, max x, min y, max y, padded by BOUNDS_PAD_M. */
+ bounds: Float64Array;
  fenceCount: number;
 }
 const FENCE_STRIDE = 8;
+/** Far larger than intersection rounding error, so a step outside a fence's padded box cannot report a crossing. */
+const BOUNDS_PAD_M = 1e-3;
 const PREPARED = new WeakMap<StadiumConfig, PreparedPark>();
 
 export function preparePark(stadium: StadiumConfig): PreparedPark {
  const cached = PREPARED.get(stadium);
  if (cached) return cached;
  const fences = new Float64Array(stadium.fences.length * FENCE_STRIDE);
+ const bounds = new Float64Array(stadium.fences.length * 4);
  stadium.fences.forEach((fence, index) => {
+  bounds.set([
+   Math.min(fence.start[0], fence.end[0]) - BOUNDS_PAD_M, Math.max(fence.start[0], fence.end[0]) + BOUNDS_PAD_M,
+   Math.min(fence.start[1], fence.end[1]) - BOUNDS_PAD_M, Math.max(fence.start[1], fence.end[1]) + BOUNDS_PAD_M
+  ], index * 4);
   const offset = index * FENCE_STRIDE;
   const dx = fence.end[0] - fence.start[0];
   const dy = fence.end[1] - fence.start[1];
-  const length = Math.hypot(dx, dy);
+  const length = planarDistance(dx, dy);
   if (!(length > 0)) throw new Error(`Degenerate fence segment ${index}: ${stadium.id}`);
   fences.set([fence.start[0], fence.start[1], fence.end[0], fence.end[1], fence.heightM, fence.fair ? 1 : 0, -dy / length, dx / length], offset);
  });
- const prepared = { stadium, fences, fenceCount: stadium.fences.length };
+ const prepared = { stadium, fences, bounds, fenceCount: stadium.fences.length };
  PREPARED.set(stadium, prepared);
  return prepared;
 }
@@ -106,7 +115,11 @@ function push(trace: FlightTrace, t: number, x: number, y: number, z: number): v
 }
 
 /** Parameter along p->q where it crosses fence `index`, or Infinity. */
-function fenceCrossing(fences: Float64Array, index: number, px: number, py: number, qx: number, qy: number): number {
+function fenceCrossing(park: PreparedPark, index: number, px: number, py: number, qx: number, qy: number): number {
+ const box = park.bounds, edge = index * 4;
+ if ((px < box[edge] && qx < box[edge]) || (px > box[edge + 1] && qx > box[edge + 1]) ||
+  (py < box[edge + 2] && qy < box[edge + 2]) || (py > box[edge + 3] && qy > box[edge + 3])) return Infinity;
+ const fences = park.fences;
  const offset = index * FENCE_STRIDE;
  const ax = fences[offset], ay = fences[offset + 1];
  const ex = fences[offset + 2] - ax, ey = fences[offset + 3] - ay;
@@ -148,12 +161,12 @@ let dragScale = 1;
 function accelerate(stadium: StadiumConfig, v: Float64Array, output: Float64Array): void {
  const [wx, wy, wz] = stadium.windMps;
  const rx = v[0] - wx, ry = v[1] - wy, rz = v[2] - wz;
- const speed = Math.hypot(rx, ry, rz);
+ const speed = Math.sqrt(rx * rx + ry * ry + rz * rz);
  const drag = -DRAG_COEFFICIENT * dragScale * stadium.airDensityKgM3 * (speed / DRAG_REFERENCE_MPS) ** DRAG_SPEED_EXPONENT * speed;
  output[0] = drag * rx;
  output[1] = drag * ry;
  output[2] = drag * rz - GRAVITY_MPS2;
- const horizontal = Math.hypot(rx, ry);
+ const horizontal = planarDistance(rx, ry);
  if (lift === 0 || horizontal === 0) return;
  const scale = lift * stadium.airDensityKgM3 * speed;
  output[0] -= scale * rz * rx / horizontal;
@@ -173,7 +186,7 @@ function airborneStep(park: PreparedPark, trace: FlightTrace, time: number): num
  const vz = velocity[2] + acceleration[2] * FLIGHT_DT;
  let best = Infinity, kind = EVENT_NONE, index = -1;
  for (let fence = 0; fence < park.fenceCount; fence++) {
-  const s = fenceCrossing(park.fences, fence, px, py, qx, qy);
+  const s = fenceCrossing(park, fence, px, py, qx, qy);
   if (s < best) { best = s; kind = EVENT_FENCE; index = fence; }
  }
  stadium.overhead.forEach((object, objectIndex) => {
@@ -240,9 +253,9 @@ function airborneStep(park: PreparedPark, trace: FlightTrace, time: number): num
 
 function rollingStep(park: PreparedPark, trace: FlightTrace, time: number): number {
  const stadium = park.stadium;
- const speed = Math.hypot(velocity[0], velocity[1]);
+ const speed = planarDistance(velocity[0], velocity[1]);
  if (speed <= 0) return -1;
- const infield = Math.hypot(position[0] - INFIELD_CENTER[0], position[1] - INFIELD_CENTER[1]) <= INFIELD_RADIUS_M;
+ const infield = planarDistance(position[0] - INFIELD_CENTER[0], position[1] - INFIELD_CENTER[1]) <= INFIELD_RADIUS_M;
  const deceleration = infield ? stadium.infieldDecelerationMps2 : stadium.outfieldDecelerationMps2;
  const step = Math.min(FLIGHT_DT, speed / deceleration);
  const nextSpeed = Math.max(0, speed - deceleration * step);
@@ -252,7 +265,7 @@ function rollingStep(park: PreparedPark, trace: FlightTrace, time: number): numb
  const qx = px + ux * distance, qy = py + uy * distance;
  let best = Infinity, index = -1;
  for (let fence = 0; fence < park.fenceCount; fence++) {
-  const s = fenceCrossing(park.fences, fence, px, py, qx, qy);
+  const s = fenceCrossing(park, fence, px, py, qx, qy);
   if (s < best) { best = s; index = fence; }
  }
  if (index < 0) {

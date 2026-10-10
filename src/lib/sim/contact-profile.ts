@@ -227,16 +227,45 @@ function solve(matrix: Float64Array, rhs: Float64Array, size: number): boolean {
  return true;
 }
 
-/** Lawson-Hanson non-negative least squares for min ||A x - b|| with x >= 0 (A is rows x cols, row-major). */
+interface NnlsScratch {
+ rows: number; cols: number;
+ passive: Uint8Array; gradient: Float64Array; z: Float64Array; normal: Float64Array; rhs: Float64Array;
+ index: Int32Array; residual: Float64Array; gram: Float64Array; projection: Float64Array;
+}
+let scratch: NnlsScratch | null = null;
+
+/** Reused work buffers; every buffer is fully written before it is read within one solve. */
+function nnlsScratch(rows: number, cols: number): NnlsScratch {
+ if (scratch?.rows !== rows || scratch.cols !== cols) {
+  scratch = {
+   rows, cols,
+   passive: new Uint8Array(cols), gradient: new Float64Array(cols), z: new Float64Array(cols), normal: new Float64Array(cols * cols),
+   rhs: new Float64Array(cols), index: new Int32Array(cols), residual: new Float64Array(rows),
+   gram: new Float64Array(cols * cols), projection: new Float64Array(cols)
+  };
+ }
+ return scratch;
+}
+
+/**
+ * Lawson-Hanson non-negative least squares for min ||A x - b|| with x >= 0 (A is rows x cols, row-major).
+ * The passive-set normal equations are gathered from AᵀA and Aᵀb, computed once per call.
+ */
 export function nnls(a: Float64Array, b: Float64Array, rows: number, cols: number, x: Float64Array): void {
  x.fill(0);
- const passive = new Uint8Array(cols);
- const gradient = new Float64Array(cols);
- const z = new Float64Array(cols);
- const normal = new Float64Array(cols * cols);
- const rhs = new Float64Array(cols);
- const index = new Int32Array(cols);
- const residual = new Float64Array(rows);
+ const { passive, gradient, z, normal, rhs, index, residual, gram, projection } = nnlsScratch(rows, cols);
+ passive.fill(0);
+ for (let i = 0; i < cols; i++) {
+  let value = 0;
+  for (let row = 0; row < rows; row++) value += a[row * cols + i] * b[row];
+  projection[i] = value;
+  for (let j = i; j < cols; j++) {
+   let entry = 0;
+   for (let row = 0; row < rows; row++) entry += a[row * cols + i] * a[row * cols + j];
+   gram[i * cols + j] = entry;
+   gram[j * cols + i] = entry;
+  }
+ }
  for (let outer = 0; outer < 3 * cols; outer++) {
   for (let row = 0; row < rows; row++) {
    let value = b[row];
@@ -256,14 +285,8 @@ export function nnls(a: Float64Array, b: Float64Array, rows: number, cols: numbe
    let size = 0;
    for (let col = 0; col < cols; col++) if (passive[col]) index[size++] = col;
    for (let i = 0; i < size; i++) {
-    let value = 0;
-    for (let row = 0; row < rows; row++) value += a[row * cols + index[i]] * b[row];
-    rhs[i] = value;
-    for (let j = 0; j < size; j++) {
-     let entry = 0;
-     for (let row = 0; row < rows; row++) entry += a[row * cols + index[i]] * a[row * cols + index[j]];
-     normal[i * size + j] = entry;
-    }
+    rhs[i] = projection[index[i]];
+    for (let j = 0; j < size; j++) normal[i * size + j] = gram[index[i] * cols + index[j]];
    }
    if (!solve(normal, rhs, size)) throw new Error('Contact fit normal equations are singular');
    z.fill(0);
@@ -294,6 +317,10 @@ const FIT_ROWS = CONTACT_OUTCOMES;
 const rowValue = (values: ArrayLike<number>, offset: number, row: number): number =>
  row === 1 ? values[offset + 1] + values[offset + 2] : row === 2 ? values[offset + 2] : values[offset + row];
 
+const shiftPenalty = (shiftIndex: number): number => (POWER_SHIFTS[shiftIndex] / 10) ** 2;
+/** Shift nodes by ascending penalty; ties in score still go to the lower index. */
+const SHIFT_SEARCH_ORDER = POWER_SHIFTS.map((_, index) => index).sort((left, right) => shiftPenalty(left) - shiftPenalty(right) || left - right);
+
 /** `error` covers the binding rows (1B, 2B + 3B, HR, OUT); `tripleError` is the best-effort split. */
 export interface ContactFit { regionWeights: Float64Array; shiftIndex: number; error: number; tripleError: number }
 
@@ -315,7 +342,9 @@ export function fitContact(basis: ContactBasis, prior: Float64Array, target: rea
  const weights = new Float64Array(REGION_COUNT);
  let best: ContactFit | null = null;
  let bestScore = Infinity;
- for (let shiftIndex = 0; shiftIndex < POWER_SHIFTS.length; shiftIndex++) {
+ for (const shiftIndex of SHIFT_SEARCH_ORDER) {
+  // Every score is at least its shift penalty, so a larger penalty cannot win.
+  if (shiftPenalty(shiftIndex) > bestScore) continue;
   regionResponses(basis, side, speed, shiftIndex, responses);
   a.fill(0);
   for (let row = 0; row < FIT_ROWS; row++) {
@@ -343,8 +372,11 @@ export function fitContact(basis: ContactBasis, prior: Float64Array, target: rea
    else error = Math.max(error, miss);
   }
   for (let region = 0; region < REGION_COUNT; region++) distance += (weights[region] - prior[region]) ** 2 / Math.max(prior[region], 1e-4);
-  const score = (error <= FIT_TOLERANCE ? 0 : 1e6 * error) + 1e3 * tripleError + distance + (POWER_SHIFTS[shiftIndex] / 10) ** 2;
-  if (score < bestScore) { bestScore = score; best = { regionWeights: Float64Array.from(weights), shiftIndex, error, tripleError }; }
+  const score = (error <= FIT_TOLERANCE ? 0 : 1e6 * error) + 1e3 * tripleError + distance + shiftPenalty(shiftIndex);
+  if (score < bestScore || (score === bestScore && best !== null && shiftIndex < best.shiftIndex)) {
+   bestScore = score;
+   best = { regionWeights: Float64Array.from(weights), shiftIndex, error, tripleError };
+  }
  }
  if (!best) throw new Error(`Contact fit failed for ${label}`);
  return best;

@@ -18,6 +18,7 @@
 		"predev": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare && npm run share:prepare",
 		"prebuild": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare && npm run share:prepare",
 		"smoke": "node scripts/smoke-season.ts",
+		"bench": "node scripts/bench-sim.ts",
 		"calibrate": "node scripts/calibrate.ts",
 		"dev": "vite dev",
 		"build": "vite build",

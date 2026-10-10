@@ -25,6 +25,9 @@ smoke *args:
 calibrate *args:
     npm run calibrate -- {{args}}
 
+bench *args:
+    npm run bench -- {{args}}
+
 deploy:
     npm run build
     npx wrangler deploy
