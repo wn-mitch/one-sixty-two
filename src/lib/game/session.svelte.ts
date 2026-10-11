@@ -94,12 +94,14 @@ export class Session {
   this.loading = true;
   this.error = '';
   const epoch = ++this.epoch;
+  let resumeSaved = false;
   try {
    const manifest = await loadManifest();
    if (epoch !== this.epoch) return;
    this.manifest = manifest;
    const sharedPath = location.pathname.match(/^\/r\/([A-Za-z0-9_-]{22})$/);
    const forceNew = location.pathname === '/' && new URLSearchParams(location.search).get('new') === '1';
+   resumeSaved = location.pathname === '/' && new URLSearchParams(location.search).get('resume') === '1';
    if (forceNew) {
     this.shared = false;
     this.draft = createDraft(manifest, newSeed());
@@ -152,6 +154,8 @@ export class Session {
    this.error = error instanceof Error ? error.message : 'Could not load game data. Please retry.';
    if (!this.incompatible) this.retryAction = this.draft ? 'resume' : 'initialize';
   } finally { if (epoch === this.epoch) this.loading = false; }
+  // `/?resume=1` (answering a challenge with the draft in progress) skips the Resume button.
+  if (resumeSaved && epoch === this.epoch && this.savedDraft) await this.resume();
  }
  /** Every completed season of the player's own draft joins the device library; viewed replays do not. */
  private async saveToLibrary(result: SeasonResult, epoch: number): Promise<void> {

@@ -26,14 +26,18 @@ function completeDraft(manifest: Manifest, seed: number, stadium: number): Draft
  throw new Error('No complete draft within 50 seeds');
 }
 
+/** Stores and publishes a complete challenger season, as Challenge a friend would. */
+async function publishChallenger(manifest: Manifest, origin: string) {
+ // Browsers send Origin on these POSTs; Node's fetch does not, and the site rejects cross-site posts.
+ const sameOrigin: typeof fetch = (input, init) => fetch(input, { ...init, headers: { ...init?.headers, origin } });
+ const { id } = await storeReplay(completeDraft(manifest, 7, 0), origin, sameOrigin);
+ return { id, publication: await prepareSharePublication(id, origin, sameOrigin) };
+}
+
 test('a challenge link opens a challenge card, binds the next draft, and offers the series after its season', async ({ page, request, baseURL }) => {
  const origin = baseURL!;
  const manifest = await currentManifest(request);
- const challenger = completeDraft(manifest, 7, 0);
- // Browsers send Origin on these POSTs; Node's fetch does not, and the site rejects cross-site posts.
- const sameOrigin: typeof fetch = (input, init) => fetch(input, { ...init, headers: { ...init?.headers, origin } });
- const { id } = await storeReplay(challenger, origin, sameOrigin);
- const publication = await prepareSharePublication(id, origin, sameOrigin);
+ const { id, publication } = await publishChallenger(manifest, origin);
  const { wins, losses } = publication.record;
 
  // Crawlers get challenge metadata with the published field image.
@@ -75,6 +79,28 @@ test('a challenge link opens a challenge card, binds the next draft, and offers 
 
  await play.click();
  await expect(page.getByRole('heading', { level: 1, name: /win 3–[012]$/ })).toBeVisible({ timeout: 240000 });
+});
+
+test('a draft in progress can answer the challenge instead of being replaced', async ({ page, request, baseURL }) => {
+ const manifest = await currentManifest(request);
+ const { id, publication } = await publishChallenger(manifest, baseURL!);
+ const current = rollDraft(selectHomeStadium(createDraft(manifest, 41), manifest, manifest.stadiums[2].ref.id), manifest);
+ await page.addInitScript(({ key, value }) => {
+  if (!localStorage.getItem(key)) localStorage.setItem(key, value);
+ }, { key: STORAGE_KEY, value: JSON.stringify({ ...current, phase: 'draft' }) });
+ await page.goto(`/c/${id}`);
+ await expect(page.getByText('You have a draft in progress · 0 of 14 picked')).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Draft your team', exact: true })).toHaveCount(0);
+ await page.getByRole('button', { name: 'Answer with my current draft', exact: true }).click();
+ // It resumes straight into the same draft rather than replacing it.
+ await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+ const stored = await page.evaluate(([challengeKey, draftKey]) => ({
+  challenge: JSON.parse(localStorage.getItem(challengeKey)!),
+  draft: JSON.parse(localStorage.getItem(draftKey)!)
+ }), [CHALLENGE_KEY, STORAGE_KEY]);
+ expect(stored.draft.seed).toBe(current.seed);
+ expect(stored.draft.currentRoll).toEqual(current.currentRoll);
+ expect(stored.challenge).toEqual({ replayId: id, wins: publication.record.wins, losses: publication.record.losses, seed: current.seed });
 });
 
 test('a challenge link without a published season says so and still starts a draft', async ({ page }) => {
