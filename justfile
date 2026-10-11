@@ -28,6 +28,9 @@ calibrate *args:
 bench *args:
     npm run bench -- {{args}}
 
+draft-feasibility *args:
+    npm run draft:feasibility -- {{args}}
+
 deploy:
     npm run build
     npx wrangler deploy

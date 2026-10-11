@@ -36,7 +36,7 @@ async function reusePrepared(compilerHash: string): Promise<boolean> {
  }
  const warSource = await optionalBytes(join('.cache/rankings', RANKINGS_SOURCE_FILE));
  if (!warSource || createHash('sha256').update(warSource).digest('hex') !== RANKINGS_SOURCE_CHECKSUM) return false;
- if (!cache.assets['current.json'] || !cache.assets[`${cache.dataVersion}/manifest.json`] || !cache.assets[`${cache.dataVersion}/showcase.json`] || !cache.assets[`${cache.dataVersion}/defense-source.json`] || !cache.assets[`${cache.dataVersion}/transformed-data.tar.gz`] || cache.gallery.some(filename => !filename.startsWith(`${cache.dataVersion}/gallery-`) || !cache.assets[filename])) return false;
+ if (!cache.assets['current.json'] || !cache.assets[`${cache.dataVersion}/manifest.json`] || !cache.assets[`${cache.dataVersion}/showcase.json`] || !cache.assets[`${cache.dataVersion}/defense-source.json`] || !cache.assets[`${cache.dataVersion}/draft-cards.json`] || !cache.assets[`${cache.dataVersion}/transformed-data.tar.gz`] || cache.gallery.some(filename => !filename.startsWith(`${cache.dataVersion}/gallery-`) || !cache.assets[filename])) return false;
  for (const [filename, checksum] of Object.entries(cache.assets)) {
   if (!/^(current\.json|[a-f0-9]{64}\/[A-Za-z0-9_.-]+)$/.test(filename)) return false;
   const asset = await optionalBytes(join(outputDir, filename));
@@ -49,7 +49,8 @@ async function reusePrepared(compilerHash: string): Promise<boolean> {
 async function prepare(): Promise<void> {
  const attribution = await acquireAttribution(offline);
  const simulationFiles = (await readdir('src/lib/sim')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts')).sort().map(name => `src/lib/sim/${name}`);
- const compilerFiles = ['scripts/prepare-data.ts', 'scripts/data/stadiums.json', STATCAST_SHAPE_FILE, 'scripts/rankings/source.ts', 'src/lib/cards/finish.ts', 'src/lib/game/types.ts', ...simulationFiles, ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
+ const draftFiles = (await readdir('src/lib/draft')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts') && !name.includes('fixtures')).sort().map(name => `src/lib/draft/${name}`);
+ const compilerFiles = ['scripts/prepare-data.ts', ...draftFiles, 'scripts/data/stadiums.json', STATCAST_SHAPE_FILE, 'scripts/rankings/source.ts', 'src/lib/cards/finish.ts', 'src/lib/game/types.ts', ...simulationFiles, ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
  const hash = createHash('sha256').update(SOURCE_COMMIT).update(canonicalJSON(CHECKSUMS)).update(RANKINGS_SOURCE_COMMIT).update(RANKINGS_SOURCE_CHECKSUM).update(canonicalJSON(attribution));
  for (const filename of compilerFiles) hash.update(filename).update(await readFile(filename));
  const compilerHash = hash.digest('hex');

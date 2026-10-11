@@ -76,9 +76,12 @@ just test
 just smoke --seed 162 --policy best
 just calibrate --seed 162 --games 10000
 just bench --runs 5
+just draft-feasibility --seeds 64
 ```
 
 `just bench` prints median timings for policy drafts, season matchup fitting, and a full season, plus a fingerprint of the seed-162 season result. An optimization that should not change simulated values must leave the fingerprint unchanged.
+
+`just draft-feasibility` is the headless Draft Mode D01 proof. It needs no browser or profile chunks. For each seed and pick policy, it builds a seeded run pool from real player-seasons: a 128-card cube in two waves of eight-card packs, plus one full roster of cleanup commons per seat. It then drafts all eight seats with placeholder policies, runs opening recovery (cuts, then common-only cleanup), and checks every submission against the cap and roster rules. It also runs named negative fixtures and replays every run. A one-screen summary goes to stdout, the full JSON report goes to `.cache/draft-feasibility/report.json`, and the exit code is 1 when any gate fails. `--policy value|needs|lopsided|random|mixed|all`, `--seed-start` and `--report` select the sweep.
 
 Browser tests start their own local Worker/R2 surface on port 4162. If another process owns it, use `PLAYWRIGHT_PORT=4172 just test` (or another free port); the suite never reuses an existing server. Before starting it, `scripts/test-build.ts` runs the prepare steps and rebuilds only when a content hash of the build inputs (application source and build scripts, excluding tests; hand-authored static files; generated-asset pointers; root configuration) differs from the last suite build. `FORCE_BUILD=1` forces a rebuild.
 
@@ -107,6 +110,8 @@ Share publication requires the existing `REPLAYS` R2 binding, the `BROWSER` Brow
 Browser Run must be able to fetch `PUBLIC_ORIGIN`, including the authenticated capture route and its static assets. Ordinary browser access does not establish this: Cloudflare can block Browser Run requests to temporary `trycloudflare.com` origins with HTTP 403. Verify publication against an accessible deployment origin before release.
 
 The rankings index pins the same source revision and SHA-256 as the statistical compiler. A season whose source rows cover fewer scheduled games than the shortest completed season in the covered window is published as unavailable rather than ranked from a fraction of a season.
+
+The compiler also writes a versioned `draft-cards.json` (`salary-runs-v1`, provisional) for Draft Mode. It prices each candidate at the modeled season runs above its role's replacement level: shared-engine linear weights against a league-average opponent in the neutral park, plus fielding runs at the position, over the role's workload. The replacement level is the 20th percentile of eligible cards. Baserunning, park fit and platoon effects are not priced. Cosmetic finishes come from WAR and never enter the price. Classic does not load this file.
 
 The data compiler pins an immutable third-party transport commit and SHA-256 for every source CSV. Changed or missing bytes fail rather than selecting another release. Output URLs use a SHA-256 version of canonical transformed payloads. The versioned `diagnostics.json` records exclusions and estimated-field counts without display names.
 

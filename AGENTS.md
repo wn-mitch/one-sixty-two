@@ -56,6 +56,7 @@ Use Node >=24.12 and npm. Prefer existing `just` recipes.
 - `just test`: unit and application browser suites.
 - `just smoke --seed 162 --policy best`: draft and full-season smoke run.
 - `just bench`: draft, matchup-fit, and season timings with a result fingerprint.
+- `just draft-feasibility`: headless Draft Mode pool, salary, cleanup and roster-legality proof with a JSON report.
 - `just storybook`: isolated component workshop.
 - `just storybook-test`: workshop browser suite when relevant.
 

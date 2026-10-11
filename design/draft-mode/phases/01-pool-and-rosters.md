@@ -1,9 +1,58 @@
 # D01 — Pool, salary, and roster feasibility
 
-**Status: PROPOSED**  
+**Status: HARNESS AVAILABLE — provisional values, acceptance decisions open**  
 **Purpose:** Prove that the finite shared player pool, salary model, opening recovery, and roster legality can support a real eight-seat draft before any season presentation is built.
 
 This phase is a contract-and-headless-proof phase, not a playable Draft Mode milestone. It should produce a runnable deterministic harness that exercises the real pool, pricing, cleanup, and roster validators. It must not introduce fictional replacement players or a second Classic engine.
+
+## Current harness
+
+`just draft-feasibility` runs the proof against the compiled pool. The code lives in `src/lib/draft/`, with the harness in `scripts/draft-feasibility*`.
+
+**Contracts.** The versions are `draft-d01-v1` (rules), `salary-runs-v1` (the salary table in `draft-cards.json`, pinned by `dataVersion`) and `pool-v1` (ownership buckets, legality failure codes and report shape). D02 consumes these and does not define parallel validators.
+
+**Identity and ownership.**
+- A `DraftCard` is immutable per data and salary version.
+- A run-owned `CardInstance` fixes its starting salary and original tier when created, and carries provenance and a trade deadline through every transfer.
+- One ledger records each card's single owner: cube pack, cleanup stock, unowned, released, or a seat roster.
+- Uniqueness is per player-season, so one pool may hold several seasons of the same athlete.
+- A pool never holds a team-season bullpen together with one of its member player-seasons.
+
+**Salary.**
+- A card's salary comes from its modeled season runs above the replacement level of its best role:
+  - shared-engine linear weights against a league-average opponent in the neutral park;
+  - plus fielding runs at the position;
+  - over the role's workload: about 706 PA for a hitter, 54 starts × the starter budget, a closer capped at 195 outs, and a 1,263-out bullpen remainder.
+- Replacement is the 20th percentile per role.
+- The minimum salary is 5 units and the price is 4 units per run, where one unit is $0.1M.
+- Baserunning, park fit and platoon effects are not priced.
+- Finish and pack tier come from WAR and never enter the price.
+
+**Pool.**
+- Cleanup stock is reserved before drafting: one full 16-card kit of commons per seat. A common is a base-finish card costing at most 15 units.
+- The cube follows role and tier quotas:
+  - 72 hitters, with at least 9 eligible at each position;
+  - 28 starters, 14 closers and 14 bullpens;
+  - 16 high-tier, 32 mid-tier and 80 base cards, dealt into packs of 1/2/5.
+- A random cube would hold about five bullpens, too few for eight seats.
+
+**Opening recovery.**
+- The order is draft → cuts → common-only cleanup → submission.
+- Surplus cards and overpriced cards are cut to the unowned pool and are not reoffered as cleanup.
+- Cleanup runs in snake rounds. No pick may reduce how much of the remaining open demand the stock can serve.
+- The legality predicate takes a `PayrollBudget` (nominal cap, franchise adjustment, obligations, ceiling) and no cash.
+
+**Provisional evidence.**
+- The default sweep (64 seeds × five placeholder pick policies, about 9 s on desktop Node) leaves every seat legal.
+- Most placeholder drafts finish over the 1,500-unit cap or short of a role; recovery repairs all of them.
+- Per-slot cleanup use stays below kit supply.
+- Named negative fixtures fail as designed.
+- Every run replays to the same fingerprint, at about 13 ms per run.
+- Phone runtime is not measured.
+
+**Prerequisites recorded for D03.**
+- `validateTeam`/`validateSeason` in `src/lib/sim/validation.ts` reject duplicate `playerId`s and duplicate franchises. Draft rules must relax both before drafted rosters can be simulated, including two bullpens from one franchise, which share `bullpen:<franchise>`.
+- Two-way cards are priced at their best role only.
 
 ## Dependencies
 

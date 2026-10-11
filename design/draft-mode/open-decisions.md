@@ -14,13 +14,13 @@ Playtest the proposed two waves of eight picks with the selected common-only cle
 
 Owner: [Salary and revenue](season-and-economy.md). First relevant gate: [phase](phases/01-pool-and-rosters.md).
 
-Calibrate all-card salaries, franchise constraints, cap ramp, minimum income, attendance revenue, segment-win bonuses and family prices. Cash banks independently of payroll. Starting salaries persist through upgrades; repricing exceptions remain open. Define final-segment payout presentation without assuming a post-season shop.
+Calibrate all-card salaries, franchise constraints, cap ramp, minimum income, attendance revenue, segment-win bonuses and family prices. The D01 harness uses provisional values: `salary-runs-v1`, a minimum of 5 units, 4 units per run above the 20th-percentile replacement level, and a 1,500-unit nominal cap. These are not decisions. Cash banks independently of payroll. Starting salaries persist through upgrades; repricing exceptions remain open. Define final-segment payout presentation without assuming a post-season shop.
 
 ## 3. Cleanup delivery
 
 Owner: [Cleanup delivery](draft-and-rosters.md). First relevant gate: [phase](phases/01-pool-and-rosters.md).
 
-Common-only opening repair is selected. Define finite stock, role/budget coverage, pack allocation and trade/cut/waiver ordering. Ensure every club can submit an affordable legal roster without duplicated cards or fictional free call-ups.
+Common-only opening repair is selected. Define finite stock, role/budget coverage, pack allocation and trade/cut/waiver ordering. The D01 harness provisionally reserves one 16-card kit of commons per seat (base finish, at most 15 units), cuts surplus and overpriced cards to the unowned pool, and runs guarded snake-order cleanup before submission. Stock size, pick format and waiver placement remain open. Ensure every club can submit an affordable legal roster without duplicated cards or fictional free call-ups.
 
 ## 4. Information and selection
 

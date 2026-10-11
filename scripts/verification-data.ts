@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../src/lib/game/draft.ts';
 import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, SLOTS, VALUATION_VERSION, type Draft, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../src/lib/game/types.ts';
 import { validateDefensiveEnvironment, validateProfile } from '../src/lib/sim/validation.ts';
+import { decodeDraftCards, type StoredDraftCardTable } from '../src/lib/draft/card-table.ts';
+import type { DraftCard } from '../src/lib/draft/types.ts';
 
 export interface CurrentData {
 	schemaVersion: 1;
@@ -113,6 +115,22 @@ export async function loadVerificationData(): Promise<VerificationData> {
 		gallery[key] = card;
 	}
 	return { current, manifest, simulation, showcase, gallery };
+}
+
+export interface DraftData {
+	dataVersion: string;
+	table: StoredDraftCardTable;
+	cards: DraftCard[];
+}
+
+/** Loads the current manifest and its draft card table without profile chunks. */
+export async function loadDraftData(): Promise<DraftData> {
+	const current = await readJson<CurrentData>(resolve(dataRoot, 'current.json'));
+	if (current.schemaVersion !== 1 || !/^[a-f0-9]{64}$/.test(current.dataVersion)) throw new Error('Generated current.json is invalid');
+	const manifest = await readJson<Manifest>(localAssetPath(current.manifestUrl));
+	if (manifest.schemaVersion !== 1 || manifest.dataVersion !== current.dataVersion) throw new Error('Generated manifest does not match current.json');
+	const table = await readJson<StoredDraftCardTable>(localAssetPath(`/data/${manifest.dataVersion}/draft-cards.json`));
+	return { dataVersion: manifest.dataVersion, table, cards: decodeDraftCards(manifest.candidates, table, manifest.dataVersion) };
 }
 
 export class ProfileChunks {

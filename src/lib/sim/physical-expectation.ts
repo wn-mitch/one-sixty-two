@@ -1,6 +1,6 @@
 import { POSITIONS, type DefensiveEnvironment, type DefensiveSkills, type Position } from '../game/types.ts';
 import { forcedBaseTransition } from './advancement.ts';
-import { leagueContactFit, REGION_COUNT, SHAPE_BINS, launchClass, shapeTables, sideIndex, type ContactModel } from './contact-profile.ts';
+import { leagueContactFit, REGION_COUNT, SHAPE_BINS, launchClass, shapeTables, sideIndex, type ContactFit, type ContactModel } from './contact-profile.ts';
 import { forEachLatticeTrace } from './contact-basis.ts';
 import {
  createContactOptions,
@@ -55,18 +55,22 @@ export interface PhysicalReference {
  readonly positionCaches: Map<string, number>[];
 }
 
-/** League class distribution at the league power shift, unknown side, and average speed. */
-function leagueClasses(model: ContactModel, environment: DefensiveEnvironment): Float64Array {
- const fit = leagueContactFit(model, environment.leagueRates);
+/** Neutral-park physical outcome classes for a contact fit made at unknown side and average speed. */
+export function contactClasses(model: ContactModel, fit: Pick<ContactFit, 'regionWeights' | 'shiftIndex'>): Float64Array {
  const classes = new Float64Array(PHYSICAL_CLASS_COUNT);
  for (let region = 0; region < REGION_COUNT; region++) {
   const offset = (fit.shiftIndex * REGION_COUNT + region) * PHYSICAL_CLASS_COUNT;
   for (let cls = 0; cls < PHYSICAL_CLASS_COUNT; cls++) classes[cls] += fit.regionWeights[region] * model.basis.classes[offset + cls];
  }
  const total = classes.reduce((sum, value) => sum + value, 0);
- if (!(Math.abs(total - 1) < 1e-6)) throw new Error('League contact classes do not sum to one');
+ if (!(Math.abs(total - 1) < 1e-6)) throw new Error('Contact classes do not sum to one');
  for (let cls = 0; cls < PHYSICAL_CLASS_COUNT; cls++) classes[cls] /= total;
  return classes;
+}
+
+/** League class distribution at the league power shift, unknown side, and average speed. */
+function leagueClasses(model: ContactModel, environment: DefensiveEnvironment): Float64Array {
+ return contactClasses(model, leagueContactFit(model, environment.leagueRates));
 }
 
 const result = createContactResult();
@@ -85,14 +89,21 @@ function setState(mask: number): void {
 
 const maskOf = (runnersOnBase: Int16Array): number => (runnersOnBase[0] >= 0 ? 1 : 0) | (runnersOnBase[1] >= 0 ? 2 : 0) | (runnersOnBase[2] >= 0 ? 4 : 0);
 
+type ResultVisitor = (probability: number, runs: number, outs: number, bases: number, ended: boolean) => void;
+
+/** Visits each legal result of one contact class from `state`, scaled by `weight`. */
+function visitContactClass(environment: DefensiveEnvironment, variant: Variant, state: number, target: number, cls: number, weight: number, visit: ResultVisitor): void {
+ const outs = Math.floor(state / 8);
+ const mask = state & 7;
+ const { kind, fielder, bases } = classKind(cls);
+ enumerateDecisions(decisions, () => {
+  setState(mask);
+  resolveContact(result, base, outs, kind, fielder, bases, 0, 0, runners, environment.leagueDoublePlay, variant.prepared, variant.options, decisions, 0, target, participants);
+ }, probability => visit(weight * probability, result.runs, result.outsAfter, maskOf(result.runners), result.ended));
+}
+
 /** Visits each legal result of one plate appearance from `state` for the variant. */
-function visitPlateAppearance(
- environment: DefensiveEnvironment,
- variant: Variant,
- state: number,
- target: number,
- visit: (probability: number, runs: number, outs: number, bases: number, ended: boolean) => void
-): void {
+function visitPlateAppearance(environment: DefensiveEnvironment, variant: Variant, state: number, target: number, visit: ResultVisitor): void {
  const outs = Math.floor(state / 8);
  const mask = state & 7;
  const rates = environment.leagueRates;
@@ -106,12 +117,7 @@ function visitPlateAppearance(
  if (rates[2] > 0) visit(rates[2], 0, outs + 1, mask, false);
  for (let cls = 0; cls < PHYSICAL_CLASS_COUNT; cls++) {
   const weight = contact * variant.classes[cls];
-  if (weight === 0) continue;
-  const { kind, fielder, bases } = classKind(cls);
-  enumerateDecisions(decisions, () => {
-   setState(mask);
-   resolveContact(result, base, outs, kind, fielder, bases, 0, 0, runners, environment.leagueDoublePlay, variant.prepared, variant.options, decisions, 0, target, participants);
-  }, probability => visit(weight * probability, result.runs, result.outsAfter, maskOf(result.runners), result.ended));
+  if (weight !== 0) visitContactClass(environment, variant, state, target, cls, weight, visit);
  }
 }
 
@@ -244,6 +250,51 @@ export function getPhysicalReference(environment: DefensiveEnvironment): Physica
  const created = createPhysicalReference(environment);
  REFERENCES.set(environment, created);
  return created;
+}
+
+/**
+ * Linear run weights for one plate-appearance event: expected runs plus the change in run
+ * expectancy, averaged over league state visits with neutral defense in a neutral park.
+ * League-rate events weighted by these values sum to zero.
+ */
+export interface EventRunWeights {
+ /** BB and HBP force the same transition. */
+ walk: number;
+ strikeout: number;
+ classes: Float64Array;
+ /** Expected outs recorded by each contact class, including double plays. */
+ classOuts: Float64Array;
+}
+
+const RUN_WEIGHTS = new WeakMap<PhysicalReference, EventRunWeights>();
+export function eventRunWeights(reference: PhysicalReference): EventRunWeights {
+ const cached = RUN_WEIGHTS.get(reference);
+ if (cached) return cached;
+ const environment = reference.environment;
+ const expectancy = reference.runExpectancy;
+ const variant = neutralVariant(environment, reference.classes);
+ const totalVisits = reference.stateVisits.reduce((sum, value) => sum + value, 0);
+ const weights: EventRunWeights = { walk: 0, strikeout: 0, classes: new Float64Array(PHYSICAL_CLASS_COUNT), classOuts: new Float64Array(PHYSICAL_CLASS_COUNT) };
+ for (let state = 0; state < STATE_COUNT; state++) {
+  const share = reference.stateVisits[state] / totalVisits;
+  if (share === 0) continue;
+  const outs = Math.floor(state / 8);
+  const mask = state & 7;
+  const before = expectancy[state];
+  const after = (afterOuts: number, bases: number): number => afterOuts >= 3 ? 0 : expectancy[afterOuts * 8 + bases];
+  const transition = forcedBaseTransition(mask);
+  weights.walk += share * ((transition >> 3) + after(outs, transition & 7) - before);
+  weights.strikeout += share * (after(outs + 1, mask) - before);
+  for (let cls = 0; cls < PHYSICAL_CLASS_COUNT; cls++) {
+   visitContactClass(environment, variant, state, Infinity, cls, share, (p, runs, afterOuts, bases, ended) => {
+    weights.classes[cls] += p * (runs + (ended ? 0 : after(afterOuts, bases)) - before);
+    weights.classOuts[cls] += p * (Math.min(3, afterOuts) - outs);
+   });
+  }
+ }
+ if (![weights.walk, weights.strikeout, ...weights.classes, ...weights.classOuts].every(Number.isFinite)) throw new Error('Event run weights are not finite');
+ RUN_WEIGHTS.set(reference, weights);
+ return weights;
 }
 
 export function targetIndex(runsNeeded: number): number {

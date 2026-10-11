@@ -20,6 +20,7 @@
 		"smoke": "node scripts/smoke-season.ts",
 		"bench": "node scripts/bench-sim.ts",
 		"calibrate": "node scripts/calibrate.ts",
+		"draft:feasibility": "node scripts/draft-feasibility.ts",
 		"dev": "vite dev",
 		"build": "vite build",
 		"postbuild": "node scripts/package-assets.ts",
