@@ -206,8 +206,7 @@ test('keeps an inspectable card draftable when the optional media index fails', 
 	await expect(card.getByRole('img', { name: 'Photo source unavailable', exact: true })).toBeVisible();
 	await openNarrowBack(sheet, era);
 	const details = await openTextVersion(sheet);
-	const photo = details.getByRole('heading', { name: 'Photo', exact: true }).locator('..');
-	await expect(photo).toContainText(/source is unavailable/i);
+	await expect(details).toContainText(/photo source unavailable/i);
 	const saved = await confirmNarrowPick(page, scenario);
 	expect(saved.picks.at(-1)?.seasonId).toBe(scenario.candidate.seasonId);
 });
@@ -242,7 +241,7 @@ test('shows a bullpen designed back, readable members and excluded saves leader,
 	await openNarrowBack(sheet, era);
 	const text = await openTextVersion(sheet);
 	await expect(text).toContainText(/excludes saves leader/i);
-	await expect(text).toContainText(/no composite WAR/i);
+	await expect(text).toContainText(/WAR\/162 unavailable/i);
 	for (const member of scenario.profile.bullpen!.members) await expect(text).toContainText(member.displayName);
 	await expect(text).toContainText(scenario.profile.bullpen!.excluded.displayName);
 	const saved = await confirmNarrowPick(page, scenario);

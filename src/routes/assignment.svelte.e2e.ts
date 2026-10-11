@@ -184,13 +184,14 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await expect(selected.sheet).not.toBeVisible();
 	rosterReview = page.locator('.field-panel .card-review.raised-only');
 	await expect(rosterReview.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
-	await expect(page.locator('.field-panel .pick-confirmation')).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	// The move is still in progress, so the footer shows it; the selection behind it returns after Cancel move.
+	await expect(page.locator('.field-panel').getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
 	await expect(page.locator(`.field-panel [data-slot="${origin}"]`)).toHaveAttribute('aria-expanded', 'true');
 	await page.setViewportSize({ width: 390, height: 844 });
 	await expect(selected.sheet).toBeVisible();
 	rosterReview = selected.sheet.locator('.card-review.raised-only');
 	await expect(rosterReview.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
-	await expect(confirmation).toHaveAttribute('data-selected-season', scenario.target.seasonId);
+	await expect(selected.sheet.getByRole('button', { name: 'Cancel move', exact: true })).toBeVisible();
 	await expect(source).toHaveAttribute('aria-expanded', 'true');
 	await selected.sheet.locator('.sheet-content').click({ position: { x: 1, y: 1 } });
 	await expect(rosterReview).toHaveCount(0);

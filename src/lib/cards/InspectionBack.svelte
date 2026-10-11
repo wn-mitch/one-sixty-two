@@ -14,6 +14,8 @@
  }
 
  let { s, onDetails, view, simplified = false, controls }: Props = $props();
+ // The printed bullpen back defers its member list to the text version, so the text version must carry it.
+ const poolRows = $derived(s.details.sections.find(section => section.h === 'Bullpen pool')?.rows.filter(row => row.k !== 'Team-season') ?? []);
  const colors = $derived.by(function (): { ground: string; ink: string } {
   switch (s.era) {
    case '2020s':
@@ -88,7 +90,7 @@
    {#if controls}{@render controls()}{:else}<span>{view.label}</span>{/if}
    {#if !simplified}<button type="button" aria-label="Show text version for {s.full}" onclick={onDetails}>Text version</button>{/if}
   </footer>
-  {#if simplified}<SourceCredits details={s.details} />{/if}
+  {#if simplified}{@render poolMembers()}<SourceCredits details={s.details} />{/if}
  </section>
 {:else}
  <section class="inspection-back historical-back" class:simplified data-era={s.era} aria-label="Historical season text version" style:--back-ground={colors.ground} style:--back-ink={colors.ink}>
@@ -120,9 +122,17 @@
    {#if controls}<div class="footer-controls">{@render controls()}</div>{/if}
    {#if !simplified}<button type="button" onclick={onDetails}>Text version</button>{/if}
   </footer>
-  {#if simplified}<SourceCredits details={s.details} />{/if}
+  {#if simplified}{@render poolMembers()}<SourceCredits details={s.details} />{/if}
  </section>
 {/if}
+
+{#snippet poolMembers()}
+ {#if poolRows.length}
+  <section class="pool-members" aria-label="Bullpen pool">
+   <dl>{#each poolRows as row}<div><dt>{row.k}</dt><dd>{row.v}</dd></div>{/each}</dl>
+  </section>
+ {/if}
+{/snippet}
 
 <style>
  .inspection-back { position: relative; box-sizing: border-box; background: var(--back-ground); color: var(--back-ink); font: 1rem/1.4 system-ui, sans-serif; text-align: left; }
@@ -170,6 +180,8 @@
  .simplified th, .simplified td { height: auto; padding: .5rem .25rem; overflow-wrap: anywhere; }
  .simplified thead th { font-size: .875rem; letter-spacing: normal; text-transform: none; }
  .simplified .results-footer { padding-inline: 0; font-size: .875rem; }
+ .pool-members { padding-block: 1rem; border-top: 1px solid var(--border); }
+ .pool-members dd { font-weight: 400; }
  @media (max-width: 25rem) {
   .historical-back { padding: 1rem; }
   .counts { grid-template-columns: repeat(3, minmax(0, 1fr)); }

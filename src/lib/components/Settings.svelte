@@ -51,6 +51,7 @@
 		type="button"
 		class="settings-trigger"
 		aria-haspopup="dialog"
+		disabled={!ready}
 		onclick={openSettings}
 	>
 		Settings

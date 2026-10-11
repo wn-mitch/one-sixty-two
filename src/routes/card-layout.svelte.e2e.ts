@@ -221,7 +221,9 @@ export async function inspect({ eras, widths }) {
 			await unmount(instance);
 			host.replaceChildren();
 		}
-		for (const era of eras) for (const { label, model } of models) for (const width of [330, 410]) {
+		// A turned card raises its back into the centered reading surface, whatever the source card's width.
+		const raisedWidth = Math.min(410, innerWidth - 32);
+		for (const era of eras) for (const { label, model } of models) for (const width of [240, 330]) {
 			host.style.width = width + 'px';
 			const instance = mount(CardFlip, { target: host, props: { s: { ...model, era }, turned: true, onDetails: () => {} } });
 			await afterLayout();
@@ -230,8 +232,8 @@ export async function inspect({ eras, widths }) {
 			const rect = { width: back.offsetWidth, height: back.offsetHeight };
 			const problems = problemsFor(back);
 			if (back.dataset.card !== era || back.dataset.face !== 'back' || !front.inert || front.getAttribute('aria-hidden') !== 'true'
-				|| Math.abs(rect.width - width) > 1 || Math.abs(rect.width / rect.height - 5 / 7) > .01) {
-				problems.push({ kind: 'designed-flip-geometry', width: rect.width, height: rect.height });
+				|| Math.abs(rect.width - raisedWidth) > 1 || Math.abs(rect.width / rect.height - 5 / 7) > .01) {
+				problems.push({ kind: 'designed-flip-geometry', width: rect.width, height: rect.height, card: back.dataset.card, face: back.dataset.face });
 			}
 			reports.push({ era, label, width, face: 'flipped-back', problems });
 			await unmount(instance);

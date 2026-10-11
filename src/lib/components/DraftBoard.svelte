@@ -50,6 +50,8 @@
  let inspectionOffersMove = $state(false);
  let inspectionMoveRequested = $state(false);
  let preserveInspectionClick = false;
+ /** The pointer press turned a candidate card back over, so its click must not also drop the selection. */
+ let preserveFlipClick = false;
  let returningSourceClick = false;
  let preserveSheetCancel = false;
  let draftBoard = $state<HTMLElement>();
@@ -140,6 +142,8 @@
   restoreCandidateFocus(seasonId, selectionTrigger);
  }
  function trackInspectionPointer(event: PointerEvent): void {
+  const flipped = draftBoard?.querySelector('.candidate-card[data-flipped="true"]');
+  preserveFlipClick = !!flipped && !event.composedPath().includes(flipped);
   const reviewing = !!inspectedSeasonId;
   preserveInspectionClick = reviewing && !event.composedPath().some(node =>
    node instanceof Element && node.matches('.card-review'));
@@ -174,6 +178,10 @@
   if (preserveInspectionClick) {
    preserveInspectionClick = false;
    returningSourceClick = false;
+   return;
+  }
+  if (preserveFlipClick) {
+   preserveFlipClick = false;
    return;
   }
   if (!selectedProfile || busy) return;
