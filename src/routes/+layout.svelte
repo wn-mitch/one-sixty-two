@@ -69,7 +69,13 @@
 				<p><a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates.
 					<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/about#attribution">Full attribution &amp; data download</a>. <a href="/about#image-credits">Image credits</a>.</p>
 			</div>
-			<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
+			<div class="footer-links">
+				<a class="kofi-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer">
+					<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M7.5 4.5 15 3.2l2.6 14.8"/><rect x="4" y="6" width="11" height="15" rx="1.5" fill="currentColor"/><path fill="var(--background)" d="m9.5 10 1.1 2.4 2.4 1.1-2.4 1.1-1.1 2.4-1.1-2.4L6 13.5l2.4-1.1Z"/></svg>
+					Buy me a card pack
+				</a>
+				<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
+			</div>
 		</footer>
 	</div>
 	<Toaster />
@@ -118,7 +124,7 @@
 		font-size: var(--text-xs);
 	}
 	footer p { margin: var(--space-1) 0; }
-	footer a { display: inline-block; padding-block: var(--space-1); }
+	footer p a { display: inline-block; padding-block: var(--space-1); }
 	.studio-link {
 		display: inline-flex;
 		min-height: 2.75rem;
@@ -131,6 +137,24 @@
 		text-decoration: none;
 	}
 	.studio-link span:first-child { color: var(--muted); font-weight: 500; }
+	.footer-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-6); }
+	.kofi-link {
+		display: inline-flex;
+		min-height: 2.75rem;
+		align-items: center;
+		gap: var(--space-2);
+		padding: 0 var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		color: var(--text);
+		font-size: .8125rem;
+		font-weight: 650;
+		text-decoration: none;
+		white-space: nowrap;
+		transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out);
+	}
+	.kofi-link svg { flex: none; color: var(--accent); }
+	.kofi-link:hover { border-color: var(--accent); background: var(--surface); }
 	@media (min-width: 48rem) {
 		footer { display: flex; justify-content: space-between; align-items: center; gap: var(--space-12); }
 	}
