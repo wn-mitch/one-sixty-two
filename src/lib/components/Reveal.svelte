@@ -5,7 +5,7 @@
 	import { draftRules } from '../game/rules.ts';
 	import TeamLogo from './TeamLogo.svelte';
 
-	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor, concealed = false, compact = false }: {
+	let { roll, manifest, revealing, pickNumber, schemaVersion, teamColor, concealed = false, compact = false, bar = false }: {
 		roll: Roll | null;
 		manifest: Manifest;
 		revealing: boolean;
@@ -16,6 +16,8 @@
 		/** Holds the roll's space without showing it while the pack deals it. */
 		concealed?: boolean;
 		compact?: boolean;
+		/** One-line phone toolbar form: the pick count over a truncating franchise name and era. */
+		bar?: boolean;
 	} = $props();
 
 	const franchise = $derived(manifest.franchises.find(item => item.id === roll?.franchiseId));
@@ -39,6 +41,7 @@
 	class:team-colored={palette !== null}
 	class:revealing
 	class:compact
+	class:bar
 	class:concealed
 	class:unveiling
 	style={bannerStyle}
@@ -49,7 +52,7 @@
 >
 	{#if roll}
 		<div class="team-mark" data-roll-mark>
-			<TeamLogo franchiseId={roll.franchiseId} label={franchise?.name ?? roll.franchiseId} size={compact ? 'small' : 'medium'} />
+			<TeamLogo franchiseId={roll.franchiseId} label={franchise?.name ?? roll.franchiseId} size={compact || bar ? 'small' : 'medium'} />
 		</div>
 	{/if}
 	<div class="reveal-copy" onanimationend={event => { if (event.animationName.endsWith('grow-sideways')) unveiling = false; }}>
@@ -120,6 +123,17 @@
 	.compact .era { font-size: 1.25rem; }
 	.compact .eyebrow { margin: 0; color: var(--muted); font-size: .75rem; white-space: nowrap; }
 	.compact .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+	.reveal.bar { flex: 1; gap: .5rem; min-height: 3rem; box-sizing: border-box; padding: .25rem .75rem .25rem .25rem; border-radius: var(--radius); }
+	.reveal.bar:not(:has(.team-mark)) { padding-left: .75rem; }
+	.bar .team-mark { display: flex; }
+	/* The franchise name takes the whole first line; the era and pick count share the second. */
+	.bar .reveal-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: .125rem .5rem; }
+	.bar .roll-copy { display: contents; }
+	.bar h2 { order: -1; flex: 1 0 100%; min-width: 0; overflow: hidden; font-size: 1.25rem; overflow-wrap: normal; text-overflow: ellipsis; white-space: nowrap; }
+	.bar .era { order: -1; margin: 0; font-size: .9375rem; }
+	.bar .eyebrow { margin: 0; font-size: .6875rem; line-height: 1; letter-spacing: .04em; text-transform: uppercase; }
+	.team-colored.bar .eyebrow { opacity: .8; }
+	.bar .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.concealed .team-mark, .concealed .roll-copy { visibility: hidden; }
 	.unveiling .roll-copy { animation: grow-sideways var(--motion-deal) var(--ease-out) both; }
 	.unveiling .roll-copy > * { animation: slide-in var(--motion-deal) var(--ease-out) both; }

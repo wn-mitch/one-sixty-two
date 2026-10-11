@@ -53,7 +53,9 @@
 			{@const view = side.star ? cards.get(side.entry.key)?.get(side.star) : undefined}
 			{@const label = side.entry.roster.find(pick => pick.seasonId === side.star)?.label}
 			<figure>
-				{#if view}<span class="card" aria-hidden="true"><Card s={view} face="front" compact thumbnail interactive={false} onDetails={noDetails} /></span>{/if}
+				<!-- Retired clubs never load cards, and playable ones fill in as their seasons load. -->
+				{#if view}<span class="card" aria-hidden="true"><Card s={view} face="front" compact thumbnail interactive={false} onDetails={noDetails} /></span>
+				{:else}<span class="card empty-card">{side.entry.status === 'retired' ? 'Retired club · no card' : 'Loading card…'}</span>{/if}
 				<figcaption><span class="muted">Star</span> {label ?? '—'}</figcaption>
 			</figure>
 		{/each}
@@ -108,6 +110,7 @@
 	.stars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 	figure { display: grid; justify-items: center; gap: var(--space-2); margin: 0; text-align: center; }
 	.card { display: block; width: min(7rem, 100%); }
+	.empty-card { display: grid; place-items: center; box-sizing: border-box; aspect-ratio: 5 / 7; padding: var(--space-2); border: 1px dashed var(--border); border-radius: .35rem; color: var(--muted); font-size: var(--text-xs); }
 	figcaption { font-size: var(--text-sm); font-weight: 650; overflow-wrap: anywhere; }
 	.tape { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 	.tape thead th { padding-bottom: var(--space-2); font-size: var(--text-xs); color: var(--muted); white-space: normal; overflow-wrap: anywhere; vertical-align: bottom; }

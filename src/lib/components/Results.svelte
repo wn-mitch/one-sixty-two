@@ -405,6 +405,10 @@
 		.results { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
 		.scoreboard { padding: var(--space-4); }
 		.scoreboard h2 { font-size: var(--text-3xl); }
+		/* Three equal jump links on one row instead of a ragged wrap. */
+		.result-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+		.result-nav button { justify-content: center; padding-inline: var(--space-1); font-size: var(--text-xs); text-align: center; line-height: 1.2; }
+		.result-nav button + button { border-left: 1px solid var(--border); border-radius: 0; }
 		.score-actions button, .score-actions .button { white-space: normal; text-align: center; line-height: 1.15; }
 		.share-shortcuts {
 			position: fixed;

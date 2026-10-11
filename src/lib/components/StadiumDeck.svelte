@@ -118,6 +118,11 @@
  .choice.selected::after { content: 'Selected'; position: absolute; top: -.6rem; left: .75rem; padding: .1rem .5rem; border-radius: var(--radius); color: var(--background); background: var(--accent); font-size: var(--text-xs); font-weight: 750; letter-spacing: .04em; }
  .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 4px; }
  input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
- .commit { position: sticky; z-index: 2; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; background: var(--background); border-top: 1px solid var(--border); margin-top: var(--space-4); }
+ /*
+  * Firefox on iOS can pin bottom-sticky content above the full height of its collapsed toolbar, leaving cards
+  * scrolling through the gap below the bar. The offset shadow paints the page background into that gap; at the
+  * end of the deck it only covers the deck's own bottom padding.
+  */
+ .commit { position: sticky; z-index: 2; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom)); background: var(--background); border-top: 1px solid var(--border); margin-top: var(--space-4); box-shadow: 0 var(--space-16) 0 0 var(--background); }
  .commit p { margin: 0; }
 </style>

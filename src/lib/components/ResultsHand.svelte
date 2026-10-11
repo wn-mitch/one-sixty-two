@@ -87,5 +87,10 @@
 	.source-note { max-width: 74ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	@media (max-width: 40rem) {
 		.section-heading { display: block; }
+		/* Phones lay the hand out as a swipeable row instead of crushing it into the screen width. */
+		.hand-scroll { overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: var(--space-4); margin-inline: calc(-1 * var(--space-4)); padding: var(--space-4); scrollbar-width: none; }
+		.hand { --w: 7.5rem; width: max-content; gap: var(--space-3); }
+		.hand-card { scroll-snap-align: start; }
+		.hand-card + .hand-card { margin-inline-start: 0; }
 	}
 </style>

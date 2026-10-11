@@ -24,7 +24,8 @@
 		const dimension = stadium.dimensions.find(item => item.bearingDeg === bearing);
 		return dimension ? [`${label} ${Math.round(dimension.distanceFt)}`] : [];
 	}));
-	const replayLabel = $derived(model.replayUrl ? model.replayUrl.replace(/^https?:\/\//, '') : 'Replay link added when shared');
+	// The header already carries the record, so the footer is the invitation: the replay once shared, the site until then.
+	const replayLabel = $derived(model.replayUrl ? model.replayUrl.replace(/^https?:\/\//, '') : '162-0.dev');
 	const expectedImages = $derived.by(() => {
 		const urls = new Set<string>();
 		for (const entry of model.cards) for (const url of [entry.card.photo, entry.card.logo]) if (url) urls.add(url);
@@ -96,8 +97,8 @@
 	</div>
 
 	<footer class="share-footer">
-		<strong>Beat {model.record.wins}–{model.record.losses}.</strong>
-		<span class:pending={!model.replayUrl}>{replayLabel}{#if model.replayUrl} <b aria-hidden="true">↗</b>{/if}</span>
+		<strong>Beat this at</strong>
+		<span>{replayLabel}{#if model.replayUrl} <b aria-hidden="true">↗</b>{/if}</span>
 	</footer>
 </section>
 
@@ -140,8 +141,7 @@
 	.identity strong, .identity span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:calc(100cqi * 7.5 / 424); line-height:1.1; }
 	.identity span { color:oklch(76% .018 255); }
 
-	.share-footer { flex:none; align-self:stretch; display:flex; align-items:center; justify-content:space-between; gap:3cqw; padding:1.8cqw 0 0; border-top:.19cqw solid oklch(37% .016 255); }
+	.share-footer { flex:none; align-self:stretch; display:flex; align-items:baseline; justify-content:center; gap:1.6cqw; padding:1.8cqw 0 0; border-top:.19cqw solid oklch(37% .016 255); }
 	.share-footer strong { font-size:4.4cqw; letter-spacing:-.04em; white-space:nowrap; }
-	.share-footer span { min-width:0; color:oklch(83% .16 120); font-size:2.6cqw; font-weight:750; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-	.share-footer span.pending { color:oklch(70% .012 255); font-weight:600; }
+	.share-footer span { min-width:0; color:oklch(83% .16 120); font-size:4.4cqw; font-weight:850; letter-spacing:-.03em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>

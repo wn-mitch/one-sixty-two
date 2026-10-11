@@ -161,3 +161,41 @@ export function morphInto(clone: HTMLElement, from: DOMRect, target: HTMLElement
 	Promise.allSettled(animations.slice(0, 2).map(animation => animation.finished)).then(done);
 	return animations;
 }
+
+/** Presses a card into place: a quick swell and settle that reads as a stamp. */
+export function stamp(target: HTMLElement): Promise<void> {
+	if (!appSettings.animateCards) return Promise.resolve();
+	const animation = target.animate([
+		{ transform: 'none' },
+		{ transform: 'scale(1.12)', offset: .35 },
+		{ transform: 'none' }
+	], { duration: MOTION.pickStamp / speed(), easing: EASE_OUT });
+	return animation.finished.then(() => {}, () => {});
+}
+
+/**
+ * Drops a departing card (`clone`, last seen at `from`) into a small control such as a button: the copy
+ * shrinks onto the control's centre and fades as it arrives, then the control gives a short bump.
+ */
+export function dropInto(clone: HTMLElement, from: DOMRect, target: HTMLElement): Animation[] {
+	const to = target.getBoundingClientRect();
+	if (!to.height || !from.height || !appSettings.animateCards) return [];
+	const ghost = ghostAt(clone, from, document.body);
+	const scale = Math.min(1, to.height / from.height);
+	const dx = to.left + to.width / 2 - (from.left + from.width * scale / 2);
+	const dy = to.top + to.height / 2 - (from.top + from.height * scale / 2);
+	const duration = MOTION.handoff / speed();
+	const travel = ghost.animate([
+		{ transform: 'none', opacity: 1 },
+		{ opacity: 1, offset: .7 },
+		{ transform: `translate(${dx}px, ${dy}px) scale(${scale})`, opacity: 0 }
+	], { duration, easing: EASE_OUT, fill: 'forwards' });
+	const bump = target.animate([
+		{ transform: 'none' },
+		{ transform: 'scale(1.08)', offset: .4 },
+		{ transform: 'none' }
+	], { duration: MOTION.pickStamp / speed(), delay: duration * .6, easing: EASE_OUT });
+	const done = () => ghost.remove();
+	travel.finished.then(done, done);
+	return [travel, bump];
+}

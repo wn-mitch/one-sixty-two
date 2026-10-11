@@ -11,7 +11,7 @@
  import { appSettings } from '../game/settings.svelte.ts';
  import CandidateList from './CandidateList.svelte';
  import { dealIntoGrid, dealOutOfGrid } from './deal-motion.ts';
- import { arriveAtTop, morphInto, riseIn, stash, take } from './phase-motion.ts';
+ import { arriveAtTop, dropInto, freeze, morphInto, riseIn, stamp, stash, take } from './phase-motion.ts';
  import Roster from './Roster.svelte';
  import Reveal from './Reveal.svelte';
  import DraftSheet from './DraftSheet.svelte';
@@ -256,6 +256,11 @@
   leaving = true;
   const grid = wide ? draftBoard?.querySelector<HTMLElement>('.candidates') : null;
   const exit = grid ? await dealOutOfGrid(grid) : [];
+  // Phones confirm inside the field sheet, so the previewed card presses into its slot before the sheet closes.
+  const placed = wide ? null : draftBoard?.querySelector<HTMLElement>('dialog.draft-sheet[open] [data-preview="true"] .card-frame');
+  const placedCard = placed?.querySelector<HTMLElement>('.miniature .card') ?? placed;
+  if (placed) await stamp(placed);
+  const landing = placedCard?.isConnected ? { clone: freeze(placedCard), rect: placedCard.getBoundingClientRect() } : null;
   // The last pick hands every field card to its lineup row.
   if (draft.picks.length + 1 === rosterSlots.length) stash('field', new Map([...draftBoard?.querySelectorAll<HTMLElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} .roster-item[data-season-id]`) ?? []]
    .map(item => [item.dataset.seasonId!, (item.querySelector<HTMLElement>('.miniature .card') ?? item).getBoundingClientRect()] as const)
@@ -264,7 +269,16 @@
   onDraft(seasonId, slot);
   leaving = false;
   await tick();
-  if (draft === before) for (const animation of exit) animation.cancel();
+  if (draft === before) {
+   for (const animation of exit) animation.cancel();
+   return;
+  }
+  if (wide) return;
+  // The next pack rises at the top of the page while the drafted card drops into the field button.
+  arriveAtTop();
+  await tick();
+  const fieldButton = draftBoard?.querySelector<HTMLElement>('.open-field');
+  if (landing && fieldButton) dropInto(landing.clone, landing.rect, fieldButton);
  }
  function beginMove(seasonId: string, nextTrigger: HTMLElement): void {
   movingSeasonId = seasonId;
@@ -469,7 +483,7 @@
    const clone = arrival.clones.get('card');
    const mini = draftBoard.querySelector<HTMLElement>('.field-panel .stadium-mini .mini-card');
    if (from && clone && mini) morphInto(clone, from, mini);
-   riseIn(draftBoard.querySelectorAll<HTMLElement>(':scope > .draft-header, .field-panel'));
+   riseIn(draftBoard.querySelectorAll<HTMLElement>(':scope > .draft-header, :scope > .draft-toolbar, .field-panel'));
   });
   return () => {
    disposed = true;
@@ -587,17 +601,22 @@
 {/snippet}
 
 <div bind:this={draftBoard} class="draft-board" class:wide>
- <header class="draft-header">
-  {#if wide}<a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>{/if}
-  <Reveal {roll} {manifest} compact={wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
-  {#if wide}
+{#snippet reveal()}
+ <Reveal {roll} {manifest} compact={wide} bar={!wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
+{/snippet}
+ {#if wide}
+  <header class="draft-header">
+   <a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>
+   {@render reveal()}
    <a class="rules-link" href="/about">Rules &amp; model</a>
    <Settings />
    <button class="secondary new-draft" disabled={loading} onclick={onNew}>New draft</button>
-  {/if}
- </header>
+  </header>
+ {/if}
+ <!-- Phones keep the roll and the field together in one sticky bar above the pool. -->
  <div class="draft-toolbar">
   {#if !wide}
+   {@render reveal()}
    <button type="button" class="secondary open-field" aria-label={`Open your field ${draft.picks.length} / ${rosterSlots.length}`} onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>
     Your field
     <span class="field-count">{draft.picks.length} / {rosterSlots.length}</span>
@@ -640,8 +659,8 @@
 
 <style>
  .draft-board, .draft-browser { min-width: 0; }
- .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; }
- .open-field { display: flex; align-items: center; gap: .625rem; min-height: 44px; white-space: nowrap; }
+ .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; }
+ .open-field { flex: none; display: flex; align-items: center; gap: .5rem; min-height: 3rem; padding-inline: .75rem; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
  .board-columns { display: grid; min-width: 0; }
  .wide .board-columns { grid-template-columns: minmax(0, 1fr) 452px; gap: 28px; align-items: start; padding-top: 16px; }

@@ -36,6 +36,8 @@ export const MOTION = {
 	gridDrop: 420,
 	/** Gap between consecutive candidate cards leaving, in reading order. */
 	gridDropStagger: 30,
+	/** A confirmed phone pick pressing into its field slot before the sheet closes. */
+	pickStamp: 320,
 	/** The next pack rising into place once the candidates have left. */
 	packEnter: 460,
 	/** One idle turn of the franchise-mark coin on a sealed pack. */
