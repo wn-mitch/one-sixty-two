@@ -371,7 +371,7 @@
  .candidates { min-width: 0; }
  .candidate-content { min-width: 0; scroll-margin-top: 72px; }
  .filter-rail { min-width: 0; }
- .search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-block: var(--space-3); }
+ .search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-block: var(--space-1) var(--space-2); }
  .search-row label { grid-column: 1 / -1; }
  .filters-toggle { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 3rem; padding-inline: var(--space-4); }
  .filters-badge { padding: .1rem .4rem; border-radius: 999px; background: var(--text); color: var(--background); font-size: var(--text-xs); font-weight: 750; }
@@ -387,7 +387,9 @@
  .filter-count { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
  .filter[aria-pressed='true'] { color: var(--background); border-color: var(--text); background: var(--text); }
  .filter[aria-pressed='true'] .filter-count { color: inherit; }
- .section-heading { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: baseline; justify-content: space-between; margin-block: var(--space-6) var(--space-3); }
+ .section-heading { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); align-items: baseline; justify-content: space-between; margin-block: var(--space-6) var(--space-3); }
+ /* On phones the first section sits right under search so its cards start above the fold. */
+ .candidates:not(.candidates-wide) .player-section:first-of-type .section-heading { margin-top: var(--space-3); }
  .section-heading h3 { font-size: var(--text-lg); }
  .section-heading span { font-size: var(--text-xs); }
  .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; align-items: start; }

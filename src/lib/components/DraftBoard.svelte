@@ -640,7 +640,7 @@
 
 <style>
  .draft-board, .draft-browser { min-width: 0; }
- .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .75rem; }
+ .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; }
  .open-field { display: flex; align-items: center; gap: .625rem; min-height: 44px; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
  .board-columns { display: grid; min-width: 0; }

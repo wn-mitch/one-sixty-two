@@ -84,4 +84,10 @@
 	progress::-webkit-progress-value { background: var(--accent); }
 	progress::-moz-progress-bar { background: var(--accent); }
 	.explanation { max-width: 52ch; margin: var(--space-3) 0 var(--space-6); font-size: var(--text-sm); }
+	/* Short phones keep Skip animation on the first screen. */
+	@media (max-width: 47.999rem) {
+		.progress-shell { margin-top: var(--space-4); }
+		.progress-track { margin-top: var(--space-4); }
+		.explanation { margin-bottom: var(--space-4); }
+	}
 </style>
