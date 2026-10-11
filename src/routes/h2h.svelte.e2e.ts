@@ -1,9 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import { LIBRARY_KEY, libraryKey, type LibraryEntry } from '../lib/game/library.ts';
+import { libraryKey, type LibraryEntry } from '../lib/game/library.ts';
+import { LEGACY_KEYS } from '../lib/storage/legacy.ts';
 import { encodeReplay } from '../lib/game/share.ts';
 import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
-import { currentManifest, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { currentManifest, deviceDraftText, STORAGE_KEY } from './draft-test-fixtures.ts';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(300000);
@@ -58,7 +59,7 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
    localStorage.setItem(key, active);
    localStorage.setItem(libraryKey, value);
   }
- }, { key: STORAGE_KEY, active: ACTIVE_SAVE, libraryKey: LIBRARY_KEY, value: JSON.stringify(library) });
+ }, { key: STORAGE_KEY, active: ACTIVE_SAVE, libraryKey: LEGACY_KEYS.library, value: JSON.stringify(library) });
 
  await page.goto('/seasons');
  const tiles = page.getByRole('list', { name: 'Saved clubs' }).getByRole('button');
@@ -79,7 +80,7 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
  expect(played.length).toBeGreaterThanOrEqual(3);
  expect(played.length).toBeLessThanOrEqual(5);
  await expect(page.getByText('Series MVP')).toBeVisible();
- expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBe(ACTIVE_SAVE);
+ expect(await deviceDraftText(page)).toBe(ACTIVE_SAVE);
 
  const seriesUrl = page.url();
  expect(seriesUrl).toMatch(/\/h2h#a=.+&an=Aces&b=.+&bn=Bombers$/);
@@ -110,7 +111,7 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
  await expect(results).toHaveAttribute('href', `/#replay=${library[0].token}`);
  await results.click();
  await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120000 });
- expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBe(ACTIVE_SAVE);
+ expect(await deviceDraftText(page)).toBe(ACTIVE_SAVE);
 });
 
 test('names the broken link instead of starting a series', async ({ page }) => {

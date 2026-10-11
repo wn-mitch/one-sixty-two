@@ -123,7 +123,8 @@
 		background: var(--surface);
 	}
 	.preview img { display: block; width: 100%; height: auto; }
-	.stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+	/* The stage is the artwork's query container, so its cqw padding matches the published 1080px frame. */
+	.stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; container-type: inline-size; }
 	.preview-state {
 		margin: calc(var(--space-3) * -1) 0 0;
 		color: var(--muted);

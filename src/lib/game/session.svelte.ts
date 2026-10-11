@@ -1,8 +1,11 @@
 import { goto } from '$app/navigation';
 import { loadChunk, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
 import { commitPick, createDraft, reassignPick, rollDraft, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
-import { saveSeason } from './library.ts';
-import { persistDraft, restoreDraft, type SavedPhase } from './persistence.ts';
+import { libraryKey, saveSeason } from './library.ts';
+import { newStickers, type NewSticker } from '../collection/collection.ts';
+import { refreshStickers } from '../collection/store.svelte.ts';
+import { persistDraft, restoreDraft, RESUME_NOTICE, type Restore, type SavedPhase } from './persistence.ts';
+import { deviceDb } from '../storage/db.ts';
 import { newSeed } from './random.ts';
 import { challengeFor, claimChallenge, type Challenge } from './challenge.ts';
 import {
@@ -12,16 +15,17 @@ import {
  decodeReplay,
  downloadPublishedImage,
  isShareIncompatibility,
- prepareSharePublication,
+ publishShare,
  requestNativeShare,
  storeReplay,
  supportsImageClipboard
 } from './share.ts';
 import { draftRules } from './rules.ts';
 import type { Draft, HitterSlot, Manifest, Profile, Slot } from './types.ts';
-import { prepareSeasonInput } from '../sim/season.ts';
+import { prepareSeasonInput } from './season-input.ts';
 import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts';
-import type { ShareAction, ShareFormat, SharePublication } from '../share/types.ts';
+import type { ShareAction, ShareFormat, SharePublication, ShareRenderModel } from '../share/types.ts';
+import { renderSharePng } from '../share/render.ts';
 
 export type Phase = 'start' | 'stadium' | 'ready' | 'revealing' | 'choosing' | 'lineup' | 'simulating' | 'results';
 
@@ -45,6 +49,8 @@ export class Session {
  shareStatus = $state('');
  sharing = $state(false);
  publication = $state.raw<SharePublication | null>(null);
+ /** Stickers the finished season earned for the first time, for Results. */
+ newStickers = $state.raw<NewSticker[]>([]);
  nativeShareReady = $state(false);
  imageDownloadFallback = $state(false);
  textCopyFallback = $state(false);
@@ -78,7 +84,7 @@ export class Session {
   return request === this.shareRequest && epoch === this.epoch;
  }
 
- private async prepareCurrentPublication(draft: Draft, request: number, epoch: number): Promise<SharePublication> {
+ private async prepareCurrentPublication(draft: Draft, model: ShareRenderModel, request: number, epoch: number): Promise<SharePublication> {
   let replayId = this.shareReplayId;
   if (!replayId) {
    const stored = await storeReplay(draft, location.origin);
@@ -86,7 +92,9 @@ export class Session {
    replayId = stored.id;
    this.shareReplayId = stored.id;
   }
-  return prepareSharePublication(replayId, location.origin);
+  const image = await renderSharePng(model, 'field');
+  if (!this.shareIsCurrent(request, epoch)) throw new Error('Share request was replaced');
+  return publishShare(replayId, location.origin, model.record, { field: image });
  }
 
  async initialize(): Promise<void> {
@@ -142,9 +150,13 @@ export class Session {
     await this.simulate();
     return;
    }
-   let saved;
-   try { saved = restoreDraft(localStorage, manifest); }
-   catch { saved = { kind: 'unavailable' as const, message: 'Resume unavailable: browser storage is blocked. You can still play.' }; }
+   let saved: Restore;
+   try {
+    const device = await deviceDb();
+    if (device.notice) this.storageNotice = device.notice;
+    saved = await restoreDraft(device.db, manifest);
+   } catch { saved = { kind: 'unavailable', message: RESUME_NOTICE }; }
+   if (epoch !== this.epoch) return;
    if (saved.kind === 'valid') { this.savedDraft = saved.draft; this.savedPhase = saved.phase; }
    else if (saved.kind === 'incompatible') { this.error = saved.message; this.incompatible = true; }
    else if (saved.kind === 'unavailable') this.storageNotice = saved.message;
@@ -160,15 +172,30 @@ export class Session {
  /** Every completed season of the player's own draft joins the device library; viewed replays do not. */
  private async saveToLibrary(result: SeasonResult, epoch: number): Promise<void> {
   if (this.shared || !this.draft || !this.manifest) return;
+  const { draft, profiles, manifest } = this;
+  const now = new Date();
   let notice: string | null;
-  try { notice = await saveSeason(localStorage, this.draft, result, this.profiles, this.manifest); }
+  try {
+   const { db } = await deviceDb();
+   notice = await saveSeason(db, draft, result, profiles, manifest, now);
+   if (!notice) {
+    const earned = await newStickers(db, await libraryKey(draft), now.toISOString(), profiles);
+    if (epoch === this.epoch) this.newStickers = earned;
+    void refreshStickers();
+   }
+  }
   catch { notice = 'Your season library is unavailable: browser storage is blocked or full.'; }
   if (notice && epoch === this.epoch) this.storageNotice = notice;
  }
  private save(phase: SavedPhase): void {
   if (!this.draft || this.shared) return;
-  try { this.storageNotice = persistDraft(localStorage, this.draft, phase, this.result ?? undefined) ?? ''; }
-  catch { this.storageNotice = 'Resume unavailable: browser storage is blocked. You can still play.'; }
+  const draft = this.draft;
+  const epoch = this.epoch;
+  // Writes queue in order on the database worker; the notice reflects the latest outcome.
+  void deviceDb()
+   .then(device => persistDraft(device.db, draft, phase).then(failure => failure ?? device.notice))
+   .catch(() => RESUME_NOTICE)
+   .then(notice => { if (epoch === this.epoch) this.storageNotice = notice ?? ''; });
  }
  private async hydrateRoster(): Promise<void> {
   if (!this.manifest || !this.draft) return;
@@ -247,6 +274,7 @@ export class Session {
   this.profiles = [];
   this.pool = [];
   this.result = null;
+  this.newStickers = [];
   this.simulationInput = null;
   this.error = '';
   this.incompatible = false;
@@ -348,6 +376,7 @@ export class Session {
   this.completed = 0;
   this.revealed = 0;
   this.result = null;
+  this.newStickers = [];
   this.skipReveal = matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.save('simulating');
   const epoch = this.epoch;
@@ -358,7 +387,7 @@ export class Session {
     this.simulationInput = prepareSeasonInput(this.draft, this.profiles, data);
    }
    const runId = ++this.runId;
-   const worker = new Worker(new URL('../sim/season.worker.ts', import.meta.url), { type: 'module' });
+   const worker = new Worker(new URL('../engine/season.worker.ts', import.meta.url), { type: 'module' });
    this.worker = worker;
    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
     const message = event.data;
@@ -410,7 +439,7 @@ export class Session {
  get challenge(): Challenge | null {
   return this.draft && !this.shared && this.phase === 'results' ? challengeFor(this.draft.seed) : null;
  }
- async share(action: ShareAction = 'copy-link', format: ShareFormat = 'field'): Promise<void> {
+ async share(action: ShareAction, format: ShareFormat, model: ShareRenderModel): Promise<void> {
   if (!this.draft || !this.result || this.loading || this.sharing) return;
   const epoch = this.epoch;
   const request = ++this.shareRequest;
@@ -456,7 +485,7 @@ export class Session {
 
   const publicationPromise = existingPublication
    ? Promise.resolve(existingPublication)
-   : this.prepareCurrentPublication(this.draft, request, epoch);
+   : this.prepareCurrentPublication(this.draft, model, request, epoch);
   let imageCopy: Promise<void> | null = null;
   let imageClipboardSupported = true;
   if (action === 'copy-image') {

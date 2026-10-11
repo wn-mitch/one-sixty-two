@@ -1,12 +1,12 @@
 import { replayInput } from './draft.ts';
-import type { StorageAccess } from './persistence.ts';
+import { collectionStatements } from '../collection/collection.ts';
+import { seasonEntries, seasonStatements, type CardRow, type SeasonRow } from '../storage/season-rows.ts';
+import type { Db } from '../storage/sql.ts';
 import { decodeReplay, encodeReplay } from './share.ts';
 import { compareId, CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, type Draft, type Manifest, type Profile, type Slot } from './types.ts';
 import { estimatedHitterWar, estimatedPitcherWar } from '../sim/value.ts';
 import type { SeasonResult } from '../sim/types.ts';
 
-export const LIBRARY_KEY = '162-zero:library:v2';
-export const LIBRARY_LIMIT = 50;
 export const STORAGE_NOTICE = 'Your season library is unavailable: browser storage is blocked or full.';
 
 /** A hitter's simulated season line as the library keeps it; `war` is the estimated hitter WAR. */
@@ -46,23 +46,6 @@ export interface LibraryEntry {
 /** `playable` entries validate under the current manifest; `retired` ones are mementos only. */
 export interface LibraryView extends LibraryEntry { status: 'playable' | 'retired' }
 
-function read(storage: StorageAccess): LibraryEntry[] {
- const bytes = storage.getItem(LIBRARY_KEY);
- if (bytes === null) return [];
- try {
-  const value: unknown = JSON.parse(bytes);
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is LibraryEntry => !!entry && typeof entry === 'object' && typeof entry.key === 'string' && typeof entry.token === 'string' &&
-   typeof entry.savedAt === 'string' && Array.isArray(entry.roster) && Array.isArray(entry.batting) && Array.isArray(entry.pitching) &&
-   !!entry.runs && Number.isFinite(entry.runs.scored) && Number.isFinite(entry.runs.allowed) && !!entry.record && Number.isInteger(entry.record.wins) && Number.isInteger(entry.record.losses));
- } catch { return []; }
-}
-
-function write(storage: StorageAccess, entries: LibraryEntry[]): string | null {
- try { storage.setItem(LIBRARY_KEY, JSON.stringify(entries)); return null; }
- catch { return STORAGE_NOTICE; }
-}
-
 /** Stable identity of a completed draft: SHA-256 of its canonical replay input. */
 export function libraryKey(draft: Draft): Promise<string> {
  return replayKeyDigest(JSON.stringify(replayInput(draft)));
@@ -84,18 +67,6 @@ function seasonMvp(result: SeasonResult, profiles: Map<string, Profile>): Librar
  ].sort((a, b) => b.war - a.war || compareId(a.seasonId, b.seasonId));
  const profile = values[0] && profiles.get(values[0].seasonId);
  return profile ? { seasonId: profile.seasonId, label: label(profile) } : undefined;
-}
-
-/** Drops the oldest unnamed entries beyond the cap; named entries are never evicted. */
-function capped(entries: LibraryEntry[]): LibraryEntry[] {
- const kept = [...entries];
- while (kept.length > LIBRARY_LIMIT) {
-  let oldest = -1;
-  kept.forEach((entry, index) => { if (!entry.nickname && (oldest < 0 || entry.savedAt < kept[oldest].savedAt)) oldest = index; });
-  if (oldest < 0) break;
-  kept.splice(oldest, 1);
- }
- return kept;
 }
 
 /** The library snapshot of one completed season, before nickname and save date are carried over. */
@@ -125,51 +96,50 @@ export function libraryEntry(key: string, savedAt: string, draft: Draft, result:
  };
 }
 
-/** Saves a completed season; saving the same draft again keeps one entry. Returns a notice on storage failure. */
-export async function saveSeason(storage: StorageAccess, draft: Draft, result: SeasonResult, profiles: readonly Profile[], manifest: Manifest, now = new Date()): Promise<string | null> {
+/** Saves a completed season; saving the same draft again keeps one entry, its first save date and its nickname. */
+export async function saveSeason(db: Db, draft: Draft, result: SeasonResult, profiles: readonly Profile[], manifest: Manifest, now = new Date()): Promise<string | null> {
  try {
   const key = await libraryKey(draft);
-  const entries = read(storage);
-  const existing = entries.find(entry => entry.key === key);
-  const entry: LibraryEntry = {
-   ...libraryEntry(key, existing?.savedAt ?? now.toISOString(), draft, result, profiles, manifest),
-   ...(existing?.nickname ? { nickname: existing.nickname } : {})
-  };
-  return write(storage, capped([entry, ...entries.filter(item => item.key !== key)]));
+  const entry = libraryEntry(key, now.toISOString(), draft, result, profiles, manifest);
+  await db.run([...seasonStatements(entry, now.toISOString()), ...collectionStatements(entry, now.toISOString())]);
+  return null;
  } catch { return STORAGE_NOTICE; }
 }
 
-/** Every saved season with its current status; status is computed here and never stored. */
-export function loadLibrary(storage: StorageAccess, manifest: Manifest): { entries: LibraryView[]; notice: string | null } {
- let entries: LibraryEntry[];
- try { entries = read(storage); }
- catch { return { entries: [], notice: STORAGE_NOTICE }; }
- return {
-  notice: null,
-  entries: entries.map(entry => {
-   let playable = entry.schemaVersion === CURRENT_REPLAY_SCHEMA_VERSION && entry.modelVersion === MODEL_VERSION && entry.dataVersion === manifest.dataVersion;
-   if (playable) {
-    try { decodeReplay(entry.token, manifest); }
-    catch { playable = false; }
-   }
-   return { ...entry, status: playable ? 'playable' : 'retired' };
-  })
- };
+/** Every saved entry, most recently saved first. */
+export async function readLibrary(db: Db): Promise<LibraryEntry[]> {
+ const [rows, cards] = await Promise.all([
+  db.all<SeasonRow>('SELECT * FROM seasons ORDER BY touched_at DESC, key'),
+  db.all<CardRow>('SELECT * FROM season_cards')
+ ]);
+ return seasonEntries(rows, cards);
 }
 
-export function renameSeason(storage: StorageAccess, key: string, nickname: string): string | null {
+/** Whether an entry can still be replayed under the current game; computed on read, never stored. */
+export function entryStatus(entry: LibraryEntry, manifest: Manifest): LibraryView['status'] {
+ if (entry.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION || entry.modelVersion !== MODEL_VERSION || entry.dataVersion !== manifest.dataVersion) return 'retired';
+ try { decodeReplay(entry.token, manifest); return 'playable'; }
+ catch { return 'retired'; }
+}
+
+/** Every saved season with its current status. */
+export async function loadLibrary(db: Db, manifest: Manifest): Promise<{ entries: LibraryView[]; notice: string | null }> {
+ let entries: LibraryEntry[];
+ try { entries = await readLibrary(db); }
+ catch { return { entries: [], notice: STORAGE_NOTICE }; }
+ return { notice: null, entries: entries.map(entry => ({ ...entry, status: entryStatus(entry, manifest) })) };
+}
+
+export async function renameSeason(db: Db, key: string, nickname: string): Promise<string | null> {
  try {
   const trimmed = nickname.trim().slice(0, 60);
-  return write(storage, read(storage).map(entry => {
-   if (entry.key !== key) return entry;
-   const { nickname: _previous, ...rest } = entry;
-   return trimmed ? { ...rest, nickname: trimmed } : rest;
-  }));
+  await db.run([{ sql: 'UPDATE seasons SET nickname = ? WHERE key = ?', bind: [trimmed || null, key] }]);
+  return null;
  } catch { return STORAGE_NOTICE; }
 }
 
-export function deleteSeason(storage: StorageAccess, key: string): string | null {
- try { return write(storage, read(storage).filter(entry => entry.key !== key)); }
+export async function deleteSeason(db: Db, key: string): Promise<string | null> {
+ try { await db.run([{ sql: 'DELETE FROM seasons WHERE key = ?', bind: [key] }]); return null; }
  catch { return STORAGE_NOTICE; }
 }
 

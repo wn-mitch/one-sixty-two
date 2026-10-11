@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { decodeReplay, encodeReplay } from '../src/lib/game/share.ts';
 import { SLOTS } from '../src/lib/game/types.ts';
-import { buildSchedule, prepareSeasonInput, simulateSeason } from '../src/lib/sim/season.ts';
+import { simulateSeason } from '../src/lib/engine/node.ts';
+import { prepareSeasonInput } from '../src/lib/game/season-input.ts';
 import type { SeasonResult } from '../src/lib/sim/types.ts';
 import { draftRoster, loadVerificationData, ProfileChunks, stadiumId, type Policy } from './verification-data.ts';
 
@@ -56,8 +57,6 @@ async function main(): Promise<void> {
 	assert.equal(new Set(profiles.map(profile => profile.playerId)).size, SLOTS.length, 'Smoke policy drafted a player more than once');
 	assert.deepStrictEqual(new Set(draft.picks.map(pick => pick.slot)), new Set(SLOTS), 'Smoke policy did not fill the declared slots exactly once');
 
-	const schedule = buildSchedule(draft.seed, simulation.opponents.map(opponent => opponent.id));
-	assert.equal(schedule.filter(game => game.isHome).length, 81, 'Smoke schedule must contain exactly 81 home games');
 	const prepared = prepareSeasonInput(draft, profiles, simulation);
 	const result = simulateSeason(prepared);
 	const draftedBullpen = prepared.roster.find(pick => pick.slot === 'BP')!.profile;
@@ -65,7 +64,11 @@ async function main(): Promise<void> {
 	assert.equal(result.pitching[4].seasonId, draftedBullpen.seasonId, 'Season did not deploy the drafted bullpen remainder');
 	assert.equal(result.pitching[4].displayName, draftedBullpen.displayName, 'Season did not preserve the drafted bullpen identity');
 	assertConcreteSeason(result);
-	assert.deepStrictEqual(result.games.map(game => ({ opponentId: game.opponentId, isHome: game.isHome })), schedule, 'Season games do not match the deterministic schedule');
+	assert.equal(result.games.filter(game => game.isHome).length, 81, 'Smoke schedule must contain exactly 81 home games');
+	for (const opponent of simulation.opponents) {
+		const games = result.games.filter(game => game.opponentId === opponent.id);
+		assert.ok(games.some(game => game.isHome) && games.some(game => !game.isHome), `Smoke schedule must host and visit ${opponent.id}`);
+	}
 	if (options.policy === 'best') {
 		const repeated = simulateSeason(prepareSeasonInput(draft, profiles, simulation));
 		assert.deepStrictEqual(repeated, result, 'Repeating the best-policy season changed its result');

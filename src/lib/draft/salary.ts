@@ -1,7 +1,6 @@
 import { finishFor, type Finish, type FinishRole } from '../cards/finish.ts';
 import { HITTER_SLOTS, STARTER_SLOTS, type DefensiveEnvironment, type Profile, type Rates, type Slot } from '../game/types.ts';
-import { contactTargets, fitContact, leagueContactFit, matchup } from '../sim/contact-profile.ts';
-import { contactClasses, eventRunWeights, getPhysicalReference, type EventRunWeights } from '../sim/physical-expectation.ts';
+import { createContactReference, type EventRunWeights, type MatchupFit, type MatchupQuery } from '../engine/node.ts';
 import { closerBudget, starterBudget } from '../sim/workload.ts';
 import { SALARY_VERSION } from './versions.ts';
 
@@ -49,10 +48,8 @@ export interface CardWar { battingWAR162: number | null; pitchingWAR162: number 
 
 interface RunValues { perPa: number; outsPerPa: number }
 
-function runValues(rates: Rates, environment: DefensiveEnvironment, weights: EventRunWeights, prior: Float64Array, label: string): RunValues {
- const model = environment.contactModel;
- const fit = fitContact(model.basis, prior, contactTargets(rates), '', 0.5, label);
- const classes = contactClasses(model, fit);
+/** Run value per plate appearance and outs per plate appearance for one fitted matchup. */
+function runValues({ rates, classes }: MatchupFit, weights: EventRunWeights): RunValues {
  const contact = rates[3] + rates[4] + rates[5] + rates[6] + rates[7];
  let perPa = (rates[0] + rates[1]) * weights.walk + rates[2] * weights.strikeout;
  let outsPerPa = rates[2];
@@ -80,20 +77,32 @@ function finishRole(slot: Slot): FinishRole {
  */
 export function buildDraftCardTable(candidates: readonly Profile[], environment: DefensiveEnvironment, war: (seasonId: string) => CardWar | undefined): DraftCardTable {
  const league = environment.leagueRates;
- const reference = getPhysicalReference(environment);
- const weights = eventRunWeights(reference);
- const prior = leagueContactFit(environment.contactModel, league).regionWeights;
- const average = { seasonId: 'league', bats: '', throws: '', battingRates: league, pitchingRates: league, speed: 0.5 } as unknown as Profile;
- const hitterPlateAppearances = 162 * 9 * reference.stateVisits.reduce((sum, value) => sum + value, 0) / 9;
+ const reference = createContactReference(environment);
+ const weights = reference.eventRunWeights();
+ const hitterPlateAppearances = 162 * 9 * reference.stateVisits().reduce((sum, value) => sum + value, 0) / 9;
+ // Each role prices against a league-average opponent at unknown side and average speed.
+ const query = (battingRates: Rates, pitchingRates: Rates, label: string): MatchupQuery => ({ battingRates, bats: '', pitchingRates, throws: '', speed: 0.5, unknownSide: true, label });
+ const queries: MatchupQuery[] = [];
+ const pricedRoles = candidates.map(profile => new Set(profile.eligibleSlots.map(pricingRole)));
+ const pricesHitter = (roles: Set<PricingRole>) => [...roles].some(role => (HITTER_SLOTS as readonly string[]).includes(role));
+ const pricesPitcher = (roles: Set<PricingRole>) => roles.has('SP') || roles.has('CL') || roles.has('BP');
+ candidates.forEach((profile, index) => {
+  if (pricesHitter(pricedRoles[index]) && profile.battingRates) queries.push(query(profile.battingRates, league, profile.seasonId));
+  if (pricesPitcher(pricedRoles[index]) && profile.pitchingRates) queries.push(query(league, profile.pitchingRates, profile.seasonId));
+ });
+ const fits = reference.fitMatchups(queries);
+ let nextFit = 0;
  const bullpenOuts = SALARY_METHOD.teamOuts - STARTER_SLOTS.length * SALARY_METHOD.starts * SALARY_METHOD.leagueStarterOuts - SALARY_METHOD.closerOutsCap;
 
  // Season runs relative to league average at each eligible role.
- const seasonRuns = candidates.map(profile => {
+ const seasonRuns = candidates.map((profile, index) => {
   const runs = new Map<PricingRole, number>();
-  const roles = new Set(profile.eligibleSlots.map(pricingRole));
-  if ([...roles].some(role => (HITTER_SLOTS as readonly string[]).includes(role))) {
-   if (!profile.battingRates) throw new Error(`${profile.seasonId}: hitter has no batting rates`);
-   const batting = runValues(matchup(profile, average, league), environment, weights, prior, profile.seasonId).perPa * hitterPlateAppearances;
+  const roles = pricedRoles[index];
+  const battingFit = pricesHitter(roles) && profile.battingRates ? fits[nextFit++] : null;
+  const pitchingFit = pricesPitcher(roles) && profile.pitchingRates ? fits[nextFit++] : null;
+  if (pricesHitter(roles)) {
+   if (!battingFit) throw new Error(`${profile.seasonId}: hitter has no batting rates`);
+   const batting = runValues(battingFit, weights).perPa * hitterPlateAppearances;
    for (const role of roles) {
     if (role === 'DH') runs.set(role, batting);
     else if ((HITTER_SLOTS as readonly string[]).includes(role)) runs.set(role, batting + (profile.defense.positions[role as Exclude<PricingRole, 'DH' | 'SP' | 'CL' | 'BP'>]?.expectedRunsSaved162 ?? 0));
@@ -101,8 +110,8 @@ export function buildDraftCardTable(candidates: readonly Profile[], environment:
   }
   const pitcherRoles = [...roles].filter(role => role === 'SP' || role === 'CL' || role === 'BP');
   if (pitcherRoles.length) {
-   if (!profile.pitchingRates) throw new Error(`${profile.seasonId}: pitcher has no pitching rates`);
-   const allowed = runValues(matchup(average, profile, league), environment, weights, prior, profile.seasonId);
+   if (!pitchingFit) throw new Error(`${profile.seasonId}: pitcher has no pitching rates`);
+   const allowed = runValues(pitchingFit, weights);
    const savedPerOut = -allowed.perPa / allowed.outsPerPa;
    for (const role of pitcherRoles) {
     const outs = role === 'SP' ? SALARY_METHOD.starts * starterBudget(profile) : role === 'CL' ? Math.min(closerBudget(profile), SALARY_METHOD.closerOutsCap) : bullpenOuts;

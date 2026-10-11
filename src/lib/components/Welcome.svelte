@@ -35,7 +35,7 @@
    <button class="primary start" disabled={loading || !manifest} onclick={onStart}>Start draft <span aria-hidden="true">↗</span></button>
    {#if hasSavedDraft}<button class="secondary resume" disabled={loading} onclick={onResume}>Resume draft</button>{/if}
   </div>
-  <p class="library-link"><a href="/seasons">My seasons</a> · <a href="/h2h">Head-to-head</a></p>
+  <p class="library-link"><a href="/seasons">My seasons</a> · <a href="/collection">Collection</a> · <a href="/h2h">Head-to-head</a></p>
   {#if loading}
    <p class="start-status muted" role="status">Loading the historical player pool…</p>
   {:else if showcaseStatus === 'loading'}

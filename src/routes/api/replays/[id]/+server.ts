@@ -1,14 +1,13 @@
 import { json } from '@sveltejs/kit';
 import { env } from 'cloudflare:workers';
 import type { RequestHandler } from './$types';
-import { loadAuthoritativeManifest, loadReplay, safeReplayMessage } from '#lib/server/replays.ts';
+import { loadCurrentDataVersion, loadReplay, safeReplayMessage } from '#lib/server/replays.ts';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const id = params.id ?? '';
 	if (!/^[A-Za-z0-9_-]{22}$/.test(id)) return json({ message: 'Replay not found. Check the link and try again.' }, { status: 404 });
 	try {
-		const manifest = await loadAuthoritativeManifest(env.ASSETS);
-		const replay = await loadReplay(env.REPLAYS, id, manifest);
+		const replay = await loadReplay(env.REPLAYS, id, await loadCurrentDataVersion(env.ASSETS));
 		return json(replay, {
 			headers: {
 				'cache-control': 'public, max-age=31536000, immutable'

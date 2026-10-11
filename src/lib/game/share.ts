@@ -5,7 +5,8 @@ import {
 	SHARE_FORMATS,
 	type ShareFormat,
 	type SharePublication,
-	type SharePublicationImage
+	type SharePublicationImage,
+	type ShareRecord
 } from '../share/types.ts';
 
 const MAX_BYTES = 16 * 1024;
@@ -130,11 +131,9 @@ export function validateSharePublication(value: unknown, replayId: string, origi
 	const publication = value as Record<string, unknown>;
 	const canonicalOrigin = normalizedOrigin(origin);
 	if (
-		publication.schemaVersion !== 1
+		publication.schemaVersion !== 2
 		|| publication.replayId !== replayId
 		|| typeof publication.replayUrl !== 'string'
-		|| typeof publication.modelDigest !== 'string'
-		|| !DIGEST_PATTERN.test(publication.modelDigest)
 		|| !validRecord(publication.record)
 		|| !publication.images
 		|| typeof publication.images !== 'object'
@@ -202,15 +201,24 @@ export async function storeReplay(draft: Draft, origin: string, fetcher: FetchBo
 }
 
 
-/** Explicitly prepare all immutable share formats for an already stored replay. */
-export async function prepareSharePublication(replayId: string, origin: string, fetcher: FetchBoundary = fetch): Promise<SharePublication> {
+/** Publishes this browser's captured share images for an already stored replay; the first publication wins. */
+export async function publishShare(
+	replayId: string,
+	origin: string,
+	record: ShareRecord,
+	images: Record<ShareFormat, Blob>,
+	fetcher: FetchBoundary = fetch
+): Promise<SharePublication> {
 	if (!ID_PATTERN.test(replayId)) throw new Error('Replay storage returned an invalid link. Please retry.');
 	const canonicalOrigin = normalizedOrigin(origin);
+	const body = new FormData();
+	body.set('record', JSON.stringify(record));
+	for (const format of SHARE_FORMATS) body.set(format, images[format], `${format}.png`);
 	let response: Response;
 	try {
-		response = await fetcher(`${canonicalOrigin}/api/replays/${replayId}/share`, { method: 'POST' });
+		response = await fetcher(`${canonicalOrigin}/api/replays/${replayId}/share`, { method: 'POST', body });
 	} catch {
-		throw new ShareRequestError('Share images could not be prepared. Your replay is saved; please retry.', 0);
+		throw new ShareRequestError('The share image could not be uploaded. Your replay is saved; please retry.', 0);
 	}
 	const payload = await responsePayload(response);
 	if (!response.ok) throw new ShareRequestError(publicationRequestMessage(response.status, payload), response.status);

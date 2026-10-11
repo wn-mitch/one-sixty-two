@@ -3,7 +3,8 @@
 	import Lineup from '#lib/components/Lineup.svelte';
 	import { reassignPick } from '#lib/game/draft.ts';
 	import type { Draft, HitterSlot } from '#lib/game/types.ts';
-	import { prepareSeasonInput, simulateSeason } from '#lib/sim/season.ts';
+	import { simulateSeason } from '#lib/engine/core.ts';
+	import { prepareSeasonInput } from '#lib/game/season-input.ts';
 	import type { SeasonResult } from '#lib/sim/types.ts';
 	import { createExampleFixtures, type ExampleFixtures } from './fixtures.ts';
 	import SeasonReveal from './SeasonReveal.svelte';

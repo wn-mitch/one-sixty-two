@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+// Node instantiates the wasm engine on import; the fixture expects a ready engine.
+import '../engine/node.ts';
 import { getExampleSeries } from './series-fixtures.ts';
 
 // The fixture plays two full regular seasons and a best-of-five.

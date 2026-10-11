@@ -5,5 +5,5 @@
  * populated by the deployed adapter, so bindings are read from here instead.
  */
 declare module 'cloudflare:workers' {
-	export const env: import('./lib/server/share-images.ts').ShareServerBindings;
+	export const env: import('./lib/server/share-images.ts').ShareServerBindings & { ASSETS: import('./lib/server/replays.ts').ReplayAssets };
 }

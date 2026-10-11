@@ -6,7 +6,9 @@ product
 
 ## Release and Compatibility Policy
 
-The game is pre-release. Iteration takes priority over backward compatibility. Breaking existing saves, replay links, schemas, data formats, and seeded simulation results is allowed when changing the game or simulation. Do not retain legacy engines, add compatibility shims or migrations, or delay changes to preserve obsolete contracts unless explicitly requested.
+The game is pre-release. Iteration takes priority over backward compatibility. Breaking replay links, schemas, data formats, and seeded simulation results is allowed when changing the game or simulation. Do not retain legacy engines, add compatibility shims, or delay changes to preserve obsolete contracts unless explicitly requested.
+
+The player's device data is the exception: the season library, head-to-head history, collection, and the draft in progress live in a versioned SQLite database on the device, and every change to its schema ships as a migration that keeps existing records. A migration preserves records, not gameplay: a season saved under an older model stays viewable as history, and a draft from older rules is still rejected.
 
 Version the current contracts and reject incompatible data explicitly rather than silently interpreting it under different rules. Determinism is required within the same supported model and data version, not across releases. Breaking compatibility does not excuse regressions in current intended behavior.
 
@@ -41,9 +43,9 @@ Home leads with a real-profile card wall, an eight-era strip, and all thirty fra
 
 Hitter fronts show historical WAR/162, OPS, and a position-specific pre-season `DEF est.`; assigned DH keeps HR, and pitchers keep historical WAR/162, ERA, and SO. Historical WAR/162 controls list order and cosmetic finish, while separate defensive evidence can affect play. Results inspection clearly separates the actual historical season from the simulated 162-0 season and the app's realized `sim-war-v2` estimate.
 
-Completed seasons are saved in a device-local library (`/seasons`). Any two current-version replay links can meet in a deterministic best-of-five head-to-head series (`/h2h`) that recomputes both seasons for seeding; a series is shared as a link and never stored on the server.
+Completed seasons are saved in a device-local library (`/seasons`), and every card the player rosters joins a device-local collection (`/collection`) where it earns cosmetic stickers that also show on that card in later drafts. Any two current-version replay links can meet in a deterministic best-of-five head-to-head series (`/h2h`) that recomputes both seasons for seeding; a series is shared as a link and never stored on the server.
 
-Sharing publishes scorecard, diamond, and wide PNGs only after a trusted server validates the current authoritative action history, pins the current assets, and deterministically recomputes the season. A local preview is not presented as the stored publication. Links are released only when all three immutable images exist; preparation errors preserve the replay and leave an explicit retry or download/copy alternative.
+Sharing publishes one 1080×1350 field-card PNG that the player's browser draws from its own season. The server checks the replay's shape and versions and the image's format and size, then stores both immutably; it does not recompute the season, so a published record is trusted, not verified. Recipients recompute the season from the replay. A local preview is not presented as the stored publication. Links are released only after the image is stored; preparation errors preserve the replay and leave an explicit retry or download/copy alternative.
 
 ## Accessibility & Inclusion
 

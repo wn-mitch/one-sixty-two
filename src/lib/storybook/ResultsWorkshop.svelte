@@ -19,7 +19,6 @@
 	const EXAMPLE_PUBLICATION = {
 		replayId: 'example-replay',
 		replayUrl: 'https://example.invalid/replay-link',
-		modelDigest: EXAMPLE_DIGEST,
 		imageUrl: EXAMPLE_IMAGE,
 		imageDigest: EXAMPLE_DIGEST
 	};

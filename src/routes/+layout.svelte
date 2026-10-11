@@ -5,15 +5,19 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import Settings from '#lib/components/Settings.svelte';
 	import Toaster from '#lib/components/Toaster.svelte';
+	import { refreshStickers } from '#lib/collection/store.svelte.ts';
 	import { page } from '$app/state';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
-	const captureRoute = $derived(page.url.pathname.startsWith('/__share/') && page.data.capture === true);
 
 	onMount(() => {
-		if (!import.meta.env.DEV || captureRoute) return;
+		void refreshStickers();
+	});
+
+	onMount(() => {
+		if (!import.meta.env.DEV) return;
 		let cancelScheduled = () => {};
 		const load = () => {
 			void import('#lib/dev/FeedbackTools.svelte').then(({ default: component }) => {
@@ -51,37 +55,33 @@
 	{/if}
 </svelte:head>
 
-{#if captureRoute}
+<div class="site">
+	<header class="site-header">
+		<a class="wordmark" href="/" aria-label="162-0 home"><span aria-hidden="true" class="mark"></span>162-0</a>
+		<nav class="site-actions" aria-label="Site controls">
+			<Settings />
+			<a class="rules-link" href="/about">Rules &amp; model</a>
+		</nav>
+	</header>
 	{@render children()}
-{:else}
-	<div class="site">
-		<header class="site-header">
-			<a class="wordmark" href="/" aria-label="162-0 home"><span aria-hidden="true" class="mark"></span>162-0</a>
-			<nav class="site-actions" aria-label="Site controls">
-				<Settings />
-				<a class="rules-link" href="/about">Rules &amp; model</a>
-			</nav>
-		</header>
-		{@render children()}
-		<footer>
-			<div class="attribution">
-				<p>Inspired by <a href="https://82-0.com/">82-0</a>. An original baseball challenge.</p>
-				<p><a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates.
-					<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/about#attribution">Full attribution &amp; data download</a>. <a href="/about#image-credits">Image credits</a>.</p>
-			</div>
-			<div class="footer-links">
-				<a class="kofi-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer">
-					<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M7.5 4.5 15 3.2l2.6 14.8"/><rect x="4" y="6" width="11" height="15" rx="1.5" fill="currentColor"/><path fill="var(--background)" d="m9.5 10 1.1 2.4 2.4 1.1-2.4 1.1-1.1 2.4-1.1-2.4L6 13.5l2.4-1.1Z"/></svg>
-					Buy me a card pack
-				</a>
-				<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
-			</div>
-		</footer>
-	</div>
-	<Toaster />
-{/if}
+	<footer>
+		<div class="attribution">
+			<p>Inspired by <a href="https://82-0.com/">82-0</a>. An original baseball challenge.</p>
+			<p><a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates.
+				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/about#attribution">Full attribution &amp; data download</a>. <a href="/about#image-credits">Image credits</a>.</p>
+		</div>
+		<div class="footer-links">
+			<a class="kofi-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer">
+				<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M7.5 4.5 15 3.2l2.6 14.8"/><rect x="4" y="6" width="11" height="15" rx="1.5" fill="currentColor"/><path fill="var(--background)" d="m9.5 10 1.1 2.4 2.4 1.1-2.4 1.1-1.1 2.4-1.1-2.4L6 13.5l2.4-1.1Z"/></svg>
+				Buy me a card pack
+			</a>
+			<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
+		</div>
+	</footer>
+</div>
+<Toaster />
 
-{#if FeedbackTools && !captureRoute}
+{#if FeedbackTools}
 	<FeedbackTools />
 {/if}
 

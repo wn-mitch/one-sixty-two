@@ -5,7 +5,7 @@ import { selectLogo, selectPhoto } from '../lib/media/client.ts';
 import { rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
 import type { WarRankings } from '../lib/rankings/types.ts';
 import {
-	STORAGE_KEY,
+	deviceDraft,
 	cardScenario,
 	currentManifest,
 	currentMedia,
@@ -108,7 +108,7 @@ async function confirmNarrowPick(page: Page, scenario: CardScenario): Promise<Dr
 	await sheet.locator(`[data-slot="${scenario.slot}"]`).click();
 	await sheet.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true }).click();
 	await expect(sheet).toHaveCount(0);
-	return page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Promise<Draft>;
+	return deviceDraft<Draft>(page);
 }
 
 test('keeps a changed exact season in the narrow designed-back sheet through ranking arrival, then drafts that season', async ({ page, request }) => {
@@ -193,7 +193,7 @@ test('keeps a no-photo card draftable through the wide in-place flip when rankin
 	const field = page.locator('.field-panel');
 	await field.locator(`[data-slot="${scenario.slot}"]`).click();
 	await field.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true }).click();
-	const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	const saved = await deviceDraft<Draft>(page);
 	expect(saved.picks.at(-1)?.seasonId).toBe(scenario.candidate.seasonId);
 });
 
@@ -341,7 +341,7 @@ test('orders displayed exact seasons after a lower-ranked season is chosen', asy
 	await expect.poll(orderedWars).toEqual((await orderedWars()).sort((a, b) => b - a));
 	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(current!.displayName);
 	await expect(page.locator(`[data-candidate-group="${current!.playerId}"] .player-card`)).toHaveAttribute('data-season-id', alternate.seasonId);
-	const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	const saved = await deviceDraft<Draft>(page);
 	expect(saved.picks).toEqual(draft.picks);
 	expect(saved.actions).toEqual(draft.actions);
 });

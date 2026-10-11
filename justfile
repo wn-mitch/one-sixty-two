@@ -1,8 +1,10 @@
 dev *args:
     npm run dev -- {{args}}
 
+# Cargo tests read the prepared dataset, which the browser suite's build prepares.
 test:
     npm test
+    cargo test --workspace
 
 media-discover *args:
     npm run media:discover -- {{args}}
@@ -19,6 +21,9 @@ media-prepare *args:
 statcast *args:
     npm run data:statcast -- {{args}}
 
+engine:
+    npm run engine
+
 smoke *args:
     npm run smoke -- {{args}}
 
@@ -27,6 +32,13 @@ calibrate *args:
 
 bench *args:
     npm run bench -- {{args}}
+
+hill-climb *args:
+    npm run data:prepare
+    cargo run --release --quiet -p engine-cli -- hill-climb {{args}}
+
+hill-climb-replay *args:
+    cargo run --release --quiet -p engine-cli -- hill-climb-replay {{args}}
 
 draft-feasibility *args:
     npm run draft:feasibility -- {{args}}

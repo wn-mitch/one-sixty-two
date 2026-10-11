@@ -50,7 +50,8 @@ async function prepare(): Promise<void> {
  const attribution = await acquireAttribution(offline);
  const simulationFiles = (await readdir('src/lib/sim')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts')).sort().map(name => `src/lib/sim/${name}`);
  const draftFiles = (await readdir('src/lib/draft')).filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts') && !name.includes('fixtures')).sort().map(name => `src/lib/draft/${name}`);
- const compilerFiles = ['scripts/prepare-data.ts', ...draftFiles, 'scripts/data/stadiums.json', STATCAST_SHAPE_FILE, 'scripts/rankings/source.ts', 'src/lib/cards/finish.ts', 'src/lib/game/types.ts', ...simulationFiles, ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
+ const engineFiles = [...(await readdir('engine/src')).filter(name => name.endsWith('.rs')).sort().map(name => `engine/src/${name}`), 'engine/Cargo.toml', 'engine-wasm/src/lib.rs', 'Cargo.lock', 'src/lib/engine/core.ts', 'src/lib/engine/prep.ts'];
+ const compilerFiles = ['scripts/prepare-data.ts', ...draftFiles, ...engineFiles, 'scripts/data/stadiums.json', STATCAST_SHAPE_FILE, 'scripts/rankings/source.ts', 'src/lib/cards/finish.ts', 'src/lib/game/types.ts', ...simulationFiles, ...(await readdir('scripts/data')).filter(name => name.endsWith('.ts')).sort().map(name => `scripts/data/${name}`)];
  const hash = createHash('sha256').update(SOURCE_COMMIT).update(canonicalJSON(CHECKSUMS)).update(RANKINGS_SOURCE_COMMIT).update(RANKINGS_SOURCE_CHECKSUM).update(canonicalJSON(attribution));
  for (const filename of compilerFiles) hash.update(filename).update(await readFile(filename));
  const compilerHash = hash.digest('hex');

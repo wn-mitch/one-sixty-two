@@ -3,8 +3,8 @@ import { replayInput } from '../game/draft.ts';
 import { seriesHash } from '../game/replay-link.ts';
 import { seriesRecord, type SeriesRecord } from '../game/series-history.ts';
 import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile } from '../game/types.ts';
-import { prepareSeasonInput, simulateSeason } from '../sim/season.ts';
-import { simulateSeries } from '../sim/series.ts';
+import { simulateSeason, simulateSeries } from '../engine/core.ts';
+import { prepareSeasonInput } from '../game/season-input.ts';
 import { SERIES_TEAM_IDS, type SeriesResult, type SeriesTeamId } from '../sim/series-types.ts';
 import { createExampleFixtures } from './fixtures.ts';
 
@@ -28,6 +28,7 @@ let cached: Promise<ExampleSeries> | null = null;
 /**
  * Two example clubs from the canonical fixture roster, played through a real best-of-five.
  * The rival hits weaker and calls a different park home, so seeding comes from their records.
+ * The wasm engine must already be instantiated.
  */
 export function getExampleSeries(): Promise<ExampleSeries> {
  if (!cached) cached = new Promise<void>(resolve => setTimeout(resolve, 0)).then(buildSeries);

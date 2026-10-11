@@ -4,6 +4,7 @@
 	import { acceptChallenge, claimChallenge } from '#lib/game/challenge.ts';
 	import { loadManifest } from '#lib/game/data.ts';
 	import { restoreDraft } from '#lib/game/persistence.ts';
+	import { deviceDb } from '#lib/storage/db.ts';
 	import { draftRules } from '#lib/game/rules.ts';
 	import type { PageProps } from './$types';
 
@@ -14,9 +15,9 @@
 
 	onMount(() => {
 		let live = true;
-		void loadManifest().then(manifest => {
+		void loadManifest().then(async manifest => {
 			let saved;
-			try { saved = restoreDraft(localStorage, manifest); } catch { return; }
+			try { saved = await restoreDraft((await deviceDb()).db, manifest); } catch { return; }
 			if (!live || saved.kind !== 'valid' || saved.phase === 'results') return;
 			const picks = saved.draft.picks.length;
 			const slots = draftRules(saved.draft.schemaVersion).slots.length;

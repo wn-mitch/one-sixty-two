@@ -1,10 +1,4 @@
-import type { DefensiveEnvironment, DefensivePosition, DefensiveSkills, Position } from '../game/types.ts';
-import {
- expectedDefensiveRuns as physicalDefensiveRuns,
- expectedNeutralPlateAppearanceValue,
- getPhysicalReference,
- type PhysicalReference
-} from './physical-expectation.ts';
+import type { DefensivePosition, DefensiveSkills, Position } from '../game/types.ts';
 
 const ZERO_SKILLS: DefensiveSkills = {
  hitPrevention: 0,
@@ -13,9 +7,6 @@ const ZERO_SKILLS: DefensiveSkills = {
  errorAvoidance: 0,
  catcherThrowing: 0
 };
-
-/** The neutral physical reference shared by defense valuation, run value, and win expectancy. */
-export type DefensiveReference = PhysicalReference;
 
 export function neutralDefensivePosition(position?: Position): DefensivePosition {
  const unavailable = () => ({ status: 'notApplicable' as const, exposure: 0 });
@@ -39,18 +30,4 @@ export function neutralDefensivePosition(position?: Position): DefensivePosition
   expectedRunsSaved162: null,
   residualClamped: false
  };
-}
-
-export { expectedNeutralPlateAppearanceValue };
-
-export function createDefensiveReference(environment: DefensiveEnvironment): DefensiveReference {
- const values = [environment.leagueStealAttempt, environment.leagueStealSuccess, environment.leagueDoublePlay];
- const invalidErrorRate = Object.values(environment.leagueErrorRates ?? {}).some(value => !Number.isFinite(value) || value < 0 || value > 0.12);
- if (values.some(value => !Number.isFinite(value) || value < 0 || value > 1) || invalidErrorRate || !environment.contactModel) throw new Error('Invalid defensive environment');
- return getPhysicalReference(environment);
-}
-
-/** Season runs saved by a defender's skills relative to a neutral defender at the same position. */
-export function expectedDefensiveRuns(reference: DefensiveReference, position: Position, skills: DefensiveSkills): number {
- return physicalDefensiveRuns(reference, position, skills);
 }

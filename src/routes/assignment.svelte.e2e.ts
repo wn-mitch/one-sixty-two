@@ -11,7 +11,7 @@ import {
 	type LegalReassignment
 } from '../lib/game/draft.ts';
 import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Profile } from '../lib/game/types.ts';
-import { currentManifest, openSavedDraft, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { currentManifest, openSavedDraft, deviceDraft } from './draft-test-fixtures.ts';
 
 const FIXTURE_SEED = 2;
 
@@ -115,7 +115,7 @@ function fieldSlot(page: Page, slot: string) {
 }
 
 async function savedDraft(page: Page): Promise<Draft> {
-	return page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Promise<Draft>;
+	return deviceDraft<Draft>(page);
 }
 
 test('keeps a blocked season selected through moves and swaps, then restores the pending roll', async ({ page, request }) => {

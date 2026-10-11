@@ -9,7 +9,7 @@
 	/**
 	 * The season share image: the draft field card, with the home park drawn from its measured
 	 * outline and every roster card in its slot, framed by the wordmark, the final record, and the
-	 * replay link. The same component renders the local preview and the trusted capture.
+	 * replay link. The same component renders the local preview and the published capture.
 	 */
 	let { model, format = 'field' }: { model: ShareRenderModel; format?: ShareFormat } = $props();
 	let root = $state<HTMLElement>();

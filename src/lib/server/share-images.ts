@@ -1,56 +1,24 @@
-import { canonicalShareRenderModelJson, createShareRenderModel } from '../share/model.ts';
-import { SHARE_DIMENSIONS, SHARE_FORMATS, type ShareFormat, type SharePublication, type SharePublicationImage, type ShareRenderModel } from '../share/types.ts';
-import { prepareSeasonInput, simulateSeason } from '../sim/season.ts';
-import {
-	ReplayIncompatibleError,
-	ReplayInvalidError,
-	ReplayNotFoundError,
-	ReplayUnavailableError,
-	type ReplayAssets,
-	type ReplayBucket,
-	type ReplayObject
-} from './replays.ts';
-import {
-	ShareDataIncompatibleError,
-	ShareDataUnavailableError,
-	loadCurrentShareAssets,
-	loadTrustedShareData,
-	validateStoredShareModel
-} from './share-data.ts';
+import { SHARE_DIMENSIONS, SHARE_FORMATS, type ShareFormat, type SharePublication, type SharePublicationImage, type ShareRecord } from '../share/types.ts';
+import { REPLAY_PREFIX, type ReplayBucket, type ReplayObject } from './replays.ts';
 
+/**
+ * Share publication stores what the player's browser captured: the season PNG and the record it
+ * shows, next to a stored replay. The server checks only the replay's existence and the image's
+ * format, size, and dimensions. Sharing is friendly, not tamper-proof, so nothing is recomputed;
+ * a viewer's own browser replays the season from the link.
+ */
 const SHA256 = /^[a-f0-9]{64}$/;
 const REPLAY_ID = /^[A-Za-z0-9_-]{22}$/;
-const MODEL_MAX_BYTES = 2 * 1024 * 1024;
 const PUBLICATION_MAX_BYTES = 64 * 1024;
-const PNG_MAX_BYTES = 16 * 1024 * 1024;
+export const PNG_MAX_BYTES = 8 * 1024 * 1024;
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
-const READY_SELECTOR = '[data-share-artwork][data-share-ready="true"]';
-const MODEL_PREFIX = 'shares/v1/models/';
-const IMAGE_PREFIX = 'shares/v1/images/';
-const PUBLICATION_PREFIX = 'shares/v1/replays/';
+const IMAGE_PREFIX = 'shares/v2/images/';
+const PUBLICATION_PREFIX = 'shares/v2/replays/';
 type OwnedBytes = Uint8Array<ArrayBuffer>;
 
-export interface ShareScreenshotOptions {
-	url: string;
-	setExtraHTTPHeaders: Record<string, string>;
-	selector: string;
-	viewport: { width: number; height: number; deviceScaleFactor: 1 };
-	screenshotOptions: { type: 'png' };
-	gotoOptions: { waitUntil: 'networkidle0'; timeout: number };
-	waitForSelector: { selector: string; visible: true; timeout: number };
-	actionTimeout: number;
-}
-
-export interface ShareBrowserBinding {
-	quickAction(action: 'screenshot', options: ShareScreenshotOptions): Promise<Response>;
-}
-
 export interface ShareServerBindings {
-	ASSETS: ReplayAssets;
 	REPLAYS: ReplayBucket;
-	BROWSER: ShareBrowserBinding;
 	PUBLIC_ORIGIN: string;
-	SHARE_CAPTURE_TOKEN: string;
 }
 
 export interface PublishedShareImage {
@@ -65,16 +33,17 @@ export class ShareNotFoundError extends Error {
 	constructor(message = 'Share publication not found.') { super(message); }
 }
 
+/** The upload itself is malformed: not a PNG, the wrong size, or an impossible record. */
+export class ShareInvalidError extends Error {
+	constructor(message = 'The share upload is invalid.') { super(message); }
+}
+
 export class ShareIncompatibleError extends Error {
-	constructor(message = 'This replay is incompatible with the current share renderer.') { super(message); }
+	constructor(message = 'This share publication is incompatible with the current game.') { super(message); }
 }
 
 export class ShareUnavailableError extends Error {
-	constructor(message = 'Share image preparation is unavailable. Please retry.') { super(message); }
-}
-
-export class ShareAuthorizationError extends Error {
-	constructor() { super('Share capture authorization failed.'); }
+	constructor(message = 'Share publication is unavailable. Please retry.') { super(message); }
 }
 
 export function parseShareFormat(value: string): ShareFormat {
@@ -82,8 +51,15 @@ export function parseShareFormat(value: string): ShareFormat {
 	return value as ShareFormat;
 }
 
+export function validRecord(record: unknown): record is ShareRecord {
+	if (!record || typeof record !== 'object') return false;
+	const value = record as ShareRecord;
+	return [value.wins, value.losses, value.longestWinningStreak, value.runsFor, value.runsAgainst].every(number => Number.isInteger(number) && number >= 0) &&
+		value.wins + value.losses === 162 && value.longestWinningStreak <= value.wins &&
+		(value.firstLoss === null ? value.losses === 0 : Number.isInteger(value.firstLoss) && value.firstLoss >= 1 && value.firstLoss <= 162 && value.losses > 0);
+}
+
 function publicationKey(id: string): string { return `${PUBLICATION_PREFIX}${id}/manifest.json`; }
-function modelKey(digest: string): string { return `${MODEL_PREFIX}${digest}.json`; }
 function imageKey(digest: string): string { return `${IMAGE_PREFIX}${digest}.png`; }
 
 function normalizedOrigin(value: string): string {
@@ -142,12 +118,12 @@ function decodeJson(bytes: Uint8Array, label: string): unknown {
 function pngDimensions(bytes: Uint8Array): { width: number; height: number } {
 	if (bytes.byteLength < 24 || PNG_SIGNATURE.some((byte, index) => bytes[index] !== byte) ||
 		bytes[12] !== 73 || bytes[13] !== 72 || bytes[14] !== 68 || bytes[15] !== 82) {
-		throw new ShareUnavailableError('The capture service did not return a PNG image.');
+		throw new ShareInvalidError('The share image is not a PNG.');
 	}
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	const width = view.getUint32(16, false);
 	const height = view.getUint32(20, false);
-	if (!width || !height) throw new ShareUnavailableError('The capture service returned an invalid PNG image.');
+	if (!width || !height) throw new ShareInvalidError('The share image is not a valid PNG.');
 	return { width, height };
 }
 
@@ -195,17 +171,8 @@ function publicationImageUrl(origin: string, id: string, format: ShareFormat): s
 function validatePublication(value: unknown, id: string, origin: string): asserts value is SharePublication {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ShareIncompatibleError('Stored share publication is invalid.');
 	const publication = value as SharePublication;
-	const record = publication.record;
-	const recordValid = record && [
-		record.wins,
-		record.losses,
-		record.longestWinningStreak,
-		record.runsFor,
-		record.runsAgainst
-	].every(number => Number.isInteger(number) && number >= 0) &&
-		record.wins + record.losses === 162 &&
-		(record.firstLoss === null || (Number.isInteger(record.firstLoss) && record.firstLoss >= 1 && record.firstLoss <= 162));
-	if (publication.schemaVersion !== 1 || publication.replayId !== id || !SHA256.test(publication.modelDigest) ||
+	const recordValid = validRecord(publication.record);
+	if (publication.schemaVersion !== 2 || publication.replayId !== id ||
 		publication.replayUrl !== `${origin}/r/${id}` || !recordValid || !publication.images ||
 		typeof publication.images !== 'object') {
 		throw new ShareIncompatibleError('Stored share publication is invalid.');
@@ -220,93 +187,47 @@ function validatePublication(value: unknown, id: string, origin: string): assert
 	}
 }
 
-/** Read completed publication state only. This function never captures. */
-export async function readSharePublication(bindings: Pick<ShareServerBindings, 'REPLAYS' | 'PUBLIC_ORIGIN'>, id: string): Promise<SharePublication | null> {
+/** Read completed publication state only. */
+export async function readSharePublication(bindings: ShareServerBindings, id: string): Promise<SharePublication | null> {
 	if (!REPLAY_ID.test(id)) throw new ShareNotFoundError();
 	const object = await bucketGet(bindings.REPLAYS, publicationKey(id));
 	if (!object) return null;
 	const publication = decodeJson(await readBoundedBody(object.body, PUBLICATION_MAX_BYTES), 'Stored share publication');
-	const origin = normalizedOrigin(bindings.PUBLIC_ORIGIN);
-	validatePublication(publication, id, origin);
+	validatePublication(publication, id, normalizedOrigin(bindings.PUBLIC_ORIGIN));
 	return publication;
 }
 
-async function captureFormat(bindings: ShareServerBindings, origin: string, modelDigest: string, format: ShareFormat): Promise<OwnedBytes> {
-	if (!bindings.BROWSER || typeof bindings.BROWSER.quickAction !== 'function') throw new ShareUnavailableError('Browser capture is unavailable.');
-	if (!bindings.SHARE_CAPTURE_TOKEN) throw new ShareUnavailableError('Share capture is not configured.');
-	const dimensions = SHARE_DIMENSIONS[format];
-	const url = `${origin}/__share/${modelDigest}/${format}`;
-	let response: Response;
-	try {
-		response = await bindings.BROWSER.quickAction('screenshot', {
-			url,
-			setExtraHTTPHeaders: { 'x-share-capture-token': bindings.SHARE_CAPTURE_TOKEN },
-			selector: READY_SELECTOR,
-			viewport: { width: dimensions.width, height: dimensions.height, deviceScaleFactor: 1 },
-			screenshotOptions: { type: 'png' },
-			gotoOptions: { waitUntil: 'networkidle0', timeout: 45_000 },
-			waitForSelector: { selector: READY_SELECTOR, visible: true, timeout: 45_000 },
-			actionTimeout: 60_000
-		});
-	} catch { throw new ShareUnavailableError('Share image capture failed. Please retry.'); }
-	if (!response.ok) throw new ShareUnavailableError('Share image capture failed. Please retry.');
-	let bytes: OwnedBytes;
-	try { bytes = await readBoundedBody(response.body, PNG_MAX_BYTES); }
-	catch { throw new ShareUnavailableError('Share image capture exceeded the allowed size.'); }
-	const actual = pngDimensions(bytes);
-	if (actual.width !== dimensions.width || actual.height !== dimensions.height) {
-		throw new ShareUnavailableError(`Share image capture returned ${actual.width}×${actual.height}; expected ${dimensions.width}×${dimensions.height}.`);
-	}
-	return bytes;
-}
-
-async function publish(bindings: ShareServerBindings, id: string): Promise<SharePublication> {
-	const cached = await readSharePublication(bindings, id);
-	if (cached) return cached;
+/**
+ * Publishes the browser-captured images for a stored replay. Publication is write-once: a replay
+ * that already has one keeps it, and a second upload returns the first.
+ */
+export async function publishShare(bindings: ShareServerBindings, id: string, record: unknown, images: Partial<Record<ShareFormat, OwnedBytes>>): Promise<SharePublication> {
+	if (!REPLAY_ID.test(id)) throw new ShareNotFoundError();
+	const existing = await readSharePublication(bindings, id);
+	if (existing) return existing;
+	const replay = await bucketGet(bindings.REPLAYS, `${REPLAY_PREFIX}${id}`);
+	if (!replay) throw new ShareNotFoundError('Replay not found.');
+	if (replay.body instanceof ReadableStream) await replay.body.cancel();
+	if (!validRecord(record)) throw new ShareInvalidError('The shared record is not a 162-game season.');
 	const origin = normalizedOrigin(bindings.PUBLIC_ORIGIN);
-	const data = await loadTrustedShareData(bindings.ASSETS, bindings.REPLAYS, id);
-	let model: ShareRenderModel;
-	try {
-		const input = prepareSeasonInput(data.draft, data.profiles, data.simulation);
-		const result = simulateSeason(input);
-		model = createShareRenderModel({
-			draft: data.draft,
-			result,
-			profiles: data.profiles,
-			manifest: data.manifest,
-			media: data.media,
-			rankings: data.rankings,
-			replayId: id,
-			publicOrigin: origin,
-			rendererVersion: data.rendererVersion
-		});
-	} catch (error) {
-		throw new ShareIncompatibleError(error instanceof Error ? error.message : undefined);
-	}
-	const modelBytes = new TextEncoder().encode(canonicalShareRenderModelJson(model));
-	if (modelBytes.byteLength > MODEL_MAX_BYTES) throw new ShareIncompatibleError('The canonical share model is too large.');
-	const modelDigest = await sha256(modelBytes);
-	await storeImmutable(bindings.REPLAYS, modelKey(modelDigest), modelBytes, 'application/json', MODEL_MAX_BYTES);
-
-	const images = {} as Record<ShareFormat, SharePublicationImage>;
+	const published = {} as Record<ShareFormat, SharePublicationImage>;
 	for (const format of SHARE_FORMATS) {
-		const bytes = await captureFormat(bindings, origin, modelDigest, format);
+		const bytes = images[format];
+		if (!bytes) throw new ShareInvalidError(`The ${format} share image is missing.`);
+		if (bytes.byteLength > PNG_MAX_BYTES) throw new ShareInvalidError('The share image is too large.');
+		const actual = pngDimensions(bytes);
+		const dimensions = SHARE_DIMENSIONS[format];
+		if (actual.width !== dimensions.width || actual.height !== dimensions.height) {
+			throw new ShareInvalidError(`The share image is ${actual.width}×${actual.height}; expected ${dimensions.width}×${dimensions.height}.`);
+		}
 		const digest = await sha256(bytes);
 		await storeImmutable(bindings.REPLAYS, imageKey(digest), bytes, 'image/png', PNG_MAX_BYTES);
-		images[format] = { url: publicationImageUrl(origin, id, format), ...SHARE_DIMENSIONS[format], sha256: digest };
+		published[format] = { url: publicationImageUrl(origin, id, format), ...dimensions, sha256: digest };
 	}
-	const publication: SharePublication = {
-		schemaVersion: 1,
-		replayId: id,
-		replayUrl: `${origin}/r/${id}`,
-		modelDigest,
-		record: model.record,
-		images
-	};
-	const bytes = new TextEncoder().encode(JSON.stringify(publication));
+	const publication: SharePublication = { schemaVersion: 2, replayId: id, replayUrl: `${origin}/r/${id}`, record, images: published };
 	let stored: unknown | null;
 	try {
-		stored = await bindings.REPLAYS.put(publicationKey(id), bytes, {
+		stored = await bindings.REPLAYS.put(publicationKey(id), new TextEncoder().encode(JSON.stringify(publication)), {
 			httpMetadata: { contentType: 'application/json' },
 			onlyIf: { etagDoesNotMatch: '*' }
 		});
@@ -317,37 +238,8 @@ async function publish(bindings: ShareServerBindings, id: string): Promise<Share
 	return winner;
 }
 
-const preparations = new Map<string, Promise<SharePublication>>();
-
-/** Trusted idempotent publication entry point. The replay ID is the only caller input. */
-export async function prepareSharePublication(bindings: ShareServerBindings, id: string): Promise<SharePublication> {
-	if (!REPLAY_ID.test(id)) throw new ShareNotFoundError();
-	const cached = await readSharePublication(bindings, id);
-	if (cached) return cached;
-	let pending = preparations.get(id);
-	if (!pending) {
-		pending = publish(bindings, id).catch(error => {
-			if (error instanceof ShareNotFoundError || error instanceof ShareIncompatibleError || error instanceof ShareUnavailableError) throw error;
-			if (error instanceof ReplayNotFoundError) throw new ShareNotFoundError(error.message);
-			if (error instanceof ReplayInvalidError || error instanceof ReplayIncompatibleError || error instanceof ShareDataIncompatibleError) {
-				throw new ShareIncompatibleError(error.message);
-			}
-			if (error instanceof ReplayUnavailableError || error instanceof ShareDataUnavailableError) throw new ShareUnavailableError(error.message);
-			throw new ShareUnavailableError();
-		}).finally(() => {
-			if (preparations.get(id) === pending) preparations.delete(id);
-		});
-		preparations.set(id, pending);
-	}
-	return pending;
-}
-
-/** Load and fully validate exact published PNG bytes. This function never captures. */
-export async function loadPublishedShareImage(
-	bindings: Pick<ShareServerBindings, 'REPLAYS' | 'PUBLIC_ORIGIN'>,
-	id: string,
-	format: ShareFormat
-): Promise<PublishedShareImage> {
+/** Load and validate the exact published PNG bytes. */
+export async function loadPublishedShareImage(bindings: ShareServerBindings, id: string, format: ShareFormat): Promise<PublishedShareImage> {
 	if (!SHARE_FORMATS.includes(format)) throw new ShareNotFoundError('Share image format not found.');
 	const publication = await readSharePublication(bindings, id);
 	if (!publication) throw new ShareNotFoundError();
@@ -364,41 +256,8 @@ export async function loadPublishedShareImage(
 	return { publication, image, bytes, etag: `"${image.sha256}"` };
 }
 
-function authorized(actual: string | null | undefined, expected: string): boolean {
-	if (!actual || !expected || actual.length !== expected.length) return false;
-	let difference = 0;
-	for (let index = 0; index < expected.length; index++) difference |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
-	return difference === 0;
-}
-
-/** Load a stored model only for the secret internal capture route. */
-export async function loadAuthenticatedShareModel(bindings: ShareServerBindings, digest: string, token: string | null | undefined): Promise<ShareRenderModel> {
-	if (!bindings.SHARE_CAPTURE_TOKEN) throw new ShareUnavailableError('Share capture is not configured.');
-	if (!authorized(token, bindings.SHARE_CAPTURE_TOKEN)) throw new ShareAuthorizationError();
-	if (!SHA256.test(digest)) throw new ShareNotFoundError('Share render model not found.');
-	const object = await bucketGet(bindings.REPLAYS, modelKey(digest));
-	if (!object) throw new ShareNotFoundError('Share render model not found.');
-	const bytes = await readBoundedBody(object.body, MODEL_MAX_BYTES);
-	if (await sha256(bytes) !== digest) throw new ShareIncompatibleError('The stored share model digest is invalid.');
-	const parsed = decodeJson(bytes, 'Stored share model');
-	try {
-		const current = await loadCurrentShareAssets(bindings.ASSETS);
-		validateStoredShareModel(parsed, current, digest, normalizedOrigin(bindings.PUBLIC_ORIGIN));
-	} catch (error) {
-		if (error instanceof ShareDataIncompatibleError) throw new ShareIncompatibleError(error.message);
-		if (error instanceof ShareDataUnavailableError) throw new ShareUnavailableError(error.message);
-		throw error;
-	}
-	const canonical = new TextEncoder().encode(canonicalShareRenderModelJson(parsed));
-	if (canonical.byteLength !== bytes.byteLength || canonical.some((byte, index) => byte !== bytes[index])) {
-		throw new ShareIncompatibleError('The stored share model is not canonical.');
-	}
-	return parsed;
-}
-
 export function safeShareMessage(error: unknown): string {
-	if (error instanceof ShareNotFoundError || error instanceof ShareIncompatibleError || error instanceof ShareUnavailableError) return error.message;
-	if (error instanceof ShareAuthorizationError) return 'Share capture authorization failed.';
+	if (error instanceof ShareNotFoundError || error instanceof ShareInvalidError || error instanceof ShareIncompatibleError || error instanceof ShareUnavailableError) return error.message;
 	console.error('Share request failed unexpectedly', error);
-	return 'Share image preparation is unavailable. Please retry.';
+	return 'Share publication is unavailable. Please retry.';
 }

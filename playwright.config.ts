@@ -3,8 +3,7 @@ import { defineConfig } from '@playwright/test';
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 4162);
 
 export default defineConfig({
-	// The suite runs against local workerd with local R2. The test launcher replaces
-	// only BROWSER.quickAction with a loopback Playwright capture bridge.
+	// The suite runs against local workerd with local R2.
 	webServer: {
 		command:
 			'node scripts/test-build.ts && node scripts/test-server.ts',

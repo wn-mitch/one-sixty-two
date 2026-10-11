@@ -1,9 +1,7 @@
-import type { StorageAccess } from './persistence.ts';
+import { isSeriesRecord } from '../storage/legacy.ts';
+import { json, parseJson, type Db } from '../storage/sql.ts';
 import { replayKeyDigest } from './library.ts';
 import type { SeriesResult, SeriesTeamId } from '../sim/series-types.ts';
-
-export const SERIES_HISTORY_KEY = '162-zero:series:v1';
-export const SERIES_HISTORY_LIMIT = 200;
 
 /** One club in a recorded series; `libraryKey` matches the club's season library entry when it has one. */
 export interface SeriesSide { libraryKey: string; name: string; seed: 1 | 2; wins: number }
@@ -29,24 +27,16 @@ export async function seriesRecord(result: SeriesResult, link: string, playedAt:
  return { id: `${[...keys].sort().join(':')}:${result.seed}`, playedAt, link, teams: [side(0), side(1)], championKey: keys[champion] };
 }
 
-export function loadSeriesHistory(storage: StorageAccess): SeriesRecord[] {
- const bytes = storage.getItem(SERIES_HISTORY_KEY);
- if (bytes === null) return [];
- try {
-  const value: unknown = JSON.parse(bytes);
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is SeriesRecord => !!entry && typeof entry === 'object' && typeof entry.id === 'string' &&
-   typeof entry.playedAt === 'string' && typeof entry.link === 'string' && typeof entry.championKey === 'string' &&
-   Array.isArray(entry.teams) && entry.teams.length === 2 &&
-   entry.teams.every((side: SeriesSide) => !!side && typeof side.libraryKey === 'string' && typeof side.name === 'string' && Number.isInteger(side.wins)));
- } catch { return []; }
+/** Every recorded series, most recently played first; rows that fail the structural check are skipped. */
+export async function loadSeriesHistory(db: Db): Promise<SeriesRecord[]> {
+ const rows = await db.all<{ json: string }>('SELECT json FROM series ORDER BY recorded_at DESC, id');
+ return rows.map(row => parseJson<unknown>(row.json)).filter(isSeriesRecord);
 }
 
-/** Records a finished series, newest first; a replayed series moves to the top. Returns a notice on storage failure. */
-export function recordSeries(storage: StorageAccess, record: SeriesRecord): string | null {
+/** Records a finished series; a replayed series is kept once and moves to the top. Returns a notice on storage failure. */
+export async function recordSeries(db: Db, record: SeriesRecord, now = new Date()): Promise<string | null> {
  try {
-  const kept = [record, ...loadSeriesHistory(storage).filter(item => item.id !== record.id)].slice(0, SERIES_HISTORY_LIMIT);
-  storage.setItem(SERIES_HISTORY_KEY, JSON.stringify(kept));
+  await db.run([{ sql: 'INSERT INTO series (id, recorded_at, json) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET recorded_at = excluded.recorded_at, json = excluded.json', bind: [record.id, now.toISOString(), json(record)] }]);
   return null;
  } catch { return 'This series could not be added to your head-to-head history: browser storage is blocked or full.'; }
 }

@@ -4,7 +4,38 @@ import type { Candidate, Draft, Manifest, Profile, Slot } from '../lib/game/type
 import type { MediaManifest, MediaPointer } from '../lib/media/types.ts';
 import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 
+/** The legacy localStorage key; a fresh browser context imports it into the device database on first load. */
 export const STORAGE_KEY = '162-zero:v1';
+
+type DeviceDb = { all(sql: string, bind?: unknown[]): Promise<Record<string, unknown>[]>; run(statements: { sql: string; bind?: unknown[] }[]): Promise<void> };
+
+/** The page's application code installs the database hook once it has loaded. */
+function deviceHook(page: Page): Promise<unknown> {
+ return page.waitForFunction(() => '__deviceDb' in window);
+}
+
+/** The draft row of the page's device database, parsed; null when nothing is saved. */
+export async function deviceDraft<T = Draft & { phase: string }>(page: Page): Promise<T> {
+ const json = await deviceDraftText(page);
+ return (json === null ? null : JSON.parse(json)) as T;
+}
+
+/** The raw draft row text, for asserting a save was left untouched. */
+export async function deviceDraftText(page: Page): Promise<string | null> {
+ await deviceHook(page);
+ return page.evaluate(async () => {
+  const rows = await (window as unknown as { __deviceDb: DeviceDb }).__deviceDb.all('SELECT json FROM draft WHERE id = 1');
+  return (rows[0]?.json as string | undefined) ?? null;
+ });
+}
+
+/** Replaces the saved draft in the page's device database. */
+export async function writeDeviceDraft(page: Page, value: string): Promise<void> {
+ await deviceHook(page);
+ await page.evaluate(async json => {
+  await (window as unknown as { __deviceDb: DeviceDb }).__deviceDb.run([{ sql: 'INSERT OR REPLACE INTO draft (id, json, updated_at) VALUES (1, ?, ?)', bind: [json, new Date().toISOString()] }]);
+ }, value);
+}
 
 export interface CardScenario {
  draft: Draft;
@@ -110,7 +141,7 @@ export async function openPackThroughRetry(page: Page): Promise<unknown> {
  await page.getByRole('button', { name: 'Roll next franchise', exact: true }).click();
  const retry = page.locator('dialog.error-dialog[open]').getByRole('button', { name: 'Retry', exact: true });
  await expect(retry).toBeVisible();
- const committed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).currentRoll, STORAGE_KEY);
+ const committed = (await deviceDraft(page)).currentRoll;
  await retry.click();
  await expect(page.locator('dialog.error-dialog[open]')).toHaveCount(0);
  await page.getByRole('button', { name: /^Take / }).click();

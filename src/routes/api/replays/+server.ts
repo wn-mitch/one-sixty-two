@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from 'cloudflare:workers';
 import type { RequestHandler } from './$types';
-import { loadAuthoritativeManifest, REPLAY_MAX_BYTES, safeReplayMessage, storeReplay } from '#lib/server/replays.ts';
+import { loadCurrentDataVersion, REPLAY_MAX_BYTES, safeReplayMessage, storeReplay } from '#lib/server/replays.ts';
 const boundedBody = async (request: Request): Promise<Uint8Array | null> => {
 	const reader = request.body?.getReader();
 	if (!reader) return new Uint8Array();
@@ -35,8 +35,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		return json({ message: 'Replay payload is invalid.' }, { status: 400 });
 	}
 	try {
-		const manifest = await loadAuthoritativeManifest(env.ASSETS);
-		const stored = await storeReplay(env.REPLAYS, body, manifest);
+		const stored = await storeReplay(env.REPLAYS, body, await loadCurrentDataVersion(env.ASSETS));
 		return json({ id: stored.id, url: `${url.origin}/r/${stored.id}` }, {
 			status: 201,
 			headers: { 'cache-control': 'no-store' }

@@ -5,6 +5,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { stageBuildAssets } from './scripts/package-assets.ts';
 
 export default defineConfig(async ({ command }) => ({
+	// sqlite-wasm resolves its .wasm beside its own module, so it must not be pre-bundled.
+	optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
+	worker: { format: 'es' as const },
 	server: {
 		// Generated datasets and acquisition caches are runtime inputs, not browser source modules.
 		watch: {

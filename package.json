@@ -7,16 +7,16 @@
 		"node": ">=24.12"
 	},
 	"scripts": {
+		"engine": "node scripts/build-engine.ts",
 		"data:prepare": "node scripts/prepare-data.ts",
 		"data:statcast": "node scripts/curate-statcast.ts",
 		"rankings:prepare": "node scripts/prepare-rankings.ts",
-		"share:prepare": "node scripts/prepare-share.ts",
 		"media:prepare": "node scripts/prepare-media.ts",
 		"media:discover": "node scripts/research-media.ts discover",
 		"media:audit": "node scripts/research-media.ts audit",
 		"media:review": "node scripts/review-media.ts",
-		"predev": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare && npm run share:prepare",
-		"prebuild": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare && npm run share:prepare",
+		"predev": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare",
+		"prebuild": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare",
 		"smoke": "node scripts/smoke-season.ts",
 		"bench": "node scripts/bench-sim.ts",
 		"calibrate": "node scripts/calibrate.ts",
@@ -26,6 +26,7 @@
 		"postbuild": "node scripts/package-assets.ts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
+		"precheck": "npm run engine",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test:unit": "vitest run",
@@ -35,7 +36,13 @@
 		"prebuild-storybook": "npm run data:prepare && npm run rankings:prepare && npm run media:prepare",
 		"storybook": "storybook dev --host 127.0.0.1 --port 6006 --exact-port --no-open --disable-telemetry --no-version-updates",
 		"build-storybook": "storybook build --disable-telemetry",
-		"test:storybook": "playwright test --config playwright.storybook.config.ts"
+		"test:storybook": "playwright test --config playwright.storybook.config.ts",
+		"predata:prepare": "npm run engine",
+		"pretest:unit": "npm run engine",
+		"presmoke": "npm run engine",
+		"prebench": "npm run engine",
+		"precalibrate": "npm run engine",
+		"predraft:feasibility": "npm run engine"
 	},
 	"devDependencies": {
 		"@modelcontextprotocol/sdk": "1.32.1",
@@ -67,8 +74,10 @@
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
+		"@sqlite.org/sqlite-wasm": "3.53.4-build1",
 		"animejs": "4.2.2",
 		"dialkit": "^2.0.2",
+		"modern-screenshot": "4.7.0",
 		"motion": "^14.0.0"
 	}
 }

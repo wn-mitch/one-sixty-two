@@ -3,7 +3,8 @@
 	import SeasonLibrary from '#lib/components/SeasonLibrary.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
-	import { deleteSeason, loadLibrary, renameSeason, type LibraryView } from '#lib/game/library.ts';
+	import { deleteSeason, loadLibrary, renameSeason, STORAGE_NOTICE, type LibraryView } from '#lib/game/library.ts';
+	import { deviceDb } from '#lib/storage/db.ts';
 	import { copyShareLink, decodeReplay, storeReplay } from '#lib/game/share.ts';
 	import { loadSeriesHistory, type SeriesRecord } from '#lib/game/series-history.ts';
 	import type { Manifest, Profile } from '#lib/game/types.ts';
@@ -16,14 +17,16 @@
 	let error = $state('');
 	let status = $state('');
 
-	function refresh(): void {
-		if (!manifest) return;
+	async function refresh(): Promise<void> {
+		const current = manifest;
+		if (!current) return;
 		try {
-			const library = loadLibrary(localStorage, manifest);
+			const device = await deviceDb();
+			const library = await loadLibrary(device.db, current);
 			entries = library.entries;
-			if (library.notice) status = library.notice;
-			history = loadSeriesHistory(localStorage);
-		} catch { status = 'Your season library is unavailable: browser storage is blocked or full.'; }
+			if (library.notice ?? device.notice) status = (library.notice ?? device.notice)!;
+			history = await loadSeriesHistory(device.db);
+		} catch { status = STORAGE_NOTICE; }
 		void loadCards();
 	}
 
@@ -50,21 +53,25 @@
 		} catch { status = `Copy this challenge link: ${link}`; }
 	}
 
-	function rename(entry: LibraryView, nickname: string): void {
-		const notice = renameSeason(localStorage, entry.key, nickname);
+	async function rename(entry: LibraryView, nickname: string): Promise<void> {
+		let notice: string | null;
+		try { notice = await renameSeason((await deviceDb()).db, entry.key, nickname); }
+		catch { notice = STORAGE_NOTICE; }
 		status = notice ?? (nickname.trim() ? `Renamed to ${nickname.trim()}.` : 'Nickname cleared.');
-		refresh();
+		await refresh();
 	}
 
-	function remove(entry: LibraryView): void {
-		const notice = deleteSeason(localStorage, entry.key);
+	async function remove(entry: LibraryView): Promise<void> {
+		let notice: string | null;
+		try { notice = await deleteSeason((await deviceDb()).db, entry.key); }
+		catch { notice = STORAGE_NOTICE; }
 		status = notice ?? 'Season deleted.';
-		refresh();
+		await refresh();
 	}
 
 	onMount(() => {
 		loadManifest()
-			.then(value => { manifest = value; refresh(); })
+			.then(value => { manifest = value; return refresh(); })
 			.catch(caught => { error = caught instanceof Error ? caught.message : 'The game data could not be loaded.'; })
 			.finally(() => { loading = false; });
 	});
@@ -82,7 +89,10 @@
 			<h1>My seasons</h1>
 			<p class="lede muted">Every season you finish is saved in this browser. Pick a club for its cards and stats, or pick two for the tale of the tape and a best-of-five.</p>
 		</div>
-		<a class="h2h-link" href="/h2h">Head-to-head with any replay link →</a>
+		<nav class="side-links" aria-label="Related">
+			<a class="h2h-link" href="/collection">Collection →</a>
+			<a class="h2h-link" href="/h2h">Head-to-head with any replay link →</a>
+		</nav>
 	</header>
 	{#if loading}
 		<p class="muted" role="status">Loading your seasons…</p>
@@ -99,6 +109,7 @@
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
 	.lede { margin: 0; max-width: 52ch; }
 	.intro { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-2) var(--space-6); }
+	.side-links { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 	.h2h-link { color: var(--muted); font-size: var(--text-sm); font-weight: 650; }
 	.h2h-link:hover { color: var(--text); }
 </style>

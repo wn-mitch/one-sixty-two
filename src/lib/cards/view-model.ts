@@ -74,6 +74,8 @@ export interface SupplementalRow { k: string; v: string; href?: string }
 export interface SupplementalSection { h: string; rows: readonly SupplementalRow[] }
 export interface Supplemental { title: string; sections: readonly SupplementalSection[] }
 export interface CardFront {
+	/** The exact player-season; collection stickers attach to it. */
+	seasonId?: string;
 	era: CardEra;
 	cardRole: CardRole;
 	given: string;
@@ -388,7 +390,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 	else if (mediaStatus === 'unavailable') photoCaption = 'Photo source unavailable';
 	const backWar = role === 'bullpen' ? '' : warText(hasBatting, hasPitching, ranking);
 	const front: CardFront = {
-		era: eraForYear(profile.year), cardRole: role, given: name.given, family: name.family, full: fullName,
+		seasonId: profile.seasonId, era: eraForYear(profile.year), cardRole: role, given: name.given, family: name.family, full: fullName,
 		team, nick: nickname, abbr: profile.teamId || initials(team), year: count(profile.year), pos,
 		st1: frontStats[0], st2: frontStats[1], st3: frontStats[2],
 		photo: cardPhoto?.url ?? '', selectedPhoto: cardPhoto, hasPhoto: !!cardPhoto, noPhoto: !cardPhoto,

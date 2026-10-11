@@ -1,5 +1,6 @@
 import type { Preview } from '@storybook/sveltekit';
 import { mount, unmount } from 'svelte';
+import { loadEngine } from '../src/lib/engine/browser.ts';
 import { configureMediaLoader, type MediaFixtureMode } from '../src/lib/storybook/media-fixtures.ts';
 import FeedbackTools from '../src/lib/dev/FeedbackTools.svelte';
 import Toaster from '../src/lib/components/Toaster.svelte';
@@ -8,6 +9,8 @@ import '../src/routes/layout.css';
 import '../src/lib/cards/fonts.css';
 
 const preview: Preview = {
+	// Example seasons and series run the wasm engine, which must be instantiated before any story renders.
+	loaders: [async () => { await loadEngine(); return {}; }],
 	async beforeEach({ id, parameters }) {
 		const mediaController = configureMediaLoader((parameters.mediaState ?? 'ready') as MediaFixtureMode);
 		let feedbackHost: HTMLDivElement | null = null;

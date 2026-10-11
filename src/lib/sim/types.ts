@@ -1,11 +1,9 @@
-import type { PreparedMatchups } from './contact-profile.ts';
-import type { ParkRef, StadiumConfig } from './park-types.ts';
+import type { ParkRef } from './park-types.ts';
 import {
  DEFENSE_METHOD_VERSION,
  MODEL_VERSION,
  RULES_VERSION,
  VALUATION_VERSION,
- type DefensiveEnvironment,
  type HitterSlot,
  type Position,
  type Profile,
@@ -57,17 +55,6 @@ export interface SeasonMoment {
  batterName: string; batterSeasonId: string; pitcherName: string; pitcherSeasonId: string; challengeBatting: boolean;
  outcome: SeasonMomentOutcome; runsScored: number;
  winBefore: number; winAfter: number; swing: number;
-}
-/** Independent named streams: plate-appearance events, contact samples, fielding, and runner decisions. */
-export interface GameRandomStreams { pa: () => number; contact: () => number; fielding: () => number; advancement: () => number }
-export interface GameInput {
- number: number; opponentId: string; opponentName: string; challengeIsHome: boolean;
- home: TeamInput; away: TeamInput; defenseEnvironment: DefensiveEnvironment;
- /** The home team's venue; both clubs play in it. */
- stadium: StadiumConfig;
- /** Home hitters against away pitchers, and the reverse; built when omitted. */
- homeMatchups?: PreparedMatchups; awayMatchups?: PreparedMatchups;
- limits?: { maxPA?: number; maxInnings?: number };
 }
 export interface GameResult {
  number: number; opponentId: string; opponentName: string; isHome: boolean;

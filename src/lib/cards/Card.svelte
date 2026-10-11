@@ -20,6 +20,9 @@
  import Back2000s from './backs/Back2000s.svelte';
  import Back2010s from './backs/Back2010s.svelte';
  import Back2020s from './backs/Back2020s.svelte';
+ import StickerLayer from '../collection/StickerLayer.svelte';
+ import { cardStickers } from '../collection/store.svelte.ts';
+ import type { PlacedSticker } from '../collection/stickers.ts';
  const fronts = { '1950s': Front1950s, '1960s': Front1960s, '1970s': Front1970s, '1980s': Front1980s, '1990s': Front1990s, '2000s': Front2000s, '2010s': Front2010s, '2020s': Front2020s };
  const backs = { '1950s': Back1950s, '1960s': Back1960s, '1970s': Back1970s, '1980s': Back1980s, '1990s': Back1990s, '2000s': Back2000s, '2010s': Back2010s, '2020s': Back2020s };
  let {
@@ -31,6 +34,7 @@
   idle = false,
   wall = false,
   capture = false,
+  stickers,
   onDetails
  }: {
   s: CardViewModel;
@@ -41,6 +45,8 @@
   idle?: boolean;
   wall?: boolean;
   capture?: boolean;
+  /** Overrides the collection's stickers for this card, e.g. while they are being arranged. */
+  stickers?: readonly PlacedSticker[];
   onDetails: () => void;
  } = $props();
 	let root = $state<HTMLDivElement>();
@@ -77,6 +83,7 @@
  </div>
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
  {#if face === 'front'}<Material {s} layer="over" {capture} />{/if}
+ {#if face === 'front' && !compact && !thumbnail && !capture}<StickerLayer stickers={stickers ?? cardStickers(s.seasonId)} />{/if}
 </div>
 
 <style>

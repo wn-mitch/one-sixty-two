@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import type { APIRequestContext, BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
-import { TEST_SHARE_CAPTURE_TOKEN } from '../../scripts/test-capture-contract.ts';
+import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
 import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.ts';
 import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, type Draft, type Slot } from '../lib/game/types.ts';
 import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
-import type { ShareFormat, SharePublication } from '../lib/share/types.ts';
-import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, STORAGE_KEY } from './draft-test-fixtures.ts';
+import type { SharePublication } from '../lib/share/types.ts';
+import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, deviceDraft, deviceDraftText } from './draft-test-fixtures.ts';
 import { verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
 
@@ -25,71 +24,12 @@ function pngDimensions(bytes: Buffer): { width: number; height: number } {
 	return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-async function captureTrustedArtwork(
-	context: BrowserContext,
-	origin: string,
-	modelDigest: string,
-	format: ShareFormat
-): Promise<Buffer> {
-	const dimensions = SHARE_DIMENSIONS[format];
-	const capture = await context.newPage();
-	try {
-		await capture.setViewportSize(dimensions);
-		await capture.setExtraHTTPHeaders({ 'x-share-capture-token': TEST_SHARE_CAPTURE_TOKEN });
-		const response = await capture.goto(`${origin}/__share/${modelDigest}/${format}`, { waitUntil: 'networkidle' });
-		expect(response?.status()).toBe(200);
-		const artwork = capture.locator(`[data-share-artwork][data-share-format="${format}"]`);
-		await expect(artwork).toHaveAttribute('data-share-ready', 'true');
-		const readiness = await artwork.evaluate((root, expectedCards) => {
-			const images = [...root.querySelectorAll<HTMLImageElement>('img')];
-			const cards = [...root.querySelectorAll<HTMLElement>('[data-card]')];
-			const bounds = root.getBoundingClientRect();
-			return {
-				width: bounds.width,
-				height: bounds.height,
-				hydrated: root.dataset.shareHydrated,
-				state: root.dataset.shareState,
-				imageCount: images.length,
-				imagesReady: images.every(image => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0),
-				cardsReady: cards.length >= expectedCards && cards.every(card => card.dataset.fitState === 'settled'),
-				overflow: Boolean(root.querySelector('[data-overflow="1"], [data-fit-state="failed"]')) ||
-					root.scrollWidth > Math.ceil(bounds.width) || root.scrollHeight > Math.ceil(bounds.height),
-				fontsLoaded: document.fonts.status === 'loaded' &&
-					[...document.fonts].every(face => face.status !== 'error'),
-				fontResources: performance.getEntriesByType('resource')
-					.filter(entry => entry.name.includes('/fonts/')).length
-			};
-		}, 14);
-		expect(readiness).toEqual({
-			width: dimensions.width,
-			height: dimensions.height,
-			hydrated: 'true',
-			state: 'ready',
-			imageCount: expect.any(Number),
-			imagesReady: true,
-			cardsReady: true,
-			overflow: false,
-			fontsLoaded: true,
-			fontResources: expect.any(Number)
-		});
-		expect(readiness.imageCount).toBeGreaterThan(0);
-		expect(readiness.fontResources).toBeGreaterThan(0);
-		const png = await artwork.screenshot({ type: 'png' });
-		expect(pngDimensions(png)).toEqual(dimensions);
-		return png;
-	} finally {
-		await capture.close();
-	}
-}
-
 async function verifyPublication(
 	request: APIRequestContext,
-	context: BrowserContext,
-	origin: string,
+	page: Page,
 	publication: SharePublication,
 	testInfo: TestInfo
 ): Promise<void> {
-	const captureMismatches: string[] = [];
 	for (const format of SHARE_FORMATS) {
 		const expected = SHARE_DIMENSIONS[format];
 		const image = publication.images[format];
@@ -110,32 +50,26 @@ async function verifyPublication(
 		expect(pngDimensions(bytes)).toEqual(expected);
 		const notModified = await request.get(image.url, { headers: { 'if-none-match': `\"${image.sha256}\"` } });
 		expect(notModified.status()).toBe(304);
-
-		const first = await captureTrustedArtwork(context, origin, publication.modelDigest, format);
-		const second = await captureTrustedArtwork(context, origin, publication.modelDigest, format);
-		if (!second.equals(first)) {
-			const firstPath = testInfo.outputPath(`share-${format}-first.png`);
-			const secondPath = testInfo.outputPath(`share-${format}-second.png`);
-			await Promise.all([writeFile(firstPath, first), writeFile(secondPath, second)]);
-			await testInfo.attach(`share-${format}-first.png`, { path: firstPath, contentType: 'image/png' });
-			await testInfo.attach(`share-${format}-second.png`, { path: secondPath, contentType: 'image/png' });
-			const firstHash = createHash('sha256').update(first).digest('hex');
-			const secondHash = createHash('sha256').update(second).digest('hex');
-			captureMismatches.push(`${format}: ${firstHash} !== ${secondHash}`);
-		}
-	}
-	const missingFonts = await context.newPage();
-	try {
-		await missingFonts.setViewportSize(SHARE_DIMENSIONS.field);
-		await missingFonts.setExtraHTTPHeaders({ 'x-share-capture-token': TEST_SHARE_CAPTURE_TOKEN });
-		await missingFonts.route('**/fonts/**', route => route.fulfill({ status: 503, body: 'Font unavailable' }));
-		await missingFonts.goto(`${origin}/__share/${publication.modelDigest}/field`, { waitUntil: 'networkidle' });
-		const artwork = missingFonts.locator('[data-share-artwork]');
-		await expect(artwork).toHaveAttribute('data-share-state', 'failed');
-		await expect(artwork).toHaveAttribute('data-share-failure', 'A required share font failed to load');
-		await expect(artwork).toBeHidden();
-	} finally {
-		await missingFonts.close();
+		const path = testInfo.outputPath(`share-${format}.png`);
+		await writeFile(path, bytes);
+		await testInfo.attach(`share-${format}.png`, { path, contentType: 'image/png' });
+		// The browser capture must contain the drawn artwork, not a blank or partly drawn frame.
+		const drawn = await page.evaluate(async url => {
+			const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+			const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+			const context = canvas.getContext('2d')!;
+			context.drawImage(bitmap, 0, 0);
+			const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+			const colours = new Set<number>();
+			let transparent = 0;
+			for (let index = 0; index < data.length; index += 4 * 7) {
+				colours.add((data[index] << 16) | (data[index + 1] << 8) | data[index + 2]);
+				if (data[index + 3] < 255) transparent += 1;
+			}
+			return { colours: colours.size, transparent };
+		}, image.url);
+		expect(drawn.colours).toBeGreaterThan(500);
+		expect(drawn.transparent).toBe(0);
 	}
 
 	const crawler = await request.get(publication.replayUrl, { headers: { 'user-agent': 'browser-suite-crawler' } });
@@ -150,10 +84,6 @@ async function verifyPublication(
 	expect(html).toContain('name=\"twitter:card\" content=\"summary_large_image\"');
 	expect(html).toContain(firstLoss === null ? 'No losses.' : `First loss: Game ${firstLoss}.`);
 	expect(html).toContain(`Longest winning streak: ${longestWinningStreak} ${longestWinningStreak === 1 ? 'game' : 'games'}.`);
-	expect(
-		captureMismatches,
-		`Share artwork was not byte-deterministic:\n${captureMismatches.join('\n')}`
-	).toEqual([]);
 }
 
 async function settlePool(page: Page) {
@@ -165,7 +95,7 @@ async function settlePool(page: Page) {
 
 async function firstLegalSeason(page: Page, request: APIRequestContext): Promise<{ seasonId: string; playerId: string; displayName: string; slot: Slot }> {
 	const manifest = await currentManifest(request);
-	const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Draft;
+	const saved = await deviceDraft<Draft>(page);
 	const candidate = availableCandidates(saved, manifest).find(item => legalSlots(saved, item, manifest).length > 0);
 	if (!candidate) throw new Error('The roll had no legal candidate in the current live manifest');
 	const response = await request.get(manifest.chunks[`${candidate.franchiseId}-${candidate.decade}`]);
@@ -265,27 +195,27 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeFocused();
-	const savedRoll = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll);
+	const savedRoll = (await deviceDraft(page)).currentRoll;
 	await page.reload();
 	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll)).toEqual(savedRoll);
+	expect((await deviceDraft(page)).currentRoll).toEqual(savedRoll);
 	for (let index = 0; index < 14; index++) {
 		await pickFirstSeason(page, request);
 		if (index < 13) await openPack(page);
 	}
 	// One franchise can be drafted only once per roster.
-	const franchises: string[] = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).picks.map((pick: { franchiseId: string }) => pick.franchiseId));
+	const franchises: string[] = (await deviceDraft<Draft>(page)).picks.map(pick => pick.franchiseId);
 	expect(new Set(franchises).size).toBe(14);
 	await expect(page.getByRole('button', { name: 'Simulate 162 games', exact: true })).toBeEnabled();
-	const before = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).battingOrder);
+	const before = (await deviceDraft(page)).battingOrder;
 	await page.getByRole('button', { name: /down in batting order/ }).first().click();
-	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).battingOrder);
+	const after = (await deviceDraft(page)).battingOrder;
 	expect(after[0]).toBe(before[1]);
 	expect(after[1]).toBe(before[0]);
-	const startersBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).starterOrder);
+	const startersBefore = (await deviceDraft(page)).starterOrder;
 	await page.getByRole('button', { name: /down in starting rotation/ }).first().click();
-	const startersAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).starterOrder);
+	const startersAfter = (await deviceDraft(page)).starterOrder;
 	expect(startersAfter).toEqual([startersBefore[1], startersBefore[0], startersBefore[2]]);
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	const games = page.getByRole('region', { name: 'All 162 games', exact: true });
@@ -327,7 +257,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	expect(url.length).toBeLessThan(100);
 	expect(publication.replayUrl).toBe(url);
 	await expect(page.getByText(`Published PNG · ${SHARE_DIMENSIONS.field.width}×${SHARE_DIMENSIONS.field.height}`, { exact: true })).toBeVisible();
-	await verifyPublication(request, context, origin, publication, testInfo);
+	await verifyPublication(request, page, publication, testInfo);
 	const cachedPublication = await request.get(`/api/replays/${publication.replayId}/share`);
 	expect(cachedPublication.status()).toBe(200);
 	expect(await cachedPublication.json()).toEqual(publication);
@@ -384,7 +314,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 
 test('starts a clean draft from a replay link without touching the local save', async ({ page, request }) => {
 	await finishRoster(page, request);
-	const local = await page.evaluate(() => localStorage.getItem('162-zero:v1'));
+	const local = await deviceDraftText(page);
 	expect(local).not.toBeNull();
 	const draft = JSON.parse(local!) as Draft;
 	const stored = await request.post('/api/replays', { data: replayInput(draft) });
@@ -392,15 +322,15 @@ test('starts a clean draft from a replay link without touching the local save', 
 	const payload = await stored.json() as { id: string; url: string };
 	expect(payload.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
 	await page.goto(payload.url);
-	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1'))).toBe(local);
+	expect(await deviceDraftText(page)).toBe(local);
 	// The replay recomputes first; New draft only skips its confirmation once results are showing.
 	await expect(page.getByRole('heading', { name: /^Final record/ })).toBeVisible({ timeout: 120000 });
 	await page.getByRole('button', { name: 'New draft', exact: true }).click();
 	await expect(page).toHaveURL(/\/\?new=1$/);
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).picks.length)).toBe(0);
-	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).schemaVersion)).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
+	expect((await deviceDraft(page)).picks.length).toBe(0);
+	expect((await deviceDraft(page)).schemaVersion).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
 });
 
 test('rejects invalid replay uploads and unknown replay ids', async ({ request }) => {
@@ -435,7 +365,7 @@ test('retries a failed chunk without rerolling the committed draft', async ({ pa
 	await selectStadium(page);
 	const committed = await openPackThroughRetry(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll)).toEqual(committed);
+	expect((await deviceDraft(page)).currentRoll).toEqual(committed);
 	expect(aborted).toBe(true);
 });
 
@@ -445,16 +375,34 @@ test('preserves incompatible saved bytes until an explicit new draft', async ({ 
 	});
 	await page.goto('/');
 	await expect(page.getByRole('alert')).toContainText('Saved draft is incompatible');
-	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1'))).toBe('{"schemaVersion":0}');
+	expect(await deviceDraftText(page)).toBe('{"schemaVersion":0}');
 	await page.getByRole('button', { name: 'Start new draft', exact: true }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).schemaVersion)).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
+	expect((await deviceDraft(page)).schemaVersion).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
+});
+
+test('imports a legacy localStorage draft once and keeps it across reloads', async ({ page }) => {
+	const legacy = '{"schemaVersion":0,"legacy":true}';
+	await page.addInitScript(value => {
+		if (!sessionStorage.getItem('seeded')) {
+			sessionStorage.setItem('seeded', '1');
+			localStorage.setItem('162-zero:v1', value);
+		}
+	}, legacy);
+	await page.goto('/');
+	await expect(page.getByRole('alert')).toContainText('Saved draft is incompatible');
+	expect(await deviceDraftText(page)).toBe(legacy);
+	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1'))).toBeNull();
+	await page.reload();
+	await expect(page.getByRole('alert')).toContainText('Saved draft is incompatible');
+	expect(await deviceDraftText(page)).toBe(legacy);
 });
 
 test('permits in-memory play when storage is blocked', async ({ page }) => {
-	await page.goto('/');
+	// Blocked storage: no localStorage, and the device database cannot load its engine.
 	await page.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Blocked', 'SecurityError'); } }));
+	await page.route('**/sqlite3-*.wasm', route => route.abort());
 	await page.goto('/');
 	await expect(page.getByText('Resume unavailable: browser storage is blocked. You can still play.')).toBeVisible();
 	await page.getByRole('button', { name: /Start draft/ }).click();
@@ -489,7 +437,7 @@ for (const invalid of ['empty', 'wrong-roll']) {
 		const committed = await openPackThroughRetry(page);
 		await expect(page.locator('.player-card').first()).toBeVisible({ timeout: 5000 });
 		expect(intercepted).toBe(2);
-		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('162-zero:v1')!).currentRoll)).toEqual(committed);
+		expect((await deviceDraft(page)).currentRoll).toEqual(committed);
 	});
 }
 
@@ -503,7 +451,7 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 	}
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator(SEASON_GAME)).toHaveCount(162);
-	const completed = await page.evaluate(() => localStorage.getItem('162-zero:v1'));
+	const completed = await deviceDraftText(page);
 	await page.reload();
 	const gate = Promise.withResolvers<void>();
 	const paused = Promise.withResolvers<void>();
@@ -522,7 +470,7 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 	await expect(page).toHaveURL(/\/about$/);
 	gate.resolve();
 	await page.waitForLoadState('networkidle');
-	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1')) === completed).toBe(true);
+	expect(await deviceDraftText(page) === completed).toBe(true);
 });
 
 test('keeps the Home copy width when centering on ultrawide screens', async ({ page }) => {
@@ -543,7 +491,7 @@ test('confirms a new draft in a modal without moving the page', async ({ page })
 	await page.getByRole('button', { name: /Start draft/ }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	const savedSeed = () => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).seed as number, STORAGE_KEY);
+	const savedSeed = () => deviceDraft<Draft>(page).then(draft => draft.seed);
 	const seed = await savedSeed();
 	const newDraft = page.getByRole('button', { name: 'New draft', exact: true }).first();
 	const before = await newDraft.boundingBox();

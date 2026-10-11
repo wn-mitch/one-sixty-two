@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSchedule } from '../sim/season.ts';
+import { buildSchedule } from '../engine/node.ts';
 import type { GameResult } from '../sim/types.ts';
 import { dateGames, DOUBLEHEADERS, OFF_DAYS, opponentSeries, seasonMonths } from './season-calendar.ts';
 

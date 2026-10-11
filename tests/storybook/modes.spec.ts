@@ -88,6 +88,33 @@ test('My seasons explains an empty or blocked library', async ({ page }) => {
 	await expect(page.locator('[data-toast]')).toHaveText(/browser storage is blocked/);
 });
 
+test('Collection lists every rostered card and arranges a card’s stickers', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openStory(page, 'modes-collection--binder');
+	const grid = page.getByRole('list', { name: 'Collected cards' });
+	await expect(grid.getByRole('listitem').first()).toBeVisible();
+	expect(await grid.getByRole('listitem').count()).toBeGreaterThanOrEqual(14);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	await page.getByLabel('With stickers').check();
+	const stickered = grid.getByRole('button').first();
+	await expect(stickered.locator('.stickers [data-family]').first()).toBeVisible();
+	const before = await stickered.locator('.stickers [data-family]').count();
+	await stickered.click();
+	const detail = page.locator('section.detail');
+	await detail.getByRole('button', { name: 'Arrange stickers' }).click();
+	await expect(detail.getByRole('button', { name: /^Move .* sticker/ })).toHaveCount(before);
+	await detail.getByRole('button', { name: 'Hide' }).first().click();
+	await expect(stickered.locator('.stickers [data-family]')).toHaveCount(before - 1);
+	await expect(detail.getByRole('button', { name: /^Move .* sticker/ })).toHaveCount(before - 1);
+});
+
+test('Collection explains an empty or blocked binder', async ({ page }) => {
+	await openStory(page, 'modes-collection--empty');
+	await expect(page.getByText('Finish a season and every card on that roster joins your collection.')).toBeVisible();
+	await openStory(page, 'modes-collection--storage-blocked');
+	await expect(page.locator('[data-toast]')).toHaveText(/browser storage is blocked/);
+});
+
 test('head-to-head validates links, fills from saved seasons, and plays the series', async ({ page }) => {
 	await openStory(page, 'modes-head-to-head--from-my-seasons');
 	const play = page.getByRole('button', { name: 'Play best-of-five', exact: true });

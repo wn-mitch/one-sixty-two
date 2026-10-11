@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+import type { LibraryEntry } from '../game/library.ts';
+import { NO_LEGACY } from '../storage/legacy.ts';
+import { migrate, MIGRATIONS } from '../storage/migrations.ts';
+import { seasonStatements } from '../storage/season-rows.ts';
+import { memoryDb } from '../storage/test-db.ts';
+import { collectionStatements, loadCollection, loadStickers, moveSticker, setStickerHidden, stickersFromSeason } from './collection.ts';
+
+const SLUGGER = 'slug:2001:NL:SFN';
+const ARM = 'arm:1999:AL:BOS';
+
+function entry(key: string, wins: number, savedAt: string, hr = 10): LibraryEntry {
+ return {
+  key, savedAt, token: `token-${key}`, schemaVersion: 5, modelVersion: 'contact-v1', dataVersion: 'data',
+  record: { wins, losses: 162 - wins }, runs: { scored: 800, allowed: 600 },
+  batting: [{ seasonId: SLUGGER, label: 'Slugger 2001', slot: 'LF', PA: 650, AB: 560, H: 160, doubles: 30, triples: 2, HR: hr, BB: 70, HBP: 5, SF: 5, RBI: 80, SB: 5, war: 3 }],
+  pitching: [{ seasonId: ARM, label: 'Arm 1999', slot: 'SP1', outs: 900, H: 200, BB: 60, SO: 250, R: 150, starts: 54, war: 4 }],
+  stadium: null,
+  roster: [{ seasonId: SLUGGER, label: 'Slugger 2001', slot: 'LF' }, { seasonId: ARM, label: 'Arm 1999', slot: 'SP1' }]
+ };
+}
+const save = (item: LibraryEntry) => [...seasonStatements(item, item.savedAt), ...collectionStatements(item, item.savedAt)];
+const day = (index: number) => new Date(Date.UTC(2026, 0, index + 1)).toISOString();
+
+describe('collection', () => {
+ it('counts each saved season once, keeps the first sticker date, and survives a library deletion', async () => {
+  const { db } = await memoryDb();
+  await db.run(save(entry('k1', 100, day(0), 45)));
+  await db.run(save({ ...entry('k1', 100, day(5), 45) }));
+  await db.run(save(entry('k2', 80, day(1))));
+  await db.run([{ sql: "DELETE FROM seasons WHERE key = 'k1'" }]);
+  const cards = await loadCollection(db);
+  const slugger = cards.find(card => card.seasonId === SLUGGER)!;
+  expect(slugger).toMatchObject({ times: 2, firstAt: day(0), lastAt: day(1), best: { wins: 100, losses: 62 } });
+  expect(slugger.best.line).toMatchObject({ HR: 45 });
+  expect(slugger.stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['hr-40', day(0)], ['wins-100', day(0)]]);
+  expect((await stickersFromSeason(db, 'k2'))).toEqual([]);
+ });
+
+ it('awards times-drafted stickers on the season that reaches them', async () => {
+  const { db } = await memoryDb();
+  for (let index = 0; index < 10; index++) await db.run(save(entry(`k${index}`, 70, day(index))));
+  const stickers = (await loadStickers(db)).get(ARM)!;
+  expect(stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['drafted-5', day(4)], ['drafted-10', day(9)]]);
+  expect((await stickersFromSeason(db, 'k4')).map(item => item.sticker.kind)).toEqual(['drafted-5', 'drafted-5']);
+ });
+
+ it('moves and hides a whole sticker family on its own card only', async () => {
+  const { db } = await memoryDb();
+  await db.run(save(entry('k1', 90, day(0), 65)));
+  await moveSticker(db, SLUGGER, 'power', 0.3, 1.5);
+  await setStickerHidden(db, SLUGGER, 'power', true);
+  const stickers = (await loadStickers(db)).get(SLUGGER)!.filter(sticker => sticker.kind.startsWith('hr-'));
+  expect(stickers.map(({ kind, x, y, hidden }) => ({ kind, x, y, hidden }))).toEqual([
+   { kind: 'hr-40', x: 0.3, y: 0.92, hidden: true },
+   { kind: 'hr-60', x: 0.3, y: 0.92, hidden: true }
+  ]);
+  // A re-save neither resets the placement nor re-shows the family.
+  await db.run(save(entry('k1', 90, day(1), 65)));
+  expect((await loadStickers(db)).get(SLUGGER)!.find(sticker => sticker.kind === 'hr-60')).toMatchObject({ x: 0.3, hidden: true });
+ });
+
+ it('backfills the collection from a library saved before it existed', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.slice(0, 1));
+  for (let index = 0; index < 5; index++) await db.run(seasonStatements(entry(`k${index}`, 101, day(index)), day(index)));
+  migrate(raw, NO_LEGACY);
+  const cards = await loadCollection(db);
+  expect(cards.map(card => [card.seasonId, card.times])).toEqual([[ARM, 5], [SLUGGER, 5]]);
+  expect((await loadStickers(db)).get(ARM)!.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['wins-100', day(0)], ['drafted-5', day(4)]]);
+ });
+});

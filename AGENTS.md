@@ -13,8 +13,9 @@
 
 Follow the release policy in `PRODUCT.md`.
 
-- Existing saves, replay links, data formats, and seeded results are disposable across releases. Do not delay work to preserve them or ask for permission each time.
-- Prefer a clean cutover: update current callers and remove obsolete paths. Do not add migrations, compatibility shims, dual engines, deprecated aliases, or legacy fixtures unless explicitly requested.
+- Replay links, data formats, and seeded results are disposable across releases. Do not delay work to preserve them or ask for permission each time.
+- Device saves are not disposable. Any change to the device database schema (`src/lib/storage/migrations.ts`) adds a migration step that keeps existing records; never edit a released step.
+- Prefer a clean cutover elsewhere: update current callers and remove obsolete paths. Do not add compatibility shims, dual engines, deprecated aliases, or legacy fixtures unless explicitly requested.
 - Version the current contract and reject incompatible data clearly. A fresh-start path is sufficient; do not silently reinterpret old data as current data.
 - Determinism matters within the same supported model and data version. Identical results across different releases are not a requirement.
 - This is permission to replace obsolete contracts, not to delete unrelated work or erase external data indiscriminately.
@@ -38,28 +39,32 @@ Use verification to establish that the requested behavior works, not to maximize
 - `design/README.md`: intended simulation and Draft Mode rules, decisions, and phase dependencies. These specifications are not proof that a feature is implemented.
 - `README.md`: current behavior, setup, data preparation, and deployment details.
 - `src/lib/game/`: draft/session state, replay sharing, and results models.
-- `src/lib/sim/`: season simulation.
+- `engine/`: the Rust simulation engine, the only one; `engine-wasm/` and `src/lib/engine/` load it in the browser and Node, `engine-cli/` runs it natively.
+- `src/lib/sim/`: the simulation data contract, validation, and stadium building.
 - `src/lib/cards/`, `src/lib/components/`, `src/lib/storybook/`: cards, application UI, and isolated workshop surfaces.
-- `src/lib/server/`, `src/lib/share/`: trusted share publication and artwork.
+- `src/lib/server/`, `src/lib/share/`: share publication storage and artwork.
 
-Ordinary simulation runs in the browser. Published sharing uses trusted server-side recomputation. Do not add accounts or a database without a product requirement.
+Simulation and share-image capture run in the browser; the Worker only checks and stores replays and published PNGs. Do not add accounts or a server database without a product requirement.
 
 ## Commands and environment
 
-Use Node >=24.12 and npm. Prefer existing `just` recipes.
+Use Node >=24.12, npm, and rustup with `wasm-pack`. Prefer existing `just` recipes.
 
 - `npm ci`: install dependencies.
 - `just dev --host 127.0.0.1 --port 5173`: local application.
 - `npm run check`: Svelte and TypeScript checks.
 - `npm run test:unit -- <test-file>`: targeted unit tests; omit the file for the unit suite.
 - `npm run test:e2e -- <test-file>`: targeted browser tests.
-- `just test`: unit and application browser suites.
+- `just engine`: rebuild the wasm engine when Rust sources changed (prepare hooks run it).
+- `cargo test --workspace`, `cargo clippy --workspace --all-targets`: Rust engine checks.
+- `just test`: Rust, unit, and application browser suites.
 - `just smoke --seed 162 --policy best`: draft and full-season smoke run.
-- `just bench`: draft, matchup-fit, and season timings with a result fingerprint.
+- `just bench`: draft and wasm season timings, native engine timings, and a result fingerprint.
+- `just hill-climb --budget-minutes N`: native best-roster search with a holdout report and estimated P(162-0); `just hill-climb-replay --seed N` replays its roster.
 - `just draft-feasibility`: headless Draft Mode pool, salary, cleanup and roster-legality proof with a JSON report.
 - `just storybook`: isolated component workshop.
 - `just storybook-test`: workshop browser suite when relevant.
 
-Development and builds prepare assets automatically. Initial preparation requires network access and ImageMagick. Generated assets and caches stay out of source control. Browser tests require `npx playwright install chromium`; use an isolated `PLAYWRIGHT_PORT` or `STORYBOOK_TEST_PORT` when needed. Automated verification uses local Worker/R2 fixtures, never the paid remote `BROWSER` binding.
+Development and builds prepare assets automatically. Initial preparation requires network access and ImageMagick. Generated assets and caches stay out of source control. Browser tests require `npx playwright install chromium`; use an isolated `PLAYWRIGHT_PORT` or `STORYBOOK_TEST_PORT` when needed. Automated verification uses local Worker/R2 fixtures.
 
 Use `jj`, not raw `git`. Leave other workspaces and unrelated changes alone. Run browsers headlessly without audio or taking focus. Update existing documentation when behavior changes; do not add standalone reports or architectural essays unless requested.

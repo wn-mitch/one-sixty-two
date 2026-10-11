@@ -1,3 +1,4 @@
+import { crc32, deflateSync } from 'node:zlib';
 import type { Page } from '@playwright/test';
 
 export interface ImagePixelDigest {
@@ -39,4 +40,24 @@ export async function imagePixelDigest(
 			bitmap.close();
 		}
 	}, source);
+}
+
+/** A valid single-colour RGB PNG, standing in for artwork a browser would capture. */
+export function solidPng(width: number, height: number, rgb: [number, number, number] = [16, 64, 40]): Buffer {
+	const chunk = (type: string, data: Buffer) => {
+		const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+		const framed = Buffer.alloc(body.length + 8);
+		framed.writeUInt32BE(data.length, 0);
+		body.copy(framed, 4);
+		framed.writeUInt32BE(crc32(body), body.length + 4);
+		return framed;
+	};
+	const header = Buffer.alloc(13);
+	header.writeUInt32BE(width, 0);
+	header.writeUInt32BE(height, 4);
+	header.set([8, 2, 0, 0, 0], 8);
+	const row = Buffer.alloc(1 + width * 3);
+	for (let x = 0; x < width; x++) row.set(rgb, 1 + x * 3);
+	const pixels = deflateSync(Buffer.concat(Array.from({ length: height }, () => row)));
+	return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', pixels), chunk('IEND', Buffer.alloc(0))]);
 }

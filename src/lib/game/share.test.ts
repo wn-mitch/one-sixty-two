@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Draft } from './types.ts';
 import type { SeasonResult } from '../sim/types.ts';
-import type { SharePublication } from '../share/types.ts';
+import type { SharePublication, ShareRenderModel } from '../share/types.ts';
 import {
 	ShareCapabilityError,
 	beginCopyPublishedImage,
 	copyShareLink,
 	downloadPublishedImage,
 	isShareIncompatibility,
-	prepareSharePublication,
+	publishShare,
 	requestNativeShare,
 	storeReplay,
 	validateSharePublication
@@ -16,6 +16,8 @@ import {
 import { Session } from './session.svelte.ts';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+// The session captures share art in the browser; Node tests stand in a PNG blob.
+vi.mock('../share/render.ts', () => ({ renderSharePng: vi.fn(async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' })) }));
 
 const replayId = 'abcdefghijklmnopqrstuv';
 const origin = 'https://play.example';
@@ -28,12 +30,14 @@ const record = {
 	runsAgainst: 622
 };
 
+const png = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' });
+const model = { record } as ShareRenderModel;
+
 function publication(): SharePublication {
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		replayId,
 		replayUrl: `${origin}/r/${replayId}`,
-		modelDigest: 'a'.repeat(64),
 		record,
 		images: {
 			field: { url: `${origin}/api/replays/${replayId}/share/field.png`, width: 1080, height: 1350, sha256: 'b'.repeat(64) }
@@ -84,7 +88,7 @@ describe('explicit replay publication', () => {
 		expect(stored).toEqual({ id: replayId, replayUrl: `${origin}/r/${replayId}` });
 		expect(requests).toEqual([`${origin}/api/replays`]);
 
-		await expect(prepareSharePublication(stored.id, origin, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(stored.id, origin, record, { field: png }, fetcher)).resolves.toEqual(publication());
 		expect(requests).toEqual([
 			`${origin}/api/replays`,
 			`${origin}/api/replays/${replayId}/share`
@@ -103,15 +107,27 @@ describe('explicit replay publication', () => {
 		});
 
 		const stored = await storeReplay(draft(), origin, fetcher);
-		await expect(prepareSharePublication(stored.id, origin, fetcher)).rejects.toThrow('Capture unavailable.');
-		await expect(prepareSharePublication(stored.id, origin, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(stored.id, origin, record, { field: png }, fetcher)).rejects.toThrow('Capture unavailable.');
+		await expect(publishShare(stored.id, origin, record, { field: png }, fetcher)).resolves.toEqual(publication());
 		expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/api/replays'))).toHaveLength(1);
 		expect(prepareAttempts).toBe(2);
 	});
 
+	it('uploads the record and the captured PNG as one multipart publication', async () => {
+		let sent: FormData | null = null;
+		const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+			sent = init?.body as FormData;
+			return Response.json(publication());
+		});
+		await expect(publishShare(replayId, origin, record, { field: png }, fetcher)).resolves.toEqual(publication());
+		expect(fetcher).toHaveBeenCalledWith(`${origin}/api/replays/${replayId}/share`, expect.objectContaining({ method: 'POST' }));
+		expect(JSON.parse(String(sent!.get('record')))).toEqual(record);
+		expect((sent!.get('field') as Blob).type).toBe('image/png');
+	});
+
 	it('classifies current-model incompatibility and rejects forged publication metadata', async () => {
 		const incompatible = vi.fn(async () => Response.json({ message: 'Replay is incompatible with this dataset.' }, { status: 409 }));
-		const error = await prepareSharePublication(replayId, origin, incompatible).catch(value => value);
+		const error = await publishShare(replayId, origin, record, { field: png }, incompatible).catch(value => value);
 		expect(isShareIncompatibility(error)).toBe(true);
 
 		const forged = publication();
@@ -198,12 +214,12 @@ describe('Session share orchestration', () => {
 		}));
 		const session = sessionWithResult();
 
-		const first = session.share('copy-link');
+		const first = session.share('copy-link', 'field', model);
 		expect(session.shareLink).toBe('');
 		await first;
 		expect(session.shareLink).toBe(publication().replayUrl);
 		expect(session.publication).toEqual(publication());
-		await session.share('copy-link');
+		await session.share('copy-link', 'field', model);
 
 		expect(requests).toEqual([
 			`${origin}/api/replays`,
@@ -224,8 +240,8 @@ describe('Session share orchestration', () => {
 		vi.stubGlobal('fetch', fetcher);
 		const session = sessionWithResult();
 
-		const first = session.share('copy-link');
-		const duplicate = session.share('copy-link');
+		const first = session.share('copy-link', 'field', model);
+		const duplicate = session.share('copy-link', 'field', model);
 		await duplicate;
 		expect(fetcher).toHaveBeenCalledTimes(1);
 		releaseStore(Response.json({ id: replayId }, { status: 201 }));
@@ -250,10 +266,10 @@ describe('Session share orchestration', () => {
 		}));
 		const session = sessionWithResult();
 
-		await session.share('copy-link');
+		await session.share('copy-link', 'field', model);
 		expect(session.publication).toBeNull();
 		expect(session.shareStatus).toContain('Capture unavailable.');
-		await session.share('copy-link');
+		await session.share('copy-link', 'field', model);
 		expect(session.publication).toEqual(publication());
 		expect(requests.filter(url => url.endsWith('/api/replays'))).toHaveLength(1);
 		expect(preparations).toBe(2);
@@ -269,12 +285,12 @@ describe('Session share orchestration', () => {
 			: Response.json(publication())));
 		const session = sessionWithResult();
 
-		await session.share('challenge');
+		await session.share('challenge', 'field', model);
 		expect(nativeShare).not.toHaveBeenCalled();
 		expect(session.nativeShareReady).toBe(true);
 		expect(session.shareStatus).toContain('Tap Challenge a friend again');
 
-		await session.share('challenge');
+		await session.share('challenge', 'field', model);
 		expect(nativeShare).toHaveBeenCalledTimes(1);
 		expect(session.shareStatus).toBe('Share canceled.');
 	});
@@ -288,7 +304,7 @@ describe('Session share orchestration', () => {
 			: Response.json(publication())));
 		const session = sessionWithResult();
 
-		await session.share('challenge');
+		await session.share('challenge', 'field', model);
 		expect(writeText).toHaveBeenCalledWith(`${origin}/c/${replayId}`);
 		expect(session.shareStatus).toBe('Challenge link copied.');
 	});
@@ -301,7 +317,7 @@ describe('Session share orchestration', () => {
 			: Response.json(publication())));
 		const session = sessionWithResult();
 
-		await session.share('copy-link');
+		await session.share('copy-link', 'field', model);
 		expect(session.textCopyFallback).toBe(true);
 		expect(session.shareLink).toBe(publication().replayUrl);
 		expect(session.shareStatus).toContain('Select and copy');
@@ -321,7 +337,7 @@ describe('Session share orchestration', () => {
 		}));
 		const session = sessionWithResult();
 
-		await session.share('copy-image', 'field');
+		await session.share('copy-image', 'field', model);
 		expect(session.publication).toEqual(publication());
 		expect(session.imageDownloadFallback).toBe(true);
 		expect(session.shareStatus).toContain('Download PNG');
@@ -339,7 +355,7 @@ describe('Session share orchestration', () => {
 			: Response.json({ message: 'Replay is incompatible with this dataset.' }, { status: 409 })));
 		const session = sessionWithResult();
 
-		await session.share('copy-link');
+		await session.share('copy-link', 'field', model);
 		expect(session.incompatible).toBe(true);
 		expect(session.error).toBe('Replay is incompatible with this dataset.');
 		expect(session.shareLink).toBe('');

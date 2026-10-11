@@ -1,5 +1,4 @@
-import { replayInput, validateReplay } from '../game/draft.ts';
-import type { Draft, Manifest, Replay } from '../game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, SLOTS, type DraftAction, type Pick, type Replay } from '../game/types.ts';
 
 export const REPLAY_MAX_BYTES = 16 * 1024;
 export const REPLAY_PREFIX = 'replays/v1/';
@@ -55,29 +54,16 @@ function isCurrentPointer(value: unknown): value is { schemaVersion: 1; dataVers
 		&& current.manifestUrl === `/data/${current.dataVersion}/manifest.json`;
 }
 
-function isManifest(value: unknown, dataVersion: string): value is Manifest {
-	if (!value || typeof value !== 'object') return false;
-	const manifest = value as Record<string, unknown>;
-	return manifest.schemaVersion === 1 && manifest.dataVersion === dataVersion
-		&& Array.isArray(manifest.franchises) && manifest.franchises.length === 30
-		&& Array.isArray(manifest.candidates) && Array.isArray(manifest.stadiums) && manifest.stadiums.length === 30;
-}
-
-/** Load the dataset manifest from the deployed immutable asset binding. */
-export async function loadAuthoritativeManifest(assets: ReplayAssets | undefined): Promise<Manifest> {
+/** The current dataset version from the deployed asset pointer; the full manifest is never parsed here. */
+export async function loadCurrentDataVersion(assets: ReplayAssets | undefined): Promise<string> {
 	if (!assets) throw new ReplayUnavailableError();
 	try {
-		const currentResponse = await assets.fetch(`${ASSET_ORIGIN}/data/current.json`);
-		if (!currentResponse.ok) throw new ReplayUnavailableError();
-		const current: unknown = await currentResponse.json();
+		const response = await assets.fetch(`${ASSET_ORIGIN}/data/current.json`);
+		if (!response.ok) throw new ReplayUnavailableError();
+		const current: unknown = await response.json();
 		if (!isCurrentPointer(current)) throw new ReplayUnavailableError();
-		const manifestResponse = await assets.fetch(`${ASSET_ORIGIN}${current.manifestUrl}`);
-		if (!manifestResponse.ok) throw new ReplayUnavailableError();
-		const manifest: unknown = await manifestResponse.json();
-		if (!isManifest(manifest, current.dataVersion)) throw new ReplayUnavailableError();
-		return manifest;
-	} catch (error) {
-		if (error instanceof ReplayUnavailableError) throw error;
+		return current.dataVersion;
+	} catch {
 		throw new ReplayUnavailableError();
 	}
 }
@@ -105,24 +91,63 @@ function parseInput(bytes: Uint8Array): unknown {
 	catch { throw new ReplayIncompatibleError(); }
 }
 
-function validatedInput(value: unknown, manifest: Manifest): { draft: Draft; input: Replay; bytes: Uint8Array } {
-	try {
-		const draft = validateReplay(value, manifest);
-		const input = replayInput(draft);
-		const bytes = new TextEncoder().encode(JSON.stringify(input));
-		if (bytes.byteLength > REPLAY_MAX_BYTES) throw new ReplayIncompatibleError();
-		return { draft, input, bytes };
-	} catch (error) {
-		if (error instanceof ReplayIncompatibleError) throw error;
-		if (error instanceof Error && error.message.includes('incompatible')) throw new ReplayIncompatibleError();
-		throw new ReplayInvalidError();
-	}
+const MAX_ACTIONS = 512;
+const isString = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 80;
+const isSlot = (value: unknown): value is Pick['slot'] => (SLOTS as readonly unknown[]).includes(value);
+
+function action(value: unknown): DraftAction {
+	const item = value as Record<string, unknown>;
+	if (!item || typeof item !== 'object') throw new ReplayInvalidError();
+	if (item.type === 'roll') return { type: 'roll' };
+	if (item.type === 'select-stadium' && isString(item.stadiumId) && isString(item.stadiumVersion)) return { type: 'select-stadium', stadiumId: item.stadiumId, stadiumVersion: item.stadiumVersion };
+	if (item.type === 'pick' && isString(item.seasonId) && isSlot(item.slot)) return { type: 'pick', seasonId: item.seasonId, slot: item.slot };
+	if (item.type === 'reassign' && isString(item.seasonId) && (HITTER_SLOTS as readonly unknown[]).includes(item.slot)) return { type: 'reassign', seasonId: item.seasonId, slot: item.slot as Extract<DraftAction, { type: 'reassign' }>['slot'] };
+	throw new ReplayInvalidError();
 }
 
-/** Validate and persist one complete replay input, without names or results. */
-export async function storeReplay(bucket: ReplayBucket | undefined, value: unknown, manifest: Manifest): Promise<StoredReplay> {
+/**
+ * Checks that a value is a complete current-version replay and returns it in canonical key order.
+ * The Worker checks shape and versions only; every browser that plays a replay validates its whole
+ * draft history against the dataset, so a malformed history fails there, not here.
+ */
+function canonicalReplay(value: unknown, dataVersion: string): { input: Replay; bytes: Uint8Array } {
+	if (!value || typeof value !== 'object') throw new ReplayInvalidError();
+	const replay = value as Record<string, unknown>;
+	if (replay.schemaVersion !== CURRENT_REPLAY_SCHEMA_VERSION || replay.modelVersion !== MODEL_VERSION || replay.rulesVersion !== RULES_VERSION || replay.dataVersion !== dataVersion) {
+		throw new ReplayIncompatibleError();
+	}
+	const stadium = replay.homeStadium as Record<string, unknown> | null;
+	const picks = replay.picks;
+	if (!Number.isSafeInteger(replay.seed) || (replay.seed as number) < 0 || (replay.seed as number) > 0xffffffff ||
+		!stadium || typeof stadium !== 'object' || !isString(stadium.id) || !isString(stadium.version) ||
+		!Array.isArray(picks) || picks.length !== SLOTS.length ||
+		!Array.isArray(replay.battingOrder) || replay.battingOrder.length !== HITTER_SLOTS.length || !replay.battingOrder.every(isString) ||
+		!Array.isArray(replay.starterOrder) || replay.starterOrder.length !== 3 || !replay.starterOrder.every(isString) ||
+		!Array.isArray(replay.actions) || replay.actions.length > MAX_ACTIONS) {
+		throw new ReplayInvalidError();
+	}
+	const input: Replay = {
+		schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, dataVersion, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION,
+		seed: replay.seed as number,
+		homeStadium: { id: stadium.id as string, version: stadium.version as string },
+		picks: picks.map(item => {
+			const pick = item as Record<string, unknown>;
+			if (!pick || !isString(pick.franchiseId) || !Number.isInteger(pick.decade) || !isString(pick.seasonId) || !isSlot(pick.slot)) throw new ReplayInvalidError();
+			return { franchiseId: pick.franchiseId, decade: pick.decade as number, seasonId: pick.seasonId, slot: pick.slot };
+		}),
+		battingOrder: [...replay.battingOrder as string[]],
+		starterOrder: [...replay.starterOrder as string[]],
+		actions: replay.actions.map(action)
+	};
+	const bytes = new TextEncoder().encode(JSON.stringify(input));
+	if (bytes.byteLength > REPLAY_MAX_BYTES) throw new ReplayInvalidError();
+	return { input, bytes };
+}
+
+/** Persist one complete current-version replay input, without names or results. */
+export async function storeReplay(bucket: ReplayBucket | undefined, value: unknown, dataVersion: string): Promise<StoredReplay> {
 	if (!bucket) throw new ReplayUnavailableError();
-	const { input, bytes } = validatedInput(value, manifest);
+	const { input, bytes } = canonicalReplay(value, dataVersion);
 	const id = await contentId(bytes);
 	const key = `${REPLAY_PREFIX}${id}`;
 	try {
@@ -140,8 +165,8 @@ export async function storeReplay(bucket: ReplayBucket | undefined, value: unkno
 	}
 }
 
-/** Fetch and revalidate a replay before returning it to a client. */
-export async function loadReplay(bucket: ReplayBucket | undefined, id: string, manifest: Manifest): Promise<Replay> {
+/** Fetch a stored replay; one from another game or data version is incompatible. */
+export async function loadReplay(bucket: ReplayBucket | undefined, id: string, dataVersion: string): Promise<Replay> {
 	if (!REPLAY_ID_PATTERN.test(id)) throw new ReplayNotFoundError();
 	if (!bucket) throw new ReplayUnavailableError();
 	let object: ReplayObject | null;
@@ -150,7 +175,7 @@ export async function loadReplay(bucket: ReplayBucket | undefined, id: string, m
 	if (!object) throw new ReplayNotFoundError();
 	const bytes = await readObject(object);
 	try {
-		const { input } = validatedInput(parseInput(bytes), manifest);
+		const { input } = canonicalReplay(parseInput(bytes), dataVersion);
 		return input;
 	} catch (error) {
 		if (error instanceof ReplayInvalidError) throw new ReplayIncompatibleError();

@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
-import { prepareSeasonInput, simulateSeason } from '../../src/lib/sim/season.ts';
+import { simulateSeason } from '../../src/lib/engine/node.ts';
+import { prepareSeasonInput } from '../../src/lib/game/season-input.ts';
 import { createExampleFixtures } from '../../src/lib/storybook/fixtures.ts';
 import { getExampleSeason, type ExampleSeason } from '../../src/lib/storybook/season-fixtures.ts';
 import { expect, openStory, test } from './workshop-test.ts';

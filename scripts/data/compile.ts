@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, POSITIONS, SLOTS, VALUATION_VERSION, type Attribution, type DefensiveEnvironment, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../../src/lib/game/types.ts';
 import { validateDefensiveEnvironment, validateProfile, validateStadiumDeck } from '../../src/lib/sim/validation.ts';
-import { battingSide, contactRecord, contactTargets, fitContact, FIT_TOLERANCE, leagueContactFit, matchup, type ContactModel } from '../../src/lib/sim/contact-profile.ts';
+import { createContactReference, type MatchupQuery } from '../../src/lib/engine/node.ts';
+import { contactRecord, FIT_TOLERANCE, type ContactModel } from '../../src/lib/sim/contact-profile.ts';
 import { stadiumRef } from '../../src/lib/sim/park.ts';
 import { compileStadiums, type StadiumCatalog } from './stadiums.ts';
 import { finishFor, type Finish, type FinishRole } from '../../src/lib/cards/finish.ts';
@@ -290,26 +291,30 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  */
 function contactFitDiagnostics(candidates: Profile[], environment: DefensiveEnvironment) {
  const league = environment.leagueRates;
- const prior = leagueContactFit(environment.contactModel, league).regionWeights;
- const average = { seasonId: 'league', bats: '', throws: '', battingRates: league, pitchingRates: league, speed: 0.5 } as unknown as Profile;
- let fits = 0, outsideTolerance = 0, maxError = 0, maxTripleError = 0;
- const examples: string[] = [];
+ const queries: MatchupQuery[] = [];
+ const labels: string[] = [];
  for (const profile of candidates) {
-  const pairs: [Profile, Profile][] = [];
-  if (profile.battingRates) pairs.push([profile, average]);
-  if (profile.pitchingRates) pairs.push([average, profile]);
-  for (const [batter, pitcher] of pairs) {
-   const fit = fitContact(environment.contactModel.basis, prior, contactTargets(matchup(batter, pitcher, league)), battingSide(batter, pitcher), batter.speed, profile.seasonId);
-   fits++;
-   maxError = Math.max(maxError, fit.error);
-   maxTripleError = Math.max(maxTripleError, fit.tripleError);
-   if (fit.error > FIT_TOLERANCE) {
-    outsideTolerance++;
-    if (examples.length < 20) examples.push(`${profile.seasonId}:${batter === profile ? 'batting' : 'pitching'}:${fit.error.toFixed(4)}`);
-   }
+  if (profile.battingRates) {
+   queries.push({ battingRates: profile.battingRates, bats: profile.bats, pitchingRates: league, throws: '', speed: profile.speed, label: profile.seasonId });
+   labels.push(`${profile.seasonId}:batting`);
+  }
+  if (profile.pitchingRates) {
+   queries.push({ battingRates: league, bats: '', pitchingRates: profile.pitchingRates, throws: profile.throws, speed: 0.5, label: profile.seasonId });
+   labels.push(`${profile.seasonId}:pitching`);
   }
  }
- return { tolerance: FIT_TOLERANCE, fits, outsideTolerance, maxError, maxTripleError, examples };
+ const fits = createContactReference(environment).fitMatchups(queries);
+ let outsideTolerance = 0, maxError = 0, maxTripleError = 0;
+ const examples: string[] = [];
+ fits.forEach((fit, index) => {
+  maxError = Math.max(maxError, fit.error);
+  maxTripleError = Math.max(maxTripleError, fit.tripleError);
+  if (fit.error > FIT_TOLERANCE) {
+   outsideTolerance++;
+   if (examples.length < 20) examples.push(`${labels[index]}:${fit.error.toFixed(4)}`);
+  }
+ });
+ return { tolerance: FIT_TOLERANCE, fits: fits.length, outsideTolerance, maxError, maxTripleError, examples };
 }
 
 function validateCompiled(candidates: Profile[], simulation: Omit<SimulationData, 'dataVersion'>): void {

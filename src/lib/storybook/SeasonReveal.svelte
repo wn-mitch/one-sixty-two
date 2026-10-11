@@ -13,7 +13,6 @@
 	const EXAMPLE_PUBLICATION = {
 		replayId: 'example',
 		replayUrl: 'https://example.invalid/r/example',
-		modelDigest: 'example-only',
 		imageUrl: EXAMPLE_SHARE_IMAGE,
 		imageDigest: 'example'
 	};

@@ -39,7 +39,7 @@ function build(): void {
 const built = existsSync(join(root, '.svelte-kit/cloudflare/_worker.js'));
 const previous = existsSync(stampPath) ? (await readFile(stampPath, 'utf8')).trim() : null;
 // Prepare steps can move generated pointers, so they run before the inputs are compared.
-for (const step of ['data:prepare', 'rankings:prepare', 'media:prepare', 'share:prepare']) {
+for (const step of ['engine', 'data:prepare', 'rankings:prepare', 'media:prepare']) {
 	execFileSync('npm', ['run', '-s', step], { cwd: root, stdio: 'inherit' });
 }
 const current = await fingerprint();

@@ -11,8 +11,11 @@
 	import type { MediaManifest } from '../media/types.ts';
 	import type { WarRankings } from '../rankings/types.ts';
 	import { createShareRenderModel } from '../share/model.ts';
-	import type { ShareAction, ShareFormat, SharePublication } from '../share/types.ts';
+	import type { ShareAction, ShareFormat, SharePublication, ShareRenderModel } from '../share/types.ts';
 	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
+	import StickerBadge from '../collection/StickerBadge.svelte';
+	import { STICKER_BY_KIND } from '../collection/stickers.ts';
+	import type { NewSticker } from '../collection/collection.ts';
 	import SeasonCalendar from './SeasonCalendar.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
 	import ResultsHand from './ResultsHand.svelte';
@@ -29,12 +32,14 @@
 		rankingLoading: boolean;
 		rankingError: boolean;
 		onNew: () => void;
-		onShare: (action: ShareAction, format: ShareFormat) => void;
+		onShare: (action: ShareAction, format: ShareFormat, model: ShareRenderModel) => void;
 		publication: SharePublication | null;
 		sharing: boolean;
 		shareStatus: string;
 		/** A friend's season this draft was started to answer; the page then leads with the series. */
 		challenge?: Challenge | null;
+		/** Stickers this season earned for the first time. */
+		newStickers?: readonly NewSticker[];
 	}
 
 	let {
@@ -50,8 +55,10 @@
 		publication,
 		sharing,
 		shareStatus,
-		challenge = null
+		challenge = null,
+		newStickers = []
 	}: Props = $props();
+	const earnedByCard = $derived([...Map.groupBy(newStickers, item => item.seasonId).values()]);
 	const challengeVerdict = $derived(challenge
 		? result.wins > challenge.wins ? 'You beat their record.' : result.wins === challenge.wins ? 'You matched their record.' : 'You fell short of their record.'
 		: '');
@@ -160,8 +167,8 @@
 
 		<div class="score-actions" aria-busy={sharing}>
 			<div class="share-shortcuts">
-				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'field')}>{sharing ? 'Preparing…' : 'Challenge a friend'}<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 11l6-6M6 5h5v5"></path></svg></button>
-				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'field')}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg>{sharing ? 'Preparing…' : 'Copy link'}</button>
+				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'field', shareModel)}>{sharing ? 'Preparing…' : 'Challenge a friend'}<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 11l6-6M6 5h5v5"></path></svg></button>
+				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'field', shareModel)}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg>{sharing ? 'Preparing…' : 'Copy link'}</button>
 			</div>
 			<div class="more-actions">
 				<a class="button" href="/seasons"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5"></path></svg>Play head-to-head</a>
@@ -184,6 +191,25 @@
 		</dl>
 	</header>
 
+	{#if earnedByCard.length}
+		<section class="new-stickers" aria-labelledby="new-stickers-heading">
+			<div class="new-stickers-head">
+				<h3 id="new-stickers-heading">New stickers</h3>
+				<a href="/collection">Open your collection</a>
+			</div>
+			<ul>
+				{#each earnedByCard as earned (earned[0].seasonId)}
+					<li>
+						<span class="badges" aria-hidden="true">
+							{#each earned as item (item.kind)}<StickerBadge definition={STICKER_BY_KIND.get(item.kind)!} />{/each}
+						</span>
+						<span><strong>{earned[0].label}</strong> {earned.map(item => item.title).join(' · ')}</span>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
 	<div class="awards-share">
 		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 		<ShareBlock
@@ -191,7 +217,7 @@
 			{publication}
 			{sharing}
 			status={shareStatus}
-			{onShare}
+			onShare={(action, format) => onShare(action, format, shareModel)}
 		/>
 	</div>
 
@@ -366,6 +392,14 @@
 		padding-top: var(--space-4);
 		border-top: 1px solid var(--border);
 	}
+	.new-stickers { display: grid; gap: var(--space-3); }
+	.new-stickers-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+	.new-stickers h3 { margin: 0; font-size: var(--text-lg); }
+	.new-stickers a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--accent); font-size: var(--text-sm); }
+	.new-stickers ul { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+	.new-stickers li { display: flex; align-items: center; gap: var(--space-4); color: var(--muted); font-size: var(--text-sm); }
+	.new-stickers li strong { color: var(--text); }
+	.new-stickers .badges { flex: none; display: inline-flex; gap: var(--space-2); font-size: .17rem; padding: .2rem; }
 	dt { color: var(--muted); font-size: var(--text-xs); }
 	dd { margin: var(--space-1) 0 0; font-size: var(--text-lg); font-weight: 750; }
 	.season-ledger dd.perfect { color: var(--success); }

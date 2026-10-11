@@ -49,9 +49,8 @@ export interface ShareRenderCard {
 }
 
 /**
- * Canonical, serializable input for every local preview and trusted capture.
- * Cards occur exactly once in canonical slot order. A local preview has null
- * replay/publication pins; a trusted publication supplies every pin.
+ * Canonical, serializable input for the local preview and the published capture.
+ * Cards occur exactly once in canonical slot order.
  */
 export interface ShareRenderModel {
 	schemaVersion: 2;
@@ -64,9 +63,6 @@ export interface ShareRenderModel {
 	homeStadium: ShareStadium;
 	mediaVersion: string | null;
 	rankingVersion: string | null;
-	rendererVersion: string | null;
-	replayId: string | null;
-	replayUrl: string | null;
 	record: ShareRecord;
 	cards: readonly ShareRenderCard[];
 }
@@ -79,10 +75,9 @@ export interface SharePublicationImage {
 }
 
 export interface SharePublication {
-	schemaVersion: 1;
+	schemaVersion: 2;
 	replayId: string;
 	replayUrl: string;
-	modelDigest: string;
 	record: ShareRecord;
 	images: Record<ShareFormat, SharePublicationImage>;
 }

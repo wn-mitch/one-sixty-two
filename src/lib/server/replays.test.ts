@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import { availableCandidates, commitPick, createDraft, legalSlots, reassignPick, replayInput, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { SLOTS, type Manifest, type Replay } from '../game/types.ts';
-import { loadReplay, loadAuthoritativeManifest, REPLAY_PREFIX, storeReplay } from './replays.ts';
+import { loadCurrentDataVersion, loadReplay, REPLAY_PREFIX, storeReplay } from './replays.ts';
 
 const dataVersion = 'a'.repeat(64);
 const candidates = SLOTS.map((slot, index) => ({
@@ -49,11 +49,14 @@ function finish(): Replay {
 }
 
 function assets() {
+	const paths: string[] = [];
 	return {
+		paths,
 		fetch: async (input: RequestInfo | URL) => {
 			const path = new URL(input.toString()).pathname;
+			paths.push(path);
 			if (path === '/data/current.json') return Response.json({ schemaVersion: 1, dataVersion, manifestUrl: `/data/${dataVersion}/manifest.json` });
-			return Response.json(manifest);
+			return new Response('not found', { status: 404 });
 		}
 	};
 }
@@ -62,13 +65,13 @@ describe('replay R2 storage', () => {
 	it('stores only validated replay input and makes retries idempotent', async () => {
 		const bucket = new MemoryBucket();
 		const input = finish();
-		const first = await storeReplay(bucket, input, manifest);
-		const second = await storeReplay(bucket, input, manifest);
+		const first = await storeReplay(bucket, input, dataVersion);
+		const second = await storeReplay(bucket, input, dataVersion);
 		expect(first.id).toHaveLength(22);
 		expect(first.id).toBe(second.id);
 		expect(first.key).toBe(`${REPLAY_PREFIX}${first.id}`);
 		expect(bucket.puts).toBe(1);
-		expect(await loadReplay(bucket, first.id, manifest)).toEqual(input);
+		expect(await loadReplay(bucket, first.id, dataVersion)).toEqual(input);
 		expect(input.schemaVersion).toBe(5);
 		expect(input.homeStadium).toEqual(manifest.stadiums[0].ref);
 		expect(input.actions.at(-1)?.type).toBe('reassign');
@@ -79,32 +82,56 @@ describe('replay R2 storage', () => {
 		for (const incompatible of [
 			{ ...current, schemaVersion: 3, modelVersion: 'pa-v2' },
 			{ ...current, schemaVersion: 4, modelVersion: 'pa-v3' },
-			{ ...current, homeStadium: { id: manifest.stadiums[0].ref.id, version: 'retired-geometry' } }
+			{ ...current, dataVersion: 'b'.repeat(64) }
 		]) {
 			const bucket = new MemoryBucket();
-			await expect(storeReplay(bucket, incompatible, manifest)).rejects.toThrow('incompatible');
+			await expect(storeReplay(bucket, incompatible, dataVersion)).rejects.toThrow('incompatible');
 			expect(bucket.puts).toBe(0);
 		}
 
 		const bucket = new MemoryBucket();
-		const stored = await storeReplay(bucket, current, manifest);
+		const stored = await storeReplay(bucket, current, dataVersion);
 		const bytes = bucket.objects.get(stored.key)!;
 		bucket.objects.set(stored.key, new TextEncoder().encode(JSON.stringify({
 			...JSON.parse(new TextDecoder().decode(bytes)),
 			schemaVersion: 3,
 			modelVersion: 'pa-v2'
 		})));
-		await expect(loadReplay(bucket, stored.id, manifest)).rejects.toThrow('incompatible');
+		await expect(loadReplay(bucket, stored.id, dataVersion)).rejects.toThrow('incompatible');
 	});
 
-	it('loads the authoritative manifest only from the deployed asset binding', async () => {
-		expect(await loadAuthoritativeManifest(assets())).toEqual(manifest);
-		await expect(loadAuthoritativeManifest(undefined)).rejects.toThrow('unavailable');
+	it('rejects malformed shapes and oversized histories, and drops unknown fields', async () => {
+		const current = finish();
+		for (const malformed of [
+			null,
+			{ ...current, seed: -1 },
+			{ ...current, homeStadium: null },
+			{ ...current, picks: current.picks.slice(1) },
+			{ ...current, picks: current.picks.map((pick, index) => index ? pick : { ...pick, slot: 'XX' }) },
+			{ ...current, starterOrder: [...current.starterOrder, 'extra'] },
+			{ ...current, actions: [...current.actions, { type: 'trade' }] },
+			{ ...current, actions: Array.from({ length: 513 }, () => ({ type: 'roll' })) }
+		]) {
+			const bucket = new MemoryBucket();
+			await expect(storeReplay(bucket, malformed, dataVersion)).rejects.toThrow('invalid');
+			expect(bucket.puts).toBe(0);
+		}
+		const bucket = new MemoryBucket();
+		const stored = await storeReplay(bucket, { ...current, playerName: 'Someone', result: { wins: 162 } }, dataVersion);
+		expect(stored.id).toBe((await storeReplay(new MemoryBucket(), current, dataVersion)).id);
+		expect(Object.keys(JSON.parse(new TextDecoder().decode(bucket.objects.get(stored.key)!)))).not.toContain('playerName');
+	});
+
+	it('reads only the small current-data pointer from the deployed asset binding', async () => {
+		const binding = assets();
+		expect(await loadCurrentDataVersion(binding)).toBe(dataVersion);
+		expect(binding.paths).toEqual(['/data/current.json']);
+		await expect(loadCurrentDataVersion(undefined)).rejects.toThrow('unavailable');
 	});
 
 	it('rejects invalid ids before touching R2', async () => {
 		const bucket = new MemoryBucket();
-		await expect(loadReplay(bucket, 'not-an-id', manifest)).rejects.toThrow('not found');
+		await expect(loadReplay(bucket, 'not-an-id', dataVersion)).rejects.toThrow('not found');
 		expect(bucket.objects.size).toBe(0);
 	});
 });

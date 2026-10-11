@@ -2,9 +2,10 @@ import { loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
 import { replayInput } from './draft.ts';
 import { loadLibrary, type LibraryView } from './library.ts';
 import { recordSeries, seriesRecord } from './series-history.ts';
+import { deviceDb } from '../storage/db.ts';
 import { loadReplayLink, parseSeriesHash, ReplayLinkError, replayLinkPath, seriesHash, type SeriesField } from './replay-link.ts';
 import type { Draft, Manifest, Profile } from './types.ts';
-import { prepareSeasonInput } from '../sim/season.ts';
+import { prepareSeasonInput } from './season-input.ts';
 import type { SeriesInput, SeriesProgress, SeriesResult, SeriesTeamId, SeriesWorkerResponse } from '../sim/series-types.ts';
 
 export type { SeriesField };
@@ -66,9 +67,10 @@ export class SeriesSession {
   if (fromHash['team-a'].link && fromHash['team-b'].link) await this.play();
  }
 
- refreshLibrary(): void {
-  if (!this.manifest) return;
-  try { this.library = loadLibrary(localStorage, this.manifest).entries.filter(entry => entry.status === 'playable'); }
+ async refreshLibrary(): Promise<void> {
+  const manifest = this.manifest;
+  if (!manifest) return;
+  try { this.library = (await loadLibrary((await deviceDb()).db, manifest)).entries.filter(entry => entry.status === 'playable'); }
   catch { this.library = []; }
  }
 
@@ -113,7 +115,7 @@ export class SeriesSession {
    });
    const input: SeriesInput = { teams: [team('team-a', a.draft, profilesA), team('team-b', b.draft, profilesB)] };
    this.stage = 'Replaying both regular seasons for seeding…';
-   const worker = new Worker(new URL('../sim/series.worker.ts', import.meta.url), { type: 'module' });
+   const worker = new Worker(new URL('../engine/series.worker.ts', import.meta.url), { type: 'module' });
    this.worker = worker;
    worker.onmessage = (event: MessageEvent<SeriesWorkerResponse>) => {
     const message = event.data;
@@ -140,7 +142,10 @@ export class SeriesSession {
 
  /** Adds a finished series to this device's head-to-head history for the season library. */
  private async record(result: SeriesResult): Promise<void> {
-  try { this.historyNotice = recordSeries(localStorage, await seriesRecord(result, `${location.pathname}${this.seriesHash()}`, new Date().toISOString())) ?? ''; }
+  try {
+   const record = await seriesRecord(result, `${location.pathname}${this.seriesHash()}`, new Date().toISOString());
+   this.historyNotice = await recordSeries((await deviceDb()).db, record) ?? '';
+  }
   catch { this.historyNotice = 'This series could not be added to your head-to-head history: browser storage is blocked or full.'; }
  }
 

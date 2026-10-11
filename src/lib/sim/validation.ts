@@ -27,10 +27,10 @@ import {
  SIDES,
  SPEED_NODES,
  contactTargets,
- shapeTables,
+ validateContactShape,
+ CLASS_COUNT,
  type ContactModel
 } from './contact-profile.ts';
-import { PHYSICAL_CLASS_COUNT } from './fielding.ts';
 import { validateStadium } from './park.ts';
 import type { ParkRef, StadiumConfig } from './park-types.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
@@ -153,11 +153,11 @@ export function validateContactModel(model: ContactModel): void {
  if (VALIDATED_MODELS.has(model)) return;
  if (!model || model.methodVersion !== CONTACT_METHOD_VERSION || model.provenance !== 'estimated' || !model.shape || !model.basis ||
   !Array.isArray(model.basis.responses) || !Array.isArray(model.basis.classes)) throw new Error('Invalid contact model');
- shapeTables(model.shape);
+ validateContactShape(model.shape);
  const { responses, classes } = model.basis;
  if (responses.length !== SIDES.length * SPEED_NODES.length * POWER_SHIFTS.length * REGION_COUNT * CONTACT_OUTCOMES ||
-  classes.length !== POWER_SHIFTS.length * REGION_COUNT * PHYSICAL_CLASS_COUNT) throw new Error('Invalid contact basis size');
- for (const [values, width] of [[responses, CONTACT_OUTCOMES], [classes, PHYSICAL_CLASS_COUNT]] as const) {
+  classes.length !== POWER_SHIFTS.length * REGION_COUNT * CLASS_COUNT) throw new Error('Invalid contact basis size');
+ for (const [values, width] of [[responses, CONTACT_OUTCOMES], [classes, CLASS_COUNT]] as const) {
   for (let row = 0; row < values.length; row += width) {
    let total = 0;
    for (let index = row; index < row + width; index++) {

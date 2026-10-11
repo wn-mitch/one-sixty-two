@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
-import { STORAGE_KEY, cardScenario, currentManifest, openSavedDraft, type CardScenario } from './draft-test-fixtures.ts';
+import { deviceDraft, cardScenario, currentManifest, openSavedDraft, type CardScenario } from './draft-test-fixtures.ts';
 
 test.setTimeout(180000);
 
@@ -19,7 +19,7 @@ type BlockedScenario = {
 };
 
 function savedDraft(page: Page): Promise<Draft> {
-	return page.evaluate(key => JSON.parse(localStorage.getItem(key)!), STORAGE_KEY) as Promise<Draft>;
+	return deviceDraft<Draft>(page);
 }
 
 function persistedState(draft: Draft) {

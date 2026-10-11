@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest';
+import { readLibrary } from '../game/library.ts';
+import { loadSeriesHistory } from '../game/series-history.ts';
+import type { LibraryEntry } from '../game/library.ts';
+import { NO_LEGACY } from './legacy.ts';
+import { migrate, MIGRATIONS, SCHEMA_VERSION, type Migration } from './migrations.ts';
+import { memoryDb } from './test-db.ts';
+
+const entry = (key: string, wins: number, extra: Partial<LibraryEntry> = {}): LibraryEntry => ({
+ key, savedAt: `2026-01-0${wins % 9 + 1}T00:00:00.000Z`, token: `token-${key}`, schemaVersion: 5, modelVersion: 'contact-v1', dataVersion: 'data',
+ record: { wins, losses: 162 - wins }, runs: { scored: 800, allowed: 600 },
+ batting: [{ seasonId: 'b:2001:NL:SFN', label: 'B 2001', slot: 'LF', PA: 600, AB: 500, H: 150, doubles: 30, triples: 2, HR: 45, BB: 90, HBP: 5, SF: 5, RBI: 110, SB: 10, war: 7 }],
+ pitching: [{ seasonId: 'p:1999:AL:BOS', label: 'P 1999', slot: 'SP1', outs: 600, H: 150, BB: 40, SO: 280, R: 60, starts: 54, war: 8 }],
+ stadium: { id: 'SFN-2025', name: 'Oracle Park' },
+ roster: [{ seasonId: 'p:1999:AL:BOS', label: 'P 1999', slot: 'SP1' }, { seasonId: 'b:2001:NL:SFN', label: 'B 2001', slot: 'LF' }],
+ mvp: { seasonId: 'b:2001:NL:SFN', label: 'B 2001' },
+ ...extra
+});
+
+describe('device database migrations', () => {
+ it('creates the current schema on a fresh database', async () => {
+  const { db, raw } = await memoryDb();
+  expect(raw.selectValue('PRAGMA user_version')).toBe(SCHEMA_VERSION);
+  expect(await db.all('SELECT * FROM draft')).toEqual([]);
+  expect(await readLibrary(db)).toEqual([]);
+ });
+
+ it('imports legacy localStorage saves once, skipping malformed entries rather than repairing them', async () => {
+  const series = { id: 's1', playedAt: '2026-01-02', link: '/h2h#a', championKey: 'k1', teams: [{ libraryKey: 'k1', name: 'A', seed: 1, wins: 3 }, { libraryKey: 'k2', name: 'B', seed: 2, wins: 1 }] };
+  const legacy = {
+   draft: '{"saved":"run"}',
+   library: JSON.stringify([
+    entry('k1', 120, { nickname: 'Machine' }),
+    { key: 'broken' },
+    entry('k2', 90, { roster: [{ seasonId: 7 }] as unknown as LibraryEntry['roster'] }),
+    entry('k3', 80),
+    entry('k1', 1)
+   ]),
+   series: JSON.stringify([series, { id: 'bad' }])
+  };
+  const { db, raw } = await memoryDb(legacy);
+  expect(await db.all('SELECT json FROM draft')).toEqual([{ json: '{"saved":"run"}' }]);
+  const library = await readLibrary(db);
+  // Legacy order (newest first) survives; the first copy of a duplicated key wins.
+  expect(library.map(item => item.key)).toEqual(['k1', 'k3']);
+  expect(library[0]).toEqual(entry('k1', 120, { nickname: 'Machine' }));
+  expect(await loadSeriesHistory(db)).toEqual([series]);
+  // Re-running is a no-op: the import belongs to migration 1 only.
+  migrate(raw, { ...legacy, draft: '{"other":1}' });
+  expect(await db.all('SELECT json FROM draft')).toEqual([{ json: '{"saved":"run"}' }]);
+ });
+
+ it('leaves the database at the last good version when a migration fails', async () => {
+  const failing: Migration[] = [...MIGRATIONS, {
+   version: SCHEMA_VERSION + 1,
+   up(db) {
+    db.exec({ sql: 'CREATE TABLE half_done (id INTEGER)' });
+    db.exec({ sql: "UPDATE seasons SET nickname = 'clobbered'" });
+    throw new Error('step failed');
+   }
+  }];
+  const { db, raw } = await memoryDb({ ...NO_LEGACY, library: JSON.stringify([entry('k1', 100)]) });
+  expect(() => migrate(raw, NO_LEGACY, failing)).toThrow('step failed');
+  expect(raw.selectValue('PRAGMA user_version')).toBe(SCHEMA_VERSION);
+  expect(await db.all("SELECT name FROM sqlite_master WHERE name = 'half_done'")).toEqual([]);
+  expect((await readLibrary(db))[0].nickname).toBeUndefined();
+ });
+
+ it('refuses a database written by a newer game', async () => {
+  const { raw } = await memoryDb();
+  raw.exec({ sql: `PRAGMA user_version = ${SCHEMA_VERSION + 1}` });
+  expect(() => migrate(raw, NO_LEGACY)).toThrow('newer version');
+ });
+});

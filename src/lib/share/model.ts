@@ -16,13 +16,8 @@ export interface CreateShareRenderModelInput {
 	manifest: Manifest;
 	media: MediaManifest | null;
 	rankings: WarRankings | null;
-	replayId?: string;
-	publicOrigin?: string;
-	rendererVersion?: string;
 }
 
-const REPLAY_ID = /^[A-Za-z0-9_-]{22}$/;
-const SHA256 = /^[a-f0-9]{64}$/;
 
 function requireInteger(value: number, label: string, minimum = 0): number {
 	if (!Number.isSafeInteger(value) || value < minimum) throw new Error(`Invalid share ${label}`);
@@ -144,35 +139,6 @@ function validateProfiles(
 	return bySeason;
 }
 
-function publicationPins(input: CreateShareRenderModelInput): {
-	replayId: string | null;
-	replayUrl: string | null;
-	rendererVersion: string | null;
-} {
-	const supplied = [input.replayId, input.publicOrigin, input.rendererVersion].filter(value => value !== undefined).length;
-	if (supplied === 0) return { replayId: null, replayUrl: null, rendererVersion: null };
-	if (supplied !== 3 || !input.replayId || !input.publicOrigin || !input.rendererVersion) {
-		throw new Error('Published share models require replay, origin, and renderer pins');
-	}
-	if (!REPLAY_ID.test(input.replayId)) throw new Error('Invalid share replay ID');
-	let origin: URL;
-	try {
-		origin = new URL(input.publicOrigin);
-	} catch {
-		throw new Error('Invalid public share origin');
-	}
-	if ((origin.protocol !== 'https:' && origin.protocol !== 'http:') || origin.username || origin.password ||
-		origin.search || origin.hash || (origin.pathname !== '/' && origin.pathname !== '')) {
-		throw new Error('Invalid public share origin');
-	}
-	if (!SHA256.test(input.rendererVersion)) throw new Error('Invalid share renderer version');
-	return {
-		replayId: input.replayId,
-		replayUrl: new URL(`/r/${input.replayId}`, origin).toString(),
-		rendererVersion: input.rendererVersion
-	};
-}
-
 function shareStadium(draft: Draft, manifest: Manifest, media: MediaManifest | null | undefined): ShareStadium {
 	const summary = manifest.stadiums.find(item => item.ref.id === draft.homeStadium?.id && item.ref.version === draft.homeStadium?.version);
 	if (!summary) throw new Error('Share stadium does not match the current dataset');
@@ -209,8 +175,6 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 	if (rankings && (rankings.schemaVersion !== 1 || !rankings.rankingVersion.trim() || rankings.dataVersion !== draft.dataVersion)) {
 		throw new Error('Share rankings do not match the drafted dataset');
 	}
-	const pins = publicationPins(input);
-	if (pins.rendererVersion && (!media || !rankings)) throw new Error('Published share models require pinned media and rankings');
 
 	const cards = SLOTS.map(slot => {
 		const pick = picks.bySlot.get(slot)!;
@@ -233,41 +197,7 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		homeStadium,
 		mediaVersion: media?.version ?? null,
 		rankingVersion: rankings?.rankingVersion ?? null,
-		rendererVersion: pins.rendererVersion,
-		replayId: pins.replayId,
-		replayUrl: pins.replayUrl,
 		record,
 		cards
 	};
-}
-
-function canonicalize(value: unknown, stack: Set<object>): unknown {
-	if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-	if (typeof value === 'number') {
-		if (!Number.isFinite(value)) throw new Error('Share render model contains a non-finite number');
-		return Object.is(value, -0) ? 0 : value;
-	}
-	if (typeof value === 'undefined') return undefined;
-	if (typeof value !== 'object') throw new Error('Share render model contains a non-serializable value');
-	if (stack.has(value)) throw new Error('Share render model contains a cycle');
-	stack.add(value);
-	let result: unknown;
-	if (Array.isArray(value)) {
-		result = value.map(item => canonicalize(item, stack) ?? null);
-	} else {
-		const record = value as Record<string, unknown>;
-		const output: Record<string, unknown> = {};
-		for (const key of Object.keys(record).sort()) {
-			const item = canonicalize(record[key], stack);
-			if (item !== undefined) output[key] = item;
-		}
-		result = output;
-	}
-	stack.delete(value);
-	return result;
-}
-
-/** Stable JSON bytes for content-addressed model storage and digesting. */
-export function canonicalShareRenderModelJson(model: ShareRenderModel): string {
-	return JSON.stringify(canonicalize(model, new Set()));
 }

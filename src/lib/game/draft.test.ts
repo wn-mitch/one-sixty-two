@@ -13,7 +13,9 @@ import {
  validateReplay
 } from './draft.ts';
 import { decodeReplay, encodeReplay } from './share.ts';
-import { persistDraft, restoreDraft, STORAGE_KEY } from './persistence.ts';
+import { persistDraft, restoreDraft } from './persistence.ts';
+import { brokenDb, memoryDb } from '../storage/test-db.ts';
+import type { Db } from '../storage/sql.ts';
 import { SLOTS, type Candidate, type Draft, type Manifest, type Slot } from './types.ts';
 import { randomStream } from './random.ts';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
@@ -87,13 +89,12 @@ describe('home stadium selection', () => {
   const forged = { ...saved, actions: [{ type: 'select-stadium', stadiumId: manifest.stadiums[0].ref.id, stadiumVersion: 'old' }, ...saved.actions.slice(1)] };
   expect(() => validateDraft(forged, manifest)).toThrow();
  });
- it('saves and resumes an unselected run in the stadium phase only', () => {
-  const store = new Map<string, string>();
-  const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value), removeItem: (key: string) => void store.delete(key) };
-  persistDraft(storage, createDraft(manifest, 3), 'stadium');
-  expect(restoreDraft(storage, manifest)).toMatchObject({ kind: 'valid', phase: 'stadium' });
-  persistDraft(storage, createDraft(manifest, 3), 'draft');
-  expect(restoreDraft(storage, manifest).kind).toBe('incompatible');
+ it('saves and resumes an unselected run in the stadium phase only', async () => {
+  const { db } = await memoryDb();
+  await persistDraft(db, createDraft(manifest, 3), 'stadium');
+  expect(await restoreDraft(db, manifest)).toMatchObject({ kind: 'valid', phase: 'stadium' });
+  await persistDraft(db, createDraft(manifest, 3), 'draft');
+  expect((await restoreDraft(db, manifest)).kind).toBe('incompatible');
  });
 });
 
@@ -107,14 +108,11 @@ function finish(seed = 162, source = manifest): Draft {
  return draft;
 }
 
-function memoryStorage() {
- const values: Record<string, string> = {};
- return {
-  getItem: (key: string) => values[key] ?? null,
-  setItem: (key: string, value: string) => { values[key] = value; },
-  removeItem: (key: string) => { delete values[key]; }
- };
+/** Writes a raw draft row, standing in for a save from another version or a forgery. */
+async function rawSave(db: Db, json: string): Promise<void> {
+ await db.run([{ sql: 'INSERT OR REPLACE INTO draft (id, json, updated_at) VALUES (1, ?, ?)', bind: [json, '2026-01-01T00:00:00.000Z'] }]);
 }
+const rawRead = async (db: Db) => (await db.all<{ json: string }>('SELECT json FROM draft'))[0]?.json;
 
 function draftWithOnlySlotsOpen(pool: Manifest, open: Slot[]): Draft {
  const openSet = new Set<Slot>(open);
@@ -213,11 +211,11 @@ describe('permanent deterministic drafting', () => {
   expect(rolls.filter(roll => roll.franchiseId === 'F12').every(roll => roll.decade === 2020)).toBe(true);
  });
 
- it('keeps an unresolved roll across saves and rejects double assignment', () => {
-  const storage = memoryStorage();
+ it('keeps an unresolved roll across saves and rejects double assignment', async () => {
+  const { db } = await memoryDb();
   const draft = rollDraft(startDraft(manifest, 162), manifest);
-  expect(persistDraft(storage, draft, 'draft')).toBeNull();
-  expect(restoreDraft(storage, manifest)).toEqual({ kind: 'valid', draft, phase: 'draft' });
+  expect(await persistDraft(db, draft, 'draft')).toBeNull();
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft, phase: 'draft' });
   expect(rollDraft(draft, manifest)).toBe(draft);
   expect(() => validateDraft({
    ...draft,
@@ -245,7 +243,7 @@ describe('permanent deterministic drafting', () => {
   expect(validateDraft(commitPick(rolled, manifest, remaining[0].seasonId, 'CL'), manifest, true).picks).toHaveLength(SLOTS.length);
  });
 
- it('rejects duplicate-franchise forgeries in saves and current replays', () => {
+ it('rejects duplicate-franchise forgeries in saves and current replays', async () => {
   const draft = finish();
   const forged = {
    ...draft,
@@ -253,9 +251,9 @@ describe('permanent deterministic drafting', () => {
   };
   expect(() => validateDraft(forged, manifest, true)).toThrow();
   expect(() => validateReplay(replayInput(forged), manifest)).toThrow();
-  const storage = memoryStorage();
-  storage.setItem(STORAGE_KEY, JSON.stringify({ ...forged, phase: 'results' }));
-  expect(restoreDraft(storage, manifest).kind).toBe('incompatible');
+  const { db } = await memoryDb();
+  await rawSave(db, JSON.stringify({ ...forged, phase: 'results' }));
+  expect((await restoreDraft(db, manifest)).kind).toBe('incompatible');
  });
 
  it('rejects out-of-era seasons and illegal lineup orders', () => {
@@ -501,7 +499,7 @@ describe('permanent deterministic drafting', () => {
   expect(() => validateReplay({ ...input, actions: [...input.actions, { type: 'unknown' }] }, flexible)).toThrow('Invalid draft action');
  });
 
- it('rejects every pre-cutover replay schema and model at replay, URL, and persistence boundaries', () => {
+ it('rejects every pre-cutover replay schema and model at replay, URL, and persistence boundaries', async () => {
   const current = replayInput(finish());
   for (const schemaVersion of [1, 2, 3]) {
    const obsolete = { ...current, schemaVersion };
@@ -513,32 +511,27 @@ describe('permanent deterministic drafting', () => {
   const obsoleteModel = { ...current, modelVersion: 'pa-v2' };
   expect(() => validateReplay(obsoleteModel, manifest)).toThrow('incompatible');
 
-  const storage = memoryStorage();
+  const { db } = await memoryDb();
   const saved = JSON.stringify({ ...current, schemaVersion: 3, modelVersion: 'pa-v2', phase: 'results' });
-  storage.setItem(STORAGE_KEY, saved);
-  expect(restoreDraft(storage, manifest)).toMatchObject({ kind: 'incompatible' });
-  expect(storage.getItem(STORAGE_KEY)).toBe(saved);
+  await rawSave(db, saved);
+  expect(await restoreDraft(db, manifest)).toMatchObject({ kind: 'incompatible' });
+  expect(await rawRead(db)).toBe(saved);
  });
 
- it('does not overwrite incompatible saves and allows blocked-storage play', () => {
-  const storage = memoryStorage();
+ it('does not overwrite incompatible saves and allows blocked-storage play', async () => {
+  const { db } = await memoryDb();
   const obsolete = JSON.stringify({ ...finish(), schemaVersion: 1 });
-  storage.setItem(STORAGE_KEY, obsolete);
-  expect(restoreDraft(storage, manifest).kind).toBe('incompatible');
-  expect(storage.getItem(STORAGE_KEY)).toBe(obsolete);
-  const blocked = {
-   getItem: () => { throw new Error('blocked'); },
-   setItem: () => { throw new Error('blocked'); },
-   removeItem: () => { throw new Error('blocked'); }
-  };
-  expect(restoreDraft(blocked, manifest).kind).toBe('unavailable');
-  expect(persistDraft(blocked, finish(), 'simulating')).toContain('Resume unavailable');
+  await rawSave(db, obsolete);
+  expect((await restoreDraft(db, manifest)).kind).toBe('incompatible');
+  expect(await rawRead(db)).toBe(obsolete);
+  expect((await restoreDraft(brokenDb, manifest)).kind).toBe('unavailable');
+  expect(await persistDraft(brokenDb, finish(), 'simulating')).toContain('Resume unavailable');
  });
 
- it('preserves exact simulation inputs on reload', () => {
-  const storage = memoryStorage();
+ it('preserves exact simulation inputs on reload', async () => {
+  const { db } = await memoryDb();
   const draft = finish();
-  expect(persistDraft(storage, draft, 'simulating')).toBeNull();
-  expect(restoreDraft(storage, manifest)).toEqual({ kind: 'valid', draft, phase: 'simulating' });
+  expect(await persistDraft(db, draft, 'simulating')).toBeNull();
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft, phase: 'simulating' });
  });
 });

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildContactBasis } from '../../src/lib/sim/contact-basis.ts';
+import { buildContactBasis } from '../../src/lib/engine/node.ts';
 import { CONTACT_METHOD_VERSION, type ContactModel, type ContactShape } from '../../src/lib/sim/contact-profile.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -10,8 +10,9 @@ export const STATCAST_SHAPE_FILE = 'scripts/data/statcast-2025.json';
 /** Sources whose behavior determines the neutral response basis. */
 export const CONTACT_BASIS_SOURCES = [
  STATCAST_SHAPE_FILE,
- 'src/lib/sim/contact-basis.ts', 'src/lib/sim/contact-profile.ts', 'src/lib/sim/fielding.ts',
- 'src/lib/sim/flight.ts', 'src/lib/sim/park.ts', 'src/lib/sim/park-types.ts'
+ 'engine/src/contact_basis.rs', 'engine/src/contact_profile.rs', 'engine/src/fielding.rs', 'engine/src/flight.rs',
+ 'engine/src/math.rs', 'engine/src/normal.rs', 'engine/src/prep.rs', 'engine/src/types.rs', 'Cargo.lock',
+ 'src/lib/sim/park.ts', 'src/lib/sim/park-types.ts'
 ];
 
 export function readContactShape(): ContactShape {

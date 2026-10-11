@@ -123,7 +123,7 @@ function failureMessage(error: unknown): string {
 
 /**
  * Resolve only when the hydrated artwork is safe for an immutable screenshot.
- * The authenticated capture route calls this after binding the artwork root.
+ * `renderSharePng` calls this on the off-screen artwork before rasterizing it.
  */
 export async function waitForShareCapture(
 	root: HTMLElement,

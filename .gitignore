@@ -32,3 +32,6 @@ static/rankings/
 static/media/
 playwright-report/
 smoke-reports/
+# Rust
+/target/
+/src/lib/engine/pkg/

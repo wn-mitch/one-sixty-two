@@ -5,7 +5,7 @@ import type { MediaManifest } from '../media/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 import { testSeason } from '../sim/test-fixtures.ts';
 import type { GameResult, SeasonResult } from '../sim/types.ts';
-import { canonicalShareRenderModelJson, createShareRenderModel, type CreateShareRenderModelInput } from './model.ts';
+import { createShareRenderModel, type CreateShareRenderModelInput } from './model.ts';
 import type { ShareRenderModel } from './types.ts';
 
 function fixture(): CreateShareRenderModelInput {
@@ -85,22 +85,12 @@ describe('share render model', () => {
 		expect(first.cards.map(card => card.slot)).toEqual(SLOTS);
 		expect(first.cards.map(card => card.seasonId)).toEqual(SLOTS.map(slot => input.draft.picks.find(pick => pick.slot === slot)!.seasonId));
 		expect(first).toEqual(second);
-		expect(canonicalShareRenderModelJson(first)).toBe(canonicalShareRenderModelJson(second));
-		const reverseKeyOrder = Object.fromEntries(Object.entries(first).reverse()) as unknown as ShareRenderModel;
-		expect(canonicalShareRenderModelJson(reverseKeyOrder)).toBe(canonicalShareRenderModelJson(first));
 	});
 
-	it('keeps local links null and derives a published URL only from complete trusted pins', () => {
+	it('records the media and ranking versions it was drawn with', () => {
 		const input = fixture();
-		const local = createShareRenderModel(input);
-		expect(local).toMatchObject({ replayId: null, replayUrl: null, rendererVersion: null, mediaVersion: null, rankingVersion: null });
-		const assets = publishedAssets(input.manifest.dataVersion);
-		const published = createShareRenderModel({
-			...input, ...assets, replayId: 'Abcdefghijklmnopqrstuv', publicOrigin: 'https://example.test', rendererVersion: 'a'.repeat(64)
-		});
-		expect(published.replayUrl).toBe('https://example.test/r/Abcdefghijklmnopqrstuv');
-		expect(published).toMatchObject({ mediaVersion: 'media-pin', rankingVersion: 'ranking-pin', rendererVersion: 'a'.repeat(64) });
-		expect(() => createShareRenderModel({ ...input, replayId: 'Abcdefghijklmnopqrstuv' })).toThrow(/require replay, origin, and renderer pins/);
+		expect(createShareRenderModel(input)).toMatchObject({ mediaVersion: null, rankingVersion: null });
+		expect(createShareRenderModel({ ...input, ...publishedAssets(input.manifest.dataVersion) })).toMatchObject({ mediaVersion: 'media-pin', rankingVersion: 'ranking-pin' });
 	});
 
 	it('rejects duplicate slots and mismatched profile identities', () => {

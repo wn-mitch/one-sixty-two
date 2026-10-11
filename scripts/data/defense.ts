@@ -1,5 +1,5 @@
 import { POSITIONS, type DefensiveEnvironment, type DefensiveEvidence, type DefensivePosition, type DefensiveSkillName, type DefensiveSkills, type Position, type Profile } from '../../src/lib/game/types.ts';
-import { createDefensiveReference, expectedDefensiveRuns, type DefensiveReference } from '../../src/lib/sim/defense.ts';
+import { createContactReference, type ContactReference } from '../../src/lib/engine/node.ts';
 import type { CsvRow } from './acquire.ts';
 import type { FieldingCohort, FieldingData, FieldRecord } from './fielding.ts';
 import { parseNullableNumber, scheduledGames, sourceRole, type GroupedWarRows, type SourceJoinDiagnostics } from './source-join.ts';
@@ -178,7 +178,7 @@ function positionSkills(profile: Profile, position: Position, fielding: Fielding
 }
 
 function residualizedPosition(
- reference: DefensiveReference,
+ reference: ContactReference,
  profile: Profile,
  position: Position,
  fielding: FieldingData,
@@ -191,7 +191,7 @@ function residualizedPosition(
   return { ...skills, evidence, expectedRunsSaved162: null, residualClamped: false };
  }
  evidence.hitPrevention = { status: 'exact', exposure: aggregate.exposure };
- const runsAt = (hitPrevention: number) => expectedDefensiveRuns(reference, position, { ...skills, hitPrevention });
+ const runsAt = (hitPrevention: number) => reference.expectedDefensiveRuns(position, { ...skills, hitPrevention });
  const negative = runsAt(-1);
  const positive = runsAt(1);
  if (!(positive > negative)) throw new Error(`Nonpositive defensive reference slope: ${profile.seasonId}:${position}`);
@@ -223,7 +223,7 @@ export function applyDefense(
  source: GroupedWarRows,
  environment: DefensiveEnvironment
 ): DefensiveCompilationDiagnostics {
- const reference = createDefensiveReference(environment);
+ const reference = createContactReference(environment);
  let aggregateAvailable = 0;
  let aggregateUnavailable = 0;
  let residualClamped = 0;

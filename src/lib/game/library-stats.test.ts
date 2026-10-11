@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SavedBatter, SavedPitcher } from './library.ts';
 import { libraryLeaders, QUALIFYING_OUTS, QUALIFYING_PA, teamTotals } from './library-stats.ts';
 import { recordSeries, loadSeriesHistory, seriesBetween, seriesTally, type SeriesRecord } from './series-history.ts';
+import { memoryDb } from '../storage/test-db.ts';
 
 const batter = (seasonId: string, overrides: Partial<SavedBatter> = {}): SavedBatter => ({
  seasonId, label: seasonId, slot: 'LF', PA: 600, AB: 500, H: 150, doubles: 30, triples: 2, HR: 20, BB: 80, HBP: 5, SF: 5, RBI: 80, SB: 10, war: 2, ...overrides
@@ -37,10 +38,6 @@ describe('library leaders', () => {
  });
 });
 
-function memory() {
- const store = new Map<string, string>();
- return { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => { store.set(key, value); }, removeItem: (key: string) => { store.delete(key); } };
-}
 const record = (id: string, a: string, b: string, champion: string): SeriesRecord => ({
  id, playedAt: '2026-01-01', link: '/h2h#a=x&b=y',
  teams: [{ libraryKey: a, name: a, seed: 1, wins: champion === a ? 3 : 1 }, { libraryKey: b, name: b, seed: 2, wins: champion === b ? 3 : 1 }],
@@ -48,12 +45,12 @@ const record = (id: string, a: string, b: string, champion: string): SeriesRecor
 });
 
 describe('head-to-head history', () => {
- it('keeps a replayed series once and tallies each club', () => {
-  const storage = memory();
-  recordSeries(storage, record('ab', 'a', 'b', 'a'));
-  recordSeries(storage, record('ac', 'a', 'c', 'c'));
-  recordSeries(storage, record('ab', 'a', 'b', 'a'));
-  const history = loadSeriesHistory(storage);
+ it('keeps a replayed series once, moves it to the top, and tallies each club', async () => {
+  const { db } = await memoryDb();
+  await recordSeries(db, record('ab', 'a', 'b', 'a'), new Date('2026-01-01'));
+  await recordSeries(db, record('ac', 'a', 'c', 'c'), new Date('2026-01-02'));
+  await recordSeries(db, record('ab', 'a', 'b', 'a'), new Date('2026-01-03'));
+  const history = await loadSeriesHistory(db);
   expect(history.map(item => item.id)).toEqual(['ab', 'ac']);
   expect(seriesTally(history, 'a')).toEqual({ won: 1, lost: 1 });
   expect(seriesTally(history, 'b')).toEqual({ won: 0, lost: 1 });

@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import { prepareSharePublication, storeReplay } from '../lib/game/share.ts';
+import { publishShare, storeReplay } from '../lib/game/share.ts';
 import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
-import { currentManifest, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { solidPng } from './image-test-helpers.ts';
+import { currentManifest, deviceDraft, STORAGE_KEY, writeDeviceDraft } from './draft-test-fixtures.ts';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(300000);
@@ -31,7 +32,10 @@ async function publishChallenger(manifest: Manifest, origin: string) {
  // Browsers send Origin on these POSTs; Node's fetch does not, and the site rejects cross-site posts.
  const sameOrigin: typeof fetch = (input, init) => fetch(input, { ...init, headers: { ...init?.headers, origin } });
  const { id } = await storeReplay(completeDraft(manifest, 7, 0), origin, sameOrigin);
- return { id, publication: await prepareSharePublication(id, origin, sameOrigin) };
+ // The record and artwork come from the challenger's browser; any 162-game record is publishable.
+ const record = { wins: 101, losses: 61, firstLoss: 2, longestWinningStreak: 11, runsFor: 812, runsAgainst: 640 };
+ const field = new Blob([new Uint8Array(solidPng(1080, 1350))], { type: 'image/png' });
+ return { id, publication: await publishShare(id, origin, record, { field }, sameOrigin) };
 }
 
 test('a challenge link opens a challenge card, binds the next draft, and offers the series after its season', async ({ page, request, baseURL }) => {
@@ -53,18 +57,16 @@ test('a challenge link opens a challenge card, binds the next draft, and offers 
  await expect(page.getByRole('link', { name: 'See their season', exact: true })).toHaveAttribute('href', `/r/${id}`);
  await page.getByRole('button', { name: 'Draft your team', exact: true }).click();
  await expect(page.getByRole('heading', { name: 'Choose your home stadium', exact: true })).toBeVisible();
- const bound = await page.evaluate(([challengeKey, draftKey]) => ({
-  challenge: JSON.parse(localStorage.getItem(challengeKey)!),
-  seed: JSON.parse(localStorage.getItem(draftKey)!).seed
- }), [CHALLENGE_KEY, STORAGE_KEY]);
+ const bound = {
+  challenge: await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CHALLENGE_KEY),
+  seed: (await deviceDraft(page)).seed
+ };
  expect(bound.challenge).toEqual({ replayId: id, wins, losses, seed: bound.seed });
 
  // Stand in a finished roster for the answering draft (rolls derive from the seed, so the challenge follows it), then play its season.
  const answer = completeDraft(manifest, 301, 3);
- await page.evaluate(([draftKey, draftValue, challengeKey, challengeValue]) => {
-  localStorage.setItem(draftKey, draftValue);
-  localStorage.setItem(challengeKey, challengeValue);
- }, [STORAGE_KEY, JSON.stringify({ ...answer, phase: 'lineup' }), CHALLENGE_KEY, JSON.stringify({ ...bound.challenge, seed: answer.seed })]);
+ await writeDeviceDraft(page, JSON.stringify({ ...answer, phase: 'lineup' }));
+ await page.evaluate(([key, value]) => localStorage.setItem(key, value), [CHALLENGE_KEY, JSON.stringify({ ...bound.challenge, seed: answer.seed })]);
  await page.goto('/');
  await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
  await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
@@ -94,10 +96,10 @@ test('a draft in progress can answer the challenge instead of being replaced', a
  await page.getByRole('button', { name: 'Answer with my current draft', exact: true }).click();
  // It resumes straight into the same draft rather than replacing it.
  await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
- const stored = await page.evaluate(([challengeKey, draftKey]) => ({
-  challenge: JSON.parse(localStorage.getItem(challengeKey)!),
-  draft: JSON.parse(localStorage.getItem(draftKey)!)
- }), [CHALLENGE_KEY, STORAGE_KEY]);
+ const stored = {
+  challenge: await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CHALLENGE_KEY),
+  draft: await deviceDraft(page)
+ };
  expect(stored.draft.seed).toBe(current.seed);
  expect(stored.draft.currentRoll).toEqual(current.currentRoll);
  expect(stored.challenge).toEqual({ replayId: id, wins: publication.record.wins, losses: publication.record.losses, seed: current.seed });

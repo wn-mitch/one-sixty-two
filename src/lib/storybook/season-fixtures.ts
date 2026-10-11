@@ -1,7 +1,8 @@
 import type { Draft, Manifest, Profile } from '../game/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 import type { SharePublication } from '../share/types.ts';
-import { prepareSeasonInput, simulateSeason } from '../sim/season.ts';
+import { simulateSeason } from '../engine/core.ts';
+import { prepareSeasonInput } from '../game/season-input.ts';
 import type { SeasonResult } from '../sim/types.ts';
 import { createExampleFixtures } from './fixtures.ts';
 
@@ -16,17 +17,15 @@ export interface ExampleSeason {
 interface ExamplePublicationOptions {
  replayId: string;
  replayUrl: string;
- modelDigest: string;
  imageUrl: string;
  imageDigest: string;
 }
 
 export function createExamplePublication(result: SeasonResult | null, options: ExamplePublicationOptions): SharePublication {
  return {
-  schemaVersion: 1,
+  schemaVersion: 2,
   replayId: options.replayId,
   replayUrl: options.replayUrl,
-  modelDigest: options.modelDigest,
   record: {
    wins: result?.wins ?? 0,
    losses: result?.losses ?? 0,
@@ -56,7 +55,8 @@ function resultForExamples(): Promise<SeasonResult> {
 /**
  * Produces fresh mutable draft and profile fixtures alongside one cached real
  * 162-game simulation. The cached result is never fabricated or recomputed by
- * consumers; createExampleFixtures supplies independent editable state.
+ * consumers; createExampleFixtures supplies independent editable state. The wasm engine must
+ * already be instantiated (the Storybook preview loader or `engine/node.ts` does so).
  */
 export async function getExampleSeason(): Promise<ExampleSeason> {
  const result = await resultForExamples();
