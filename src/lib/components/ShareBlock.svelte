@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { challengeUrl } from '#lib/game/share.ts';
 	import ShareArtwork from '#lib/share/ShareArtwork.svelte';
 	import { toasts } from '#lib/toast.svelte.ts';
 	import {
@@ -70,6 +71,16 @@
 	</div>
 
 	{#if publication}
+		<label for="published-challenge-link">Challenge link</label>
+		<input
+			id="published-challenge-link"
+			class="share-link"
+			type="url"
+			readonly
+			value={challengeUrl(publication)}
+			onfocus={selectLink}
+			onclick={selectLink}
+		/>
 		<label for="published-share-link">Replay link</label>
 		<input
 			id="published-share-link"

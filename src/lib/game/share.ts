@@ -293,6 +293,12 @@ export async function downloadPublishedImage(
 	boundary.save(blob, `162-0-${publication.record.wins}-${publication.record.losses}-${format}.png`);
 }
 
+/** The link a friend opens to take on a published season: its challenge card, not its results. */
+export function challengeUrl(publication: Pick<SharePublication, 'replayId' | 'replayUrl'>): string {
+	return new URL(`/c/${publication.replayId}`, publication.replayUrl).href;
+}
+
+/** Opens the native share sheet with the season's challenge link. */
 export function requestNativeShare(
 	publication: SharePublication,
 	share: ((data: ShareData) => Promise<void>) | undefined = typeof navigator === 'undefined' ? undefined : navigator.share?.bind(navigator)
@@ -301,8 +307,8 @@ export function requestNativeShare(
 	try {
 		return share({
 			title: `${publication.record.wins}-${publication.record.losses} in 162-0`,
-			text: `Can you beat ${publication.record.wins}-${publication.record.losses}?`,
-			url: publication.replayUrl
+			text: `Can you beat ${publication.record.wins}-${publication.record.losses}? Draft a team and take me on.`,
+			url: challengeUrl(publication)
 		});
 	} catch (error) {
 		return Promise.reject(error);

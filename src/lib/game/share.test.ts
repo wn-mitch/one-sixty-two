@@ -175,7 +175,7 @@ describe('browser action boundaries', () => {
 		const canceled = new DOMException('Canceled', 'AbortError');
 		const sharing = requestNativeShare(publication(), data => {
 			invoked = true;
-			expect(data.url).toBe(publication().replayUrl);
+			expect(data.url).toBe(`${origin}/c/${publication().replayId}`);
 			return Promise.reject(canceled);
 		});
 		expect(invoked).toBe(true);
@@ -289,8 +289,8 @@ describe('Session share orchestration', () => {
 		const session = sessionWithResult();
 
 		await session.share('challenge');
-		expect(writeText).toHaveBeenCalledWith(publication().replayUrl);
-		expect(session.shareStatus).toContain('Replay link copied instead');
+		expect(writeText).toHaveBeenCalledWith(`${origin}/c/${replayId}`);
+		expect(session.shareStatus).toBe('Challenge link copied.');
 	});
 
 	it('exposes a selected-link fallback when clipboard permission is denied', async () => {

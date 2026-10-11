@@ -2,7 +2,9 @@
 	import { onMount, tick } from 'svelte';
 	import CardReview from '../cards/CardReview.svelte';
 	import type { CardViewModel } from '../cards/view-model.ts';
+	import { challengeSeriesPath, type Challenge } from '../game/challenge.ts';
 	import { createResultsModel } from '../game/results-model.ts';
+	import { encodeReplay } from '../game/share.ts';
 	import type { Draft, Manifest, Profile } from '../game/types.ts';
 	import { innings } from '../game/format.ts';
 	import { loadMedia } from '../media/client.ts';
@@ -31,6 +33,8 @@
 		publication: SharePublication | null;
 		sharing: boolean;
 		shareStatus: string;
+		/** A friend's season this draft was started to answer; the page then leads with the series. */
+		challenge?: Challenge | null;
 	}
 
 	let {
@@ -45,8 +49,12 @@
 		onShare,
 		publication,
 		sharing,
-		shareStatus
+		shareStatus,
+		challenge = null
 	}: Props = $props();
+	const challengeVerdict = $derived(challenge
+		? result.wins > challenge.wins ? 'You beat their record.' : result.wins === challenge.wins ? 'You matched their record.' : 'You fell short of their record.'
+		: '');
 
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaUnavailable = $state(false);
@@ -126,6 +134,15 @@
 </script>
 
 <section class="results" aria-labelledby="results-heading">
+	{#if challenge}
+		<aside class="challenge-offer" aria-labelledby="challenge-offer-heading">
+			<div>
+				<p class="eyebrow">Challenge</p>
+				<h2 id="challenge-offer-heading">{challengeVerdict} They went {challenge.wins}–{challenge.losses}.</h2>
+			</div>
+			<a class="button primary" href={challengeSeriesPath(encodeReplay(draft), challenge)}>Play the best-of-five</a>
+		</aside>
+	{/if}
 	<header class="scoreboard">
 		<div class="record-block">
 			<p class="eyebrow">Your club · Season final</p>
@@ -377,6 +394,10 @@
 	.section-heading h3 { font-size: var(--text-xl); }
 	.section-heading h4 { margin: 0; font-size: var(--text-base); font-weight: 750; }
 	.section-heading > p { max-width: 60ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
+	.challenge-offer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6); padding: var(--space-4) var(--space-5); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: color-mix(in oklch, var(--accent) 10%, var(--surface)); }
+	.challenge-offer .eyebrow { margin: 0 0 var(--space-1); color: var(--accent); }
+	.challenge-offer h2 { margin: 0; font-size: var(--text-lg); line-height: 1.25; }
+	.challenge-offer .button { flex: none; min-height: 2.75rem; }
 	.result-nav {
 		display: flex;
 		flex-wrap: wrap;

@@ -4,8 +4,10 @@ import { commitPick, createDraft, reassignPick, rollDraft, selectHomeStadium, va
 import { saveSeason } from './library.ts';
 import { persistDraft, restoreDraft, type SavedPhase } from './persistence.ts';
 import { newSeed } from './random.ts';
+import { challengeFor, claimChallenge, type Challenge } from './challenge.ts';
 import {
  beginCopyPublishedImage,
+ challengeUrl,
  copyShareLink,
  decodeReplay,
  downloadPublishedImage,
@@ -101,6 +103,7 @@ export class Session {
    if (forceNew) {
     this.shared = false;
     this.draft = createDraft(manifest, newSeed());
+    claimChallenge(this.draft.seed);
     this.savedDraft = null;
     this.phase = 'stadium';
     this.save('stadium');
@@ -234,6 +237,7 @@ export class Session {
   }
   this.shared = false;
   this.draft = createDraft(this.manifest, newSeed());
+  claimChallenge(this.draft.seed);
   this.savedDraft = null;
   this.selected.clear();
   this.profiles = [];
@@ -398,6 +402,10 @@ export class Session {
   this.announce = `Season complete: ${this.result.wins} wins, ${this.result.losses} losses.`;
  }
  skip(): void { this.skipReveal = true; if (this.result) this.showResults(); }
+ /** The friend's season this finished draft was started to answer, if any. */
+ get challenge(): Challenge | null {
+  return this.draft && !this.shared && this.phase === 'results' ? challengeFor(this.draft.seed) : null;
+ }
  async share(action: ShareAction = 'copy-link', format: ShareFormat = 'field'): Promise<void> {
   if (!this.draft || !this.result || this.loading || this.sharing) return;
   const epoch = this.epoch;
@@ -415,9 +423,8 @@ export class Session {
      await requestNativeShare(existingPublication);
      if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Shared.';
     } else {
-     const copy = copyShareLink(existingPublication.replayUrl);
-     await copy;
-     if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Native sharing is unavailable. Replay link copied instead.';
+     await copyShareLink(challengeUrl(existingPublication));
+     if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Challenge link copied.';
     }
    } catch (error) {
     if (!this.shareIsCurrent(request, epoch)) return;
@@ -426,16 +433,16 @@ export class Session {
      this.shareStatus = 'Share canceled.';
     } else if (errorName === 'NotSupportedError') {
      try {
-      await copyShareLink(existingPublication.replayUrl);
-      if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Native sharing is unavailable. Replay link copied instead.';
+      await copyShareLink(challengeUrl(existingPublication));
+      if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Challenge link copied.';
      } catch {
       if (!this.shareIsCurrent(request, epoch)) return;
       this.textCopyFallback = true;
-      this.shareStatus = 'Native sharing is unavailable. Select and copy the replay link below.';
+      this.shareStatus = 'Sharing is unavailable. Select and copy the challenge link below.';
      }
     } else {
      this.textCopyFallback = true;
-     this.shareStatus = 'Sharing is unavailable. Select and copy the replay link below.';
+     this.shareStatus = 'Sharing is unavailable. Select and copy the challenge link below.';
     }
    } finally {
     if (this.shareIsCurrent(request, epoch)) this.sharing = false;
@@ -464,7 +471,7 @@ export class Session {
    const publication = await publicationPromise;
    if (!this.shareIsCurrent(request, epoch)) return;
    this.publication = publication;
-   this.shareLink = publication.replayUrl;
+   this.shareLink = action === 'challenge' ? challengeUrl(publication) : publication.replayUrl;
    this.nativeShareReady = true;
 
    if (action === 'challenge') {
@@ -472,12 +479,12 @@ export class Session {
      this.shareStatus = 'Your share is ready. Tap Challenge a friend again to open the share sheet.';
     } else {
      try {
-      await copyShareLink(publication.replayUrl);
-      if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Native sharing is unavailable. Replay link copied instead.';
+      await copyShareLink(challengeUrl(publication));
+      if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Challenge link copied.';
      } catch {
       if (!this.shareIsCurrent(request, epoch)) return;
       this.textCopyFallback = true;
-      this.shareStatus = 'Native sharing is unavailable. Select and copy the replay link below.';
+      this.shareStatus = 'Clipboard unavailable. Select and copy the challenge link below.';
      }
     }
    } else if (action === 'copy-link') {

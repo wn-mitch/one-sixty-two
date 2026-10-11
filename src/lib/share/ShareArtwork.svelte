@@ -24,8 +24,6 @@
 		const dimension = stadium.dimensions.find(item => item.bearingDeg === bearing);
 		return dimension ? [`${label} ${Math.round(dimension.distanceFt)}`] : [];
 	}));
-	// The header already carries the record, so the footer is the invitation: the replay once shared, the site until then.
-	const replayLabel = $derived(model.replayUrl ? model.replayUrl.replace(/^https?:\/\//, '') : '162-0.dev');
 	const expectedImages = $derived.by(() => {
 		const urls = new Set<string>();
 		for (const entry of model.cards) for (const url of [entry.card.photo, entry.card.logo]) if (url) urls.add(url);
@@ -97,8 +95,9 @@
 	</div>
 
 	<footer class="share-footer">
+		<!-- The header already carries the record; a full replay URL would truncate in the image, so the footer names the site. -->
 		<strong>Beat this at</strong>
-		<span>{replayLabel}{#if model.replayUrl} <b aria-hidden="true">↗</b>{/if}</span>
+		<span>162-0.dev</span>
 	</footer>
 </section>
 
