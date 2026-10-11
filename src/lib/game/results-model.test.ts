@@ -43,9 +43,11 @@ function fixture(): Fixture {
 		actions: [],
 		currentRoll: null
 	};
-	const batting = input.roster.slice(0, 9).map(({ profile }): BatterLine => ({
+	const batting = input.roster.slice(0, 9).map(({ profile, slot }): BatterLine => ({
 		seasonId: profile.seasonId,
 		playerId: profile.playerId,
+		position: slot as BatterLine['position'],
+		year: profile.year,
 		displayName: profile.displayName,
 		PA: 1,
 		AB: 1,
@@ -71,6 +73,7 @@ function fixture(): Fixture {
 	const pitching = input.roster.slice(9).map(({ profile }, index): PitcherLine => ({
 		seasonId: profile.seasonId,
 		playerId: profile.playerId,
+		year: profile.year,
 		displayName: profile.displayName,
 		role: index === 4 ? 'support' : index === 3 ? 'closer' : 'starter',
 		outs: 3,
@@ -103,7 +106,9 @@ function fixture(): Fixture {
 		pitching,
 		starterStarts: [1, 1, 1],
 		highlight: null,
-		lowlight: null
+		lowlight: null,
+		highlightTrace: null,
+		lowlightTrace: null
 	};
 	const manifest: Manifest = {
 		schemaVersion: 1,

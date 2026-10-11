@@ -4,7 +4,7 @@
  import type { CardViewModel } from './view-model.ts';
  import CardFlip from './CardFlip.svelte';
 
- let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, onMove, moveRequested = $bindable(false) }: {
+ let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, flipInPlace = false, onMove, moveRequested = $bindable(false) }: {
   id?: string;
   s: CardViewModel;
   inspection?: ResultsInspection;
@@ -17,6 +17,7 @@
   onClose?: () => void;
   sourceElement?: HTMLElement | null;
   raisedOnly?: boolean;
+  flipInPlace?: boolean;
   onMove?: () => void;
   moveRequested?: boolean;
  } = $props();
@@ -89,7 +90,7 @@ let heading = $state<HTMLHeadingElement>();
    {#if textBack}<button type="button" class="back-text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>{/if}
    {#if onMove}<button type="button" onclick={moveCard}>Move card</button>{/if}
   {/snippet}
- <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
+ <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} {flipInPlace} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
 </div>
 </section>
 

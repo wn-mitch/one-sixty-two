@@ -6,6 +6,7 @@ import {
  RULES_VERSION,
  VALUATION_VERSION,
  type DefensiveEnvironment,
+ type HitterSlot,
  type Position,
  type Profile,
  type ReplaySchemaVersion,
@@ -22,12 +23,14 @@ export interface DefensiveRunComponents {
 }
 export interface BatterLine {
  seasonId: string; playerId: string; displayName: string;
+ /** Fielded position, or DH for the hitter without one; `year` is the player's source season. */
+ position: HitterSlot; year: number;
  PA: number; AB: number; H: number; doubles: number; triples: number; HR: number; BB: number; HBP: number; SO: number; R: number; RBI: number; SB: number; CS: number; SF: number;
  battingRuns: number; stealRuns: number; defensiveRuns: number;
  defensiveComponents: DefensiveRunComponents; fieldingOuts: number; caughtAdvancing: number;
 }
 export interface PitcherLine {
- seasonId: string; playerId: string; displayName: string; role: 'starter' | 'closer' | 'support';
+ seasonId: string; playerId: string; displayName: string; year: number; role: 'starter' | 'closer' | 'support';
  outs: number; H: number; BB: number; HBP: number; SO: number; R: number; starts: number; appearances: number;
  BF: number; pitchingRunsAboveNeutral: number;
 }
@@ -83,6 +86,8 @@ export interface SeasonResult {
  wins: number; losses: number; firstLoss: number | null; longestWinningStreak: number; runsFor: number; runsAgainst: number;
  games: GameResult[]; batting: BatterLine[]; pitching: PitcherLine[]; starterStarts: number[];
  highlight: SeasonMoment | null; lowlight: SeasonMoment | null;
+ /** Challenge-side win chance through the highlight's and lowlight's games; see `simulateGame`'s trace. */
+ highlightTrace: WinPoint[] | null; lowlightTrace: WinPoint[] | null;
 }
 export interface ScheduleGame { opponentId: string; isHome: boolean }
 export type WorkerRequest = { runId: number; input: SeasonInput };

@@ -42,7 +42,7 @@ test('My seasons shows a club’s cards, lines, and history, and renames and del
 	await club.getByLabel('Nickname').fill('Night Shift');
 	await club.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Night Shift' })).toBeVisible();
-	await expect(page.getByRole('status')).toHaveText('Renamed to Night Shift.');
+	await expect(page.locator('[data-toast]')).toHaveText('Renamed to Night Shift.');
 	await page.getByRole('button', { name: 'Delete Night Shift' }).click();
 	await expect(tiles(page)).toHaveCount(2);
 	await expect(page.getByRole('heading', { name: 'All-time leaders' })).toBeVisible();
@@ -85,7 +85,7 @@ test('My seasons explains an empty or blocked library', async ({ page }) => {
 	await openStory(page, 'modes-my-seasons--empty');
 	await expect(page.getByText('Finish a season and it is saved here')).toBeVisible();
 	await openStory(page, 'modes-my-seasons--storage-blocked');
-	await expect(page.getByRole('status')).toHaveText(/browser storage is blocked/);
+	await expect(page.locator('[data-toast]')).toHaveText(/browser storage is blocked/);
 });
 
 test('head-to-head validates links, fills from saved seasons, and plays the series', async ({ page }) => {

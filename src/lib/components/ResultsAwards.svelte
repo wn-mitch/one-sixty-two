@@ -58,7 +58,6 @@
 					</div>
 					<div class="primary-metric" class:red={primaryMetric.tone === 'red'}>
 						<strong>{primaryMetric.formattedValue}</strong>
-						{#if primaryMetric.key === 'mvp' || primaryMetric.key === 'lvp'}<span>App-estimated WAR</span>{/if}
 					</div>
 					{#if entry.metrics.length > 1}
 						<ul class="additional-metrics" aria-label={`Additional featured awards for ${entry.card.profile.displayName}`}>
@@ -101,7 +100,6 @@
 	.award-copy span { color: var(--muted); font-size: var(--text-xs); }
 	.primary-metric { display: grid; gap: .1rem; padding-top: var(--space-2); border-top: 1px solid var(--border); }
 	.primary-metric strong { color: var(--award-tone); font-size: var(--text-2xl); line-height: 1; letter-spacing: -.03em; }
-	.primary-metric span { color: var(--muted); font-size: var(--text-xs); }
 	.primary-metric.red strong { color: var(--error); }
 	.additional-metrics, .award-chips { margin: 0; padding: 0; list-style: none; }
 	.additional-metrics { display: grid; gap: var(--space-2); }
@@ -112,6 +110,17 @@
 	.award-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 	.award-chips li { padding: .2rem .5rem; border: 1px solid color-mix(in oklch, var(--accent) 60%, var(--border)); border-radius: 999px; color: var(--accent); font-size: .6875rem; font-weight: 750; }
 	.award-chips li.red { border-color: color-mix(in oklch, var(--error) 60%, var(--border)); color: var(--error); }
+	/* Beside the share panel: a 2×2 grid, each card to the left of its kicker, name and metrics. */
+	@media (min-width: 64.001rem) {
+		.award-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6) var(--space-5); }
+		.award-entry { grid-template-columns: minmax(0, 10rem) minmax(0, 1fr); grid-auto-rows: min-content; column-gap: var(--space-4); }
+		.award-entry > .award-card { grid-column: 1; grid-row: 1 / span 6; align-self: start; }
+		.award-entry > :not(.award-card) { grid-column: 2; }
+		.award-copy strong { font-size: var(--text-base); }
+		.primary-metric strong { font-size: var(--text-xl); white-space: nowrap; }
+		.section-heading { display: block; }
+		.section-heading > p { margin-top: var(--space-2); text-align: left; }
+	}
 	@media (max-width: 64rem) {
 		.award-rail { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(13rem, 16rem); justify-content: start; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline mandatory; }
 		.award-entry { scroll-snap-align: start; }

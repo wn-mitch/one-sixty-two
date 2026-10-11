@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { toasts } from '../toast.svelte.ts';
 	import { onMount } from 'svelte';
 	import Card from '../cards/Card.svelte';
 	import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
@@ -22,6 +23,7 @@
 		onAgain: () => void;
 	}
 	let { result, manifest, profiles, drafts, copyStatus, onCopy, onAgain }: Props = $props();
+	$effect(() => { if (copyStatus) toasts.show(copyStatus, { id: 'series' }); });
 
 	/** A best-of-five always reserves five game columns, so a sweep still shows its unplayed games. */
 	const GAME_SLOTS = [1, 2, 3, 4, 5] as const;
@@ -109,7 +111,6 @@
 		<div class="actions">
 			<button class="primary" type="button" onclick={onCopy}>Copy series link</button>
 			<button class="secondary" type="button" onclick={onAgain}>Play another series</button>
-			<p class="copy-status" role="status">{copyStatus}</p>
 		</div>
 
 		<div class="table-scroll series-line" role="region" aria-label="Series line score" use:tableScroll>
@@ -242,8 +243,6 @@
 	.verdict .eyebrow { margin: 0; }
 	.clinch { color: var(--muted); }
 	.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-	.copy-status { flex-basis: 100%; min-height: 1.25rem; color: var(--muted); font-size: var(--text-xs); }
-	.copy-status:empty { display: none; }
 
 	.series-line { min-width: 0; }
 	.series-line table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -308,7 +307,6 @@
 		.award + .award { padding-left: var(--space-4); border-left: 1px solid var(--border); }
 		.scorebug { grid-template-columns: minmax(0, 1fr) auto; align-items: end; padding: var(--space-8); }
 		.actions { justify-content: flex-end; }
-		.copy-status { text-align: right; }
 		.series-line, .scorebug > .note { grid-column: 1 / -1; }
 		.game-col { width: 3.5rem; font-size: var(--text-lg); }
 		.wins-col { width: 5rem; }

@@ -7,6 +7,7 @@
  import { loadStadiumPreferences, orderStadiums, saveStadiumPreferences, type StadiumSort } from '#lib/game/stadium-preferences.ts';
  import type { Manifest } from '#lib/game/types.ts';
  import { MOTION } from '#lib/motion-timing.ts';
+ import { toasts } from '#lib/toast.svelte.ts';
  import { clearStage, stash } from './phase-motion.ts';
  import VenueCard from './VenueCard.svelte';
 
@@ -16,12 +17,11 @@
  const saved = loadStadiumPreferences();
  let sort = $state<StadiumSort>(saved.sort);
  const favorites = new SvelteSet(saved.favorites);
- let persistNotice = $state('');
  const stadiums = $derived(orderStadiums(manifest.stadiums, sort, favorites, franchiseName));
  const reorder = () => ({ duration: appSettings.effectiveEnabled ? MOTION.deckReorder / (appSettings.snapshot.cardSpeed || 1) : 0, easing: cubicOut });
 
  function persist(): void {
-  persistNotice = saveStadiumPreferences({ sort, favorites: [...favorites] }) ? '' : 'Favorites and sort will reset next visit: browser storage is unavailable.';
+  if (!saveStadiumPreferences({ sort, favorites: [...favorites] })) toasts.show('Favorites and sort will reset next visit: browser storage is unavailable.', { id: 'stadium-preferences', tone: 'error' });
  }
 
  function setSort(next: StadiumSort): void {
@@ -65,7 +65,6 @@
    <button type="button" aria-pressed={sort === 'team'} onclick={() => setSort('team')}>Team</button>
   </div>
   <p class="muted">{favorites.size ? `${favorites.size} favorite${favorites.size === 1 ? '' : 's'} pinned first` : 'Star a park to pin it first'}</p>
-  {#if persistNotice}<p class="notice" role="status">{persistNotice}</p>{/if}
  </div>
  <form onsubmit={event => { event.preventDefault(); void choose(); }}>
   <fieldset>
@@ -103,7 +102,6 @@
  .grid { gap: var(--space-5) var(--space-4); }
  .deck-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
  .deck-tools p { margin: 0; font-size: var(--text-sm); }
- .deck-tools .notice { flex-basis: 100%; color: var(--warning, var(--muted)); }
  .sort-toggle { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 999px; }
  .sort-toggle button { min-height: 2.5rem; padding: 0 var(--space-4); border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: var(--text-sm); }
  .sort-toggle button[aria-pressed='true'] { background: var(--text); color: var(--background); }

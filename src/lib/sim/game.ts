@@ -1,3 +1,4 @@
+import type { HitterSlot } from '../game/types.ts';
 import { buildMatchupInputs } from './contact-profile.ts';
 import { preparePark } from './flight.ts';
 import { createInningContext, playHalf, type InningEvent, type InningObserver } from './inning.ts';
@@ -9,12 +10,14 @@ import { createDefensiveRunComponents } from './value.ts';
 import { beginHalf, createWorkload } from './workload.ts';
 
 export function createBox(team: TeamInput): TeamBox {
+ const fielded = new Map(Object.entries(team.defense).map(([position, index]) => [index, position as HitterSlot]));
  return {
   id: team.id, name: team.name, runs: 0, innings: [],
-  batting: team.hitters.map(profile => ({ seasonId: profile.seasonId, playerId: profile.playerId, displayName: profile.displayName,
+  batting: team.hitters.map((profile, index) => ({ seasonId: profile.seasonId, playerId: profile.playerId, displayName: profile.displayName,
+   position: fielded.get(index) ?? 'DH', year: profile.year,
    PA: 0, AB: 0, H: 0, doubles: 0, triples: 0, HR: 0, BB: 0, HBP: 0, SO: 0, R: 0, RBI: 0, SB: 0, CS: 0, SF: 0,
    battingRuns: 0, stealRuns: 0, defensiveRuns: 0, defensiveComponents: createDefensiveRunComponents(), fieldingOuts: 0, caughtAdvancing: 0 })),
-  pitching: team.pitchers.map((profile, index) => ({ seasonId: profile.seasonId, playerId: profile.playerId, displayName: profile.displayName,
+  pitching: team.pitchers.map((profile, index) => ({ seasonId: profile.seasonId, playerId: profile.playerId, displayName: profile.displayName, year: profile.year,
    role: index === team.bullpenIndex ? 'support' : index === team.closerIndex ? 'closer' : 'starter',
    outs: 0, H: 0, BB: 0, HBP: 0, SO: 0, R: 0, starts: index === team.starterIndex ? 1 : 0, appearances: index === team.starterIndex ? 1 : 0,
    BF: 0, pitchingRunsAboveNeutral: 0 })),

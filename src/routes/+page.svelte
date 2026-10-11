@@ -10,11 +10,14 @@
  import { loadMedia } from '#lib/media/client.ts';
  import type { MediaManifest } from '#lib/media/types.ts';
  import { loadRankings } from '#lib/rankings/client.ts';
+ import { toasts } from '#lib/toast.svelte.ts';
  import type { WarRankings } from '#lib/rankings/types.ts';
 
  type GameSession = import('#lib/game/session.svelte.ts').Session;
 
  let session = $state.raw<GameSession | null>(null);
+ // Storage problems are toasts, not a paragraph that shifts the screen.
+ $effect(() => { const notice = session?.storageNotice; if (notice) toasts.show(notice, { id: 'storage', tone: 'error' }); });
  let StadiumDeck = $state<typeof import('#lib/components/StadiumDeck.svelte').default | null>(null);
  let DraftBoard = $state<typeof import('#lib/components/DraftBoard.svelte').default | null>(null);
  let Lineup = $state<typeof import('#lib/components/Lineup.svelte').default | null>(null);
@@ -168,7 +171,6 @@
   {@const currentSession = session}
   <div class="sr-only" aria-live="polite" aria-atomic="true">{currentSession.announce}</div>
   <div class="session-feedback">
-   {#if currentSession.storageNotice}<p class="notice">{currentSession.storageNotice}</p>{/if}
    <ErrorDialog message={currentSession.error} onDismiss={() => currentSession.error = ''}>
     {#snippet actions()}
      {#if currentSession.canRetry}<button type="button" class="primary" disabled={currentSession.loading} onclick={() => void currentSession.retry()}>Retry</button>{/if}

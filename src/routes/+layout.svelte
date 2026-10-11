@@ -4,6 +4,7 @@
 	import '../lib/cards/fonts.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import Settings from '#lib/components/Settings.svelte';
+	import Toaster from '#lib/components/Toaster.svelte';
 	import { page } from '$app/state';
 	import type { LayoutProps } from './$types';
 
@@ -71,6 +72,7 @@
 			<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
 		</footer>
 	</div>
+	<Toaster />
 {/if}
 
 {#if FeedbackTools && !captureRoute}

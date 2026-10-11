@@ -72,7 +72,12 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	const firstSeasonId = await review.getAttribute('data-season-id');
+	// The raised card turns to its front in place and stays raised until it is dismissed.
+	const raised = await review.locator('.stack').boundingBox();
 	await review.getByRole('button', { name: 'Show front', exact: true }).click();
+	await expect(review.getByRole('button', { name: 'Turn over', exact: true }).last()).toBeVisible();
+	await expect.poll(async () => (await review.locator('.stack').boundingBox())?.y).toBe(raised?.y);
+	await page.keyboard.press('Escape');
 	const nextTrigger = page.locator('.hand-card').last();
 	await nextTrigger.click();
 	await expect(review).not.toHaveAttribute('data-season-id', firstSeasonId!);

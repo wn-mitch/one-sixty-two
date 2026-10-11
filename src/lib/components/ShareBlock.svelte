@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ShareArtwork from '#lib/share/ShareArtwork.svelte';
+	import { toasts } from '#lib/toast.svelte.ts';
 	import {
 		SHARE_DIMENSIONS,
 		type ShareAction,
@@ -25,6 +26,9 @@
 	let previewWidth = $state(0);
 	let previewScale = $derived(previewWidth / SHARE_DIMENSIONS[format].width);
 	let statusIsError = $derived(/unavailable|could not|denied|incompatible|cannot be published/i.test(status));
+
+	// Share progress and outcomes are toasts; one slot so an outcome replaces its progress message.
+	$effect(() => { if (status) toasts.show(status, { id: 'share', tone: statusIsError ? 'error' : 'info' }); });
 
 	function selectLink(event: FocusEvent | MouseEvent): void {
 		(event.currentTarget as HTMLInputElement).select();
@@ -77,15 +81,14 @@
 			onclick={selectLink}
 		/>
 	{/if}
-	{#if status}
-		<p class:error={statusIsError} class="share-status" role={statusIsError ? 'alert' : 'status'} aria-live="polite">{status}</p>
-	{/if}
 </section>
 
 <style>
+	/* One centered column at the preview's width: the image, then every share action beneath it. */
 	.share-panel {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr);
+		grid-template-columns: minmax(0, 30rem);
+		justify-content: center;
 		gap: var(--space-4);
 		min-width: 0;
 		padding-block: var(--space-6);
@@ -117,13 +120,13 @@
 	}
 	/* One primary action, then the secondary ways to share joined into a single control. */
 	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-3);
+		display: grid;
+		gap: var(--space-2);
 	}
+	.actions .primary { min-height: 3rem; }
 	.action-group {
-		display: inline-flex;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		overflow: hidden;
@@ -140,6 +143,7 @@
 		font-weight: 650;
 		white-space: nowrap;
 	}
+	.action-group button { padding-inline: var(--space-2); }
 	.action-group button + button { border-left: 1px solid var(--border); }
 	.action-group button:hover:not(:disabled) { background: var(--surface-raised); }
 	.share-panel button:disabled { cursor: wait; opacity: .58; }
@@ -158,19 +162,8 @@
 		color: var(--text);
 		font: inherit;
 	}
-	.share-status { margin: 0; color: var(--muted); }
-	.share-status.error { color: var(--error); }
-	/* Wide screens keep the preview at a readable size and set the controls beside it. */
-	@media (min-width: 64rem) {
-		.share-panel { grid-template-columns: minmax(0, 30rem) minmax(0, 1fr); column-gap: var(--space-8); align-content: start; }
-		.share-panel > * { grid-column: 2; }
-		.share-panel > .preview { grid-column: 1; grid-row: 1 / span 8; align-self: start; }
-		.share-panel > .preview-state { margin-top: 0; }
-		header { flex-direction: column; align-items: start; }
-	}
 	@media (max-width: 40rem) {
 		header { align-items: start; flex-direction: column; }
-		.actions .primary, .action-group { width: 100%; }
-		.action-group button { flex: 1; min-width: 0; padding-inline: var(--space-2); white-space: normal; line-height: 1.15; }
+		.action-group button { white-space: normal; line-height: 1.15; }
 	}
 </style>

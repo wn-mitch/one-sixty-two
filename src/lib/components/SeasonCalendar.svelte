@@ -79,13 +79,26 @@
 	</button>
 {/snippet}
 
+{#snippet seriesGame(game: GameResult)}
+	<button
+		type="button"
+		class="chip"
+		class:win={game.win}
+		class:loss={!game.win}
+		aria-label={gameLabel(game)}
+		aria-pressed={selectedNumber === game.number}
+		aria-controls="season-game-detail"
+		onclick={() => void choose(game)}
+	><span class="venue" aria-hidden="true">{game.isHome ? 'vs' : '@'}</span><span class="score" aria-hidden="true">{game.challengeRuns}–{game.opponentRuns}</span></button>
+{/snippet}
+
 <div class="season-calendar">
 	<div class="toolbar">
 		<div class="view-toggle" role="group" aria-label="Game log view">
 			<button type="button" aria-pressed={view === 'calendar'} onclick={() => view = 'calendar'}>Calendar</button>
 			<button type="button" aria-pressed={view === 'opponents'} onclick={() => view = 'opponents'}>By opponent</button>
 		</div>
-		<p class="legend" aria-hidden="true"><span class="swatch home"></span>Home <span class="swatch"></span>Away <b>@</b></p>
+		{#if view === 'calendar'}<p class="legend" aria-hidden="true"><span class="swatch home"></span>Home <span class="swatch"></span>Away <b>@</b></p>{/if}
 	</div>
 
 	{#if view === 'calendar'}
@@ -93,8 +106,8 @@
 			{#each months as month (month.month)}
 				<section class="month" aria-label={`${month.name}, ${month.wins}–${month.losses}`}>
 					<header><h4>{month.name}</h4><span>{month.wins}–{month.losses}</span></header>
+					<div class="weekdays" aria-hidden="true">{#each WEEKDAYS as weekday}<span class="weekday">{weekday}</span>{/each}</div>
 					<div class="grid">
-						{#each WEEKDAYS as weekday}<span class="weekday" aria-hidden="true">{weekday}</span>{/each}
 						{#each { length: month.lead } as _}<span class="cell blank" aria-hidden="true"></span>{/each}
 						{#each month.days as entry (entry.day)}
 							{#if entry.games.length === 2}{@render doubleheader(entry.games[0], entry.games[1], entry.day)}
@@ -109,10 +122,9 @@
 		<ol class="opponents">
 			{#each series as entry (entry.opponentId)}
 				<li class="opponent">
-					<span class="club"><TeamLogo franchiseId={entry.opponentId} year={2025} label={entry.opponentName} size="small" /><span>{entry.opponentName}</span></span>
+					<span class="club"><TeamLogo franchiseId={entry.opponentId} year={2025} label={entry.opponentName} size="small" /><span class="club-copy"><span class="club-name">{entry.opponentName}</span><span class="runs">{entry.runsFor}–{entry.runsAgainst} runs</span></span></span>
 					<strong class="record" class:winning={entry.wins > entry.losses} class:losing={entry.wins < entry.losses}>{entry.wins}–{entry.losses}</strong>
-					<span class="runs">{entry.runsFor}–{entry.runsAgainst} runs</span>
-					<span class="series-games">{#each entry.games as game (game.number)}{@render gameCell(game)}{/each}</span>
+					<span class="series-games">{#each entry.games as game (game.number)}{@render seriesGame(game)}{/each}</span>
 				</li>
 			{/each}
 		</ol>
@@ -141,42 +153,58 @@
 	.swatch { width: .8rem; height: .8rem; border: 1px solid var(--border); border-radius: 2px; }
 	.swatch.home { background: var(--home-ground); }
 
-	.months { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr)); gap: var(--space-4); align-items: start; }
-	.month { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+	.months { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--space-4); align-items: start; }
+	.month { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface);  container-type: inline-size;}
 	.month header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--space-2); }
 	.month h4 { margin: 0; font: italic 900 1.25rem/1 'Barlow Condensed', sans-serif; text-transform: uppercase; }
 	.month header span { color: var(--muted); font-size: var(--text-xs); font-weight: 700; font-variant-numeric: tabular-nums; }
-	.grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+	/*
+	 * Cell type scales with the month's width within readable bounds. Every week row takes the height of
+	 * the tallest square in the month, so a doubleheader never leaves uneven squares.
+	 */
+	.weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; margin-bottom: 2px; }
+	.grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(calc((100cqi - 12px) / 7 * 1.1), 1fr); gap: 2px; }
 	.weekday { color: var(--muted); font-size: .625rem; font-weight: 700; text-align: center; }
-	.cell { position: relative; display: grid; place-items: center; align-content: center; min-width: 0; aspect-ratio: 1 / 1.05; border-radius: 3px; }
-	.cell .date { position: absolute; top: 2px; left: 3px; color: var(--muted); font-size: .5625rem; line-height: 1; }
+	.cell { position: relative; display: grid; place-items: center; align-content: center; min-width: 0; min-height: 0; overflow: hidden; border-radius: 3px; }
+	.cell .date { position: absolute; top: 2px; left: 3px; color: var(--muted); font-size: clamp(.5rem, 2.4cqi, .6875rem); line-height: 1; }
 	.cell.off { background: color-mix(in oklch, var(--surface-raised) 35%, transparent); }
-	.cell.game { min-height: 0; padding: .55rem 0 0; border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; gap: 1px; }
+	.cell.game { min-height: 0; padding: clamp(.55rem, 3.2cqi, .8rem) 0 0; border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; gap: 2px; }
 	.cell.game.home { background: var(--home-ground); border-color: transparent; }
 	.cell.game:hover { background: var(--surface-raised); }
 	.cell.game[aria-pressed='true'] { outline: 2px solid var(--focus); outline-offset: 1px; z-index: 1; }
-	.cell.doubleheader { padding-top: .55rem; gap: 0; background: transparent; border: 1px solid var(--border); }
+	.cell.doubleheader { align-content: center; grid-template-rows: auto auto auto; padding: clamp(.5rem, 2.8cqi, .75rem) 0 1px; gap: 0; background: transparent; border: 1px solid var(--border); }
 	.cell.doubleheader.home { background: var(--home-ground); border-color: transparent; }
-	.cell b small { color: var(--accent); font-size: .5rem; }
-	.half { display: block; min-height: 0; width: 100%; padding: 0; border: 0; border-radius: 2px; background: transparent; line-height: 1; }
+	.cell b small { color: var(--accent); font-size: .8em; }
+	.half { display: block; min-height: 0; width: 100%; padding: 0; font: inherit; font-size: clamp(.5rem, 2.3cqi, .6875rem); border: 0; border-radius: 2px; background: transparent; line-height: 1; }
 	.half:hover { background: var(--surface-raised); }
 	.half[aria-pressed='true'] { outline: 2px solid var(--focus); }
-	.half .result { font-size: .5rem; }
-	.cell b { font: 800 .6875rem/1 'Barlow Condensed', sans-serif; letter-spacing: .02em; }
-	.cell .result { font-size: .5625rem; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.half .result { font-size: clamp(.5rem, 2.3cqi, .6875rem); }
+	.cell.doubleheader b { font-size: clamp(.5625rem, 2.6cqi, .8125rem); }
+	.cell b { font: 800 clamp(.625rem, 3cqi, .875rem)/1 'Barlow Condensed', sans-serif; letter-spacing: .02em; white-space: nowrap; }
+	.cell .result { font-size: clamp(.5rem, 2.5cqi, .75rem); font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 	.win .result, strong.win { color: var(--success); }
 	.loss .result, strong.loss { color: var(--error); }
 
-	.opponents { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr)); gap: 0 var(--space-6); margin: 0; padding: 0; list-style: none; }
-	.opponent { display: grid; grid-template-columns: minmax(0, 1fr) 3rem 5.5rem auto; align-items: center; gap: var(--space-3); min-height: 2.75rem; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+	.opponents { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 34rem), 1fr)); gap: 0 var(--space-6); margin: 0; padding: 0; list-style: none; }
+	.opponent { display: grid; grid-template-columns: minmax(0, 1fr) 2.5rem auto; align-items: center; gap: var(--space-3); min-height: 3rem; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
 	.club { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-	.club > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.club-copy { display: grid; min-width: 0; line-height: 1.25; }
+	.club-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.record { font-variant-numeric: tabular-nums; text-align: right; }
 	.record.winning { color: var(--success); }
 	.record.losing { color: var(--error); }
-	.runs { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-	.series-games { display: grid; grid-template-columns: repeat(6, 2.4rem); gap: 2px; }
-	.series-games .cell { aspect-ratio: auto; height: 2.1rem; padding-top: 0; }
+	.runs { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+	/* Each series game is a result-tinted chip: venue marker, then the score with this club's runs first. */
+	.series-games { display: grid; grid-template-columns: repeat(6, 3.125rem); gap: 3px; }
+	.chip { display: flex; align-items: center; justify-content: center; gap: .25em; min-width: 0; min-height: 2rem; padding: 0 .25rem; border: 1px solid transparent; border-radius: 999px; font: inherit; font-size: var(--text-xs); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.chip.win { background: color-mix(in oklch, var(--success) 16%, transparent); border-color: color-mix(in oklch, var(--success) 35%, transparent); }
+	.chip.loss { background: color-mix(in oklch, var(--error) 14%, transparent); border-color: color-mix(in oklch, var(--error) 32%, transparent); }
+	.chip:hover { border-color: var(--text); }
+	.chip[aria-pressed='true'] { outline: 2px solid var(--focus); outline-offset: 1px; }
+	.venue { color: var(--muted); font-size: .625rem; font-weight: 700; text-transform: uppercase; }
+	.score { font-weight: 800; }
+	.chip.win .score { color: var(--success); }
+	.chip.loss .score { color: var(--error); }
 
 	.detail { display: none; }
 	.detail.open { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); scroll-margin-block: var(--space-6); }
@@ -186,7 +214,6 @@
 
 	@media (max-width: 40rem) {
 		.opponent { grid-template-columns: minmax(0, 1fr) 3rem; padding-block: var(--space-2); }
-		.runs { display: none; }
 		.series-games { grid-column: 1 / -1; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 	}
 </style>

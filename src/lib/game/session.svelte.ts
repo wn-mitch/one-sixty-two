@@ -404,7 +404,7 @@ export class Session {
   const request = ++this.shareRequest;
   const existingPublication = this.publication;
   this.sharing = true;
-  this.shareStatus = existingPublication ? 'Completing share action…' : 'Preparing all three share images…';
+  this.shareStatus = existingPublication ? 'Completing share action…' : 'Preparing the share image…';
   this.imageDownloadFallback = false;
   this.textCopyFallback = false;
 

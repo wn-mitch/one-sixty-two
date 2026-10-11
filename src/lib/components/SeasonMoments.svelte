@@ -2,7 +2,8 @@
  import Card from '../cards/Card.svelte';
  import type { CardViewModel } from '../cards/view-model.ts';
  import type { ResultsCard } from '../game/results-types.ts';
- import type { SeasonResult } from '../sim/types.ts';
+ import type { SeasonMoment, SeasonResult, WinPoint } from '../sim/types.ts';
+ import MomentWinChart from './MomentWinChart.svelte';
  import { formatSeasonMoment } from './season-moment.ts';
  import type { SeasonMomentCopy } from './season-moment.ts';
 
@@ -28,7 +29,7 @@
  function noDetails(): void {}
 </script>
 
-{#snippet momentPanel(label: string, tone: 'highlight' | 'lowlight', copy: SeasonMomentCopy | null, card: ResultsCard | null, view: CardViewModel | null)}
+{#snippet momentPanel(label: string, tone: 'highlight' | 'lowlight', copy: SeasonMomentCopy | null, card: ResultsCard | null, view: CardViewModel | null, moment: SeasonMoment | null, trace: WinPoint[] | null)}
  <article class={`moment-card ${tone}`} class:has-participant={!!card && !!view}>
   {#if copy}
    {#if card && view}
@@ -50,10 +51,11 @@
     <h4>{copy.matchup}</h4>
     <p class="situation">{copy.situation}</p>
     <p class="story">{copy.action} {copy.score}</p>
-    <div class="expectancy">
-     <span>Estimated neutral league-rate win expectancy</span>
-     <strong>{copy.winChance} <small>{copy.swing}</small></strong>
-    </div>
+    {#if moment && trace?.length}
+     <MomentWinChart {trace} {moment} {tone} summary={`${copy.winChance} (${copy.swing})`} />
+    {:else}
+     <p class="expectancy">{copy.winChance} <small>{copy.swing}</small></p>
+    {/if}
     {#if copy.final}<p class="final">{copy.final}</p>{/if}
    </div>
   {:else}
@@ -71,8 +73,8 @@
   <h3 id="season-moments-heading">Season turning points</h3>
  </div>
  <div class="moment-grid">
-  {@render momentPanel('Season highlight', 'highlight', highlight, highlightCard, highlightView)}
-  {@render momentPanel('Season lowlight', 'lowlight', lowlight, lowlightCard, lowlightView)}
+  {@render momentPanel('Season highlight', 'highlight', highlight, highlightCard, highlightView, result.highlight, result.highlightTrace)}
+  {@render momentPanel('Season lowlight', 'lowlight', lowlight, lowlightCard, lowlightView, result.lowlight, result.lowlightTrace)}
  </div>
 </section>
 
@@ -97,17 +99,13 @@
  .situation, .story, .final, .empty { margin: 0; }
  .situation, .final { color: var(--muted); font-size: var(--text-sm); }
  .story { max-width: 64ch; line-height: 1.55; }
- .expectancy { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
- .expectancy > span { max-width: 18rem; color: var(--muted); font-size: var(--text-xs); }
- .expectancy strong { font-size: var(--text-lg); font-variant-numeric: tabular-nums; white-space: normal; }
- .expectancy small { display: inline-block; margin-left: var(--space-2); color: var(--text); font-size: var(--text-sm); white-space: nowrap; }
+ .expectancy { margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); font-weight: 750; font-variant-numeric: tabular-nums; }
+ .expectancy small { margin-left: var(--space-2); font-size: var(--text-sm); }
  @media (min-width: 48rem) {
   .moment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
  }
  @media (max-width: 30rem) {
   .moment-card { gap: var(--space-3); padding: var(--space-4); }
   .moment-card.has-participant { grid-template-columns: 4.5rem minmax(0, 1fr); }
-  .expectancy { align-items: start; }
-  .expectancy strong { width: 100%; }
  }
 </style>

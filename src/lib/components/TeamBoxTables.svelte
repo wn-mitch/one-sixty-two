@@ -6,6 +6,10 @@
 	/** Batting and pitching tables for each club box, labelled for one game or a series total. */
 	let { boxes, label, idPrefix }: { boxes: readonly TeamBox[]; label: string; idPrefix: string } = $props();
 
+	function roleLabel(line: PitcherLine): string {
+		return line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : 'SP';
+	}
+
 	function ra9(line: PitcherLine): string {
 		return line.outs > 0 ? (line.R * 27 / line.outs).toFixed(2) : '–';
 	}
@@ -32,7 +36,7 @@
 				<tbody>
 					{#each box.batting as line}
 						<tr>
-							<th scope="row">{line.displayName}</th><td>{line.PA}</td><td>{line.AB}</td><td>{line.H}</td>
+							<th scope="row"><span class="stat-identity">{line.displayName}<small>{line.position} · {line.year}</small></span></th><td>{line.PA}</td><td>{line.AB}</td><td>{line.H}</td>
 							<td>{line.doubles}</td><td>{line.triples}</td><td class="stat-key">{line.HR}</td><td class="stat-group">{line.BB}</td>
 							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{line.RBI}</td>
 							<td class="stat-group">{line.SB}</td><td>{line.CS}</td><td>{line.SF}</td>
@@ -54,7 +58,7 @@
 				<tbody>
 					{#each box.pitching as line}
 						<tr>
-							<th scope="row">{line.displayName}</th><td>{innings(line.outs)}</td><td>{line.H}</td><td>{line.BB}</td>
+							<th scope="row"><span class="stat-identity">{line.displayName}<small>{roleLabel(line)} · {line.year}</small></span></th><td>{innings(line.outs)}</td><td>{line.H}</td><td>{line.BB}</td>
 							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{ra9(line)}</td>
 						</tr>
 					{/each}

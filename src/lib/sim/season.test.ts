@@ -7,6 +7,7 @@ import { buildSchedule, prepareSeasonInput, simulateSeason } from './season.ts';
 import { contactRecord } from './contact-profile.ts';
 import { testSeason } from './test-fixtures.ts';
 import { validateSeason } from './validation.ts';
+import { momentIndex } from '../components/win-trace.ts';
 import type { SeasonInput } from './types.ts';
 
 function draftInput() {
@@ -138,6 +139,12 @@ describe('full seasons', () => {
   expect(season.lowlight).toEqual(expectedLowlight);
   expect(season.highlight!.swing).toBeGreaterThan(0);
   expect(season.lowlight!.swing).toBeLessThan(0);
+  // Each kept trace belongs to its moment's game: it contains the play and ends on that game's result.
+  for (const [moment, trace] of [[season.highlight!, season.highlightTrace!], [season.lowlight!, season.lowlightTrace!]] as const) {
+   expect(momentIndex(trace, moment)).toBeGreaterThan(0);
+   expect(trace.every((point, index) => index === 0 || point.half >= trace[index - 1].half)).toBe(true);
+   expect(trace.at(-1)!.win).toBe(season.games[moment.gameNumber - 1].win ? 1 : 0);
+  }
   let streak = 0;
   let longest = 0;
   const rotations = new Map<string, number>();

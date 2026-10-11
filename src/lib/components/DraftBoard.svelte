@@ -483,27 +483,28 @@
 <svelte:window onpointerdowncapture={trackInspectionPointer} onkeydowncapture={closeInspectionOnEscape} onkeyup={clearInspectionEscape} onclick={deselectOutsideCard} />
 
 {#snippet fieldHeader()}
- <div class="field-header">
-  <div>
+ {@const sheetTabs = !wide && !!selectedProfile}
+ <div class="field-header" class:sheet-tabs={sheetTabs}>
+  <div class:sr-only={sheetTabs}>
    <div class="field-title"><h2 bind:this={fieldHeading} tabindex="-1">Your field <span class="sr-only">{draft.picks.length} of {rosterSlots.length} picked</span></h2>
     {#if wide}<div class="pick-track" aria-hidden="true">{#each rosterSlots as slot}<span class:locked={occupiedSlots.has(slot)}></span>{/each}</div>{/if}
     <span class="picked-count" aria-hidden="true">{draft.picks.length} / {rosterSlots.length}</span>
    </div>
   </div>
+  {#if sheetTabs}
+   <div class="tabs" role="tablist" aria-label="Selected player view" tabindex="-1" onkeydown={tabKey}>
+    <button type="button" role="tab" id="{uid}-tab-field" aria-selected={sheetTab === 'field'} aria-controls="{uid}-panel-field" tabindex={sheetTab === 'field' ? 0 : -1} onclick={() => sheetTab = 'field'}>Field <span class="tab-count" aria-hidden="true">{draft.picks.length}/{rosterSlots.length}</span></button>
+    <button type="button" role="tab" id="{uid}-tab-back" aria-selected={sheetTab === 'back'} aria-controls="{uid}-panel-back" tabindex={sheetTab === 'back' ? 0 : -1} onclick={() => { candidateTurned = true; sheetTab = 'back'; }}>Card back</button>
+   </div>
+  {/if}
   {#if !wide}<button type="button" class="quiet close-field" aria-label="Close field" onclick={dismissSheet}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>{/if}
  </div>
  {#if !wide && selectedProfile}
-  <label class="sheet-season">Exact season for {selectedProfile.displayName}
+  <label class="sheet-season"><span class="sr-only">Exact season for {selectedProfile.displayName}</span>
    <select aria-label="Exact season for {selectedProfile.displayName}" value={selectedSeasonId ?? ''} disabled={busy} onchange={event => changeSeason(selectedProfile!.playerId, event.currentTarget.value)}>
     {#each seasonChoices as season (season.seasonId)}<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>{/each}
    </select>
   </label>
-  {#if !wide}
-   <div class="tabs" role="tablist" aria-label="Selected player view" tabindex="-1" onkeydown={tabKey}>
-    <button type="button" role="tab" id="{uid}-tab-field" aria-selected={sheetTab === 'field'} aria-controls="{uid}-panel-field" tabindex={sheetTab === 'field' ? 0 : -1} onclick={() => sheetTab = 'field'}>Field</button>
-    <button type="button" role="tab" id="{uid}-tab-back" aria-selected={sheetTab === 'back'} aria-controls="{uid}-panel-back" tabindex={sheetTab === 'back' ? 0 : -1} onclick={() => { candidateTurned = true; sheetTab = 'back'; }}>Card back</button>
-   </div>
-  {/if}
  {/if}
 {/snippet}
 
@@ -604,13 +605,6 @@
   {/if}
  </div>
  <div class="board-columns">
-  {#if wide}
-   <aside class="field-panel" aria-label="Your field">
-    <div class="panel-header">{@render fieldHeader()}</div>
-    <div class="field-scroll">{@render fieldContent()}</div>
-    {#if movingSeasonId || selectedProfile}<div class="field-footer">{@render fieldFooter()}</div>{/if}
-   </aside>
-  {/if}
   <section class="draft-browser" aria-label="Make your next pick" inert={leaving}>
    {#if phase === 'ready' || dealing}
     <FoilPack
@@ -633,6 +627,13 @@
     <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
+  {#if wide}
+   <aside class="field-panel" aria-label="Your field">
+    <div class="panel-header">{@render fieldHeader()}</div>
+    <div class="field-scroll">{@render fieldContent()}</div>
+    {#if movingSeasonId || selectedProfile}<div class="field-footer">{@render fieldFooter()}</div>{/if}
+   </aside>
+  {/if}
  </div>
  <DraftSheet open={!wide && sheetOpen} {trigger} onClose={dismissSheet} header={fieldHeader} children={fieldContent} footer={movingSeasonId || selectedProfile ? fieldFooter : undefined} />
 </div>
@@ -643,7 +644,7 @@
  .open-field { display: flex; align-items: center; gap: .625rem; min-height: 44px; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
  .board-columns { display: grid; min-width: 0; }
- .wide .board-columns { grid-template-columns: 452px minmax(0, 1fr); gap: 28px; align-items: start; padding-top: 16px; }
+ .wide .board-columns { grid-template-columns: minmax(0, 1fr) 452px; gap: 28px; align-items: start; padding-top: 16px; }
  .wide .draft-toolbar { display: none; }
  .field-panel { position: sticky; top: 72px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: calc(100dvh - 88px); min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
  .panel-header { padding-inline: 1rem; }
@@ -662,6 +663,14 @@
  .sheet-season { display: grid; gap: .3rem; font-size: .8rem; margin-bottom: .75rem; }
  select { min-height: 44px; width: 100%; min-width: 0; }
  .tabs { display: flex; gap: .5rem; }
+ /* Phone sheet: the tabs share the close button's row, and the field gets the space the title and labels used. */
+ .field-header.sheet-tabs { padding-block: 0 .75rem; }
+ .field-header.sheet-tabs .tabs { flex: 1; min-width: 0; }
+ .tab-count { margin-left: .35rem; opacity: .65; font-size: .8em; font-variant-numeric: tabular-nums; }
+ :global(.draft-sheet) .preview-label { display: none; }
+ :global(.draft-sheet .roster > .pick-track) { display: none; }
+ /* The candidate's card fits the space between the sheet header and footer, so a turned card is never cut off. */
+ [role='tabpanel'][id$='-panel-back'] { --card-front-width: min(20rem, calc((100dvh - 23rem) * 5 / 7)); }
  .tabs button { flex: 1; min-height: 44px; }
  .tabs [aria-selected='true'] { background: var(--text); color: var(--background); }
  .confirmation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }

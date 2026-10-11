@@ -3,7 +3,7 @@ import { gameRandomStreams, randomStream, shuffle } from '../game/random.ts';
 import { buildMatchupInputs } from './contact-profile.ts';
 import { simulateGame } from './game.ts';
 import { accumulateBox, createDraftTeam, createTotalsBox } from './team.ts';
-import type { GameResult, ScheduleGame, SeasonInput, SeasonResult, TeamInput } from './types.ts';
+import type { GameResult, ScheduleGame, SeasonInput, SeasonResult, TeamInput, WinPoint } from './types.ts';
 import { resolveStadium, validateDraftVersion, validateSeason, validateTeam } from './validation.ts';
 import { closerBudget, closerReady, recordCloser, type CloserUsage } from './workload.ts';
 import { WinExpectancyModel } from './win-expectancy.ts';
@@ -99,7 +99,10 @@ export function simulateSeason(input: SeasonInput, onGame?: (game: GameResult) =
  const result: SeasonResult = { modelVersion: input.modelVersion, rulesVersion: input.rulesVersion, dataVersion: data.dataVersion, seed: input.seed,
   homeStadium: input.homeStadium, defenseMethodVersion: data.defenseMethodVersion, valuationVersion: data.valuationVersion,
   wins: 0, losses: 0, firstLoss: null, longestWinningStreak: 0, runsFor: 0, runsAgainst: 0,
-  games: [], batting: totals.batting, pitching: totals.pitching, starterStarts: [0, 0, 0], highlight: null, lowlight: null };
+  games: [], batting: totals.batting, pitching: totals.pitching, starterStarts: [0, 0, 0], highlight: null, lowlight: null,
+  highlightTrace: null, lowlightTrace: null };
+ // One buffer reused per game; only a game that sets a new season highlight or lowlight keeps a copy.
+ const trace: WinPoint[] = [];
  let streak = 0;
  for (let index = 0; index < schedule.length; index++) {
   const scheduled = schedule[index];
@@ -115,7 +118,7 @@ export function simulateSeason(input: SeasonInput, onGame?: (game: GameResult) =
    challengeIsHome: scheduled.isHome, home: scheduled.isHome ? challenge : opponent.team, away: scheduled.isHome ? opponent.team : challenge,
    defenseEnvironment: data, stadium: scheduled.isHome ? homeStadium : opponent.stadium,
    homeMatchups: scheduled.isHome ? opponent.challengeBatting : opponent.opponentBatting,
-   awayMatchups: scheduled.isHome ? opponent.opponentBatting : opponent.challengeBatting }, gameRandomStreams(input.seed, number), winExpectancy);
+   awayMatchups: scheduled.isHome ? opponent.opponentBatting : opponent.challengeBatting }, gameRandomStreams(input.seed, number), winExpectancy, trace);
   const challengeBox = scheduled.isHome ? game.home : game.away;
   const opponentBox = scheduled.isHome ? game.away : game.home;
   const closer = challengeBox.pitching[challenge.closerIndex];
@@ -123,8 +126,15 @@ export function simulateSeason(input: SeasonInput, onGame?: (game: GameResult) =
   recordCloser(challengeUsage, number, closer.outs, closer.appearances > 0);
   recordCloser(opponent.usage, number, opponentCloser.outs, opponentCloser.appearances > 0);
   result.games.push(game);
-  if (game.highlight && (!result.highlight || game.highlight.swing > result.highlight.swing)) result.highlight = game.highlight;
-  if (game.lowlight && (!result.lowlight || game.lowlight.swing < result.lowlight.swing)) result.lowlight = game.lowlight;
+  if (game.highlight && (!result.highlight || game.highlight.swing > result.highlight.swing)) {
+   result.highlight = game.highlight;
+   result.highlightTrace = trace.slice();
+  }
+  if (game.lowlight && (!result.lowlight || game.lowlight.swing < result.lowlight.swing)) {
+   result.lowlight = game.lowlight;
+   result.lowlightTrace = trace.slice();
+  }
+  trace.length = 0;
   result.starterStarts[challenge.starterIndex]++;
   accumulateBox(totals, challengeBox);
   result.runsFor += game.challengeRuns;

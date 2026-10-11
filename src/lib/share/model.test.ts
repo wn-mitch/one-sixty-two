@@ -57,7 +57,7 @@ function fixture(): CreateShareRenderModelInput {
 		modelVersion: 'contact-v1', rulesVersion: 'classic-v2', dataVersion: season.data.dataVersion, seed: season.seed, homeStadium: season.homeStadium,
 		defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2',
 		wins: 100, losses: 62, firstLoss: 3, longestWinningStreak: 12, runsFor: 811, runsAgainst: 644,
-		games, batting: [], pitching: [], starterStarts: [54, 54, 54], highlight: null, lowlight: null
+		games, batting: [], pitching: [], starterStarts: [54, 54, 54], highlight: null, lowlight: null, highlightTrace: null, lowlightTrace: null
 	};
 	return { draft, result, profiles: season.roster.map(pick => pick.profile), manifest, media: null, rankings: null };
 }

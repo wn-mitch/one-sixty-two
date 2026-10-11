@@ -198,6 +198,9 @@
 	/* The dealt card rises 62% of its 7.4/5 height out of the pack, so the top padding reserves that rise below the sticky header. */
 	.foil-pack { --stage-width: min(11.5rem, 52vw); display: grid; justify-items: center; gap: var(--space-3); padding-block: calc(var(--stage-width) * 7.4 / 5 * .62 + var(--space-4)) var(--space-8); }
 	.stage { position: relative; display: grid; width: var(--stage-width); aspect-ratio: 5 / 7.4; perspective: 900px; }
+	/* Phones have the pick header and field button above the pack; the dealt card rises over them instead of into reserved space. */
+	.opening .stage { z-index: 6; }
+	@media (max-width: 47.999rem) { .foil-pack { padding-block: var(--space-6) var(--space-6); } }
 	.pack, .dealt-card { grid-area: 1 / 1; }
 	.pack {
 		--mx: 30%;

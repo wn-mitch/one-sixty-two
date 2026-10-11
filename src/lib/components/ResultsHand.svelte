@@ -38,7 +38,7 @@
 		</div>
 	</div>
 	<div class="hand-scroll" role="region" aria-label="Rest of roster cards">
-		<div class="hand">
+		<div class="hand" style:--count={cards.filter(card => cardViews.has(card.seasonId)).length}>
 			{#each cards as card (card.seasonId)}
 				{@const view = cardViews.get(card.seasonId)}
 				{#if view}
@@ -52,7 +52,7 @@
 						onclick={(event) => onInspect(card.seasonId, event.currentTarget)}
 					>
 						<span aria-hidden="true">
-							<Card s={view} face="front" compact thumbnail interactive={false} onDetails={noCardDetails} />
+							<Card s={view} face="front" thumbnail interactive={false} onDetails={noCardDetails} />
 						</span>
 					</button>
 				{/if}
@@ -74,17 +74,18 @@
 	.section-heading { display: flex; align-items: end; justify-content: space-between; gap: var(--space-6); }
 	.section-heading .eyebrow { margin: 0 0 var(--space-2); }
 	.section-heading h3 { font-size: var(--text-xl); }
-	.hand-scroll { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; padding: var(--space-3) var(--space-1) var(--space-3); }
-	/* Cards sit side by side while they fit; only narrow screens fan them into an overlapping hand. */
-	.hand { display: flex; align-items: end; gap: var(--space-3); width: max-content; min-width: 100%; }
-	.hand-card { position: relative; flex: 0 0 clamp(4.5rem, 7vw, 7rem); width: clamp(4.5rem, 7vw, 7rem); min-height: 0; padding: 0; border: 0; background: transparent; border-radius: .35rem; filter: drop-shadow(0 .55rem .7rem oklch(8% .01 255 / .38)); transition: transform 180ms var(--ease-out), filter 180ms var(--ease-out); }
+	.hand-scroll { min-width: 0; container-type: inline-size; padding: var(--space-3) 0; }
+	/*
+	 * The hand always fits its row without scrolling: each full front takes an equal share (104px to
+	 * 11rem), and when even 104px cards cannot fit side by side they overlap just enough to fit.
+	 */
+	.hand { --gap: var(--space-3); --w: clamp(104px, (100cqi - (var(--count) - 1) * var(--gap)) / var(--count), 11rem); display: flex; align-items: end; }
+	.hand-card + .hand-card { margin-inline-start: min(var(--gap), (100cqi - var(--count) * var(--w)) / (var(--count) - 1)); }
+	.hand-card { position: relative; flex: 0 0 var(--w); width: var(--w); min-height: 0; padding: 0; border: 0; background: transparent; border-radius: .35rem; filter: drop-shadow(0 .55rem .7rem oklch(8% .01 255 / .38)); transition: transform 180ms var(--ease-out), filter 180ms var(--ease-out); }
 	.hand-card:hover, .hand-card:focus-visible { z-index: 20; background: transparent; transform: translateY(-.7rem); filter: drop-shadow(0 1rem 1rem oklch(8% .01 255 / .48)); }
 	.hand-card > span { display: block; }
 	.source-note { max-width: 74ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	@media (max-width: 40rem) {
 		.section-heading { display: block; }
-		.hand { gap: 0; }
-		.hand-card { flex-basis: 72px; width: 72px; }
-		.hand-card + .hand-card { margin-inline-start: -48px; }
 	}
 </style>

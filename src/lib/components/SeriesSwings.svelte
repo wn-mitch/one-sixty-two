@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { SeriesMoment, SeriesResult, SeriesTeamId } from '../sim/series-types.ts';
+	import type { SeriesResult, SeriesTeamId } from '../sim/series-types.ts';
 	import { formatSeasonMoment } from './season-moment.ts';
+	import { momentIndex, tracePositions } from './win-trace.ts';
 
 	/** Team A's win chance through every game, one strip per game on a shared inning axis, pinned at the series' two biggest swings. */
 	let { result }: { result: SeriesResult } = $props();
@@ -11,24 +12,6 @@
 	let innings = $derived(Array.from({ length: halves / 2 }, (_, index) => index + 1));
 	let ticks = $derived(innings.filter(inning => inning === innings.length || (inning % 2 === 1 && inning < innings.length - 1)));
 
-	/** Plays share their half-inning evenly; the pre-game point sits at the left edge. */
-	function positions(trace: readonly { half: number }[]): number[] {
-		const counts = new Map<number, number>();
-		for (const point of trace.slice(1)) counts.set(point.half, (counts.get(point.half) ?? 0) + 1);
-		const seen = new Map<number, number>();
-		return trace.map((point, index) => {
-			if (index === 0) return 0;
-			const order = (seen.get(point.half) ?? 0) + 1;
-			seen.set(point.half, order);
-			return point.half + order / counts.get(point.half)!;
-		});
-	}
-
-	function pinIndex(trace: readonly { half: number; win: number }[], moment: SeriesMoment): number {
-		const half = (moment.inning - 1) * 2 + (moment.half === 'bottom' ? 1 : 0);
-		return trace.findIndex((point, index) => index > 0 && point.half === half && point.win === moment.winAfter && trace[index - 1].win === moment.winBefore);
-	}
-
 	let swings = $derived(([[result.highlight, 'team-a'], [result.lowlight, 'team-b']] as const).flatMap(([value, liftFor], index) => {
 		if (!value) return [];
 		const game = result.games.find(entry => entry.number === value.gameNumber);
@@ -36,11 +19,11 @@
 	}));
 
 	let strips = $derived(result.games.map(game => {
-		const xs = positions(game.winTrace);
+		const xs = tracePositions(game.winTrace);
 		const points = game.winTrace.map((point, index) => `${xs[index]},${(1 - point.win) * 100}`);
 		const end = xs.at(-1)!;
 		const pins = swings.filter(swing => swing.value.gameNumber === game.number).flatMap(swing => {
-			const index = pinIndex(game.winTrace, swing.value);
+			const index = momentIndex(game.winTrace, swing.value);
 			return index < 0 ? [] : [{ ...swing, x: xs[index] / halves * 100, y: (1 - game.winTrace[index].win) * 100 }];
 		});
 		const a = game.homeTeamId === 'team-a' ? game.result.home.runs : game.result.away.runs;

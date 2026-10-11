@@ -107,7 +107,7 @@ test.describe('application workshop stories', () => {
 		const game = expected.games[0];
 		const challenge = game.isHome ? game.home : game.away;
 		await expect(firstGame.getByRole('region', { name: `${challenge.name} batting box score for Game ${game.number}`, exact: true })
-			.locator('tbody th[scope="row"]')).toHaveText(challenge.batting.map(line => line.displayName));
+			.locator('tbody th[scope="row"]')).toHaveText(challenge.batting.map(line => `${line.displayName}${line.position} · ${line.year}`));
 	});
 
 	test('disables simulation for missing profiles and swaps flexible outfield assignments without replacing seasons', async ({ page }) => {
@@ -242,9 +242,9 @@ test.describe('application workshop stories', () => {
 	test('shows publication and publishing failure states', async ({ page }) => {
 		await openStory(page, 'results-season--share-link');
 		await expect(page.locator('#published-share-link')).toHaveValue(/example\.invalid/);
-		await expect(page.getByRole('status')).toContainText(/no upload/i);
+		await expect(page.locator('[data-toast]')).toContainText(/no upload/i);
 		await openStory(page, 'results-season--share-unavailable');
-		await expect(page.getByRole('alert')).toContainText(/unavailable/i);
+		await expect(page.locator('[data-toast].error')).toContainText(/unavailable/i);
 	});
 
 	test('uses real game boxes and both turning point branches', async ({ page }) => {

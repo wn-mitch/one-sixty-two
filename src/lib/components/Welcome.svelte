@@ -45,17 +45,17 @@
   {:else if mediaStatus === 'unavailable'}
    <p class="start-status muted" role="status">Verified photos are unavailable. Cards use their canonical missing-image treatment.</p>
   {/if}
-  {#if eraCards.length}
-   <div class="era-strip" role="region" aria-label="Card designs from eight eras">
-    {#each eraCards as era (era.decade)}
-     <figure>
-      <div class="era-card" aria-hidden="true"><Card s={era.card.model} onDetails={noDetails} /></div>
-      <figcaption>{era.decade}s</figcaption>
-     </figure>
-    {/each}
-   </div>
-  {/if}
  </div>
+ {#if eraCards.length}
+  <div class="era-strip" role="region" aria-label="Card designs from eight eras">
+   {#each eraCards as era (era.decade)}
+    <figure>
+     <div class="era-card" aria-hidden="true"><Card s={era.card.model} onDetails={noDetails} /></div>
+     <figcaption>{era.decade}s</figcaption>
+    </figure>
+   {/each}
+  </div>
+ {/if}
  <HomeWall {cards} franchises={manifest?.franchises ?? []} />
 </section>
 
@@ -105,20 +105,24 @@
  .library-link { margin: var(--space-4) 0 0; font-size: var(--text-sm); }
  .library-link a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--muted); font-weight: 650; }
  .start-status { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); }
+ /* Always two even rows of four, oldest to newest. */
  .era-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: var(--space-10);
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  max-width: min(100%, calc(4 * 80px + 3 * var(--space-3)));
+  margin: 0 2rem 2rem;
  }
  .era-strip figure {
   display: grid;
-  flex: 0 0 46px;
   gap: 6px;
   justify-items: center;
+  min-width: 0;
   margin: 0;
  }
- .era-card { width: 46px; pointer-events: none; }
+ .era-card { width: 100%; min-width: 0; pointer-events: none; }
  .era-strip figcaption {
   color: var(--muted);
   font-family: 'Barlow Condensed', sans-serif;
@@ -128,13 +132,7 @@
   letter-spacing: .04em;
  }
  @media (min-width: 48rem) {
-  .era-strip {
-   display: grid;
-   grid-template-columns: repeat(4, minmax(0, 1fr));
-   gap: var(--space-3);
-   max-width: min(100%, calc(4 * var(--home-era-card-width, 128px) + 3 * var(--space-3)));
-  }
-  .era-strip figure, .era-card { width: 100%; min-width: 0; }
+  .era-strip { max-width: min(100%, calc(4 * var(--home-era-card-width, 128px) + 3 * var(--space-3))); }
  }
  @media (max-width: 47.999rem) {
   .welcome {
@@ -151,12 +149,27 @@
   .actions { align-items: stretch; }
   .start { max-width: none; }
   .resume { width: 100%; }
-  .era-strip { margin-top: var(--space-6); }
+  .era-strip { margin: 0 max(var(--space-4), env(safe-area-inset-right)) var(--space-6) max(var(--space-4), env(safe-area-inset-left)); }
   .era-strip figure { gap: 4px; }
   .era-strip figcaption { font-size: var(--text-xs); letter-spacing: 0; }
  }
+ /* Wide screens set the copy on the left and the era showcase in its own panel on the right. */
  @media (min-width: 68rem) {
+  .welcome { display: grid; grid-template-columns: minmax(0, 41.5rem) minmax(0, 1fr); align-items: end; }
+  .welcome > :global(.logo-strip) { grid-column: 1 / -1; }
   .welcome-copy { margin-left: max(0px, calc((100vw - 90rem) / 2 - 2rem)); }
+  .era-strip {
+   box-sizing: border-box;
+   justify-self: end;
+   width: 100%;
+   max-width: calc(4 * var(--home-era-card-width, 128px) + 3 * var(--space-3) + 2 * var(--space-4));
+   margin: 0 max(2rem, calc((100vw - 90rem) / 2)) 2rem 2rem;
+   padding: var(--space-4);
+   border: 1px solid var(--border);
+   border-radius: var(--radius-lg);
+   background: oklch(16% .009 255 / .82);
+   backdrop-filter: blur(10px);
+  }
  }
  @media (max-width: 24rem) {
   h1 strong { font-size: 4.5rem; }

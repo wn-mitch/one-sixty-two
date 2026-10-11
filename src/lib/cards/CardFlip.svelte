@@ -20,7 +20,8 @@ let {
  backControls,
  sourceElement,
  onReturned,
- raisedOnly = false
+ raisedOnly = false,
+ flipInPlace = false
 }: {
  s: CardViewModel;
  onDetails: () => void;
@@ -35,11 +36,15 @@ let {
  sourceElement?: HTMLElement | null;
  onReturned?: () => void;
  raisedOnly?: boolean;
+ /** The raised reader turns between back and front where it is; only dismissal returns it. */
+ flipInPlace?: boolean;
 } = $props();
 
 let stack = $state<HTMLDivElement>();
 let sourceFocus: HTMLElement | undefined;
-const readerOpen = $derived(raisedOnly ? opened : turned);
+// A reader flipped to its front in place stays raised until it is dismissed.
+let raisedFront = $state(false);
+const readerOpen = $derived(raisedOnly ? opened : turned || raisedFront);
 let previousOpen = untrack(() => readerOpen);
 // A reader that mounts already open belongs to a parent that places focus itself.
 let openedOnMount = untrack(() => readerOpen);
@@ -60,6 +65,7 @@ $effect.pre(() => {
 
 async function closeReader(): Promise<void> {
  if (raisedOnly) opened = false;
+ raisedFront = false;
  turned = false;
  await tick();
  const target = sourceFocus?.isConnected ? sourceFocus : controlOwner()?.querySelector<HTMLButtonElement>('.draft-turn, .turn');
@@ -76,6 +82,13 @@ function toggle(): void {
  else turned = true;
 }
 
+/** The raised reader's own turn control and surface. */
+function readerToggle(): void {
+ if (!flipInPlace || raisedOnly || !readerOpen) return toggle();
+ raisedFront = turned;
+ turned = !turned;
+}
+
 $effect(() => {
  if (readerOpen && !openedOnMount) void tick().then(() => stack?.querySelector<HTMLButtonElement>('.reader-return')?.focus({ preventScroll: true }));
  if (!readerOpen) {
@@ -88,6 +101,7 @@ $effect(() => {
   if (stack && (stack.contains(target) || event.composedPath().includes(stack))) return;
   if (target instanceof Element && controlOwner()?.contains(target) && target.closest('.turn, .draft-turn, .season-toggle button, .review-header button')) return;
   if (raisedOnly) opened = false;
+  raisedFront = false;
   turned = false;
  };
  const closeOnEscape = (event: KeyboardEvent) => {
@@ -111,7 +125,7 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (target.closest('button, a, input, select, textarea, summary, [role="button"]')) return;
-  toggle();
+  readerToggle();
  };
  node.addEventListener('click', handleClick);
  return { destroy: () => node.removeEventListener('click', handleClick) };
@@ -155,7 +169,7 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
     </div>
    </div>
     {#if readerOpen}
-     <button class="reader-return" type="button" aria-label={turned ? 'Show front' : 'Turn over'} onclick={toggle}><span aria-hidden="true">↻</span></button>
+     <button class="reader-return" type="button" aria-label={turned ? 'Show front' : 'Turn over'} onclick={readerToggle}><span aria-hidden="true">↻</span></button>
     {/if}
    </div>
 </div>

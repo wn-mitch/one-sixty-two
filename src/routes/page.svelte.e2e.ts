@@ -297,7 +297,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await expect(moments.getByText('Season lowlight', { exact: true })).toBeVisible();
 	await expect(moments.locator('.moment-card .empty')).toHaveCount(0);
 	await expect(moments.locator('.moment-card .story')).toHaveCount(2);
-	await expect(moments.getByText('Estimated neutral league-rate win expectancy', { exact: true })).toHaveCount(2);
+	await expect(moments.getByRole('img', { name: /^Win chance through game \d+/ })).toHaveCount(2);
 	const momentCopy = await moments.locator('.moment-card').allTextContents();
 	for (const copy of momentCopy) {
 		expect(copy).toMatch(/Game \d+/);
@@ -341,7 +341,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	});
 	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
 	await sharePanel.getByRole('button', { name: 'Copy image', exact: true }).click();
-	await expect(sharePanel.locator('.share-status')).toHaveText('PNG copied.');
+	await expect(page.locator('[data-toast]')).toHaveText('PNG copied.');
 	// Clipboard implementations may re-encode PNGs; the displayed image must remain exact.
 	const storedPixels = await imagePixelDigest(page, { url: publication.images.field.url });
 	const clipboardPixels = await imagePixelDigest(page, { clipboard: true });
@@ -353,7 +353,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	const downloadPath = await download.path();
 	if (!downloadPath) throw new Error('The PNG download has no saved file');
 	expect(createHash('sha256').update(await readFile(downloadPath)).digest('hex')).toBe(publication.images.field.sha256);
-	await expect(sharePanel.locator('.share-status')).toHaveText('Season PNG downloaded.');
+	await expect(page.locator('[data-toast]')).toHaveText('Season PNG downloaded.');
 	expect(repeatPreparations).toEqual([]);
 	// The stored replay must survive a fresh HTTP read, not just the upload response.
 	const stored = await page.request.get(`/api/replays/${publication.replayId}`);

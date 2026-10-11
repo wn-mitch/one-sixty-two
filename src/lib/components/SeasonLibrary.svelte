@@ -2,6 +2,7 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { createCardViewModel, type CardMediaStatus, type CardViewModel } from '../cards/view-model.ts';
 	import type { LibraryView } from '../game/library.ts';
+	import { toasts } from '../toast.svelte.ts';
 	import { libraryLeaders, stars } from '../game/library-stats.ts';
 	import { seriesTally, type SeriesRecord } from '../game/series-history.ts';
 	import type { Manifest, Profile } from '../game/types.ts';
@@ -26,6 +27,7 @@
 		initialSelection?: readonly string[];
 	}
 	let { entries, history, profiles, manifest, status, onCopy, onRename, onDelete, initialSelection = [] }: Props = $props();
+	$effect(() => { if (status) toasts.show(status, { id: 'library', tone: /unavailable|could not|blocked|full/i.test(status) ? 'error' : 'info' }); });
 
 	let sort = $state<'wins' | 'date'>('wins');
 	let comparing = $state(false);
@@ -90,7 +92,6 @@
 		<button type="button" class="compare-toggle" aria-pressed={comparing} onclick={() => comparing = !comparing}>Compare</button>
 		<p class="hint">{comparing ? 'Choose two clubs to compare.' : 'Ctrl- or ⌘-click two clubs to compare.'}</p>
 	</div>
-	<p class="status muted" role="status">{status}</p>
 
 	{#if !sorted.length}
 		<p class="empty muted">Finish a season and it is saved here automatically, on this device only.</p>
@@ -135,7 +136,6 @@
 	.compare-toggle { border: 1px solid var(--border); }
 	.compare-toggle[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
 	.hint { margin: 0; color: var(--muted); font-size: var(--text-xs); }
-	.status { min-height: 1.25rem; margin: 0; font-size: var(--text-xs); }
 	.empty { margin: 0; }
 	.columns { display: grid; gap: var(--space-6); align-items: start; }
 	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }

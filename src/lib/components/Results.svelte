@@ -59,7 +59,6 @@
 	let resultsHeading = $state<HTMLHeadingElement>();
 	const resultsReviewId = 'results-card-review';
 
-	let profileById = $derived(new Map(profiles.map((profile) => [profile.seasonId, profile])));
 	let resultsModel = $derived(createResultsModel({ result, draft, profiles, manifest, rankings }));
 	let shareModel = $derived(createShareRenderModel({ result, draft, profiles, manifest, media, rankings }));
 	let cardViews = $derived<ReadonlyMap<string, CardViewModel>>(
@@ -144,12 +143,12 @@
 
 		<div class="score-actions" aria-busy={sharing}>
 			<div class="share-shortcuts">
-				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'field')}>{sharing ? 'Preparing…' : 'Challenge a friend'}</button>
-				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'field')}>{sharing ? 'Preparing…' : 'Copy link'}</button>
+				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'field')}>{sharing ? 'Preparing…' : 'Challenge a friend'}<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 11l6-6M6 5h5v5"></path></svg></button>
+				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'field')}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg>{sharing ? 'Preparing…' : 'Copy link'}</button>
 			</div>
 			<div class="more-actions">
-				<a class="button quiet" href="/seasons">Play head-to-head</a>
-				<button class="quiet new-draft" type="button" onclick={onNew}>New draft</button>
+				<a class="button" href="/seasons"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5"></path></svg>Play head-to-head</a>
+				<button class="new-draft" type="button" onclick={onNew}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>New draft</button>
 			</div>
 		</div>
 
@@ -168,7 +167,16 @@
 		</dl>
 	</header>
 
-	<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
+	<div class="awards-share">
+		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
+		<ShareBlock
+			model={shareModel}
+			{publication}
+			{sharing}
+			status={shareStatus}
+			{onShare}
+		/>
+	</div>
 
 	<ResultsHand
 		cards={resultsModel.rest}
@@ -180,6 +188,7 @@
 		reviewId={resultsReviewId}
 		onInspect={inspectCard}
 	/>
+
 
 	<SeasonMoments {result} cards={resultsModel.cards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 
@@ -193,18 +202,12 @@
 				bind:turned
 				bind:textBack
 				bind:selectedMode
+				flipInPlace
 				onClose={closeInspection}
 			/>
 		{/key}
 	{/if}
 
-	<ShareBlock
-		model={shareModel}
-		{publication}
-		{sharing}
-		status={shareStatus}
-		{onShare}
-	/>
 
 	<nav class="result-nav" aria-label="Season results sections">
 		<button class="quiet" type="button" onclick={() => jumpTo('batting-heading')}>Batting totals</button>
@@ -237,10 +240,9 @@
 				</thead>
 				<tbody>
 					{#each result.batting as line}
-						{@const profile = profileById.get(line.seasonId)}
 						<tr>
 							<th scope="row">
-								<span class="stat-identity">{line.displayName}{#if profile}<small>{profile.year}</small>{/if}</span>
+								<span class="stat-identity">{line.displayName}<small>{line.position} · {line.year}</small></span>
 							</th>
 							<td>{line.PA}</td><td>{line.AB}</td><td>{line.H}</td>
 							<td>{line.doubles}</td><td>{line.triples}</td><td class="stat-key">{line.HR}</td><td class="stat-group">{line.BB}</td>
@@ -272,10 +274,9 @@
 				</thead>
 				<tbody>
 					{#each result.pitching as line}
-						{@const profile = profileById.get(line.seasonId)}
 						<tr>
 							<th scope="row">
-								<span class="stat-identity">{pitcherName(line)}{#if profile}<small>{profile.year} · {line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : 'SP'}</small>{/if}</span>
+								<span class="stat-identity">{pitcherName(line)}<small>{line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : 'SP'} · {line.year}</small></span>
 							</th>
 							<td>{innings(line.outs)}</td><td>{line.H}</td><td>{line.BB}</td>
 							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{ra9(line)}</td>
@@ -351,10 +352,22 @@
 	dt { color: var(--muted); font-size: var(--text-xs); }
 	dd { margin: var(--space-1) 0 0; font-size: var(--text-lg); font-weight: 750; }
 	.season-ledger dd.perfect { color: var(--success); }
-	.score-actions { display: grid; align-content: center; gap: var(--space-3); }
-	.share-shortcuts { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-	.more-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-self: start; }
-	.more-actions a { display: inline-flex; align-items: center; text-decoration: none; }
+	/* Two equal columns: the share pair at full size, then the smaller head-to-head / new-draft pair. */
+	.score-actions { display: grid; align-content: center; gap: var(--space-2); width: min(100%, 24rem); }
+	.share-shortcuts, .more-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+	.score-actions button, .score-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); white-space: nowrap; }
+	.score-actions svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+	.share-shortcuts button { min-height: 3rem; }
+	.share-shortcuts .secondary { border-color: var(--border-strong, var(--border)); }
+	.more-actions .button, .more-actions button { min-height: 2.75rem; padding-inline: var(--space-3); border-color: var(--border); background: transparent; color: var(--muted); font-size: var(--text-sm); }
+	.more-actions .button:hover, .more-actions button:hover { color: var(--text); background: var(--surface-raised); }
+	/* Wide screens set the 2×2 awards beside the share panel; narrower ones stack them. */
+	.awards-share { display: grid; gap: var(--space-8); min-width: 0; }
+	.awards-share > :global(.share-panel) { grid-template-columns: minmax(0, 1fr); padding-block: var(--space-6) 0; border-bottom: 0; }
+	@media (min-width: 64rem) {
+		.awards-share { grid-template-columns: minmax(0, 1fr) 24rem; align-items: start; }
+		.awards-share > :global(.share-panel) { padding-block: 0; border-block: 0; }
+	}
 	.season-review { display: grid; gap: var(--space-6); min-width: 0; }
 	.review-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--border); }
 	.review-heading h3 { font-size: var(--text-xl); }
@@ -377,8 +390,6 @@
 		min-height: 2.75rem;
 		font-size: var(--text-sm);
 	}
-	.stat-identity { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .5rem; max-width: 15rem; white-space: normal; }
-	.stat-identity small { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 	.support-note { margin: 0; font-size: var(--text-xs); }
 
 	@media (min-width: 48rem) {
@@ -388,21 +399,20 @@
 			gap: var(--space-6) var(--space-8);
 		}
 		.season-ledger { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-		.score-actions { justify-items: end; }
-		.share-shortcuts { justify-content: end; }
-		.more-actions { justify-self: end; }
+		.score-actions { justify-self: end; }
 	}
 	@media (max-width: 40rem) {
 		.results { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
 		.scoreboard { padding: var(--space-4); }
 		.scoreboard h2 { font-size: var(--text-3xl); }
+		.score-actions button, .score-actions .button { white-space: normal; text-align: center; line-height: 1.15; }
 		.share-shortcuts {
 			position: fixed;
 			z-index: 30;
 			inset-inline: 0;
 			bottom: 0;
 			display: grid;
-			grid-template-columns: 1fr 1fr;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: var(--space-2);
 			padding: var(--space-2) var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom));
 			background: color-mix(in oklch, var(--background) 94%, transparent);

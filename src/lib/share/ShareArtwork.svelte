@@ -24,7 +24,6 @@
 		const dimension = stadium.dimensions.find(item => item.bearingDeg === bearing);
 		return dimension ? [`${label} ${Math.round(dimension.distanceFt)}`] : [];
 	}));
-	const firstLoss = $derived(model.record.firstLoss === null ? 'No losses' : `First loss: Game ${model.record.firstLoss}`);
 	const replayLabel = $derived(model.replayUrl ? model.replayUrl.replace(/^https?:\/\//, '') : 'Replay link added when shared');
 	const expectedImages = $derived.by(() => {
 		const urls = new Set<string>();
@@ -62,7 +61,6 @@
 		<div class="record" aria-label={`${model.record.wins} wins and ${model.record.losses} losses`}>
 			<b>{model.record.wins}</b><span>–</span><b class="losses">{model.record.losses}</b>
 		</div>
-		<span class="kicker">Season final · {firstLoss}</span>
 	</header>
 
 	<div class="field-card" style={fieldStyle}>
@@ -104,20 +102,19 @@
 </section>
 
 <style>
-	[data-share-artwork] { position:relative; box-sizing:border-box; width:100%; aspect-ratio:4/5; container-type:inline-size; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:4.6cqw 5.9cqw 1.5cqw; background:oklch(16% .009 255); color:oklch(97% .006 255); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; font-variant-numeric:tabular-nums; line-height:1; isolation:isolate; }
+	[data-share-artwork] { position:relative; box-sizing:border-box; width:100%; aspect-ratio:4/5; container-type:inline-size; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:3.6cqw 5.2cqw 2.2cqw; background:oklch(16% .009 255); color:oklch(97% .006 255); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; font-variant-numeric:tabular-nums; line-height:1; isolation:isolate; }
 	.expected-images { position:absolute; inset:0; z-index:-1; pointer-events:none; opacity:0; }
 	.expected-images img { position:absolute; width:1px; height:1px; }
 
-	.share-header { flex:none; align-self:stretch; display:grid; grid-template-columns:1fr auto; grid-template-rows:auto auto; align-items:end; gap:1.2cqw 3cqw; padding-bottom:3cqw; }
+	.share-header { flex:none; align-self:stretch; display:flex; align-items:center; justify-content:space-between; gap:3cqw; padding-bottom:1.6cqw; }
 	.wordmark { display:inline-flex; align-items:center; gap:1.9cqw; font-size:4.6cqw; font-weight:850; letter-spacing:-.04em; }
 	.wordmark i { display:block; width:2cqw; height:2cqw; border:.35cqw solid currentColor; transform:rotate(45deg); }
-	.record { grid-row:1 / span 2; grid-column:2; display:flex; align-items:baseline; gap:1.5cqw; font-size:13.5cqw; font-weight:850; letter-spacing:-.05em; line-height:.85; }
+	.record { display:flex; align-items:baseline; gap:1.2cqw; font-size:10cqw; font-weight:850; letter-spacing:-.05em; line-height:.85; }
 	.record span { color:oklch(52% .016 255); font-weight:600; }
 	.record .losses { color:oklch(76% .018 255); }
-	.kicker { color:oklch(76% .018 255); font-size:2.2cqw; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
 
 	/* Draft field geometry: 424×594 card units, scaled by the field card's own width. */
-	.field-card { position:relative; flex:none; width:69cqw; aspect-ratio:424 / 594; container-type:inline-size; border-radius:calc(100cqi * 14 / 424); box-shadow:0 2cqw 4cqw oklch(8% .01 255 / .45); }
+	.field-card { position:relative; flex:none; width:80cqw; aspect-ratio:424 / 594; container-type:inline-size; border-radius:calc(100cqi * 14 / 424); box-shadow:0 2cqw 4cqw oklch(8% .01 255 / .45); }
 	.field-art { position:absolute; inset:0; width:100%; height:100%; }
 	.stock { fill:var(--stock, oklch(27% .016 255)); }
 	.ground { fill:oklch(19% .02 160); }
@@ -143,8 +140,8 @@
 	.identity strong, .identity span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:calc(100cqi * 7.5 / 424); line-height:1.1; }
 	.identity span { color:oklch(76% .018 255); }
 
-	.share-footer { flex:none; align-self:stretch; display:flex; align-items:center; justify-content:space-between; gap:3cqw; padding:2.6cqw 0 1.5cqw; border-top:.19cqw solid oklch(37% .016 255); }
-	.share-footer strong { font-size:5cqw; letter-spacing:-.04em; white-space:nowrap; }
+	.share-footer { flex:none; align-self:stretch; display:flex; align-items:center; justify-content:space-between; gap:3cqw; padding:1.8cqw 0 0; border-top:.19cqw solid oklch(37% .016 255); }
+	.share-footer strong { font-size:4.4cqw; letter-spacing:-.04em; white-space:nowrap; }
 	.share-footer span { min-width:0; color:oklch(83% .16 120); font-size:2.6cqw; font-weight:750; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 	.share-footer span.pending { color:oklch(70% .012 255); font-weight:600; }
 </style>

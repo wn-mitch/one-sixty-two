@@ -171,9 +171,9 @@
 		box-shadow: 0 -1.5rem 4rem oklch(8% .01 255 / .52);
 		overflow: hidden;
 	}
-	.draft-sheet[open] { animation: sheet-enter 220ms var(--ease-out) both; }
+	.draft-sheet[open] { animation: sheet-enter 300ms var(--ease-out) both; }
 	.draft-sheet::backdrop { background: oklch(8% .01 255 / .72); }
-	.draft-sheet[open]::backdrop { animation: backdrop-enter 180ms var(--ease-out) both; }
+	.draft-sheet[open]::backdrop { animation: backdrop-enter 240ms var(--ease-out) both; }
 	.sheet-shell {
 		display: grid;
 		grid-template-rows: auto minmax(0, 1fr) auto;
@@ -204,9 +204,10 @@
 		padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right)) max(var(--space-4), env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left));
 		border-top: 1px solid var(--border);
 	}
+	/* The sheet rises from the bottom edge, the way a phone sheet is expected to arrive. */
 	@keyframes sheet-enter {
-		from { opacity: 0; transform: translateY(1.5rem); }
-		to { opacity: 1; transform: translateY(0); }
+		from { transform: translateY(100%); }
+		to { transform: translateY(0); }
 	}
 	@keyframes backdrop-enter {
 		from { opacity: 0; }
