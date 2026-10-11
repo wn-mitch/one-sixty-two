@@ -409,7 +409,10 @@ test.describe('normal card motion', () => {
 			});
 			observer.observe(root, { subtree: true, attributes: true, attributeFilter: ['style'] });
 		});
-		await page.locator('.ranking-controls select').selectOption('metrics');
+		// Narrow layouts keep ranking behind the Filters toggle.
+		const filters = page.getByRole('button', { name: /^Filters/ });
+		if (await filters.isVisible()) await filters.click();
+		await page.getByRole('combobox', { name: 'Rank players & seasons' }).selectOption('metrics');
 		await expect.poll(() => page.evaluate(() => (window as Window & { cardGridMoved?: boolean }).cardGridMoved)).toBe(true);
 		await expect.poll(() => page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.every(node => {
 			const style = (node as HTMLElement).style;

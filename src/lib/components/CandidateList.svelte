@@ -67,6 +67,7 @@
  let showBlocked = $state(false);
  let browseRevision = $state(0);
  let sort = $state<RankingSort>('war');
+ let filtersOpen = $state(false);
  const manifestBySeason = $derived(new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])));
  const usedPlayerIds = $derived(new Set(draft.picks.map(pick => manifestBySeason.get(pick.seasonId)?.playerId).filter((id): id is string => !!id)));
  const usedFranchises = $derived(new Set(draft.picks.map(pick => pick.franchiseId)));
@@ -247,26 +248,34 @@
 <section use:candidateGridMotion={gridMotion} class:candidates-wide={wide} class="candidates" aria-label="Choose a historical player season" aria-busy={busy}>
  <div class="filter-rail">
   <div class="search-row">
-   <label for="{uid}-search">Find your pick</label>
+   <label for="{uid}-search" class:sr-only={!wide}>Find your pick</label>
    <input id="{uid}-search" type="search" placeholder="Player, year, or historical team" bind:value={query} oninput={resetBrowse} disabled={busy} />
+   {#if !wide}
+    <button type="button" class="secondary filters-toggle" class:active={activeFilter !== 'All'} aria-expanded={filtersOpen} aria-controls="{uid}-filters" onclick={() => filtersOpen = !filtersOpen}>
+     Filters{#if activeFilter !== 'All'}<span class="filters-badge">{activeFilter}</span>{/if}
+    </button>
+   {/if}
   </div>
-  <fieldset class="filters" disabled={busy}>
-   <legend>Qualifies for position</legend>
-   <div class="filter-options" role="group" aria-label="Qualifies for position">
-    {#each filterOptions as option}
-     {@const count = option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0}
-     <button type="button" class="quiet filter" aria-pressed={activeFilter === option} aria-label={option} title={`${option} · ${count} players`} onclick={() => { filter = option; resetBrowse(); }}>
-      <span>{option}</span>{#if wide}<span class="filter-count">{count}</span>{/if}
-     </button>
-    {/each}
+  <!-- Phones keep the position filter and ranking behind Filters so the first cards sit near the top. -->
+  <div class="filter-panel" id="{uid}-filters" hidden={!wide && !filtersOpen}>
+   <fieldset class="filters" disabled={busy}>
+    <legend>Qualifies for position</legend>
+    <div class="filter-options" role="group" aria-label="Qualifies for position">
+     {#each filterOptions as option}
+      {@const count = option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0}
+      <button type="button" class="quiet filter" aria-pressed={activeFilter === option} aria-label={option} title={`${option} · ${count} players`} onclick={() => { filter = option; resetBrowse(); }}>
+       <span>{option}</span>{#if wide}<span class="filter-count">{count}</span>{/if}
+      </button>
+     {/each}
+    </div>
+   </fieldset>
+   <div class="ranking-controls">
+    <label for="{uid}-sort">Rank players &amp; seasons</label>
+    <select id="{uid}-sort" bind:value={sort} disabled={busy} onchange={resetBrowse}>
+     <option value="war">WAR / 162</option>
+     <option value="metrics">OPS / ERA</option>
+    </select>
    </div>
-  </fieldset>
-  <div class="ranking-controls">
-   <label for="{uid}-sort">Rank players &amp; seasons</label>
-   <select id="{uid}-sort" bind:value={sort} disabled={busy} onchange={resetBrowse}>
-    <option value="war">WAR / 162</option>
-    <option value="metrics">OPS / ERA</option>
-   </select>
   </div>
   {#if rankingLoading}
    <p class="ranking-status muted" role="status">Loading composite WAR/162.{sort === 'war' ? ' Cards are in stable ID order until it arrives. Choose Historical OPS / ERA to sort by those stats now.' : ''} Drafting is available.</p>
@@ -362,7 +371,12 @@
  .candidates { min-width: 0; }
  .candidate-content { min-width: 0; scroll-margin-top: 72px; }
  .filter-rail { min-width: 0; }
- .search-row { display: grid; gap: var(--space-2); margin-block: var(--space-6) var(--space-4); }
+ .search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-block: var(--space-3); }
+ .search-row label { grid-column: 1 / -1; }
+ .filters-toggle { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 3rem; padding-inline: var(--space-4); }
+ .filters-badge { padding: .1rem .4rem; border-radius: 999px; background: var(--text); color: var(--background); font-size: var(--text-xs); font-weight: 750; }
+ .filter-panel { margin-bottom: var(--space-2); }
+ .filter-panel[hidden] { display: none; }
  .search-row label, legend { font-size: var(--text-sm); font-weight: 650; }
  input[type='search'] { width: 100%; min-width: 0; min-height: 3rem; }
  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -402,7 +416,7 @@
   .candidates-wide .filter-options { display: grid; gap: 3px; }
   .candidates-wide .filter { display: flex; justify-content: space-between; align-items: center; gap: .45rem; width: 100%; min-height: 44px; padding: 0 10px; border-radius: 4px; }
   .candidates-wide .section-heading h3 { font: italic 900 1.5rem/1 'Barlow Condensed', sans-serif; text-transform: uppercase; }
-  .candidates-wide .search-row { margin-block: 0 20px; }
+  .candidates-wide .search-row { grid-template-columns: minmax(0, 1fr); margin-block: 0 20px; }
   .candidates-wide .ranking-controls { display: grid; margin-top: 20px; }
   .candidates-wide .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 20px; grid-auto-flow: dense; }
  }
