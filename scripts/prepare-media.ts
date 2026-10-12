@@ -7,7 +7,7 @@ import { acquireTables, CHECKSUMS, SOURCE_COMMIT } from './data/acquire.ts';
 import { canonicalJSON } from './data/compile.ts';
 import { atomicWrite, digest } from './media/cache.ts';
 import { generateMedia } from './media/compile.ts';
-import type { AtmosphereSourceRegistry, DataManifest, DataPointer, PhotoReview, PlayerSourceRegistry, ReviewedPlayerPhotos, TeamSourceRegistry } from './media/types.ts';
+import type { AtmosphereSourceRegistry, DataManifest, DataPointer, PhotoReview, PlayerSourceRegistry, ReviewedPlayerPhotos, TeamSourceRegistry, TeamPhotoReview } from './media/types.ts';
 
 const args = new Set(process.argv.slice(2));
 for (const argument of args) {
@@ -60,7 +60,7 @@ async function canReusePrepared(compilerHash: string, dataVersion: string): Prom
 		validateMedia(manifest, prepared.version);
 		if (manifest.dataVersion !== dataVersion || digest(canonicalJSON(manifest)) !== prepared.manifestChecksum) return false;
 		const urls = [
-			...Object.values(manifest.teams).flatMap((team) => [team.logo?.url, ...team.historical.map((logo) => logo.url)]),
+			...Object.values(manifest.teams).flatMap((team) => [team.logo?.url, ...team.historical.map((logo) => logo.url), ...(team.photos ?? []).map(photo => photo.url)]),
 			...Object.values(manifest.players).flatMap((player) => player.photos.map((photo) => photo.url)),
 			...Object.values(manifest.atmosphere).map((photo) => photo.url)
 		].filter((url): url is string => Boolean(url));
@@ -99,6 +99,7 @@ const teamSources = await readJson<TeamSourceRegistry>(join(root, 'scripts', 'me
 const playerSources = await readJson<PlayerSourceRegistry>(join(root, 'scripts', 'media', 'player-sources.json'), 'curated player photo source registry');
 const reviewedPlayerPhotos = await readJson<ReviewedPlayerPhotos>(join(root, 'scripts', 'media', 'reviewed-player-photos.json'), 'reviewed portrait inventory');
 const photoReviews = await readJson<PhotoReview[]>(join(root, 'scripts', 'media', 'photo-reviews.json'), 'photo classification reviews');
+const teamPhotoReviews = await readJson<TeamPhotoReview[]>(join(root, 'scripts', 'media', 'team-photo-reviews.json'), 'team photo reviews');
 const atmosphereSources = await readJson<AtmosphereSourceRegistry>(join(root, 'scripts', 'media', 'atmosphere-sources.json'), 'atmosphere source registry');
 const tables = await acquireTables(offline);
 const generated = await generateMedia({
@@ -108,6 +109,7 @@ const generated = await generateMedia({
 	playerSources,
 	reviewedPlayerPhotos,
 	photoReviews,
+	teamPhotoReviews,
 	atmosphereSources,
 	cacheDir,
 	outputDir,

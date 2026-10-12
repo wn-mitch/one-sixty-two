@@ -9,12 +9,12 @@ import { prepareImage } from '../../../scripts/media/images.ts';
 import { packageGeneratedAssets, stageBuildAssets } from '../../../scripts/package-assets.ts';
 import { generateMedia } from '../../../scripts/media/compile.ts';
 import { canonicalJSON } from '../../../scripts/data/compile.ts';
-import { selectPhoto, validateMedia } from './client.ts';
+import { selectPhoto, selectTeamPhoto, validateMedia } from './client.ts';
 import { auditMedia } from '../../../scripts/media/audit.ts';
 import { writeResearch } from '../../../scripts/media/research.ts';
 import type { ResearchContext } from '../../../scripts/media/research.ts';
 import { parse } from 'csv-parse/sync';
-import type { ApprovedPhotoReview, DirectTeamLogoSource, TeamSourceRegistry } from '../../../scripts/media/types.ts';
+import type { ApprovedPhotoReview, DirectTeamLogoSource, TeamSourceRegistry, TeamPhotoReview } from '../../../scripts/media/types.ts';
 import type { AcquiredTables } from '../../../scripts/data/acquire.ts';
 
 let root: string;
@@ -41,6 +41,21 @@ function review(id = 'archive:synthetic'): ApprovedPhotoReview {
 }
 
 describe('reviewed image acquisition and offline compilation', () => {
+	it('compiles reviewed group photographs offline with pinned rights and distinct credits', async () => {
+		const franchises = Array.from({ length: 30 }, (_, i) => ({ id: `T${i}`, name: `Synthetic Club ${i}` }));
+		const { playerId: _playerId, ...sourceReview } = review();
+		const team: TeamPhotoReview = { ...sourceReview, franchiseId: 'T0', caption: 'Synthetic club in uniform', crop: undefined };
+		const input = { dataManifest: { dataVersion: 'synthetic', candidates: [], franchises }, tables: { People: [], Batting: [], Pitching: [] } as unknown as AcquiredTables,
+			teamSources: Object.fromEntries(franchises.map(team => [team.id, { name: team.name, color: '#123456', current: null, historical: [] }])), playerSources: {}, reviewedPlayerPhotos: {}, atmosphereSources: [], teamPhotoReviews: [team], cacheDir: root, outputDir: join(root, 'published'), offline: true, log: () => {} };
+		const { manifest } = await generateMedia(input);
+		validateMedia(manifest, manifest.version);
+		const photo = selectTeamPhoto(manifest, 'T0', 2025)!;
+		expect(photo).toMatchObject({ subject: 'team', width: 80, height: 40, year: 1988, review: 'approved' });
+		expect(await readFile(join(root, 'published', manifest.version, 'NOTICE.txt'), 'utf8')).toContain('T0 1988 team photo');
+		expect((await generateMedia(input)).manifest.version).toBe(manifest.version);
+		input.teamPhotoReviews[0] = { ...team, evidence: { ...team.evidence, sourceChecksum: '0'.repeat(64) } };
+		await expect(generateMedia(input)).rejects.toThrow('bytes changed');
+	});
 	it('packages current, rollback and referenced media without staging generated assets through Vite', async () => {
 		const versions = ['a', 'b', 'c', 'd'].map(letter => letter.repeat(64));
 		const media = join(root, 'static/media');

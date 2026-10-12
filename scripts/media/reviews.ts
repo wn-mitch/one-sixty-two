@@ -1,10 +1,10 @@
 import { canonicalJSON } from '../data/compile.ts';
 import { isCaptureDate, isPhotoCrop } from '../../src/lib/media/photo-policy.ts';
-import type { PlayerPhoto } from '../../src/lib/media/types.ts';
+import type { PlayerPhoto, TeamPhoto } from '../../src/lib/media/types.ts';
 import { digest } from './cache.ts';
 import { prepareImage } from './images.ts';
 import { emptyExclusions, validateReusableAsset } from './logic.ts';
-import type { ApprovedPhotoReview, PhotoReview } from './types.ts';
+import type { ApprovedPhotoReview, PhotoReview, TeamPhotoReview } from './types.ts';
 
 const https = (value: unknown): value is string => typeof value === 'string' && /^https:\/\/[^\s]+$/.test(value);
 const hash = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -39,8 +39,8 @@ export function validateReviews(reviews: PhotoReview[], playerIds: Set<string>, 
 }
 
 /** Only reviewed, byte-pinned assets enter the public manifest. The snapshot preserves offline provenance. */
-export async function prepareReviewedPhoto(review: ApprovedPhotoReview, cacheDir: string, stagingDirectory: string, offline: boolean): Promise<PlayerPhoto> {
-	const asset = await prepareImage(review.metadata, cacheDir, stagingDirectory, offline, 384, review.crop, review.evidence.sourceChecksum);
+export async function prepareReviewedPhoto(review: ApprovedPhotoReview | TeamPhotoReview, cacheDir: string, stagingDirectory: string, offline: boolean, maxDimension = 384): Promise<PlayerPhoto> {
+	const asset = await prepareImage(review.metadata, cacheDir, stagingDirectory, offline, maxDimension, review.crop, review.evidence.sourceChecksum);
 	const rights = validateReusableAsset(review.metadata, emptyExclusions());
 	if (!rights) throw new Error(`Unsupported reviewed image rights: ${review.sourceId}`);
 	return {
@@ -53,4 +53,17 @@ export async function prepareReviewedPhoto(review: ApprovedPhotoReview, cacheDir
 		...(review.captureEvidenceUrl ? { captureEvidenceUrl: review.captureEvidenceUrl } : {}),
 		identityEvidenceUrl: review.evidence.identityUrl
 	};
+}
+
+export function validateTeamPhotoReviews(reviews: TeamPhotoReview[], franchises: Set<string>): void {
+	if (!Array.isArray(reviews) || reviews.some(review => !franchises.has(review.franchiseId) || !review.caption?.trim() || review.status !== 'approved')) {
+		throw new Error('Team photo identity or caption is incompatible');
+	}
+	// Use the same rights, crop, snapshot and visual-review requirements for both subjects.
+	validateReviews(reviews.map(review => ({ ...review, playerId: review.franchiseId })), franchises, franchises);
+}
+
+export async function prepareTeamPhoto(review: TeamPhotoReview, cacheDir: string, stagingDirectory: string, offline: boolean): Promise<TeamPhoto> {
+	return { ...await prepareReviewedPhoto(review, cacheDir, stagingDirectory, offline, 1280),
+		subject: 'team', caption: review.caption, franchiseId: review.franchiseId, review: 'approved' };
 }

@@ -1,6 +1,6 @@
 import { fetchJson } from '../game/data.ts';
-import type { MediaAsset, MediaManifest, MediaPointer, PlayerPhoto } from './types.ts';
-import { comparePhotos, isCaptureDate, isPhotoCrop, reusablePhotoLicense } from './photo-policy.ts';
+import type { MediaAsset, MediaManifest, MediaPointer, PlayerPhoto, TeamPhoto } from './types.ts';
+import { comparePhotos, compareTeamPhotos, isCaptureDate, isPhotoCrop, reusablePhotoLicense } from './photo-policy.ts';
 
 function record(value: unknown): value is Record<string, unknown> {
  return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -29,13 +29,33 @@ export function validateMedia(value: unknown, version: string): asserts value is
   if (!Number.isInteger(value.diagnostics[key]) || Number(value.diagnostics[key]) < 0) throw new Error('Image coverage counts are incompatible');
  }
  if (Number(value.diagnostics.atmospherePhotos) !== Object.keys(value.atmosphere).length) throw new Error('Atmosphere image count is incompatible');
- for (const team of Object.values(value.teams)) {
+ for (const [franchiseId, team] of Object.entries(value.teams)) {
   if (!record(team) || typeof team.name !== 'string' || typeof team.color !== 'string'
    || !/^#[a-f0-9]{6}$/i.test(team.color) || !Array.isArray(team.historical)
    || (team.logo !== null && !asset(team.logo, version))) throw new Error('Team imagery is incompatible');
   for (const logo of team.historical) {
    if (!asset(logo, version) || !record(logo) || !Number.isInteger(logo.firstYear)
     || !Number.isInteger(logo.lastYear) || Number(logo.firstYear) > Number(logo.lastYear)) throw new Error('Historical logo dates are incompatible');
+  }
+  if (team.photos !== undefined) {
+   if (!Array.isArray(team.photos)) throw new Error('Team photos are incompatible');
+   const sources = new Set<string>();
+   for (const photo of team.photos) {
+    if (!asset(photo, version) || !record(photo) || photo.subject !== 'team' || photo.franchiseId !== franchiseId
+     || photo.review !== 'approved' || typeof photo.caption !== 'string' || !photo.caption.trim()
+     || typeof photo.sourceId !== 'string' || !photo.sourceId.trim() || sources.has(photo.sourceId)
+     || !reusablePhotoLicense(photo.license) || !isCaptureDate(photo.captureDate)
+     || (photo.captureDate.kind === 'exact' ? photo.year !== photo.captureDate.year : photo.year !== undefined)
+     || (photo.captureDate.kind !== 'unknown' && !httpsUrl(photo.captureEvidenceUrl))
+     || !['mlb', 'minor', 'other'].includes(String(photo.uniform)) || !['playing', 'later'].includes(String(photo.context))
+     || (photo.crop !== undefined && !isPhotoCrop(photo.crop))
+     || !record(photo.evidence) || !['identityUrl', 'uniformUrl', 'contextUrl', 'rightsUrl'].every(key => httpsUrl(photo.evidence && (photo.evidence as Record<string, unknown>)[key]))
+     || typeof photo.evidence.rightsBasis !== 'string' || !photo.evidence.rightsBasis.trim()
+     || !['sourceChecksum', 'snapshotChecksum'].every(key => /^[a-f0-9]{64}$/.test(String((photo.evidence as Record<string, unknown>)[key])))) {
+     throw new Error('Team photo review evidence is incompatible');
+    }
+    sources.add(photo.sourceId);
+   }
   }
  }
  for (const player of Object.values(value.players)) {
@@ -118,4 +138,11 @@ export function selectLogo(media: MediaManifest | null | undefined, franchiseId:
   if (historical) return { asset: historical, historical: true };
  }
  return team.logo ? { asset: team.logo, historical: false } : null;
+}
+
+export function selectTeamPhoto(media: MediaManifest | null | undefined, franchiseId: string, year: number): TeamPhoto | null {
+ if (!Number.isInteger(year)) return null;
+ return (media?.teams[franchiseId]?.photos ?? [])
+  .filter(photo => photo.review === 'approved' && photo.subject === 'team' && photo.franchiseId === franchiseId)
+  .reduce<TeamPhoto | null>((selected, photo) => !selected || compareTeamPhotos(photo, selected, year) < 0 ? photo : selected, null);
 }

@@ -10,10 +10,11 @@ import type { PhotoCandidate } from './media/research.ts';
 import type { CommonsMetadata } from './media/types.ts';
 import { existsSync } from 'node:fs';
 import { acquireCommonsReviewEvidence } from './media/providers.ts';
+import { cardPhotoPriorities } from './media/card-priorities.ts';
 
 // This command prepares evidence for inspection; it never writes approval decisions.
 const args = process.argv.slice(2);
-if (args.some(arg => !/^(?:--(?:offline|all|legacy-only|evidence-only)|--(?:limit|offset|per-player|players|batch)=.+)$/.test(arg))) throw new Error('Usage: review-media.ts [--offline] [--all] [--legacy-only] [--evidence-only] [--limit=N] [--offset=N] [--per-player=N] [--players=id,id] [--batch=name]');
+if (args.some(arg => !/^(?:--(?:offline|all|legacy-only|evidence-only|gems-only)|--(?:limit|offset|per-player|players|batch)=.+)$/.test(arg))) throw new Error('Usage: review-media.ts [--offline] [--all] [--legacy-only] [--evidence-only] [--gems-only] [--limit=N] [--offset=N] [--per-player=N] [--players=id,id] [--batch=name]');
 const option = (name: string) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 const limit = Number(option('limit') ?? 100), offset = Number(option('offset') ?? 0), perPlayer = Number(option('per-player') ?? 2);
 if (![limit, offset, perPlayer].every(Number.isSafeInteger) || limit < 1 || offset < 0 || perPlayer < 1) throw new Error('Invalid review batch bounds');
@@ -33,10 +34,12 @@ if (args.includes('--evidence-only')) {
 	process.exit(0);
 }
 const explicit = option('players')?.split(',');
+const gemPlayers = args.includes('--gems-only') ? new Set((await cardPhotoPriorities(context.root, context.media)).players.map(player => player.playerId)) : null;
 const reviewed = new Set(context.reviews.map(review => `${review.playerId}\0${review.sourceId}`));
 const frequency = new Map<string, number>();
 for (const candidate of context.data.candidates) if (!candidate.eligibleSlots?.includes('BP')) frequency.set(candidate.playerId, (frequency.get(candidate.playerId) ?? 0) + 1);
 const identities = context.identities.filter(identity => explicit ? explicit.includes(identity.playerId) : args.includes('--all') || args.includes('--legacy-only') || !context.media.players[identity.playerId]?.photos.length)
+	.filter(identity => !gemPlayers || gemPlayers.has(identity.playerId))
 	.sort((a, b) => (frequency.get(b.playerId) ?? 0) - (frequency.get(a.playerId) ?? 0) || a.playerId.localeCompare(b.playerId));
 const queue: Array<{ playerId: string; name: string; firstYear: number; lastYear: number; sourceId: string; metadata: CommonsMetadata; relevance: number }> = [];
 for (const identity of identities) {

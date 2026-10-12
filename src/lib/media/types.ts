@@ -40,6 +40,13 @@ export interface PhotoEvidence {
  snapshotChecksum: string;
 }
 export interface HistoricalLogo extends MediaAsset { firstYear: number; lastYear: number }
+/** A reviewed group photograph; it does not identify the members of a simulated relief pool. */
+export interface TeamPhoto extends PlayerPhoto {
+ subject: 'team';
+ caption: string;
+ franchiseId: string;
+ review: 'approved';
+}
 export interface AtmospherePhoto extends MediaAsset {
  id: string;
  caption: string;
@@ -51,6 +58,7 @@ export interface TeamMedia {
  color: string;
  logo: MediaAsset | null;
  historical: HistoricalLogo[];
+ photos?: TeamPhoto[];
 }
 export interface PlayerMedia {
  name: string;

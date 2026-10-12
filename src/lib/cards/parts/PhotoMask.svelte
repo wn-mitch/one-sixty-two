@@ -3,7 +3,7 @@
 	import type { CardFront } from '../view-model.ts';
 
 	export interface PhotoMaskProps {
-		s: Pick<CardFront, 'full' | 'photo' | 'hasPhoto' | 'noPhoto' | 'photoNote' | 'caption' | 'k'>;
+		s: Pick<CardFront, 'full' | 'photo' | 'hasPhoto' | 'noPhoto' | 'photoNote' | 'caption' | 'k'> & Partial<Pick<CardFront, 'selectedPhoto'>>;
 		style?: string;
 		imageStyle?: string;
 		emptyStyle?: string;
@@ -42,8 +42,8 @@
 			data-rt
 			data-layer="photo.image"
 			src={s.photo}
-			alt={`${s.full} · ${s.caption}`}
-			style={`position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:${focus}; display:block; ${imageStyle}`}
+			alt={s.selectedPhoto?.subject === 'team' ? `${s.selectedPhoto.contextLabel} · ${s.caption}` : `${s.full} · ${s.caption}`}
+			style={`position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:${focus}; display:block; ${imageStyle}; ${s.selectedPhoto?.subject === 'team' ? `object-fit:contain; object-position:center; background:${s.k.accent};` : ''}`}
 			onerror={markUnavailable}
 		/>
 	{:else}

@@ -184,5 +184,16 @@ describe('card data boundaries', () => {
   expect(exact.caption).toBe('Photo 2021 · Selected season');
   media.teams.AAA.historical = [{ ...asset, firstYear: 2020, lastYear: 2025 }];
   expect(createCardViewModel({ profile, media }).logoLabel).toBe('Verified historical team mark');
+  media.teams.AAA.photos = [{ ...photo, subject: 'team', caption: 'Example Club group in uniform', franchiseId: 'AAA', review: 'approved' }];
+  const bullpen = { members: [], excluded: { seasonId: 'excluded', playerId: 'excluded', displayName: 'Example Closer' } };
+  const remainder = createCardViewModel({ profile: { ...profile, bullpen, eligibleSlots: ['BP'], pitching }, media });
+  expect(remainder.caption).toBe('Team photo 2021');
+  expect(remainder.selectedPhoto).toMatchObject({ subject: 'team', selectedSeason: false });
+  expect(remainder.details.sections.find(s => s.h === 'Photo')?.rows).toContainEqual(expect.objectContaining({ k: 'Verification', v: expect.stringContaining('simulated relief-pool members') }));
+  expect(createCardViewModel({ profile: { ...profile, playerId: 'AAA:bullpen', eligibleSlots: [], pitching }, media }).photo).toBe(photo.url);
+  expect(createCardViewModel({ profile: { ...profile, playerId: 'league:bullpen', eligibleSlots: [], pitching }, media }).hasPhoto).toBe(false);
+  media.teams.AAA.photos = [];
+  const emptyPool = createCardViewModel({ profile: { ...profile, playerId: 'AAA:bullpen', eligibleSlots: [], pitching }, media });
+  expect(emptyPool.details.sections.find(section => section.h === 'Photo')?.rows).toEqual([{ k: 'Status', v: 'No reviewed team photo is published.' }]);
  });
 });

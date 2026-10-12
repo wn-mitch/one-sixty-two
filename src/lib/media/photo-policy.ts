@@ -1,4 +1,4 @@
-import type { CaptureDate, PhotoCrop, PlayerPhoto } from './types.ts';
+import type { CaptureDate, PhotoCrop, PlayerPhoto, TeamPhoto } from './types.ts';
 
 const validYear = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 1800 && Number(value) <= 2100;
 
@@ -70,6 +70,15 @@ export function photoTier(photo: PlayerPhoto, year: number): number {
 function distance(photo: PlayerPhoto, year: number): number {
 	const bounds = dateBounds(captureDate(photo));
 	return bounds ? Math.max(bounds[0] - year, year - bounds[1], 0) : Infinity;
+}
+
+/** Team portraits use the closest documented season, with unknown dates last. */
+export function compareTeamPhotos(a: TeamPhoto, b: TeamPhoto, year: number): number {
+	const da = distance(a, year), db = distance(b, year);
+	if (da !== db) return da < db ? -1 : 1;
+	return b.width * b.height - a.width * a.height
+		|| (a.sourceId ?? a.sourceUrl).localeCompare(b.sourceId ?? b.sourceUrl, 'en')
+		|| a.url.localeCompare(b.url, 'en');
 }
 
 /** Date proximity precedes team and quality; source identity makes ties independent of provider order. */

@@ -129,6 +129,10 @@ export interface ApprovedPhotoReview {
 	visualReview: true;
 	rights: { kind: 'original' | 'reproduction'; underlyingRightsUrl?: string };
 }
+export interface TeamPhotoReview extends Omit<ApprovedPhotoReview, 'playerId'> {
+ franchiseId: string;
+ caption: string;
+}
 export interface RejectedPhotoReview {
 	playerId: string;
 	sourceId: string;

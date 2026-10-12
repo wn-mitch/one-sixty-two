@@ -4,6 +4,7 @@ import { canonicalJSON } from './data/compile.ts';
 import { photoTier } from '../src/lib/media/photo-policy.ts';
 import { selectPhoto } from '../src/lib/media/client.ts';
 import { auditMedia } from './media/audit.ts';
+import { auditCardPhotos } from './media/card-priorities.ts';
 import { DiscoveryAccess, discoverCommonsCollection, searchCommonsBatch, searchLoc, searchOpenverse } from './media/discovery-providers.ts';
 import { cachedCandidates, candidateMatchesPlayer, discoveryStrategy, mergeCandidates, normalizedName, readJson, readResearch, recordManualSearch, researchContext, searchComplete, updateResearch, validateManualSearch, writeResearch } from './media/research.ts';
 import type { PhotoCandidate, ResearchProvider, SearchState } from './media/research.ts';
@@ -34,7 +35,7 @@ if (command === 'record') {
 }
 if (command === 'audit') {
 	const summary = await auditMedia(context);
-	console.log(JSON.stringify(summary, null, 2));
+	console.log(JSON.stringify({ ...summary, cards: await auditCardPhotos(context.root, context.media) }, null, 2));
 	process.exit(0);
 }
 const providers = (option('providers') ?? 'cached,commons,openverse,loc').split(',') as ResearchProvider[];

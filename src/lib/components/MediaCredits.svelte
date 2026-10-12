@@ -2,7 +2,7 @@
  import { onMount } from 'svelte';
  import { loadMedia } from '../media/client.ts';
  import type { MediaAsset, MediaManifest } from '../media/types.ts';
- import { photoLabel } from '../media/photo-policy.ts';
+ import { captureLabel, photoLabel } from '../media/photo-policy.ts';
  import { compareId } from '../game/types.ts';
  let media = $state.raw<MediaManifest | null>(null);
  let loading = $state(true);
@@ -25,6 +25,7 @@
   for (const [id, team] of Object.entries(media.teams)) {
    if (team.logo) entries.push({ key: `${id}:current`, label: `${team.name}: current franchise mark`, asset: team.logo });
    team.historical.forEach((asset, index) => entries.push({ key: `${id}:historical:${index}`, label: `${team.name}: ${asset.firstYear}–${asset.lastYear} mark`, asset }));
+   (team.photos ?? []).forEach(asset => entries.push({ key: `${id}:team:${asset.sourceId}`, label: `${asset.caption}: team photo ${captureLabel(asset)}`, asset, captureEvidenceUrl: asset.captureEvidenceUrl, identityEvidenceUrl: asset.identityEvidenceUrl, rightsEvidenceUrl: asset.evidence?.rightsUrl }));
   }
   for (const [id, player] of Object.entries(media.players)) {
    player.photos.forEach((asset, index) => entries.push({
@@ -68,6 +69,7 @@
 </script>
 
 <div class="image-credits" aria-busy={loading}>
+ <p>Remainder cards use the closest available reviewed team photo from the same franchise. The label gives the photo’s actual date; a group photo does not identify the simulated relief-pool members.</p>
  <p>Reviewed portraits prefer an MLB playing photo from the card’s decade, then another MLB playing photo, a minor-league photo, another baseball playing uniform, and finally a later coaching or old-timers uniform. Within each group, the nearest evidenced date wins, followed by the matching team and image quality. Approximate and unknown dates are labelled. Previously published career photos remain available while their uniform classifications are reviewed.</p>
  <p>Atmosphere photographs are context only. Stadium cards show a photo of each franchise's current park, sometimes taken before later renovations or renaming; photos never affect the simulation. Marks without a verified historical year range are labelled as current franchise marks.</p>
  <p>Image copyright licences are separate from the statistical-data licence and do not grant trademark, privacy, publicity, or likeness rights. All club marks identify actual franchises in this game and its season share images. Some reviewed marks rely on an asserted fair-use basis; their copyright disclosure is not a reuse licence or established permission. This game is not affiliated with or endorsed by the clubs or league.</p>
@@ -99,7 +101,7 @@
        <a href={row.asset.sourceUrl} target="_blank" rel="noreferrer">Original source</a>
        <a href={row.asset.licenseUrl} rel="license noreferrer" target="_blank">{row.asset.license}</a>
        {#if row.captureEvidenceUrl}<a href={row.captureEvidenceUrl} target="_blank" rel="noreferrer">Capture-date evidence</a>{/if}
-       {#if row.identityEvidenceUrl}<a href={row.identityEvidenceUrl} target="_blank" rel="noreferrer">Player-identity evidence</a>{/if}
+       {#if row.identityEvidenceUrl}<a href={row.identityEvidenceUrl} target="_blank" rel="noreferrer">Subject-identity evidence</a>{/if}
        {#if row.rightsEvidenceUrl}<a href={row.rightsEvidenceUrl} target="_blank" rel="noreferrer">Underlying rights evidence</a>{/if}
       </div>
      </div>

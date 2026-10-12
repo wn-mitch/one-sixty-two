@@ -17,7 +17,7 @@ import {
 	validateTeamSources
 } from './logic.ts';
 import { inventoryMetadata } from './inventory.ts';
-import { prepareReviewedPhoto, validateReviews } from './reviews.ts';
+import { prepareReviewedPhoto, prepareTeamPhoto, validateReviews, validateTeamPhotoReviews } from './reviews.ts';
 import { captureLabel } from '../../src/lib/media/photo-policy.ts';
 import type {
 	AtmosphereSourceRegistry,
@@ -30,9 +30,10 @@ import type {
 	PhotoReview,
 	PreparedAsset,
 	ReviewedPlayerPhotos,
-	TeamSourceRegistry
+	TeamSourceRegistry,
+	TeamPhotoReview
 } from './types.ts';
-const modifications = 'Files are auto-oriented, metadata stripped, and re-encoded as WebP. Portrait and logo derivatives are resized to at most 384px; atmosphere derivatives are resized to at most 1280px. Portraits may be cropped for display.';
+const modifications = 'Files are auto-oriented, metadata stripped, and re-encoded as WebP. Portrait and logo derivatives are resized to at most 384px; team and atmosphere derivatives are resized to at most 1280px. Reviewed crops are recorded; individual portraits may also be cropped by the card frame.';
 const rightsNotice = [
 	'Source file copyright licences do not grant trademark, privacy, publicity, or likeness rights.',
 	'Team names and marks may be trademarks of their respective owners. This game is not affiliated with or endorsed by the clubs or league.'
@@ -204,6 +205,7 @@ export async function generateMedia(input: {
 	playerSources: PlayerSourceRegistry;
 	reviewedPlayerPhotos: ReviewedPlayerPhotos;
 	photoReviews?: PhotoReview[];
+	teamPhotoReviews?: TeamPhotoReview[];
 	atmosphereSources: AtmosphereSourceRegistry;
 	cacheDir: string;
 	outputDir: string;
@@ -212,6 +214,7 @@ export async function generateMedia(input: {
 }): Promise<GeneratedMedia> {
 	validateTeamSources(input.teamSources, input.dataManifest.franchises);
 	validateAtmosphereSources(input.atmosphereSources, input.dataManifest);
+	validateTeamPhotoReviews(input.teamPhotoReviews ?? [], new Set(input.dataManifest.franchises.map(franchise => franchise.id)));
 	const exclusions = emptyExclusions();
 	const identities = buildCandidateIdentities(
 		input.dataManifest,
@@ -418,6 +421,10 @@ export async function generateMedia(input: {
 				.sort((a, b) => a.firstYear - b.firstYear || a.lastYear - b.lastYear || compareText(a.url, b.url));
 			generatedTeams[franchiseId] = { name: source.name, color: source.color, logo, historical };
 		}
+		for (const review of [...(input.teamPhotoReviews ?? [])].sort((a, b) => compareText(a.franchiseId, b.franchiseId) || compareText(a.sourceId, b.sourceId))) {
+			const team = generatedTeams[review.franchiseId];
+			(team.photos ??= []).push(await prepareTeamPhoto(review, input.cacheDir, stagingDirectory, input.offline));
+		}
 
 		const generatedAtmosphere: Record<string, AtmospherePhoto> = {};
 		for (const source of acceptedAtmosphere) {
@@ -461,7 +468,8 @@ export async function generateMedia(input: {
 		const teams = Object.fromEntries(Object.entries(generatedTeams).map(([id, team]) => [id, {
 			...team,
 			logo: team.logo ? replaceUrl(team.logo) : null,
-			historical: team.historical.map((item) => ({ ...replaceUrl(item), firstYear: item.firstYear, lastYear: item.lastYear }))
+			historical: team.historical.map((item) => ({ ...replaceUrl(item), firstYear: item.firstYear, lastYear: item.lastYear })),
+			...(team.photos ? { photos: team.photos.map(item => ({ ...item, ...replaceUrl(item) })) } : {})
 		}]));
 		const players = Object.fromEntries(Object.entries(generatedPlayers).map(([id, player]) => [id, {
 			...player,
@@ -497,6 +505,7 @@ export async function generateMedia(input: {
 			identityEvidenceUrl?: string;
 		}> = [
 			...Object.entries(manifest.teams).flatMap(([id, team]) => [
+				...(team.photos ?? []).map(asset => ({ label: `${id} ${captureLabel(asset)} team photo`, asset, captureEvidenceUrl: asset.captureEvidenceUrl, identityEvidenceUrl: asset.evidence?.identityUrl })),
 				...(team.logo ? [{ label: `${id} current mark`, asset: team.logo }] : []),
 				...team.historical.map((asset) => ({ label: `${id} ${asset.firstYear}-${asset.lastYear} mark`, asset }))
 			]),

@@ -138,14 +138,17 @@ export function previewCompact(era) {
 
 export { disposeCompact, readCompactNameClips as compactNameClips };
 
-function afterLayout() {
-	return tick()
-		.then(() => document.fonts.ready)
-		.then(() => {
-			const { promise, resolve } = Promise.withResolvers();
-			requestAnimationFrame(() => requestAnimationFrame(resolve));
-			return promise;
-		});
+async function afterLayout() {
+	await tick();
+	const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+	// Fitting can expose another font face after an earlier fonts.ready resolves.
+	for (let attempt = 0; attempt < 30; attempt++) {
+		await frames();
+		await document.fonts.ready;
+		await frames();
+		if (document.fonts.status === 'loaded' && !document.querySelector('[data-fit-state="unsettled"]')) return;
+	}
+	throw new Error('Card fonts and fitting did not settle');
 }
 
 function colorHex(cssColor) {
@@ -189,7 +192,8 @@ function problemsFor(host) {
 		}
 		const css = getComputedStyle(node);
 		if (css.whiteSpace === 'nowrap' && node.clientWidth && node.scrollWidth > node.clientWidth + 1) {
-			problems.push({ kind: 'nowrap', layer: node.dataset.layer, text: node.textContent, width: node.clientWidth, scroll: node.scrollWidth });
+			problems.push({ kind: 'nowrap', layer: node.dataset.layer, text: node.textContent, width: node.clientWidth, scroll: node.scrollWidth,
+				font: css.font, fonts: document.fonts.status, fitted: node.dataset.fitted, fitState: node.closest('[data-card]')?.dataset.fitState });
 		}
 		if (node.dataset.layer?.endsWith('.value') && node.parentElement
 			&& node.getBoundingClientRect().width > node.parentElement.getBoundingClientRect().width + 1) {
@@ -408,6 +412,32 @@ test('shows reviewed uncertain dates and uniform contexts across all eight eras'
 	for (const label of expected) await expect(host.getByRole('img', { name: `Example Athlete · ${label}`, exact: true })).toHaveCount(1);
 	await expect(host.locator('[data-card][data-face="front"]')).toHaveCount(8);
 	await host.screenshot({ path: testInfo.outputPath('portrait-policy-eight-eras.png') });
+});
+
+test('preserves team groups and actual photo dates on remainder cards across all eight eras', async ({ page, request }, testInfo) => {
+	const [manifest, current, rankings] = await Promise.all([currentManifest(request), currentMedia(request), currentRankings(request)]);
+	const base = (await selectSpecimens(request, manifest, current))[0];
+	const photo = Object.values(current.teams).flatMap(team => team.photos ?? [])[0];
+	expect(photo, 'Prepared media includes a reviewed team group').toBeDefined();
+	const specimens = ERAS.map((era, i) => ({ ...base, label: `synthetic-remainder-${i}`, slot: 'BP' as const,
+		profile: { ...base.profile, playerId: `synthetic-pool-${i}`, seasonId: `synthetic-pool-${i}`, displayName: 'Example relief pool',
+			franchiseId: photo.franchiseId, historicalTeam: 'Example Club', year: Number(era.slice(0, 4)) + 5, eligibleSlots: ['BP'] as Profile['eligibleSlots'],
+			bullpen: { members: [], excluded: { playerId: 'synthetic-excluded', seasonId: 'synthetic-excluded', displayName: 'Example Closer' } } }
+	}));
+	await installHarness(page);
+	await page.evaluate(async input => {
+		const harness = (window as typeof window & { CardLayoutHarness: { prepare(input: unknown): void; preview(): Promise<void> } }).CardLayoutHarness;
+		harness.prepare(input); await harness.preview();
+	}, { specimens, media: current, manifest, rankings });
+	const host = page.locator('#portrait-policy-preview');
+	const images = host.locator('[data-layer="photo.image"]');
+	await expect(images).toHaveCount(8);
+	for (const image of await images.all()) {
+		await expect(image).toHaveCSS('object-fit', 'contain');
+		await expect(image).toHaveAttribute('alt', new RegExp(`Team photo ${photo.year}`));
+		expect(await image.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+	}
+	await host.screenshot({ path: testInfo.outputPath('remainder-photo-eight-eras.png') });
 });
 
 test('keeps compact text readable above every era finish at its minimum width', async ({ page, request }, testInfo) => {

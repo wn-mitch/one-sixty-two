@@ -1,8 +1,8 @@
 import { average, formatDefEstimate, historicalBatting, historicalEra, innings } from '../game/format.ts';
 import { POSITIONS } from '../game/types.ts';
 import type { HitterSlot, Manifest, Position, Profile, RosterSlot } from '../game/types.ts';
-import { selectLogo, selectPhoto } from '../media/client.ts';
-import type { MediaAsset, MediaManifest, PlayerPhoto } from '../media/types.ts';
+import { selectLogo, selectPhoto, selectTeamPhoto } from '../media/client.ts';
+import type { MediaAsset, MediaManifest, PlayerPhoto, TeamPhoto } from '../media/types.ts';
 import { logoShapeFor, type LogoShape } from '../media/logo-shapes.ts';
 import { captureLabel, exactSeason, photoContextLabel, photoLabel } from '../media/photo-policy.ts';
 import type { WarSeasonRanking, WarRankings } from '../rankings/types.ts';
@@ -19,6 +19,7 @@ export type CardMediaStatus = 'loading' | 'ready' | 'unavailable';
 
 export interface CardStat { l: string; v: string; role?: 'BAT' | 'PIT'; name?: string }
 export interface CardMedia {
+	subject?: 'team';
 	url: string;
 	year?: number;
 	dateLabel?: string;
@@ -230,8 +231,9 @@ function position(profile: Profile, slot: RosterSlot | null | undefined, role: C
 	if (batting && pitching) return `${batting} · ${pitching.replace(/[123]$/, '')}`;
 	return (role === 'batting' ? batting : pitching) ?? EM_DASH;
 }
-function selectedPhoto(photo: PlayerPhoto, year: number): CardMedia {
-	return { url: photo.url, year: photo.year, dateLabel: captureLabel(photo), contextLabel: photoContextLabel(photo, year), selectedSeason: exactSeason(photo, year), credit: photo.credit || 'credit unverified', license: photo.license || 'credit unverified', licenseUrl: photo.licenseUrl, sourceUrl: photo.sourceUrl, captureEvidenceUrl: photo.captureEvidenceUrl, identityEvidenceUrl: photo.identityEvidenceUrl, rightsEvidenceUrl: photo.evidence?.rightsUrl };
+function selectedPhoto(photo: PlayerPhoto | TeamPhoto, year: number): CardMedia {
+	const team = 'subject' in photo && photo.subject === 'team';
+	return { ...(team ? { subject: 'team' as const } : {}), url: photo.url, year: photo.year, dateLabel: captureLabel(photo), contextLabel: team ? photo.caption : photoContextLabel(photo, year), selectedSeason: exactSeason(photo, year), credit: photo.credit || 'credit unverified', license: photo.license || 'credit unverified', licenseUrl: photo.licenseUrl, sourceUrl: photo.sourceUrl, captureEvidenceUrl: photo.captureEvidenceUrl, identityEvidenceUrl: photo.identityEvidenceUrl, rightsEvidenceUrl: photo.evidence?.rightsUrl };
 }
 function selectedLogo(asset: MediaAsset, historical: boolean): CardMedia {
 	return { url: asset.url, credit: asset.credit || 'credit unverified', license: asset.license || 'credit unverified', licenseUrl: asset.licenseUrl, sourceUrl: asset.sourceUrl, historical };
@@ -270,24 +272,24 @@ function warText(hasBatting: boolean, hasPitching: boolean, ranking: WarSeasonRa
 	].filter(Boolean);
 	return entries.length ? `${entries.join(' · ')} · rank only` : '';
 }
-function photoRows(photo: CardMedia | null, year: number, modifications: string | undefined, mediaStatus: CardMediaStatus): SupplementalSection {
+function photoRows(photo: CardMedia | null, year: number, modifications: string | undefined, mediaStatus: CardMediaStatus, team = false): SupplementalSection {
 	if (!photo) {
 		const status = mediaStatus === 'loading'
 			? 'Verified photo availability is loading.'
 			: mediaStatus === 'unavailable'
 				? 'Photo source is unavailable. The season remains fully draftable.'
-				: 'No reviewed baseball-uniform photo is published.';
+				: team ? 'No reviewed team photo is published.' : 'No reviewed baseball-uniform photo is published.';
 		return { h: 'Photo', rows: [{ k: 'Status', v: status }] };
 	}
 	return { h: 'Photo', rows: [
 		{ k: 'Year', v: photo.dateLabel ?? 'date unknown' },
 		{ k: 'Context', v: photo.contextLabel ?? 'Photo' },
-		{ k: 'Verification', v: photo.selectedSeason ? 'The capture year matches the drafted season.' : `This photo does not establish the player's appearance in the drafted ${year} season.` },
+		{ k: 'Verification', v: photo.subject === 'team' ? `${photo.selectedSeason ? 'The capture year matches the card season.' : `This team photo is from another or an undated season, not the ${year} roster.`} It does not identify the simulated relief-pool members.` : photo.selectedSeason ? 'The capture year matches the drafted season.' : `This photo does not establish the player's appearance in the drafted ${year} season.` },
 		{ k: 'Credit', v: photo.credit }, { k: 'Licence', v: photo.license, href: photo.licenseUrl },
 		{ k: 'Source', v: photo.sourceUrl, href: photo.sourceUrl },
 		{ k: 'Changes', v: modifications || 'Image modifications unavailable' },
 		...(photo.captureEvidenceUrl ? [{ k: 'Capture-date evidence', v: photo.captureEvidenceUrl, href: photo.captureEvidenceUrl }] : []),
-		...(photo.identityEvidenceUrl ? [{ k: 'Player-identity evidence', v: photo.identityEvidenceUrl, href: photo.identityEvidenceUrl }] : []),
+		...(photo.identityEvidenceUrl ? [{ k: photo.subject === 'team' ? 'Team-identity evidence' : 'Player-identity evidence', v: photo.identityEvidenceUrl, href: photo.identityEvidenceUrl }] : []),
 		...(photo.rightsEvidenceUrl ? [{ k: 'Underlying rights evidence', v: photo.rightsEvidenceUrl, href: photo.rightsEvidenceUrl }] : [])
 	] };
 }
@@ -319,7 +321,10 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 	const pos = position(profile, slot, role);
 	const hasBatting = !profile.bullpen && profile.eligibleSlots.some(isHitter) && !!profile.batting;
 	const hasPitching = !profile.bullpen && profile.eligibleSlots.some(value => !isHitter(value)) && !!profile.pitching;
-	const photo = profile.bullpen ? null : selectPhoto(media, profile.playerId, profile.year, profile.franchiseId);
+	const teamRemainder = !!profile.bullpen || profile.playerId === `${profile.franchiseId}:bullpen`;
+	const photo = profile.playerId === 'league:bullpen' ? null : teamRemainder
+		? selectTeamPhoto(media, profile.franchiseId, profile.year)
+		: selectPhoto(media, profile.playerId, profile.year, profile.franchiseId);
 	const logo = selectLogo(media, profile.franchiseId, profile.year);
 	const cardPhoto = photo ? selectedPhoto(photo, profile.year) : null;
 	const cardLogo = logo ? selectedLogo(logo.asset, logo.historical) : null;
@@ -380,11 +385,12 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 	else if (mediaStatus === 'loading') logoLabel = 'Loading team mark';
 	else if (mediaStatus === 'unavailable') logoLabel = 'Team mark source unavailable';
 	let photoSource = profile.bullpen ? 'Team-season pool · no photo' : 'No photo';
-	if (cardPhoto) photoSource = cardPhoto.dateLabel === 'date unknown' ? 'Undated photo' : `Photo ${cardPhoto.dateLabel}`;
+	if (cardPhoto) photoSource = cardPhoto.subject === 'team' ? `Team photo ${cardPhoto.dateLabel}` : cardPhoto.dateLabel === 'date unknown' ? 'Undated photo' : `Photo ${cardPhoto.dateLabel}`;
 	else if (!profile.bullpen && mediaStatus === 'loading') photoSource = 'Photo availability loading';
 	else if (!profile.bullpen && mediaStatus === 'unavailable') photoSource = 'Photo source unavailable';
 	let photoCaption = 'No verified photo published';
-	if (profile.bullpen) photoCaption = 'Team-season pool · no photo';
+	if (cardPhoto?.subject === 'team') photoCaption = `Team photo ${cardPhoto.dateLabel}`;
+	else if (teamRemainder) photoCaption = 'Team-season pool · no photo';
 	else if (photo) photoCaption = photoLabel(photo, profile.year);
 	else if (mediaStatus === 'loading') photoCaption = 'Photo availability loading';
 	else if (mediaStatus === 'unavailable') photoCaption = 'Photo source unavailable';
@@ -410,6 +416,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 				{ k: 'Team-season', v: `${team}, ${front.year}` }, { k: `Members (${profile.bullpen.members.length})`, v: profile.bullpen.members.map(member => member.displayName).join(', ') || EM_DASH },
 				{ k: 'Excluded saves leader', v: profile.bullpen.excluded.displayName || EM_DASH },
 			] },
+			photoRows(cardPhoto, profile.year, media?.modifications, mediaStatus, true),
 			...(estimates.length ? [{ h: 'Season estimates', rows: estimates.map((v, index) => ({ k: `Estimate ${index + 1}`, v })) }] : []),
 			logoRows(cardLogo, mediaStatus),
 			statisticsSource
@@ -421,7 +428,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 				{ k: 'Source', v: rankings?.source.description || 'Ranking source unavailable', href: rankings?.source.url }
 			] },
 			...(estimates.length ? [{ h: 'Pre-season estimates', rows: estimates.map((v, index) => ({ k: `Estimate ${index + 1}`, v })) }] : []),
-			photoRows(cardPhoto, profile.year, media?.modifications, mediaStatus),
+			photoRows(cardPhoto, profile.year, media?.modifications, mediaStatus, teamRemainder || profile.playerId === 'league:bullpen'),
 			logoRows(cardLogo, mediaStatus),
 			statisticsSource
 		]

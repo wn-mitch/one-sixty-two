@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { selectPhoto, validateMedia } from './client.ts';
+import { selectPhoto, selectTeamPhoto, validateMedia } from './client.ts';
 import { captureLabel, comparePhotos, exactSeason, isCaptureDate, photoLabel, photoTier } from './photo-policy.ts';
-import type { CaptureDate, MediaManifest, PlayerPhoto } from './types.ts';
+import type { CaptureDate, MediaManifest, PlayerPhoto, TeamPhoto } from './types.ts';
 import { canonicalJSON } from '../../../scripts/data/compile.ts';
 import { digest } from '../../../scripts/media/cache.ts';
 import { validateReviews } from '../../../scripts/media/reviews.ts';
@@ -23,6 +23,21 @@ function manifest(photos: PlayerPhoto[]): MediaManifest {
 		diagnostics: { playersSearched: 1, playersWithPhotos: Number(photos.length > 0), photos: photos.length, logos: 0, historicalLogos: 0, atmospherePhotos: 0, excluded: 0 } };
 }
 const exact = (year: number): CaptureDate => ({ kind: 'exact', year });
+
+it('selects only reviewed photos of the same franchise, nearest dated season first', () => {
+	const index = manifest([]);
+	const teamPhoto = (id: string, date: CaptureDate): TeamPhoto => ({ ...photo(id, date), subject: 'team', caption: 'Synthetic club in uniform', franchiseId: 'A', review: 'approved' });
+	const close = teamPhoto('near', exact(1995)), distant = teamPhoto('far', exact(1990)), unknown = teamPhoto('unknown', { kind: 'unknown' });
+	index.teams.A.photos = [unknown, distant, close];
+	expect(() => validateMedia(index, version)).not.toThrow();
+	expect(selectTeamPhoto(index, 'A', 1996)).toBe(close);
+	expect(selectTeamPhoto(index, 'B', 1996)).toBeNull();
+	index.teams.A.photos.reverse();
+	expect(selectTeamPhoto(index, 'A', 1990)).toBe(distant);
+	index.teams.A.photos = [{ ...close, franchiseId: 'B' }];
+	expect(selectTeamPhoto(index, 'A', 1996)).toBeNull();
+	expect(() => validateMedia(index, version)).toThrow('Team photo');
+});
 
 describe('uniform and era preference', () => {
 	it('orders every tier and retains pre-debut minor-league and later uniforms', () => {
