@@ -6,6 +6,7 @@ import {
 	ShareNotFoundError,
 	ShareUnavailableError
 } from '#lib/server/share-images.ts';
+import { sitePreviewImage } from '#lib/share/site-preview.ts';
 
 export const load: PageServerLoad = async ({ params, setHeaders }) => {
 	setHeaders({ 'cache-control': 'no-store' });
@@ -15,7 +16,8 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 		title: 'Shared roster | 162-0',
 		description: 'Open this shared 162-0 roster and replay its 162-game season.',
 		canonical,
-		image: null
+		// Unpublished or unreadable seasons fall back to the site preview.
+		image: sitePreviewImage(env.PUBLIC_ORIGIN)
 	};
 	try {
 		const publication = await readSharePublication(env, replayId);

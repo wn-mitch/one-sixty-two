@@ -7,9 +7,13 @@
 	import Toaster from '#lib/components/Toaster.svelte';
 	import { refreshStickers } from '#lib/collection/store.svelte.ts';
 	import { page } from '$app/state';
+	import { sitePreviewImage } from '#lib/share/site-preview.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+	const sitePreview = sitePreviewImage();
+	// Roster links (/r, /c) set their own preview from the published season image.
+	const rosterLink = $derived(/^\/(r|c)\//.test(page.url.pathname));
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
 
 	onMount(() => {
@@ -52,6 +56,21 @@
 	{#if page.url.pathname === '/'}
 		<title>162-0 | The undefeated baseball challenge</title>
 		<meta name="description" content="Roll a franchise and decade. Draft sixteen historical selections. Can your team survive 162 games without a loss?" />
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content="https://162-0.dev/" />
+		<meta property="og:title" content="162-0 | The undefeated baseball challenge" />
+		<meta property="og:description" content="Roll a franchise and decade. Draft sixteen historical selections. Can your team survive 162 games without a loss?" />
+	{/if}
+	{#if !rosterLink}
+		<meta property="og:site_name" content="162-0" />
+		<meta property="og:image" content={sitePreview.url} />
+		<meta property="og:image:width" content={String(sitePreview.width)} />
+		<meta property="og:image:height" content={String(sitePreview.height)} />
+		<meta property="og:image:type" content={sitePreview.type} />
+		<meta property="og:image:alt" content={sitePreview.alt} />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content={sitePreview.url} />
+		<meta name="twitter:image:alt" content={sitePreview.alt} />
 	{/if}
 </svelte:head>
 

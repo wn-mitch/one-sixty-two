@@ -8,6 +8,7 @@
 	},
 	"scripts": {
 		"engine": "node scripts/build-engine.ts",
+		"og:capture": "node scripts/og-image.ts",
 		"data:prepare": "node scripts/prepare-data.ts",
 		"data:statcast": "node scripts/curate-statcast.ts",
 		"rankings:prepare": "node scripts/prepare-rankings.ts",

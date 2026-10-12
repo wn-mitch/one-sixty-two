@@ -90,6 +90,8 @@ async function verifyPublication(
 	expect(html).toContain(`property=\"og:image:width\" content=\"${SHARE_DIMENSIONS.field.width}\"`);
 	expect(html).toContain(`property=\"og:image:height\" content=\"${SHARE_DIMENSIONS.field.height}\"`);
 	expect(html).toContain('name=\"twitter:card\" content=\"summary_large_image\"');
+	// A published roster shows its own field image, never the site preview as well.
+	expect(html).not.toContain('/og.png');
 	expect(html).toContain(firstLoss === null ? 'No losses.' : `First loss: Game ${firstLoss}.`);
 	expect(html).toContain(`Longest winning streak: ${longestWinningStreak} ${longestWinningStreak === 1 ? 'game' : 'games'}.`);
 }
@@ -352,6 +354,18 @@ test('starts a clean draft from a replay link without touching the local save', 
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect((await deviceDraft(page)).picks.length).toBe(0);
 	expect((await deviceDraft(page)).schemaVersion).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
+});
+
+test('previews the site with the card fan, and unpublished roster links fall back to it', async ({ request }) => {
+	for (const path of ['/', '/r/aaaaaaaaaaaaaaaaaaaaaa']) {
+		const html = await (await request.get(path, { headers: { 'user-agent': 'browser-suite-crawler' } })).text();
+		expect(html).toMatch(/property="og:image" content="https?:\/\/[^"]+\/og\.png"/);
+		expect(html).toContain('property="og:image:width" content="1200"');
+		expect(html.match(/property="og:image"/g)).toHaveLength(1);
+	}
+	const image = await request.get('/og.png');
+	expect(image.status()).toBe(200);
+	expect(image.headers()['content-type']).toBe('image/png');
 });
 
 test('rejects invalid replay uploads and unknown replay ids', async ({ request }) => {

@@ -6,6 +6,7 @@ import {
 	ShareNotFoundError,
 	ShareUnavailableError
 } from '#lib/server/share-images.ts';
+import { sitePreviewImage } from '#lib/share/site-preview.ts';
 
 export const load: PageServerLoad = async ({ params, setHeaders }) => {
 	setHeaders({ 'cache-control': 'no-store' });
@@ -17,7 +18,8 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 		title: 'Challenge | 162-0',
 		description: 'Draft a historical roster, play 162 games, then take on this club in a best-of-five.',
 		canonical,
-		image: null
+		// Unpublished or unreadable seasons fall back to the site preview.
+		image: sitePreviewImage(env.PUBLIC_ORIGIN)
 	};
 	try {
 		const publication = await readSharePublication(env, replayId);
