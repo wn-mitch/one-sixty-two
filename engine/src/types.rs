@@ -356,9 +356,48 @@ pub enum Half {
     Bottom,
 }
 
+/// The selected fielding attempt; the legal outcome records success or an error.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum MomentFielding { Air, Ground, Hit }
+
+/// Observed contact, not a second simulation or an imagined pitch sequence.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MomentContact {
+    pub exit_velocity_mph: f64,
+    pub launch_angle_deg: f64,
+    pub spray_angle_deg: f64,
+    pub fair: bool,
+    pub fielding: MomentFielding,
+    pub automatic_double: bool,
+    pub fielder_name: Option<String>,
+    pub fielder_season_id: Option<String>,
+    pub fielder_position: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MomentRunner {
+    pub name: String,
+    pub season_id: String,
+    pub from: u32,
+    /// 0 = out, 1–3 = base, 4 = scored. Only runners already aboard are listed.
+    pub to: u32,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MomentPlay {
+    pub outs_after: u32,
+    pub contact: Option<MomentContact>,
+    pub runners: Vec<MomentRunner>,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SeasonMoment {
+    pub play: MomentPlay,
     pub game_number: u32,
     pub opponent_name: String,
     pub is_home: bool,

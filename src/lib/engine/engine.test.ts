@@ -34,6 +34,34 @@ describe('wasm engine boundary', () => {
   expect(result.games.filter(game => game.isHome)).toHaveLength(81);
   expect(result.games.every(game => game.challengeRuns !== game.opponentRuns && game.win === game.challengeRuns > game.opponentRuns)).toBe(true);
   expect(result.runsFor).toBe(result.games.reduce((sum, game) => sum + game.challengeRuns, 0));
+  const observed = result.games.flatMap(game => [game.highlight, game.lowlight]).filter(moment => moment !== null);
+  expect(observed.length).toBeGreaterThan(0);
+  for (const moment of observed) {
+   const play = moment.play!;
+   expect(play).toBeDefined();
+   expect(play.outsAfter).toBeGreaterThanOrEqual(moment.outsBefore);
+   expect(play.outsAfter).toBeLessThanOrEqual(3);
+   const nonContact = ['walk', 'hitByPitch', 'strikeout', 'stolenBase', 'caughtStealing'].includes(moment.outcome);
+   expect(play.contact === null).toBe(nonContact);
+   if (play.contact) {
+    expect(Number.isFinite(play.contact.exitVelocityMph)).toBe(true);
+    expect(Number.isFinite(play.contact.launchAngleDeg)).toBe(true);
+    expect(Number.isFinite(play.contact.sprayAngleDeg)).toBe(true);
+    if (play.contact.fielderName) {
+     const game = result.games[moment.gameNumber - 1];
+     const fielding = moment.half === 'top' ? game.home : game.away;
+     expect(fielding.batting.some(line => line.displayName === play.contact!.fielderName && line.seasonId === play.contact!.fielderSeasonId)).toBe(true);
+    }
+   }
+   expect(play.runners.filter(runner => runner.to === 4).length + (moment.outcome === 'homeRun' ? 1 : 0)).toBe(moment.runsScored);
+   expect(play.runners.filter(runner => runner.to === 0).length).toBeLessThanOrEqual(play.outsAfter - moment.outsBefore);
+   for (const runner of play.runners) {
+    expect(moment.basesBefore & (1 << (runner.from - 1))).not.toBe(0);
+    expect(runner.to).not.toBe(runner.from);
+   }
+  }
+  expect(observed.some(moment => moment.play!.runners.some(runner => runner.to === 4))).toBe(true);
+  expect(observed.some(moment => moment.play!.contact?.fielding === 'air')).toBe(true);
   for (const game of result.games) expect(Math.abs(valueLedger(game))).toBeLessThan(1e-9);
   expect(simulateSeason(testSeason(162))).toEqual(result);
   expect(simulateSeason(testSeason(163))).not.toEqual(result);

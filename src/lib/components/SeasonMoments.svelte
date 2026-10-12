@@ -4,7 +4,7 @@
  import type { ResultsCard } from '../game/results-types.ts';
  import type { SeasonMoment, SeasonResult, WinPoint } from '../sim/types.ts';
  import MomentWinChart from './MomentWinChart.svelte';
- import { formatSeasonMoment } from './season-moment.ts';
+ import { formatSeasonMoment, momentParticipant } from './season-moment.ts';
  import type { SeasonMomentCopy } from './season-moment.ts';
 
  interface Props {
@@ -17,10 +17,10 @@
  }
 
  let { result, cards, cardViews, selectedSeasonId, reviewId, onInspect }: Props = $props();
- let highlight = $derived(result.highlight ? formatSeasonMoment(result.highlight, result.games.find(game => game.number === result.highlight?.gameNumber)) : null);
- let lowlight = $derived(result.lowlight ? formatSeasonMoment(result.lowlight, result.games.find(game => game.number === result.lowlight?.gameNumber)) : null);
- let highlightSeasonId = $derived(result.highlight ? (result.highlight.challengeBatting ? result.highlight.batterSeasonId : result.highlight.pitcherSeasonId) : null);
- let lowlightSeasonId = $derived(result.lowlight ? (result.lowlight.challengeBatting ? result.lowlight.batterSeasonId : result.lowlight.pitcherSeasonId) : null);
+ let highlight = $derived(result.highlight ? formatSeasonMoment(result.highlight, result.games.find(game => game.number === result.highlight?.gameNumber), undefined, result.seed) : null);
+ let lowlight = $derived(result.lowlight ? formatSeasonMoment(result.lowlight, result.games.find(game => game.number === result.lowlight?.gameNumber), undefined, result.seed) : null);
+ let highlightSeasonId = $derived(momentParticipant(result.highlight));
+ let lowlightSeasonId = $derived(momentParticipant(result.lowlight));
  let highlightCard = $derived(highlightSeasonId ? cards.find(card => card.seasonId === highlightSeasonId) ?? null : null);
  let lowlightCard = $derived(lowlightSeasonId ? cards.find(card => card.seasonId === lowlightSeasonId) ?? null : null);
  let highlightView = $derived(highlightSeasonId ? cardViews.get(highlightSeasonId) ?? null : null);

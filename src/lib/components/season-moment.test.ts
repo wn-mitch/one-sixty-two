@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameResult, SeasonMoment, TeamBox } from '../sim/types.ts';
 import { createDefensiveRunComponents } from '../sim/value.ts';
-import { formatSeasonMoment } from './season-moment.ts';
+import { formatSeasonMoment, momentParticipant } from './season-moment.ts';
 
 const baseMoment: SeasonMoment = {
  gameNumber: 42,
@@ -140,8 +140,8 @@ describe('radio calls', () => {
  it('calls each play from its own facts and ends a walk-off on the game', () => {
   const slam = formatSeasonMoment(moment());
   expect(slam.call).toMatch(/Batter/);
-  expect(slam.call).toMatch(/GRAND SLAM!/);
-  expect(slam.call).toMatch(/ballgame is OVER!$/);
+  expect(slam.call).toMatch(/grand slam!/);
+  expect(slam.call).toMatch(/wins it|ballgame|walk-off|winning run|one is over/);
   const strikeout = formatSeasonMoment(moment({ outcome: 'strikeout', runsScored: 0, challengeRunsAfter: 1, inning: 5, half: 'top' }));
   expect(strikeout.call).toMatch(/Pitcher/);
   expect(strikeout.call).not.toMatch(/OVER/);
@@ -155,10 +155,53 @@ describe('radio calls', () => {
   for (const outcome of outcomes) expect(formatSeasonMoment(moment({ outcome, inning: 3, half: 'top' })).call.length).toBeGreaterThan(10);
  });
 
- it('interrupts the booth for a Nick Castellanos home run only', () => {
-  const nick = formatSeasonMoment(moment({ batterName: 'Nick Castellanos', inning: 6, half: 'top' })).call;
-  expect(nick).toMatch(/^…and I just want to take a moment.*drive into deep left field by Castellanos, that'll be a home run\.$/);
-  expect(formatSeasonMoment(moment({ batterName: 'Humberto Castellanos', inning: 6, half: 'top' })).call).not.toMatch(/take a moment/);
-  expect(formatSeasonMoment(moment({ batterName: 'Nick Castellanos', outcome: 'double', inning: 6, half: 'top' })).call).not.toMatch(/take a moment/);
+ it('retains the Castellanos interruption as an intentional Easter egg', () => {
+  const call = formatSeasonMoment(moment({ batterName: 'Nick Castellanos', inning: 6, half: 'top' })).call;
+  expect(call).toContain('take a moment');
+  expect(call).toContain('deep left field by Castellanos');
+  expect(formatSeasonMoment(moment({ batterName: 'Nick Castellanos', outcome: 'double' })).call).not.toContain('take a moment');
+ });
+
+ it('follows contact, the fielder, a tag-up and the actual score', () => {
+  const play = { outsAfter: 1, contact: { exitVelocityMph: 91, launchAngleDeg: 33, sprayAngleDeg: 22, fair: true, fielding: 'air' as const, automaticDouble: false, fielderName: 'Test Fielder', fielderSeasonId: 'fielder-2000', fielderPosition: 'RF' }, runners: [{ name: 'Test Runner', seasonId: 'runner-2000', from: 3, to: 4 }] };
+  const call = formatSeasonMoment(moment({ outcome: 'sacrificeFly', inning: 7, outsBefore: 0, basesBefore: 4, challengeRunsBefore: 2, challengeRunsAfter: 3, runsScored: 1, play })).call;
+  expect(call).toContain('to right');
+  expect(call).toContain('Test Fielder makes the catch');
+  expect(call).toContain('Test Runner tags and scores');
+  expect(call).toMatch(/tied at 3|ties it, 3–3|3–3 game|even at 3/);
+ });
+
+ it('keeps a runner thrown out in the story and does not award a phantom run', () => {
+  const call = formatSeasonMoment(moment({ outcome: 'single', inning: 7, challengeRunsAfter: 1, runsScored: 0, play: { outsAfter: 3, contact: { exitVelocityMph: 99, launchAngleDeg: 8, sprayAngleDeg: -20, fair: true, fielding: 'hit' as const, automaticDouble: false, fielderName: 'Test Fielder', fielderSeasonId: 'fielder-2000', fielderPosition: 'LF' }, runners: [{ name: 'Test Runner', seasonId: 'runner-2000', from: 2, to: 0 }] } })).call;
+  expect(call).toContain('left side');
+  expect(call).toContain('Test Runner is out on the play');
+  expect(call).toMatch(/inning|retires the side/);
+  expect(call).not.toMatch(/scores|comes home|wins it/);
+ });
+
+ it('varies the wording by run seed while preserving names and measured direction', () => {
+  const m = moment({ batterName: 'Vladimir Guerrero Jr.', play: { outsAfter: 2, contact: { exitVelocityMph: 105, launchAngleDeg: 29, sprayAngleDeg: 35, fair: true, fielding: 'hit' as const, automaticDouble: false, fielderName: null, fielderSeasonId: null, fielderPosition: null }, runners: [] } });
+  const calls = Array.from({ length: 20 }, (_, seed) => formatSeasonMoment(m, undefined, undefined, seed).call);
+  expect(new Set(calls).size).toBeGreaterThan(10);
+  for (const call of calls) {
+   expect(call).toContain('Vladimir Guerrero Jr.');
+   expect(call).toContain('right-field line');
+   expect(call).not.toContain('left');
+  }
+  expect(formatSeasonMoment(m, undefined, undefined, 7).call).toBe(calls[7]);
+ });
+});
+
+describe('turning-point attribution', () => {
+ it('names and shows the fielder on an error instead of blaming the pitcher', () => {
+  const m = moment({ outcome: 'reachedOnError', challengeBatting: false, half: 'top', runsScored: 1, play: { outsAfter: 2, contact: { exitVelocityMph: 84, launchAngleDeg: 5, sprayAngleDeg: -18, fair: true, fielding: 'ground', automaticDouble: false, fielderName: 'Test Fielder', fielderSeasonId: 'fielder-2000', fielderPosition: 'SS' }, runners: [] } });
+  expect(momentParticipant(m)).toBe('fielder-2000');
+  expect(formatSeasonMoment(m).action).toContain('error by Test Fielder');
+  expect(formatSeasonMoment(m).call).toContain('error by Test Fielder');
+  expect(momentParticipant({ ...m, play: undefined })).toBeNull();
+ });
+ it('shows the runner thrown out, while keeping strikeouts attributed to the pitcher', () => {
+  expect(momentParticipant(moment({ outcome: 'single', play: { outsAfter: 3, contact: null, runners: [{ name: 'Test Runner', seasonId: 'runner-2000', from: 2, to: 0 }] } }))).toBe('runner-2000');
+  expect(momentParticipant(moment({ outcome: 'strikeout', challengeBatting: false }))).toBe('pitcher-2000');
  });
 });

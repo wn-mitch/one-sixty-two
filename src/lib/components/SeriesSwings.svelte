@@ -15,7 +15,7 @@
 	let swings = $derived(([[result.highlight, 'team-a'], [result.lowlight, 'team-b']] as const).flatMap(([value, liftFor], index) => {
 		if (!value) return [];
 		const game = result.games.find(entry => entry.number === value.gameNumber);
-		return [{ number: index + 1, value, liftFor, copy: formatSeasonMoment(value, game?.result, labels) }];
+		return [{ number: index + 1, value, liftFor, copy: formatSeasonMoment(value, game?.result, labels, result.seed) }];
 	}));
 
 	let strips = $derived(result.games.map(game => {

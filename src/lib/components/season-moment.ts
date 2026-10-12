@@ -65,7 +65,7 @@ function outcome(moment: SeasonMoment): string {
   case 'groundedIntoDoublePlay': return `grounded into a double play${suffix}`;
   case 'sacrificeFly': return `hit a sacrifice fly${suffix}`;
   case 'out': return `made an out${suffix}`;
-  case 'reachedOnError': return `reached on an error${suffix}`;
+  case 'reachedOnError': return `reached on an error${moment.play?.contact?.fielderName ? ` by ${moment.play.contact.fielderName}` : ''}${suffix}`;
   case 'stolenBase': return `stole a base${suffix}`;
   case 'caughtStealing': return 'was caught stealing';
  }
@@ -99,12 +99,32 @@ function percentagePoints(value: number): string {
  return `${points > 0 ? '+' : '−'}${Math.abs(points).toFixed(1)} pp`;
 }
 
-export function formatSeasonMoment(moment: SeasonMoment, game?: GameResult, labels?: MomentLabels): SeasonMomentCopy {
+/** Show the involved fielder or baserunner when the play identifies one, not always the pitcher. */
+export function momentParticipant(moment: SeasonMoment | null): string | null {
+ if (!moment) return null;
+ if (moment.challengeBatting) {
+  if (moment.outcome !== 'groundedIntoDoublePlay') {
+   const runnerOut = moment.play?.runners.find(runner => runner.to === 0);
+   if (runnerOut) return runnerOut.seasonId;
+  }
+  return moment.batterSeasonId;
+ }
+ if (moment.outcome === 'reachedOnError') return moment.play?.contact?.fielderSeasonId ?? null;
+ if (moment.outcome === 'stolenBase' || moment.outcome === 'caughtStealing') return null;
+ if (moment.runsScored === 0 && moment.play && moment.play.outsAfter > moment.outsBefore && moment.play.contact?.fielderSeasonId)
+  return moment.play.contact.fielderSeasonId;
+ return moment.pitcherSeasonId;
+}
+
+export function formatSeasonMoment(moment: SeasonMoment, game?: GameResult, labels?: MomentLabels, seed = 0): SeasonMomentCopy {
+ const stealing = moment.outcome === 'stolenBase' || moment.outcome === 'caughtStealing';
+ const role = stealing ? 'runner' : 'hitter';
  const actor = labels
-  ? `${moment.challengeBatting ? labels.challenge : labels.opponent} hitter ${moment.batterName}`
-  : moment.challengeBatting ? moment.batterName : `Opponent hitter ${moment.batterName}`;
+  ? `${moment.challengeBatting ? labels.challenge : labels.opponent} ${role} ${moment.batterName}`
+  : moment.challengeBatting ? moment.batterName : `Opponent ${role} ${moment.batterName}`;
+ const pitching = stealing ? '' : moment.outcome === 'reachedOnError' ? ` with ${moment.pitcherName} pitching` : ` against ${moment.pitcherName}`;
  const walkOff = isWalkOff(moment) ? ' It was a walk-off.' : '';
- const call = radioCall(moment, walkOff !== '');
+ const call = radioCall(moment, walkOff !== '', seed);
  const final = !game ? null : labels
   ? `Final: ${labels.challenge} ${game.challengeRuns}–${game.opponentRuns} ${labels.opponent}`
   : `Final: ${game.win ? 'W' : 'L'}, ${game.challengeRuns}–${game.opponentRuns}`;
@@ -114,7 +134,7 @@ export function formatSeasonMoment(moment: SeasonMoment, game?: GameResult, labe
    : `Game ${moment.gameNumber} · ${moment.isHome ? 'vs.' : 'at'} ${moment.opponentName}`,
   situation: `${moment.half === 'top' ? 'Top' : 'Bottom'} of the ${ordinal(moment.inning)} · ${outs(moment.outsBefore)} · ${bases(moment.basesBefore)}`,
   call,
-  action: `${actor} ${outcome(moment)} against ${moment.pitcherName}.${walkOff}`,
+  action: `${actor} ${outcome(moment)}${pitching}.${walkOff}`,
   score: `Before the play, ${scoreState(moment.challengeRunsBefore, moment.opponentRunsBefore, labels)}; after it, ${scoreState(moment.challengeRunsAfter, moment.opponentRunsAfter, labels)}.`,
   winChance: `${percentage(moment.winBefore)} → ${percentage(moment.winAfter)}`,
   swing: percentagePoints(moment.swing),

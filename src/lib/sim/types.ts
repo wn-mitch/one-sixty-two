@@ -54,7 +54,20 @@ export type SeasonMomentOutcome =
  'groundedIntoDoublePlay' | 'sacrificeFly' | 'out' | 'reachedOnError' | 'stolenBase' | 'caughtStealing';
 /** Challenge-side win chance after one play; `half` counts half-innings from 0 (top of the 1st). */
 export interface WinPoint { half: number; win: number }
+export interface MomentContact {
+ exitVelocityMph: number; launchAngleDeg: number; sprayAngleDeg: number;
+ fair: boolean; fielding: 'air' | 'ground' | 'hit'; automaticDouble: boolean;
+ fielderName: string | null; fielderSeasonId: string | null; fielderPosition: string | null;
+}
+export interface MomentPlay {
+ outsAfter: number;
+ contact: MomentContact | null;
+ /** Runners already aboard: 0 = out, 1–3 = base, 4 = scored. */
+ runners: { name: string; seasonId: string; from: number; to: number }[];
+}
 export interface SeasonMoment {
+ /** Older saved results retain their summary even without observed play detail. */
+ play?: MomentPlay;
  gameNumber: number; opponentName: string; isHome: boolean;
  inning: number; half: 'top' | 'bottom'; outsBefore: number; basesBefore: number;
  challengeRunsBefore: number; opponentRunsBefore: number; challengeRunsAfter: number; opponentRunsAfter: number;

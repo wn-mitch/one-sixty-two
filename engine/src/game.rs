@@ -108,6 +108,7 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
                     (away_before, home_before, away_after, home_after)
                 };
                 let moment = SeasonMoment {
+                    play: event.moment_play(),
                     game_number: input.number, opponent_name: input.opponent_name.to_string(), is_home: input.challenge_is_home,
                     inning, half, outs_before: event.outs_before, bases_before: event.bases_before,
                     challenge_runs_before: challenge_before, opponent_runs_before: opponent_before,
