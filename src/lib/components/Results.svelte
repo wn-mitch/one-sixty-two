@@ -6,7 +6,6 @@
 	import { createResultsModel } from '../game/results-model.ts';
 	import { encodeReplay } from '../game/share.ts';
 	import type { Draft, Manifest, Profile } from '../game/types.ts';
-	import { innings } from '../game/format.ts';
 	import { loadMedia } from '../media/client.ts';
 	import type { MediaManifest } from '../media/types.ts';
 	import type { WarRankings } from '../rankings/types.ts';
@@ -24,6 +23,7 @@
 	import SeasonMoments from './SeasonMoments.svelte';
 	import ShareBlock from './ShareBlock.svelte';
 	import { tableScroll } from './table-scroll.ts';
+	import { BATTING_COLUMNS, nextSort, PITCHING_COLUMNS, sortLines, type SortDirection, type StatColumn } from './stat-sort.ts';
 
 	interface Props {
 		result: SeasonResult;
@@ -92,8 +92,13 @@
 		return line.displayName;
 	}
 
-	function ra9(line: PitcherLine): string {
-		return line.outs > 0 ? (line.R * 27 / line.outs).toFixed(2) : '–';
+	// Season totals open best first by estimated WAR; any header re-sorts its table.
+	let battingSort = $state<{ key: string; direction: SortDirection }>({ key: 'war', direction: 'descending' });
+	let pitchingSort = $state<{ key: string; direction: SortDirection }>({ key: 'war', direction: 'descending' });
+	const battingLines = $derived(sortLines(result.batting, BATTING_COLUMNS.find(column => column.key === battingSort.key)!, battingSort.direction));
+	const pitchingLines = $derived(sortLines(result.pitching, PITCHING_COLUMNS.find(column => column.key === pitchingSort.key)!, pitchingSort.direction));
+	function ariaSort<T>(sort: { key: string; direction: SortDirection }, column: StatColumn<T>): 'ascending' | 'descending' | 'none' {
+		return sort.key === column.key ? sort.direction : 'none';
 	}
 
 	function jumpTo(id: string): void {
@@ -278,29 +283,28 @@
 			<div>
 				<h4 id="batting-heading" tabindex="-1">Batting</h4>
 			</div>
-			<p>Every plate appearance, including all games after the first loss.</p>
+			<p>Every plate appearance, including all games after the first loss. WAR is the app's estimate. Choose a column to sort.</p>
 		</div>
 		<div class="table-scroll stat-table-scroll" role="region" aria-label="Season batting totals" use:tableScroll>
 			<table class="stat-table">
-				<caption class="sr-only">Simulated season batting totals</caption>
+				<caption class="sr-only">Simulated season batting totals, sorted by {BATTING_COLUMNS.find(column => column.key === battingSort.key)!.title}</caption>
 				<thead>
 					<tr>
-						<th scope="col">Batter</th><th scope="col">PA</th><th scope="col">AB</th><th scope="col">H</th>
-						<th scope="col">2B</th><th scope="col">3B</th><th scope="col" class="stat-key">HR</th><th scope="col" class="stat-group">BB</th>
-						<th scope="col">HBP</th><th scope="col">SO</th><th scope="col" class="stat-group">R</th><th scope="col" class="stat-key">RBI</th>
-						<th scope="col" class="stat-group">SB</th><th scope="col">CS</th><th scope="col">SF</th>
+						<th scope="col">Batter</th>
+						{#each BATTING_COLUMNS as column (column.key)}
+							<th scope="col" class={column.className} aria-sort={ariaSort(battingSort, column)}>
+								<button type="button" class="sort-header" class:sorted={battingSort.key === column.key} aria-label={`Sort by ${column.title}`} onclick={() => battingSort = nextSort(battingSort, column)}>{column.label}<span aria-hidden="true">{battingSort.key === column.key ? (battingSort.direction === 'descending' ? '▼' : '▲') : ''}</span></button>
+							</th>
+						{/each}
 					</tr>
 				</thead>
 				<tbody>
-					{#each result.batting as line}
+					{#each battingLines as line (line.seasonId)}
 						<tr>
 							<th scope="row">
 								<span class="stat-identity">{line.displayName}<small>{line.position} · {line.year}</small></span>
 							</th>
-							<td>{line.PA}</td><td>{line.AB}</td><td>{line.H}</td>
-							<td>{line.doubles}</td><td>{line.triples}</td><td class="stat-key">{line.HR}</td><td class="stat-group">{line.BB}</td>
-							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{line.RBI}</td>
-							<td class="stat-group">{line.SB}</td><td>{line.CS}</td><td>{line.SF}</td>
+							{#each BATTING_COLUMNS as column (column.key)}<td class={column.className}>{column.format(line)}</td>{/each}
 						</tr>
 					{/each}
 				</tbody>
@@ -317,23 +321,24 @@
 		</div>
 		<div class="table-scroll stat-table-scroll" role="region" aria-label="Season pitching totals" use:tableScroll>
 			<table class="stat-table pitching-table">
-				<caption class="sr-only">Simulated season pitching totals</caption>
+				<caption class="sr-only">Simulated season pitching totals, sorted by {PITCHING_COLUMNS.find(column => column.key === pitchingSort.key)!.title}</caption>
 				<thead>
 					<tr>
-						<th scope="col">Pitcher</th><th scope="col">IP</th><th scope="col">H</th><th scope="col">BB</th>
-						<th scope="col">HBP</th><th scope="col">SO</th><th scope="col" class="stat-group">R</th><th scope="col" class="stat-key">RA9</th>
-						<th scope="col" class="stat-group">Starts</th><th scope="col">App.</th>
+						<th scope="col">Pitcher</th>
+						{#each PITCHING_COLUMNS as column (column.key)}
+							<th scope="col" class={column.className} aria-sort={ariaSort(pitchingSort, column)}>
+								<button type="button" class="sort-header" class:sorted={pitchingSort.key === column.key} aria-label={`Sort by ${column.title}`} onclick={() => pitchingSort = nextSort(pitchingSort, column)}>{column.label}<span aria-hidden="true">{pitchingSort.key === column.key ? (pitchingSort.direction === 'descending' ? '▼' : '▲') : ''}</span></button>
+							</th>
+						{/each}
 					</tr>
 				</thead>
 				<tbody>
-					{#each result.pitching as line}
+					{#each pitchingLines as line (line.seasonId)}
 						<tr>
 							<th scope="row">
 								<span class="stat-identity">{pitcherName(line)}<small>{line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : line.role === 'reliever' ? 'RP' : 'SP'} · {line.year}</small></span>
 							</th>
-							<td>{innings(line.outs)}</td><td>{line.H}</td><td>{line.BB}</td>
-							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{ra9(line)}</td>
-							<td class="stat-group">{line.starts}</td><td>{line.appearances}</td>
+							{#each PITCHING_COLUMNS as column (column.key)}<td class={column.className}>{column.format(line)}</td>{/each}
 						</tr>
 					{/each}
 				</tbody>
@@ -466,6 +471,10 @@
 		font-size: var(--text-sm);
 	}
 	.support-note { margin: 0; font-size: var(--text-xs); }
+	.sort-header { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; width: 100%; min-height: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: 0; }
+	.sort-header:hover:not(:disabled) { background: transparent; color: var(--text); }
+	.sort-header.sorted { color: var(--text); }
+	.sort-header span { font-size: .6em; }
 
 	@media (min-width: 48rem) {
 		.scoreboard {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildSchedule } from '../engine/node.ts';
 import type { GameResult } from '../sim/types.ts';
-import { dateGames, DOUBLEHEADERS, OFF_DAYS, opponentSeries, seasonMonths } from './season-calendar.ts';
+import { dateGames, DOUBLEHEADERS, OFF_DAYS, opponentSeries, seasonMonths, streakEnds, venueRecords } from './season-calendar.ts';
 
 const IDS = Array.from({ length: 30 }, (_, index) => `T${String(index).padStart(2, '0')}`);
 
@@ -68,5 +68,20 @@ describe('season calendar', () => {
 			expect(entry.wins + entry.losses).toBe(entry.games.length);
 			expect(entry.runsFor).toBe(entry.games.reduce((sum, game) => sum + game.challengeRuns, 0));
 		}
+	});
+});
+
+describe('streaks and venue records', () => {
+	const results = (pattern: string): GameResult[] => [...pattern].map((mark, index) => ({ number: index + 1, win: mark === 'W', isHome: index % 2 === 0 }) as GameResult);
+
+	it('marks only the last game of each run of three or more', () => {
+		expect([...streakEnds(results('WWWLLWWWWL'))]).toEqual([[3, { win: true, length: 3 }], [9, { win: true, length: 4 }]]);
+		// A season-ending streak is closed by the final game.
+		expect([...streakEnds(results('LWLLL'))]).toEqual([[5, { win: false, length: 3 }]]);
+		expect(streakEnds(results('WLWLWL')).size).toBe(0);
+	});
+
+	it('splits the record by venue', () => {
+		expect(venueRecords(results('WWWL'))).toEqual({ home: { wins: 2, losses: 0 }, away: { wins: 1, losses: 1 } });
 	});
 });

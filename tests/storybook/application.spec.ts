@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { simulateSeason } from '../../src/lib/engine/node.ts';
 import { prepareSeasonInput } from '../../src/lib/game/season-input.ts';
+import { BATTING_COLUMNS, sortLines } from '../../src/lib/components/stat-sort.ts';
 import { createExampleFixtures } from '../../src/lib/storybook/fixtures.ts';
 import { getExampleSeason, type ExampleSeason } from '../../src/lib/storybook/season-fixtures.ts';
 import { expect, openStory, test } from './workshop-test.ts';
@@ -216,7 +217,9 @@ test.describe('application workshop stories', () => {
 		await expect.poll(() => batting.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
 		await batting.evaluate(node => node.scrollTo({ left: node.scrollWidth, behavior: 'instant' }));
 		const finalCell = batting.locator('tbody tr').first().locator('td').last();
-		await expect(finalCell).toHaveText(String(example.result.batting[0]!.SF));
+		// Season totals open sorted by estimated WAR, best first.
+		const leader = sortLines(example.result.batting, BATTING_COLUMNS.find(column => column.key === 'war')!, 'descending')[0]!;
+		await expect(finalCell).toHaveText(String(leader.SF));
 		const endBox = (await finalCell.boundingBox())!;
 		const regionBox = (await batting.boundingBox())!;
 		expect(endBox.x + endBox.width).toBeLessThanOrEqual(regionBox.x + regionBox.width + 1);
@@ -235,8 +238,11 @@ test.describe('application workshop stories', () => {
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 
 		await page.setViewportSize({ width: 1440, height: 900 });
+		// The game opens under its week, and its month card widens to the calendar's full row.
 		const listBox = (await page.locator('.season-calendar').boundingBox())!;
-		expect((await lastGame.boundingBox())!.width).toBeGreaterThanOrEqual(listBox.width - 1);
+		const month = page.locator('.month:has(#season-game-detail)');
+		expect((await month.boundingBox())!.width).toBeGreaterThanOrEqual(listBox.width - 1);
+		expect((await lastGame.boundingBox())!.width).toBeGreaterThanOrEqual((await month.locator('.grid').boundingBox())!.width - 1);
 		await expect(lastGame.locator('tbody th').first()).toBeVisible();
 	});
 

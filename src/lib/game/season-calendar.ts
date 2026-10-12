@@ -132,3 +132,26 @@ export function opponentSeries(games: readonly GameResult[]): OpponentSeries[] {
 	}
 	return [...byOpponent.values()].sort((a, b) => a.opponentName.localeCompare(b.opponentName) || a.opponentId.localeCompare(b.opponentId));
 }
+
+/** A run of consecutive wins or losses, marked on the game that ended it. */
+export interface Streak { win: boolean; length: number }
+
+/** Streaks of at least `minimum` games, keyed by the number of each streak's last game. */
+export function streakEnds(games: readonly GameResult[], minimum = 3): Map<number, Streak> {
+ const ordered = [...games].sort((a, b) => a.number - b.number);
+ const ends = new Map<number, Streak>();
+ let length = 0;
+ ordered.forEach((game, index) => {
+  length = index > 0 && ordered[index - 1].win === game.win ? length + 1 : 1;
+  const next = ordered[index + 1];
+  if ((!next || next.win !== game.win) && length >= minimum) ends.set(game.number, { win: game.win, length });
+ });
+ return ends;
+}
+
+/** Wins and losses at home and on the road. */
+export function venueRecords(games: readonly GameResult[]): { home: { wins: number; losses: number }; away: { wins: number; losses: number } } {
+ const records = { home: { wins: 0, losses: 0 }, away: { wins: 0, losses: 0 } };
+ for (const game of games) records[game.isHome ? 'home' : 'away'][game.win ? 'wins' : 'losses']++;
+ return records;
+}
