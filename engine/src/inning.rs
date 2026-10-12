@@ -3,16 +3,23 @@ use crate::advancement::Bases;
 use crate::contact::{resolve_contact, ContactOptions, ContactResult, Decisions, Play, PreparedDefense, DECISION_DOUBLE_PLAY, DECISION_ERROR, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT, DECISION_SECOND_ATTEMPT, DECISION_SECOND_OUT, DECISION_THIRD_ATTEMPT, DECISION_THIRD_OUT};
 use crate::contact_profile::{sample_contact, sample_non_contact, ContactDraw, PreparedMatchups, ShapeTables, CONTACT_UNIFORMS};
 use crate::defense_rules::{double_play_participants, steal_success_probability};
-use crate::fielding::{build_fielding_plan, compute_candidates, fielding_outcomes, select_outcome, FieldingCandidates, FieldingPlan, PhysicalOutcomes, OUTCOME_FOUL, OUTCOME_GROUND_OUT};
+use crate::fielding::{build_fielding_plan, compute_candidates, fielding_outcomes, select_outcome, FieldingCandidates, FieldingPlan, PhysicalOutcomes, OUTCOME_AUTOMATIC_DOUBLE, OUTCOME_CAUGHT, OUTCOME_FOUL, OUTCOME_GROUND_OUT};
 use crate::flight::{trace_flight, ContactSample, FlightTrace, PreparedPark, TRACE_DEAD_BALL};
 use crate::random::{GameStreams, Mulberry32};
 use crate::team::TeamInput;
-use crate::types::{DefenseComponent, MomentOutcome, TeamBox};
+use crate::types::{DefenseComponent, MomentContact, MomentFielding, MomentOutcome, MomentPlay, MomentRunner, TeamBox, POSITIONS};
 use crate::value::RunValueModel;
 use crate::workload::Workload;
 
 /// Foul and dead balls resample contact for the same batter and pitcher at most this often.
 pub const MAX_CONTACT_RETRIES: usize = 100;
+
+struct ContactObservation<'a> {
+    draw: &'a ContactDraw,
+    fair: bool,
+    kind: u8,
+    fielder: Option<(&'a str, &'a str, &'static str)>,
+}
 
 /// One play as seen by the win-expectancy observer.
 pub struct InningEvent<'a> {
@@ -30,6 +37,30 @@ pub struct InningEvent<'a> {
     pub pitcher_season_id: &'a str,
     pub outcome: MomentOutcome,
     pub runs_scored: i32,
+    contact: Option<ContactObservation<'a>>,
+    runners: [Option<(&'a str, &'a str, u32, u32)>; 3],
+}
+
+impl InningEvent<'_> {
+    /// Allocate names only when this event becomes a highlight or lowlight.
+    pub fn moment_play(&self) -> MomentPlay {
+        MomentPlay {
+            outs_after: self.outs_after,
+            contact: self.contact.as_ref().map(|contact| {
+                let ContactObservation { draw, fair, kind, fielder } = *contact;
+                MomentContact {
+                    exit_velocity_mph: draw.speed_mph, launch_angle_deg: draw.launch_deg,
+                    spray_angle_deg: draw.spray_deg, fair,
+                    fielding: match kind { OUTCOME_CAUGHT => MomentFielding::Air, OUTCOME_GROUND_OUT => MomentFielding::Ground, _ => MomentFielding::Hit },
+                    automatic_double: kind == OUTCOME_AUTOMATIC_DOUBLE,
+                    fielder_name: fielder.map(|(name, _, _)| name.to_string()),
+                    fielder_season_id: fielder.map(|(_, id, _)| id.to_string()),
+                    fielder_position: fielder.map(|(_, _, position)| position.to_string()),
+                }
+            }),
+            runners: self.runners.iter().flatten().map(|(name, id, from, to)| MomentRunner { name: name.to_string(), season_id: id.to_string(), from: *from, to: *to }).collect(),
+        }
+    }
 }
 
 /// Immutable inputs shared by every half inning of a game.
@@ -307,15 +338,36 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
     let mut outs = 0u32;
     let mut appearances = 0usize;
     macro_rules! observe {
-        ($outs_before:expr, $bases_before:expr, $runs_before:expr, $batter:expr, $pitcher:expr, $outcome:expr) => {
+        ($outs_before:expr, $bases_before:expr, $runs_before:expr, $batter:expr, $pitcher:expr, $outcome:expr, $before:expr, $runner_runs:expr, $has_contact:expr) => {
             if let Some(observer) = observer.as_mut() {
+                let before = $before;
+                let runner_runs = $runner_runs;
+                let runners = std::array::from_fn(|base| {
+                    let runner = before[base];
+                    if runner < 0 { return None; }
+                    let index = runner as usize;
+                    let to = if sides.batting.batting[index].r > runner_runs[base] { 4 }
+                        else { context.bases.runners.iter().position(|&id| id == runner).map_or(0, |base| base as u32 + 1) };
+                    let from = base as u32 + 1;
+                    (to != from).then_some((offense.hitters[index].display_name.as_str(), offense.hitters[index].season_id.as_str(), from, to))
+                });
+                let contact = if $has_contact {
+                    let selected = select_outcome(&context.outcomes, context.reach_uniform)?;
+                    let position = context.contact.fielder;
+                    let fielder = (position >= 0).then(|| {
+                        let position = position as usize;
+                        let player = defense.hitters[context.prepared.hitter_by_position[position]];
+                        (player.display_name.as_str(), player.season_id.as_str(), POSITIONS[position])
+                    });
+                    Some(ContactObservation { draw: &context.draw, fair: context.trace.fair, kind: context.outcomes.kind[selected], fielder })
+                } else { None };
                 observer(&InningEvent {
                     outs_before: $outs_before, outs_after: outs, bases_before: $bases_before, bases_after: bases_mask(&context.bases.runners),
                     offense_runs_before: $runs_before, defense_runs_before: sides.pitching.runs,
                     offense_runs_after: sides.batting.runs, defense_runs_after: sides.pitching.runs,
                     batter_name: &$batter.display_name, batter_season_id: &$batter.season_id,
                     pitcher_name: &$pitcher.display_name, pitcher_season_id: &$pitcher.season_id,
-                    outcome: $outcome, runs_scored: sides.batting.runs - $runs_before,
+                    outcome: $outcome, runs_scored: sides.batting.runs - $runs_before, contact, runners,
                 });
             }
         };
@@ -331,12 +383,14 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
                 let outs_before = outs;
                 let bases_before = bases_mask(&context.bases.runners);
                 let runs_before = sides.batting.runs;
+                let runners_before = context.bases.runners;
+                let runner_runs = runners_before.map(|id| if id >= 0 { sides.batting.batting[id as usize].r } else { 0 });
                 let success_uniform = streams.advancement.next();
                 let steal_outs = record_steal(context, shared, sides, offense, outs, runner_index, steal_pitcher_index, success_uniform)?;
                 let outcome = if steal_outs == outs_before { MomentOutcome::StolenBase } else { MomentOutcome::CaughtStealing };
                 outs = steal_outs;
                 let pitcher = defense.pitchers[steal_pitcher_index];
-                observe!(outs_before, bases_before, runs_before, runner, pitcher, outcome);
+                observe!(outs_before, bases_before, runs_before, runner, pitcher, outcome, runners_before, runner_runs, false);
                 if outs == 3 { break; }
                 workload.before_plate_appearance(defense, &sides.pitching.pitching, sides.pitching.runs - sides.batting.runs, context.bases.runners[1] != -1 || context.bases.runners[2] != -1);
             }
@@ -352,6 +406,8 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         context.next = (context.next + 1) % 9;
         let outs_before = outs;
         let bases_before = bases_mask(&context.bases.runners);
+        let runners_before = context.bases.runners;
+        let runner_runs = runners_before.map(|id| if id >= 0 { sides.batting.batting[id as usize].r } else { 0 });
         let pair = hitter_index * defense.pitchers.len() + active_index;
         let pa_uniform = uniform(&mut streams.pa)?;
         let event = sample_non_contact(context.matchups, pair, pa_uniform);
@@ -420,7 +476,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         sides.batting.batting[hitter_index].batting_runs += offensive_runs;
         sides.batting.batting_runs += offensive_runs;
         record_pitching_value(sides, active_index, offensive_runs, defensive_runs)?;
-        observe!(outs_before, bases_before, runs_before, profile, active_profile, outcome);
+        observe!(outs_before, bases_before, runs_before, profile, active_profile, outcome, runners_before, runner_runs, event > 2);
     }
     Ok(())
 }
