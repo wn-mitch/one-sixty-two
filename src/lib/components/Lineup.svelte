@@ -12,6 +12,7 @@
  import { createOrderMotion, type OrderMotion } from './order-motion.ts';
  import { arriveAtTop, clearStage, flyInto, riseIn, stash, take } from './phase-motion.ts';
  import { MOTION } from '../motion-timing.ts';
+ import { smartBattingOrder, smartReliefRoles, smartRotation } from '../game/smart-lineup.ts';
  let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onRoles, onsimulate }: {
   draft: Draft;
   manifest: Manifest;
@@ -55,6 +56,14 @@
  const closerPick = $derived(draft.picks.find(pick => pick.slot === 'CL'));
  const closer = $derived(closerPick ? bySeason.get(closerPick.seasonId) : undefined);
  const ROLE_NAMES: Record<ReliefRole, string> = { closer: 'Closer', setup: 'Setup', middle: 'Middle relief', long: 'Long relief', stopper: 'Stopper' };
+ /** When the engine calls each role (`workload.rs`), in plain words. */
+ const ROLE_HELP: Record<ReliefRole, string> = {
+  closer: 'Pitches the 9th with a lead of 3 runs or fewer.',
+  setup: 'Pitches the 8th, then the 7th, with a lead of 3 or fewer once the starter is out.',
+  middle: 'Takes any other relief inning; stays a second inning after a quick first.',
+  long: 'Takes over when the starter leaves before the 6th or the team trails by 4 or more; stays up to 3 innings.',
+  stopper: 'Comes in mid-inning from the 6th with a runner in scoring position and a lead of 3 or fewer.'
+ };
  const relievers = $derived(RELIEF_SLOTS.flatMap(slot => {
   const pick = draft.picks.find(item => item.slot === slot);
   const profile = pick ? bySeason.get(pick.seasonId) : undefined;
@@ -66,6 +75,31 @@
   return profile ? [[pick.seasonId, createCardViewModel({ profile, slot: pick.slot, manifest, rankings, media, mediaStatus })] as const] : [];
  })));
  const inspectedCard = $derived(inspectedSeasonId ? cardViews.get(inspectedSeasonId) : undefined);
+ const bullpenProfiles = $derived(new Map(draft.picks.flatMap(pick => {
+  const profile = bySeason.get(pick.seasonId);
+  return profile && (pick.slot === 'CL' || (RELIEF_SLOTS as readonly string[]).includes(pick.slot)) ? [[pick.slot as BullpenSlot, profile] as const] : [];
+ })));
+ const smartBatting = $derived(smartBattingOrder(draft.battingOrder, bySeason));
+ const smartStarters = $derived(smartRotation(draft.starterOrder, bySeason));
+ const smartRoles = $derived(smartReliefRoles(draft.reliefRoles, bullpenProfiles));
+ const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((id, index) => id === b[index]);
+ const battingIsSmart = $derived(sameOrder(draft.battingOrder, smartBatting));
+ const startersAreSmart = $derived(sameOrder(draft.starterOrder, smartStarters));
+ const rolesAreSmart = $derived(draft.reliefRoles.every((assignment, index) => assignment.primary === smartRoles[index]?.primary && assignment.secondary === smartRoles[index]?.secondary));
+
+ function applySmartOrder(kind: OrderKind): void {
+  if (busy || drag) return;
+  const order = kind === 'batting' ? smartBatting : smartStarters;
+  animateOrder(lineupRoot?.querySelector<HTMLElement>(`[data-order-kind="${kind}"]`) ?? null, () => onOrder(kind, order));
+  const names = order.map(id => bySeason.get(id)?.displayName ?? 'Player');
+  announcement = kind === 'batting' ? `Smart lineup set: ${names.join(', ')}.` : `Ace first: ${names.join(', ')}.`;
+ }
+
+ function applySmartRoles(): void {
+  if (busy) return;
+  onRoles(smartRoles);
+  announcement = `Smart roles set: ${smartRoles.map(assignment => `${bullpenProfiles.get(assignment.slot)?.displayName ?? assignment.slot} ${ROLE_NAMES[assignment.primary]}`).join(', ')}.`;
+ }
 
  function rolesFor(slot: BullpenSlot): ReliefAssignment | undefined {
   return draft.reliefRoles.find(assignment => assignment.slot === slot);
@@ -335,14 +369,15 @@
  <p class="announcement" aria-live="polite" aria-atomic="true">{announcement}</p>
  <div class="lineup-columns">
   <section aria-labelledby="batting-heading">
-   <div class="section-heading"><h3 id="batting-heading">Batting order</h3><span class="muted">Fielding and DH can change before simulation</span></div>
+   <div class="section-heading"><h3 id="batting-heading">Batting order</h3>{@render smartButton('Smart lineup', battingIsSmart, () => applySmartOrder('batting'))}</div>
    {@render orderList('batting', draft.battingOrder)}
+   <p class="workload muted">Smart lineup bats your three best hitters 1, 2 and 4: the best on-base hitter leads off and the most power bats cleanup. The next two bat 5 and 3, and the rest follow, best first. Each spot down the order comes up about 18 fewer times a season.</p>
   </section>
   <section aria-labelledby="rotation-heading">
-   <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3><span class="muted">54 starts each</span></div>
+   <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3>{@render smartButton('Ace first', startersAreSmart, () => applySmartOrder('starter'))}</div>
    {@render orderList('starter', draft.starterOrder)}
-   <p class="workload muted">The three starters cycle in this order for all 162 games, without injuries or fatigue.</p>
-   <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3></div>
+   <p class="workload muted">The three starters cycle in this order, 54 starts each, without injuries or fatigue. The order only decides which games each one gets: the opponent, its starter, and the park. Ace first gives your best arm opening day.</p>
+   <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3>{@render smartButton('Smart roles', rolesAreSmart, applySmartRoles)}</div>
    <ul class="order fixed" aria-labelledby="relief-heading">
     {#if closer}
      {@render fixedPlayer(closer, 'CL')}
@@ -351,7 +386,7 @@
     {/if}
     {#each relievers as { slot, profile } (slot)}{@render fixedPlayer(profile, slot)}{/each}
    </ul>
-   <p class="workload muted">Roles decide who pitches when, a backup role is used only after a day off, no one pitches three days running, and a league-average relief pool covers the rest; <a href="/about#simulation">Rules &amp; model</a> has the details.</p>
+   <p class="workload muted">Smart roles gives your best arm the closer's job, the next two setup, and the rest middle and long relief. Roles decide who pitches when, a backup role is used only after a day off, no one pitches three days running, and a league-average relief pool covers the rest; <a href="/about#simulation">Rules &amp; model</a> has the details.</p>
   </section>
  </div>
  {#if inspectedCard}
@@ -364,6 +399,13 @@
   {#if !complete && !busy}<p class="notice">All {draftRules(draft.schemaVersion).slots.length} selected seasons must finish loading before the season can start.</p>{/if}
  </footer>
 </section>
+
+{#snippet smartButton(label: string, applied: boolean, apply: () => void)}
+ <button type="button" class="secondary smart" disabled={busy || applied || !complete} title={applied ? 'Already in this order' : undefined} onclick={apply}>
+  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 4.5h10M3 8h7M3 11.5h4"></path></svg>
+  {label}
+ </button>
+{/snippet}
 
 {#snippet artwork(profile: Profile)}
  {@const card = cardViews.get(profile.seasonId)}
@@ -412,6 +454,7 @@
       {#each RELIEF_ROLES.filter(role => role !== assigned.primary) as role (role)}<option value={role}>{ROLE_NAMES[role]}</option>{/each}
      </select>
     </label>
+    <p class="role-help muted">{ROLE_HELP[assigned.primary]}</p>
    </div>
   {/if}
  </li>
@@ -461,17 +504,21 @@
  .section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
  .relief-heading { margin-top: var(--space-8); }
  h3 { font-size: var(--text-lg); }
- .section-heading > span { font-size: var(--text-xs); }
+ .smart { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.5rem; padding-inline: var(--space-3); font-size: var(--text-sm); }
+ .smart svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+ .section-heading { align-items: center; }
 
  /* Narrow: number | card | identity over meta | stacked arrows. */
  .order { list-style: none; padding: 0; margin: 0; }
  .order li {
   position: relative; display: grid; align-items: center; min-width: 0;
-  grid-template-columns: 2.75rem 56px minmax(0, 1fr) 2.75rem;
+  grid-template-columns: 3.25rem 56px minmax(0, 1fr) 2.75rem;
   grid-template-areas: 'num card identity move' 'num card meta move';
-  gap: var(--space-1) var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--border);
+  gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
  }
- .order li:last-child { border-bottom: 0; }
+ /* Each player is a compact card tile; tiles stack with a small gap. */
+ .order { display: grid; gap: var(--space-2); padding-top: var(--space-3); }
  .order-number { grid-area: num; }
  .order li > .card-trigger { grid-area: card; }
  .identity { grid-area: identity; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); min-width: 0; align-self: end; }
@@ -481,13 +528,13 @@
  .season { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 
  .drag-handle {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
-  width: 2.75rem; min-height: 2.75rem; padding: 0; border: 0; border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center; gap: var(--space-1);
+  width: 3.25rem; min-height: 2.75rem; align-self: stretch; padding: 0; border: 0; border-radius: var(--radius);
   background: none; color: var(--text); font-size: var(--text-xl); font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1;
   touch-action: none; cursor: grab; user-select: none;
  }
  .drag-handle:hover:not(:disabled) { background: var(--surface-hover); }
- .drag-handle .grip { color: var(--muted); font-size: var(--text-xs); line-height: 1; }
+ .drag-handle .grip { color: var(--muted); font-size: var(--text-base); line-height: 1; }
  .drag-source .drag-handle { cursor: grabbing; }
  .fixed-label { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: var(--text-sm); font-weight: 750; letter-spacing: .04em; }
  .move { width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: var(--text-lg); }
@@ -506,6 +553,8 @@
  .roles label { display: grid; gap: var(--space-1); min-width: 0; }
  .roles label > span { color: var(--muted); font-size: var(--text-xs); }
  .roles select { width: 100%; min-width: 0; }
+ .order .fixed-player .roles { padding-left: var(--space-3); }
+ .role-help { grid-column: 1 / -1; margin: 0; font-size: var(--text-xs); line-height: 1.4; }
  .card-trigger { display: block; width: 56px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
  .card-trigger.placeholder { aspect-ratio: 5 / 7; border-radius: var(--radius); background: var(--surface-raised); cursor: default; }
  .card-trigger:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
@@ -519,15 +568,17 @@
 
  /* Wide rows: one line per player, arrows side by side. */
  @media (min-width: 40rem) {
-  .order li { grid-template-columns: 2.75rem 56px minmax(0, 1fr) auto 5.5rem; grid-template-areas: 'num card identity meta move'; padding-block: var(--space-2); }
+  .order li { grid-template-columns: 3.25rem 56px minmax(0, 1fr) auto 5.5rem; grid-template-areas: 'num card identity meta move'; }
   .order .fixed-player { grid-template-areas: 'num card identity meta .' 'num card roles roles roles'; }
   .roles { max-width: 26rem; }
+  .order .fixed-player .roles { padding-left: 0; }
   .identity { flex-direction: column; flex-wrap: nowrap; align-items: start; gap: var(--space-1); align-self: center; }
   .meta { flex-wrap: nowrap; align-self: center; }
   .move-controls { flex-direction: row; }
  }
  @media (max-width: 23.99rem) {
-  .order li { grid-template-columns: 2rem 56px minmax(0, 1fr) 2.75rem; column-gap: var(--space-2); }
+  .order li { grid-template-columns: 2.75rem 56px minmax(0, 1fr) 2.75rem; column-gap: var(--space-2); }
+  .drag-handle { width: 2.75rem; gap: 2px; }
   .stats { gap: var(--space-2); }
   .stat { min-width: 0; }
  }
