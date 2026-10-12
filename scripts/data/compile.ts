@@ -6,7 +6,8 @@ import { contactRecord, FIT_TOLERANCE, type ContactModel } from '../../src/lib/s
 import { stadiumRef } from '../../src/lib/sim/park.ts';
 import { compileStadiums, type StadiumCatalog } from './stadiums.ts';
 import { finishFor, type Finish, type FinishRole } from '../../src/lib/cards/finish.ts';
-import { buildDraftCardTable } from '../../src/lib/draft/salary.ts';
+import { buildDraftCardTable, buildParkFits } from '../../src/lib/draft/salary.ts';
+import { cachedParkBasis } from './contact-model.ts';
 import { applyDefense } from './defense.ts';
 import { numberField, type Tables } from './counts.ts';
 import { buildBullpenCandidates } from './bullpens.ts';
@@ -223,6 +224,7 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  const contactFits = contactFitDiagnostics(candidates, defenseEnvironment);
  const cardWar = showcaseWar(joinedWar);
  const draftCards = buildDraftCardTable(candidates, defenseEnvironment, seasonId => cardWar.get(seasonId));
+ const parkFits = buildParkFits(candidates, defenseEnvironment, stadiums.configs, draftCards, cachedParkBasis);
  const simulationBase = {
   schemaVersion: 1 as const,
   ...defenseEnvironment,
@@ -266,7 +268,7 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, contactFits, messages: compiled.diagnostics };
  const showcase = buildShowcase(candidates, joinedWar);
  const gallery = buildGallery(chunks);
- const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, draftCards, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
+ const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, draftCards, parkFits, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
  const dataVersion = createHash('sha256').update(canonicalJSON(payload)).digest('hex');
  const prefix = `/data/${dataVersion}`;
  const manifest: Manifest = {
@@ -280,6 +282,7 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  const simulation: SimulationData = { ...simulationBase, dataVersion };
  const files: Record<string, unknown> = { 'manifest.json': manifest, 'simulation.json': simulation, 'showcase.json': showcase, 'attribution.json': attribution, 'defense-source.json': DEFENSE_METHOD, 'diagnostics.json': diagnostics, 'draft-cards.json': { ...draftCards, dataVersion } };
  for (const [key, profiles] of Object.entries(chunks)) files[`${key}.json`] = profiles;
+ for (const fit of parkFits) files[`draft-park-${fit.franchiseId}.json`] = { ...fit, dataVersion };
  for (const [key, card] of Object.entries(gallery)) files[`gallery-${key}.json`] = card;
  return { manifest, files, payload, diagnostics: compiled.diagnostics };
 }

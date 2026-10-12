@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DRAFT_RULES, picksPerSeat } from '../src/lib/draft/rules.ts';
+import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty } from '../src/lib/draft/scouting.ts';
 import { DRAFT_RULES_VERSION, POOL_CONTRACT_VERSION, SALARY_VERSION } from '../src/lib/draft/versions.ts';
 import { HITTER_SLOTS, MODEL_VERSION, type Slot } from '../src/lib/game/types.ts';
 import { CONTACT_METHOD_VERSION } from '../src/lib/sim/contact-profile.ts';
@@ -8,10 +9,10 @@ import { isCommon } from '../src/lib/draft/cleanup.ts';
 import { executeRun, negativeProofs, POLICY_MODES, type PolicyMode, type RunRecord } from './draft-feasibility/run.ts';
 import { loadDraftData } from './verification-data.ts';
 
-interface Options { seeds: number; seedStart: number; modes: PolicyMode[]; report: string; runtimeBudgetMs: number }
+interface Options { seeds: number; seedStart: number; modes: PolicyMode[]; report: string; runtimeBudgetMs: number; difficulty: Difficulty }
 
 function parseOptions(arguments_: string[]): Options {
-	const options: Options = { seeds: 64, seedStart: 1, modes: [...POLICY_MODES], report: '.cache/draft-feasibility/report.json', runtimeBudgetMs: 200 };
+	const options: Options = { seeds: 64, seedStart: 1, modes: [...POLICY_MODES], report: '.cache/draft-feasibility/report.json', runtimeBudgetMs: 200, difficulty: DEFAULT_DIFFICULTY };
 	for (let index = 0; index < arguments_.length; index++) {
 		const [flag, inlineValue] = arguments_[index].split('=', 2);
 		const value = inlineValue ?? arguments_[++index];
@@ -20,6 +21,10 @@ function parseOptions(arguments_: string[]): Options {
 		else if (flag === '--seed-start') options.seedStart = Number(value);
 		else if (flag === '--report') options.report = value;
 		else if (flag === '--runtime-budget-ms') options.runtimeBudgetMs = Number(value);
+		else if (flag === '--difficulty') {
+			if (!(DIFFICULTIES as readonly string[]).includes(value)) throw new Error(`Difficulty must be one of ${DIFFICULTIES.join(', ')}`);
+			options.difficulty = value as Difficulty;
+		}
 		else if (flag === '--policy') {
 			if (value === 'all') options.modes = [...POLICY_MODES];
 			else if ((POLICY_MODES as readonly string[]).includes(value)) options.modes = [value as PolicyMode];
@@ -55,15 +60,16 @@ function salarySummary(cards: Awaited<ReturnType<typeof loadDraftData>>['cards']
 async function main(): Promise<void> {
 	const options = parseOptions(process.argv.slice(2));
 	const loadStarted = performance.now();
-	const { dataVersion, table, cards } = await loadDraftData();
+	const { dataVersion, table, cards, franchiseIds, parkFits } = await loadDraftData();
+	const parks = { franchiseIds, fits: parkFits };
 	const loadMs = performance.now() - loadStarted;
 
 	const runs: RunRecord[] = [];
 	let replayMismatches = 0;
 	for (let seed = options.seedStart; seed < options.seedStart + options.seeds; seed++) {
 		for (const mode of options.modes) {
-			const { record } = executeRun(cards, seed, mode);
-			if (executeRun(cards, seed, mode).record.fingerprint !== record.fingerprint) replayMismatches++;
+			const { record } = executeRun(cards, seed, mode, parks, options.difficulty);
+			if (executeRun(cards, seed, mode, parks, options.difficulty).record.fingerprint !== record.fingerprint) replayMismatches++;
 			runs.push(record);
 		}
 	}
@@ -86,6 +92,15 @@ async function main(): Promise<void> {
 	const recoveredOverCap = legalSeats.filter(seat => seat.overCap).length;
 	const recoveredMissing = legalSeats.filter(seat => seat.missing > 0).length;
 	const capRoom = legalSeats.map(seat => seat.capRoom ?? 0);
+	const aiPicks = runs.reduce((sum, run) => ({ picks: sum.picks + run.aiPicks.picks, contested: sum.contested + run.aiPicks.contested, topFinish: sum.topFinish + run.aiPicks.topFinish, pickedPark: sum.pickedPark + run.aiPicks.pickedPark, pilePark: sum.pilePark + run.aiPicks.pilePark, parkDecided: sum.parkDecided + run.aiPicks.parkDecided }), { picks: 0, contested: 0, topFinish: 0, pickedPark: 0, pilePark: 0, parkDecided: 0 });
+	const aiSeats = seats.filter(seat => seat.policy === 'ai');
+	// The perfect drafter at seat 0 of each AI table: its rank by the true value of its submitted roster and its margin over the average AI club.
+	const aiTables = runs.filter(run => run.mode === 'ai');
+	const perfect = aiTables.map(run => {
+		const [own, ...others] = run.submittedValues;
+		return { rank: 1 + others.filter(value => value > own).length, margin: own - others.reduce((sum, value) => sum + value, 0) / others.length };
+	});
+	const perfectSummary = perfect.length ? { tables: perfect.length, firstShare: perfect.filter(entry => entry.rank === 1).length / perfect.length, meanRank: perfect.reduce((sum, entry) => sum + entry.rank, 0) / perfect.length, meanMargin: perfect.reduce((sum, entry) => sum + entry.margin, 0) / perfect.length } : null;
 	const gates = {
 		poolIntegrity: runs.every(run => run.cube.size === DRAFT_RULES.seats * picksPerSeat(DRAFT_RULES) && !run.failures.some(({ stage }) => stage === 'pool' || stage === 'draft')),
 		coverage: runFailures.length === 0 && legalSeats.length === seats.length,
@@ -104,6 +119,7 @@ async function main(): Promise<void> {
 			missingRoleAfterDraft: seats.filter(seat => seat.missing > 0).length, recoveredMissing,
 			surplusCuts: seats.reduce((sum, seat) => sum + seat.surplusCuts, 0), overCapCuts: seats.reduce((sum, seat) => sum + seat.overCapCuts, 0),
 			capRoom: { min: Math.min(...capRoom), p5: quantile(capRoom, 0.05), p50: quantile(capRoom, 0.5) },
+			aiPicks: { ...aiPicks, difficulty: options.difficulty, overCapAfterDraft: aiSeats.filter(seat => seat.overCap).length, seats: aiSeats.length, perfectDrafter: perfectSummary },
 			cubeFinishes: Object.fromEntries(finishes), cubeRoles: Object.fromEntries(roles), cleanupUse, warnings: [...new Set(runs.flatMap(run => run.warnings))],
 			failedRuns: runFailures.map(run => ({ seed: run.seed, mode: run.mode, failures: run.failures }))
 		},
@@ -122,6 +138,8 @@ async function main(): Promise<void> {
 		`Legal seats: ${legalSeats.length}/${seats.length}; over cap after draft ${report.aggregate.overCapAfterDraft} (recovered ${recoveredOverCap}); missing roles ${report.aggregate.missingRoleAfterDraft} (recovered ${recoveredMissing})`,
 		`Cuts: ${report.aggregate.surplusCuts} surplus, ${report.aggregate.overCapCuts} over-cap; cap room at submission min ${report.aggregate.capRoom.min}, p5 ${report.aggregate.capRoom.p5}, p50 ${report.aggregate.capRoom.p50}`,
 		`Table of ${DRAFT_RULES.seats * picksPerSeat(DRAFT_RULES)} (mean, min–max): ${finishes.map(([finish, use]) => `${finish} ${use.mean} (${use.min}–${use.max})`).join(', ')}; roles ${roles.map(([role, mean]) => `${role} ${mean}`).join(', ')}`,
+		...(aiPicks.picks ? [`AI: took the highest finish in ${round(100 * aiPicks.topFinish / aiPicks.contested)}% of ${aiPicks.contested} mixed-finish piles; home park fit ${round(aiPicks.pickedPark / aiPicks.picks, 2)} runs per pick against ${round(aiPicks.pilePark / aiPicks.picks, 2)} for the average pile card, deciding ${aiPicks.parkDecided} of ${aiPicks.picks} picks; ${report.aggregate.aiPicks.overCapAfterDraft}/${aiSeats.length} AI seats over cap after the draft`] : []),
+		...(perfectSummary ? [`Perfect drafter vs ${options.difficulty} AI: best roster in ${round(100 * perfectSummary.firstShare)}% of ${perfectSummary.tables} tables, mean rank ${round(perfectSummary.meanRank, 2)} of 8, ${round(perfectSummary.meanMargin)} runs over the average AI club`] : []),
 		`Cleanup cards per run (max/p95): ${Object.entries(cleanupUse).map(([row, use]) => `${row} ${use.max}/${use.p95}`).join(', ') || 'none'}`,
 		`Salary p50 by role: ${Object.entries(report.salary.byRole).map(([role, summary]) => `${role} ${summary.p50}`).join(', ')}; cap ${DRAFT_RULES.nominalCap}`,
 		...proofs.map(proof => `Proof ${proof.passed ? 'ok  ' : 'FAIL'} ${proof.name}: expected ${proof.expected}, observed ${proof.observed.join(', ') || 'nothing'}`),

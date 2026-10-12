@@ -285,6 +285,7 @@ describe('historical data compiler', () => {
   expect(assigned[1].seasonId).toBe(catcher.seasonId);
   expect(new Set(assigned.map(profile => profile.playerId)).size).toBe(9);
  });
+ // A cold park-basis cache traces all 31 parks for Draft park fit, about two minutes; warm, a few seconds.
  it('compiles all thirty opponents, versioned chunks and exact slot assignments reproducibly', () => {
   const tables = syntheticTables();
   expect(() => compileData(tables, syntheticAttribution, 'fixture', [], references(tables))).toThrow('WAR');
@@ -325,7 +326,7 @@ describe('historical data compiler', () => {
   }
   expect(first.manifest.diagnostics.excludedBatting).toBe(0);
   expect(canonicalJSON({ z: 1, a: { y: 2, b: 3 } })).toBe('{"a":{"b":3,"y":2},"z":1}');
- });
+ }, 300_000);
  it('selects the smallest validated season and first canonical slot independent of chunk order', () => {
   const profiles = compileProfiles(syntheticTables()).profiles.filter(profile => profile.franchiseId === 'F0' && Math.floor(profile.year / 10) * 10 === 1960);
   const expected = [...profiles].sort((a, b) => compareId(a.seasonId, b.seasonId)).find(profile => SLOTS.some(slot => profile.eligibleSlots.includes(slot)))!;

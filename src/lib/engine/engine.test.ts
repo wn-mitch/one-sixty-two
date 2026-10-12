@@ -5,6 +5,8 @@ import { testDefenseEnvironment, testSeason } from '../sim/test-fixtures.ts';
 import type { SeriesProgress } from '../sim/series-types.ts';
 import type { GameResult } from '../sim/types.ts';
 import { buildSchedule, createContactReference, simulateSeason, simulateSeries } from './node.ts';
+import { neutralPark } from '../sim/park.ts';
+import type { Rates } from '../game/types.ts';
 
 // The engine prepares its reference tables and plays full seasons through wasm.
 vi.setConfig({ testTimeout: 120_000 });
@@ -63,6 +65,29 @@ describe('wasm engine boundary', () => {
    expect(reference.expectedDefensiveRuns(position, { ...neutral, hitPrevention: 1 })).toBeGreaterThan(reference.expectedDefensiveRuns(position, { ...neutral, hitPrevention: -1 }));
   }
   expect(() => reference.expectedDefensiveRuns('C', { ...neutralDefensivePosition('C'), hitPrevention: 2 })).toThrow(/skill/);
+ });
+
+ it('plays contact out by park: the neutral park reproduces the linear weights and thin air favors power', () => {
+  const environment = testDefenseEnvironment();
+  const reference = createContactReference(environment);
+  const league = environment.leagueRates;
+  const power: Rates = [0.1, 0.01, 0.27, 0.11, 0.045, 0.002, 0.06, 0.403];
+  const contact: Rates = [0.06, 0.01, 0.12, 0.2, 0.05, 0.006, 0.01, 0.544];
+  const queries = [league, power, contact].map(battingRates => ({ battingRates, bats: '', pitchingRates: league, throws: '', speed: 0.5, unknownSide: true }));
+  // At unknown side in the neutral park, park values equal the pricing path's fits and linear weights.
+  const weights = reference.eventRunWeights();
+  const [neutral, thin] = reference.parkRunValues([neutralPark(), { ...neutralPark(), id: 'thin-air', airDensityKgM3: 0.95 }].map(park => reference.parkBasis(park)), queries);
+  expect(() => reference.parkRunValues([new Float64Array(5)], queries)).toThrow(/multiple/);
+  reference.fitMatchups(queries).forEach((fit, index) => {
+   const inPlay = fit.rates[3] + fit.rates[4] + fit.rates[5] + fit.rates[6] + fit.rates[7];
+   let runs = (fit.rates[0] + fit.rates[1]) * weights.walk + fit.rates[2] * weights.strikeout;
+   fit.classes.forEach((share, cls) => { runs += inPlay * share * weights.classes[cls]; });
+   expect(neutral[index].runs).toBeCloseTo(runs, 9);
+  });
+  const gain = thin.map((value, index) => value.runs - neutral[index].runs);
+  expect(gain[0]).toBeGreaterThan(0);
+  expect(gain[1]).toBeGreaterThan(gain[2]);
+  expect(thin[1].outs).toBeLessThan(neutral[1].outs);
  });
 
  it('labels a failing matchup fit with its query', () => {

@@ -1,6 +1,5 @@
 import { json, parseJson, type Db } from '../storage/sql.ts';
-import { replayRun, RunActionError, unsupportedVersion, type DraftRun, type RunAction, type RunPhase, type RunSetup } from './run.ts';
-import type { DraftCard } from './types.ts';
+import { replayRun, RunActionError, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunPhase, type RunSetup } from './run.ts';
 
 /** A Draft Mode run as the device keeps it: the setup and the player's actions so far. */
 export interface SavedRun {
@@ -18,7 +17,8 @@ const isSetup = (value: unknown): value is RunSetup => {
  const setup = value as RunSetup | null;
  return typeof setup === 'object' && setup !== null
   && ['runVersion', 'rulesVersion', 'salaryVersion', 'dataVersion', 'franchiseId'].every(key => typeof setup[key as keyof RunSetup] === 'string')
-  && Number.isInteger(setup.seed) && setup.seed >= 0 && setup.seed <= 0xffffffff;
+  && Number.isInteger(setup.seed) && setup.seed >= 0 && setup.seed <= 0xffffffff
+  && typeof setup.difficulty === 'string';
 };
 const isAction = (value: unknown): value is RunAction =>
  typeof value === 'object' && value !== null && (value as RunAction).type === 'pick' && typeof (value as RunAction).cardId === 'string';
@@ -65,11 +65,11 @@ export type Resumed = { ok: true; run: DraftRun } | { ok: false; reason: string 
  * Rebuilds a saved run under the current build. A run saved with other rules, salaries, data or
  * run format is refused with the reason rather than reinterpreted; so is a log that no longer replays.
  */
-export function resumeRun(saved: SavedRun, cards: readonly DraftCard[], franchiseIds: readonly string[], dataVersion: string): Resumed {
+export function resumeRun(saved: SavedRun, data: RunData, dataVersion: string): Resumed {
  const stale = unsupportedVersion(saved.setup, dataVersion);
  if (stale) return { ok: false, reason: `This draft was saved with ${stale} that this version of the game no longer uses. Start a new draft.` };
  try {
-  return { ok: true, run: replayRun(saved.setup, saved.actions, cards, franchiseIds) };
+  return { ok: true, run: replayRun(saved.setup, saved.actions, data) };
  } catch (error) {
   if (error instanceof RunActionError) return { ok: false, reason: 'This saved draft no longer replays. Start a new draft.' };
   throw error;

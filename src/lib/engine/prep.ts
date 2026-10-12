@@ -1,6 +1,7 @@
 import { buildContactBasis as wasmContactBasis, DataPrep } from './pkg/engine.js';
 import type { DefensiveEnvironment, DefensiveSkills, Position, Rates } from '../game/types.ts';
 import type { ContactBasis, ContactShape } from '../sim/contact-profile.ts';
+import type { StadiumConfig } from '../sim/park-types.ts';
 import { neutralPark } from '../sim/park.ts';
 
 /** Linear run value of one plate-appearance event, averaged over league base-out state visits. */
@@ -17,6 +18,9 @@ export interface MatchupQuery {
 /** Platoon-adjusted eight-event rates, the contact fit's misses, and its neutral outcome classes. */
 export interface MatchupFit { rates: Rates; error: number; tripleError: number; classes: number[] }
 
+/** Expected runs and outs per plate appearance for one matchup in one park. */
+export interface ParkRunValue { runs: number; outs: number }
+
 /** The engine's neutral league reference for data preparation and draft pricing. */
 export interface ContactReference {
  eventRunWeights(): EventRunWeights;
@@ -25,6 +29,13 @@ export interface ContactReference {
  /** Season runs saved at `position` relative to a neutral defender. */
  expectedDefensiveRuns(position: Position, skills: DefensiveSkills): number;
  fitMatchups(queries: readonly MatchupQuery[]): MatchupFit[];
+ /** Traces a stadium's outcome classes for every batting side; seconds per park, so callers cache it. */
+ parkBasis(stadium: StadiumConfig): Float64Array;
+ /**
+  * Plays each query's neutral contact fit out in every traced park, at the batter's side against
+  * `throws` (unknown when either is blank). Returns [park][query].
+  */
+ parkRunValues(bases: readonly Float64Array[], queries: readonly MatchupQuery[]): ParkRunValue[][];
 }
 
 function environmentJson(environment: DefensiveEnvironment): string {
@@ -40,7 +51,16 @@ export function createContactReference(environment: DefensiveEnvironment): Conta
   stateVisits: () => [...prep.stateVisits()],
   expectedDefensiveRuns: (position, skills) =>
    prep.expectedDefensiveRuns(position, skills.hitPrevention, skills.doublePlay, skills.outfieldThrowing, skills.errorAvoidance, skills.catcherThrowing),
-  fitMatchups: queries => JSON.parse(prep.fitMatchups(JSON.stringify(queries))) as MatchupFit[]
+  fitMatchups: queries => JSON.parse(prep.fitMatchups(JSON.stringify(queries))) as MatchupFit[],
+  parkBasis: stadium => prep.parkBasis(JSON.stringify(stadium)),
+  parkRunValues: (bases, queries) => {
+   const joined = new Float64Array(bases.reduce((sum, basis) => sum + basis.length, 0));
+   let offset = 0;
+   for (const basis of bases) { joined.set(basis, offset); offset += basis.length; }
+   const flat = prep.parkRunValues(joined, JSON.stringify(queries));
+   const parks = bases.length;
+   return bases.map((_, park) => queries.map((_, index) => ({ runs: flat[2 * (index * parks + park)], outs: flat[2 * (index * parks + park) + 1] })));
+  }
  };
 }
 

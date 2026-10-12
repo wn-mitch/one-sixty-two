@@ -105,3 +105,55 @@ pub fn build_contact_basis(tables: &ShapeTables, park: &PreparedPark) -> Result<
     }
     Ok(ContactBasis { responses, classes })
 }
+
+/// Physical outcome classes in `park` at average runner speed for every batting side, integrated
+/// over the league shape like `build_contact_basis`: [side][shift][region][class]. Draft park fit
+/// compares these across parks; the neutral basis keeps only the unknown side.
+pub fn side_class_basis(tables: &ShapeTables, park: &PreparedPark) -> Result<Vec<f64>, String> {
+    let mut node_classes = vec![0.0; LATTICE_POINTS * PHYSICAL_CLASS_COUNT];
+    let mut candidates = FieldingCandidates::default();
+    let mut plan = FieldingPlan::default();
+    let mut outcomes = PhysicalOutcomes::default();
+    let zeros = [0.0; 8];
+    let mask = [0u8; 8];
+    let average_speed = SPEED_NODES[2];
+    let mut failure: Option<String> = None;
+    for_each_lattice_trace(park, &mut |e, l, s, trace, carry_weight| {
+        let point = lattice_index(e, l, s);
+        compute_candidates(trace, &zeros, &mut candidates);
+        build_fielding_plan(trace, &candidates, &mask, &zeros, &mut plan);
+        fielding_outcomes(&plan, average_speed, &mut outcomes);
+        let mut fair = 0.0;
+        for index in 0..outcomes.count { if outcomes.kind[index] != OUTCOME_FOUL { fair += outcomes.probability[index]; } }
+        if !(fair > 0.0) { failure.get_or_insert(format!("Lattice point is never fair in this park: {e}:{l}:{s}")); return; }
+        for index in 0..outcomes.count {
+            if outcomes.kind[index] == OUTCOME_FOUL { continue; }
+            let cls = physical_class(outcomes.kind[index], outcomes.fielder[index], outcomes.bases[index]);
+            node_classes[point * PHYSICAL_CLASS_COUNT + cls] += carry_weight * outcomes.probability[index] / fair;
+        }
+    })?;
+    if let Some(message) = failure { return Err(message); }
+    let mut classes = vec![0.0; SIDE_COUNT * SHIFT_STEPS * REGION_COUNT * PHYSICAL_CLASS_COUNT];
+    for region in 0..REGION_COUNT {
+        let cdf = &tables.cell_cdf[region];
+        for (position, cell) in tables.cells[region].iter().enumerate() {
+            let cell_probability = cdf[position] - if position == 0 { 0.0 } else { cdf[position - 1] };
+            let e = cell / LAUNCH_COUNT;
+            let l = cell - e * LAUNCH_COUNT;
+            let launch_class_index = launch_class(LAUNCH_MIN + (l as f64 + 0.5) * LAUNCH_WIDTH);
+            for side in 0..SIDE_COUNT {
+                let spray_cdf = &tables.spray_cdf[side * 4 + launch_class_index];
+                for s in 0..SPRAY_COUNT {
+                    let weight = cell_probability * (spray_cdf[s] - if s == 0 { 0.0 } else { spray_cdf[s - 1] });
+                    if weight == 0.0 { continue; }
+                    for shift in 0..SHIFT_STEPS {
+                        let point = lattice_index(e + shift, l, s);
+                        let target = ((side * SHIFT_STEPS + shift) * REGION_COUNT + region) * PHYSICAL_CLASS_COUNT;
+                        for cls in 0..PHYSICAL_CLASS_COUNT { classes[target + cls] += weight * node_classes[point * PHYSICAL_CLASS_COUNT + cls]; }
+                    }
+                }
+            }
+        }
+    }
+    Ok(classes)
+}

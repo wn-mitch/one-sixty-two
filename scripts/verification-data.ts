@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../src/lib/game/draft.ts';
 import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, SLOTS, VALUATION_VERSION, type Draft, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../src/lib/game/types.ts';
 import { validateDefensiveEnvironment, validateProfile } from '../src/lib/sim/validation.ts';
+import { decodeParkFit, type StoredParkFit } from '../src/lib/draft/park-fit.ts';
 import { decodeDraftCards, type StoredDraftCardTable } from '../src/lib/draft/card-table.ts';
 import type { DraftCard } from '../src/lib/draft/types.ts';
 
@@ -121,6 +122,9 @@ export interface DraftData {
 	dataVersion: string;
 	table: StoredDraftCardTable;
 	cards: DraftCard[];
+	franchiseIds: string[];
+	/** Home-half park fit in runs, by franchise then season id. */
+	parkFits: Map<string, Map<string, number>>;
 }
 
 /** Loads the current manifest and its draft card table without profile chunks. */
@@ -130,7 +134,12 @@ export async function loadDraftData(): Promise<DraftData> {
 	const manifest = await readJson<Manifest>(localAssetPath(current.manifestUrl));
 	if (manifest.schemaVersion !== 1 || manifest.dataVersion !== current.dataVersion) throw new Error('Generated manifest does not match current.json');
 	const table = await readJson<StoredDraftCardTable>(localAssetPath(`/data/${manifest.dataVersion}/draft-cards.json`));
-	return { dataVersion: manifest.dataVersion, table, cards: decodeDraftCards(manifest.candidates, table, manifest.dataVersion) };
+	const franchiseIds = manifest.franchises.map(franchise => franchise.id);
+	const parkFits = new Map(await Promise.all(franchiseIds.map(async id => {
+		const stored = await readJson<StoredParkFit>(localAssetPath(`/data/${manifest.dataVersion}/draft-park-${id}.json`));
+		return [id, decodeParkFit(manifest.candidates, stored, manifest.dataVersion)] as const;
+	})));
+	return { dataVersion: manifest.dataVersion, table, cards: decodeDraftCards(manifest.candidates, table, manifest.dataVersion), franchiseIds, parkFits };
 }
 
 export class ProfileChunks {

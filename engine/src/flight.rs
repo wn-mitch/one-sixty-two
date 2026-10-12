@@ -11,6 +11,8 @@ pub const DRAG_REFERENCE_MPS: f64 = 44.704;
 pub const LIFT_COEFFICIENT: f64 = 0.0037;
 pub const MAX_FLIGHT_SECONDS: f64 = 20.0;
 pub const MAX_REBOUNDS: u32 = 16;
+/// Fraction of a fence segment's length by which a crossing may overshoot either end.
+const VERTEX_TOLERANCE: f64 = 1e-9;
 pub const MPH_TO_MPS: f64 = 0.44704;
 const WALL_OFFSET_M: f64 = 1e-6;
 const MIN_STEP_FRACTION: f64 = 1e-12;
@@ -196,7 +198,8 @@ fn fence_crossing(park: &PreparedPark, index: usize, px: f64, py: f64, qx: f64, 
     let (wx, wy) = (ax - px, ay - py);
     let s = (wx * ey - wy * ex) / denominator;
     let u = (wx * dy - wy * dx) / denominator;
-    if s > MIN_STEP_FRACTION && s <= 1.0 && u >= 0.0 && u <= 1.0 { s } else { f64::INFINITY }
+    // A path through the vertex shared by two segments can miss both by rounding, so the ends overlap slightly.
+    if s > MIN_STEP_FRACTION && s <= 1.0 && u >= -VERTEX_TOLERANCE && u <= 1.0 + VERTEX_TOLERANCE { s } else { f64::INFINITY }
 }
 
 /// Integration state for one trace; replaces the TS module-level buffers.

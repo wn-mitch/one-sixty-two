@@ -89,6 +89,32 @@ impl DataPrep {
     }
 }
 
+#[wasm_bindgen]
+impl DataPrep {
+    /// Traces `stadium_json` (a `StadiumConfig`) for every batting side; a few seconds per park.
+    #[wasm_bindgen(js_name = parkBasis)]
+    pub fn park_basis(&self, stadium_json: &str) -> Result<Vec<f64>, JsError> {
+        let park: StadiumConfig = parse(stadium_json, "stadium")?;
+        self.inner.park_basis(&park).map_err(fail)
+    }
+
+    /// Runs and outs per plate appearance for each query in each park of `bases` (park bases
+    /// concatenated in order), flattened query-major as `[runs, outs]` per park.
+    #[wasm_bindgen(js_name = parkRunValues)]
+    pub fn park_run_values(&self, bases: &[f64], queries_json: &str) -> Result<Vec<f64>, JsError> {
+        let set = engine::prep::ParkSet::from_flat(bases).map_err(fail)?;
+        let queries: Vec<MatchupQuery> = parse(queries_json, "matchup queries")?;
+        let mut values = Vec::with_capacity(queries.len() * set.len() * 2);
+        for query in &queries {
+            for value in self.inner.park_run_values(&set, query).map_err(fail)? {
+                values.push(value.runs);
+                values.push(value.outs);
+            }
+        }
+        Ok(values)
+    }
+}
+
 /// The neutral contact basis for a contact shape, as JSON.
 #[wasm_bindgen(js_name = buildContactBasis)]
 pub fn build_contact_basis(shape_json: &str, neutral_park_json: &str) -> Result<String, JsError> {

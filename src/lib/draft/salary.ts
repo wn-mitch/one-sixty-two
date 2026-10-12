@@ -1,7 +1,10 @@
 import { finishFor, type Finish, type FinishRole } from '../cards/finish.ts';
 import { HITTER_SLOTS, STARTER_SLOTS, type DefensiveEnvironment, type Profile, type Rates, type Slot } from '../game/types.ts';
-import { createContactReference, type EventRunWeights, type MatchupFit, type MatchupQuery } from '../engine/node.ts';
+import { createContactReference, type ContactReference, type EventRunWeights, type MatchupFit, type MatchupQuery, type ParkRunValue } from '../engine/node.ts';
 import { closerBudget, starterBudget } from '../sim/workload.ts';
+import { neutralPark, stadiumRef } from '../sim/park.ts';
+import type { StadiumConfig } from '../sim/park-types.ts';
+import { HOME_SHARE, PARK_FIT_VERSION, type ParkFitTable } from './park-fit.ts';
 import { SALARY_VERSION } from './versions.ts';
 
 /** Provisional pricing constants; the table header records them with the derived workloads. */
@@ -152,4 +155,50 @@ export function buildDraftCardTable(candidates: readonly Profile[], environment:
   if (profile.bullpen) table.bullpenMembers[profile.seasonId] = profile.bullpen.members.map(member => member.seasonId);
  });
  return table;
+}
+
+const isHitterSlot = (slot: Slot): boolean => (HITTER_SLOTS as readonly Slot[]).includes(slot);
+
+/**
+ * Prices how each card plays in every home park. A card's contact fit is played out in the park
+ * and the neutral park; its change, less the same change for a league-average player in that
+ * role, is scaled to the card's priced workload over the home half of the season. Hitters gain
+ * runs scored per plate appearance; pitchers gain runs saved per out. Positive is a better fit.
+ * `parkBasis` traces a park, normally through a cache, since each trace takes seconds.
+ */
+export function buildParkFits(candidates: readonly Profile[], environment: DefensiveEnvironment, stadiums: readonly StadiumConfig[], table: DraftCardTable, parkBasis: (reference: ContactReference, stadium: StadiumConfig) => Float64Array): ParkFitTable[] {
+ const league = environment.leagueRates;
+ const reference = createContactReference(environment);
+ const query = (profile: Profile, slot: Slot): MatchupQuery => isHitterSlot(slot)
+  ? { battingRates: profile.battingRates!, bats: profile.bats, pitchingRates: league, throws: '', speed: 0.5, unknownSide: true, label: profile.seasonId }
+  : { battingRates: league, bats: '', pitchingRates: profile.pitchingRates!, throws: '', speed: 0.5, unknownSide: true, label: profile.seasonId };
+ const queries = [
+  { battingRates: league, bats: '', pitchingRates: league, throws: '', speed: 0.5, unknownSide: true, label: 'league' },
+  ...candidates.map((profile, index) => {
+   if (table.seasonId[index] !== profile.seasonId) throw new Error(`Park fit row ${index} is ${profile.seasonId}, expected ${table.seasonId[index]}`);
+   return query(profile, table.pricedSlot[index]);
+  })
+ ];
+ const [neutral, ...parks] = reference.parkRunValues([neutralPark(), ...stadiums].map(stadium => parkBasis(reference, stadium)), queries);
+ const perOut = (value: ParkRunValue): number => value.runs / value.outs;
+ const { hitterPlateAppearances, bullpenOuts } = table.method;
+ return stadiums.map((stadium, park) => {
+  const values = parks[park];
+  const leaguePa = values[0].runs - neutral[0].runs;
+  const leagueOut = perOut(values[0]) - perOut(neutral[0]);
+  const tenths = candidates.map((profile, index) => {
+   const slot = table.pricedSlot[index];
+   const here = values[index + 1];
+   const there = neutral[index + 1];
+   let runs: number;
+   if (isHitterSlot(slot)) runs = (here.runs - there.runs - leaguePa) * hitterPlateAppearances;
+   else {
+    const outs = slot === 'BP' ? bullpenOuts : slot === 'CL' ? Math.min(closerBudget(profile), SALARY_METHOD.closerOutsCap) : SALARY_METHOD.starts * starterBudget(profile);
+    runs = -(perOut(here) - perOut(there) - leagueOut) * outs;
+   }
+   if (!Number.isFinite(runs)) throw new Error(`${profile.seasonId}: non-finite park fit at ${stadium.id}`);
+   return Math.round(runs * HOME_SHARE * 10);
+  });
+  return { schemaVersion: 1 as const, parkFitVersion: PARK_FIT_VERSION, franchiseId: stadium.franchiseId, stadium: stadiumRef(stadium), tenths };
+ });
 }

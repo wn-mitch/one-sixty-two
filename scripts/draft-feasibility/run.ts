@@ -5,10 +5,13 @@ import { buildRunPool, cubeRole, type RunPool } from '../../src/lib/draft/pool.t
 import { recoverOpeningRosters } from '../../src/lib/draft/recovery.ts';
 import { DRAFT_RULES, baselineBudget } from '../../src/lib/draft/rules.ts';
 import type { ClubAccount, DraftCard, LegalityFailure, Owner } from '../../src/lib/draft/types.ts';
-import { PICK_POLICIES, runDraft, type PickPolicy } from './policies.ts';
+import { seatTable } from '../../src/lib/draft/franchises.ts';
+import { rosterValue, trueJudgment } from '../../src/lib/draft/ai.ts';
+import { DEFAULT_DIFFICULTY, type Difficulty } from '../../src/lib/draft/scouting.ts';
+import { PICK_POLICIES, runDraft, type AiPickStats, type PickPolicy } from './policies.ts';
 
-export type PolicyMode = PickPolicy | 'mixed';
-export const POLICY_MODES: readonly PolicyMode[] = [...PICK_POLICIES, 'mixed'];
+export type PolicyMode = Exclude<PickPolicy, 'perfect'> | 'mixed';
+export const POLICY_MODES: readonly PolicyMode[] = [...PICK_POLICIES.filter(policy => policy !== 'perfect'), 'mixed'];
 
 /** Provisional franchise budget shapes; seats rotate through them by seed. Cash never reaches legality. */
 const BUDGET_SHAPES: readonly ClubAccount[] = [
@@ -27,7 +30,10 @@ export function seatAccounts(seed: number): ClubAccount[] {
 }
 
 export function seatPolicies(mode: PolicyMode): PickPolicy[] {
- return Array.from({ length: DRAFT_RULES.seats }, (_, seat) => mode === 'mixed' ? PICK_POLICIES[seat % PICK_POLICIES.length] : mode);
+ // An AI table seats one perfect drafter at seat 0, standing in for a strong player.
+ if (mode === 'ai') return Array.from({ length: DRAFT_RULES.seats }, (_, seat) => seat === 0 ? 'perfect' : 'ai');
+ const mixed = PICK_POLICIES.filter(policy => policy !== 'perfect');
+ return Array.from({ length: DRAFT_RULES.seats }, (_, seat) => mode === 'mixed' ? mixed[seat % mixed.length] : mode);
 }
 
 export interface SeatSummary {
@@ -57,6 +63,9 @@ export interface RunRecord {
  failures: { stage: string; failure: LegalityFailure }[];
  seats: SeatSummary[];
  cleanupUsed: Record<string, number>;
+ aiPicks: AiPickStats;
+ /** True value per seat of the legal roster it submitted: active cards in full, reserves at a quarter, with home park fit. */
+ submittedValues: number[];
 }
 
 const ownerKey = (owner: Owner): string => owner.kind === 'roster' ? `seat${owner.seat}` : owner.kind === 'pile' ? `pile${owner.pile}` : owner.kind;
@@ -66,8 +75,11 @@ function poolViews(pool: RunPool) {
  return pool.packs.flatMap((packs, pile) => packs.flat().map(cardId => ({ cardId, owner: { kind: 'pile', pile } as Owner })));
 }
 
+/** Home parks for a feasibility table: each seat gets a franchise, seated as a player run would be. */
+export interface HomeParks { franchiseIds: readonly string[]; fits: ReadonlyMap<string, ReadonlyMap<string, number>> }
+
 /** One seeded run: pool, draft, opening recovery and submission, with ledger audits after each stage. */
-export function executeRun(cards: readonly DraftCard[], seed: number, mode: PolicyMode): { record: RunRecord; pool: RunPool } {
+export function executeRun(cards: readonly DraftCard[], seed: number, mode: PolicyMode, parks?: HomeParks, difficulty: Difficulty = DEFAULT_DIFFICULTY): { record: RunRecord; pool: RunPool } {
  const started = performance.now();
  const failures: RunRecord['failures'] = [];
  const record = (stage: string, list: LegalityFailure[]) => failures.push(...list.map(failure => ({ stage, failure })));
@@ -77,7 +89,9 @@ export function executeRun(cards: readonly DraftCard[], seed: number, mode: Poli
  record('pool', auditView(pool.ledger, poolViews(pool)));
  const cube = pool.packs.flat(2).map(id => pool.ledger.cards.get(id)!);
  const policies = seatPolicies(mode);
- runDraft(pool, policies);
+ const homes = parks ? seatTable(seed, parks.franchiseIds[seed % parks.franchiseIds.length], parks.franchiseIds, DRAFT_RULES.seats).seats : policies.map(() => 'none');
+ const parkFit = (seat: number, seasonId: string): number => parks?.fits.get(homes[seat])?.get(seasonId) ?? 0;
+ const { values: _drafted, ...aiPicks } = runDraft(pool, policies, { difficulty, homes, parkFit });
  record('draft', auditLedger(pool.ledger));
  const accounts = seatAccounts(seed);
  const result = recoverOpeningRosters(pool, accounts.map(account => account.budget));
@@ -103,7 +117,9 @@ export function executeRun(cards: readonly DraftCard[], seed: number, mode: Poli
    seed, mode, fingerprint, ms: performance.now() - started,
    cube: { size: cube.length, roles: count(cube.map(cubeRole)), finishes: count(cube.map(card => card.finish)) },
    warnings: pool.warnings, failures, seats,
-   cleanupUsed: count(result.seats.flatMap(seat => seat.cleanup.map(pick => pick.row ?? 'reserve')))
+   cleanupUsed: count(result.seats.flatMap(seat => seat.cleanup.map(pick => pick.row ?? 'reserve'))),
+   aiPicks,
+   submittedValues: result.submissions.map(submission => Math.round(10 * rosterValue([...Object.values(submission.active), ...submission.reserves].map(id => pool.ledger.cards.get(id!)!), trueJudgment, id => parkFit(submission.seat, id))) / 10)
   }
  };
 }
@@ -123,7 +139,7 @@ export function negativeProofs(cards: readonly DraftCard[], seed: number): Proof
  proofs.push({ name: 'no common starters', expected: 'stock-role-shortfall:SP1', observed: starters, passed: starters.includes('stock-role-shortfall:SP1') });
 
  const pool = buildRunPool(seed, cards);
- runDraft(pool, seatPolicies('value'));
+ runDraft(pool, seatPolicies('value'), { difficulty: DEFAULT_DIFFICULTY, homes: seatPolicies('value').map(() => 'none'), parkFit: () => 0 });
  const budgets = seatAccounts(seed).map(account => account.budget);
  budgets[0] = { ...budgets[0], ceiling: 16 * DRAFT_RULES.commonSalaryMax - 1 };
  const starved = recoverOpeningRosters(pool, budgets);
