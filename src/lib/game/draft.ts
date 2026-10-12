@@ -83,8 +83,11 @@ export function availableCandidates(draft: Draft, manifest: Manifest, roll: Roll
  });
 }
 
-function nextRoll(draft: Draft, manifest: Manifest, random: () => number): Roll {
- const candidates = availableCandidates(draft, manifest, null);
+/** A uniformly random franchise with legal seasons left, then one of its legal decades; a reroll excludes the pending roll when anything else remains. */
+function nextRoll(draft: Draft, manifest: Manifest, random: () => number, exclude: Roll | null = null): Roll {
+ const legal = availableCandidates(draft, manifest, null);
+ const others = exclude ? legal.filter(candidate => candidate.franchiseId !== exclude.franchiseId || candidate.decade !== exclude.decade) : legal;
+ const candidates = others.length ? others : legal;
  const franchises = [...new Set(candidates.map(candidate => candidate.franchiseId))].sort(compareId);
  if (!franchises.length) throw new Error('Dataset error: no legal candidates remain. Your draft is preserved.');
  const franchiseId = franchises[Math.floor(random() * franchises.length)];
@@ -120,6 +123,17 @@ function applyRoll(draft: Draft, manifest: Manifest, random: () => number, recor
  const result = { ...draft, currentRoll: nextRoll(draft, manifest, random) } as Draft;
  if (record) return { ...result, actions: appendAction(draft, { type: 'roll' }) } as Draft;
  return result;
+}
+
+/** Rerolls this draft may still spend on a pending roll. */
+export function rerollsLeft(draft: Draft): number {
+ return draftRules(draft.schemaVersion).rerolls - draft.actions.filter(action => action.type === 'reroll').length;
+}
+
+function applyReroll(draft: Draft, manifest: Manifest, random: () => number): Draft {
+ if (!draft.currentRoll) throw new Error('Roll before rerolling');
+ if (rerollsLeft(draft) <= 0) throw new Error('No rerolls left');
+ return { ...draft, currentRoll: nextRoll(draft, manifest, random, draft.currentRoll), actions: appendAction(draft, { type: 'reroll' }) } as Draft;
 }
 
 function commitPickWithPolicy(
@@ -242,6 +256,10 @@ function validAction(value: unknown): DraftAction {
   if (Object.keys(action).length !== 1) throw new Error('Invalid draft action');
   return { type: 'roll' };
  }
+ if (action.type === 'reroll') {
+  if (Object.keys(action).length !== 1) throw new Error('Invalid draft action');
+  return { type: 'reroll' };
+ }
  if (action.type === 'pick') {
   if (Object.keys(action).length !== 3 || typeof action.seasonId !== 'string' ||
    typeof action.slot !== 'string' || !draftRules(CURRENT_REPLAY_SCHEMA_VERSION).slots.includes(action.slot as Slot)) {
@@ -268,6 +286,7 @@ function replayActions(input: Replay, manifest: Manifest): { draft: Draft; rando
   const previous = draft;
   if (action.type === 'select-stadium') draft = applyStadium(draft, manifest, action.stadiumId, action.stadiumVersion);
   else if (action.type === 'roll') draft = applyRoll(draft, manifest, random, true);
+  else if (action.type === 'reroll') draft = applyReroll(draft, manifest, random);
   else if (action.type === 'pick') {
    draft = commitPickWithPolicy(draft, manifest, action.seasonId, action.slot, draftRules(CURRENT_REPLAY_SCHEMA_VERSION), true);
   } else {
@@ -291,6 +310,14 @@ export function rollDraft(draft: Draft, manifest: Manifest): Draft {
  const { draft: replayed, random } = replayActions(draft, manifest);
  if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
  return applyRoll(replayed, manifest, random, true);
+}
+
+/** Replaces the pending franchise and decade with a fresh draw from the draft's seeded stream. */
+export function rerollDraft(draft: Draft, manifest: Manifest): Draft {
+ requireCurrentRules(draft);
+ const { draft: replayed, random } = replayActions(draft, manifest);
+ if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
+ return applyReroll(replayed, manifest, random);
 }
 
 export function commitPick(draft: Draft, manifest: Manifest, seasonId: string, slot: Slot): Draft {

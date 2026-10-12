@@ -51,7 +51,7 @@
 	<meta name="theme-color" content="oklch(16% 0.009 255)" />
 	{#if page.url.pathname === '/'}
 		<title>162-0 | The undefeated baseball challenge</title>
-		<meta name="description" content="Roll a franchise and decade. Draft fourteen historical selections. Can your team survive 162 games without a loss?" />
+		<meta name="description" content="Roll a franchise and decade. Draft sixteen historical selections. Can your team survive 162 games without a loss?" />
 	{/if}
 </svelte:head>
 

@@ -15,6 +15,8 @@ export interface DraftRulePolicy {
  minYear: number;
  maxYear: number;
  modelVersion: typeof MODEL_VERSION;
+ /** Times per draft a pending franchise and decade may be replaced before picking. */
+ rerolls: number;
 }
 
 const CURRENT_RULE_POLICY: DraftRulePolicy = {
@@ -23,7 +25,8 @@ const CURRENT_RULE_POLICY: DraftRulePolicy = {
  slots: SLOTS,
  minYear: MIN_SEASON_YEAR,
  maxYear: MAX_SEASON_YEAR,
- modelVersion: MODEL_VERSION
+ modelVersion: MODEL_VERSION,
+ rerolls: 2
 };
 
 export function draftRules(schemaVersion: ReplaySchemaVersion): DraftRulePolicy {

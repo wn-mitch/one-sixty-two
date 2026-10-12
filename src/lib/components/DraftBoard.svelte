@@ -1,6 +1,6 @@
 <script lang="ts">
  import { onMount, tick, untrack } from 'svelte';
- import { legalSlots, legalReassignments, rollYears } from '../game/draft.ts';
+ import { legalSlots, legalReassignments, rerollsLeft, rollYears } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
  import { HITTER_SLOTS, compareId, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../game/types.ts';
  import { loadMedia } from '../media/client.ts';
@@ -17,11 +17,11 @@
  import DraftSheet from './DraftSheet.svelte';
  import FoilPack from './FoilPack.svelte';
  import Settings from './Settings.svelte';
- let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onDraft, onReassign, onNew }: {
+ let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onReroll, onDraft, onReassign, onNew }: {
   draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
   phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean;
   rankings: WarRankings | null; rankingLoading: boolean; rankingError: boolean;
-  onRetryRankings: () => void; onRoll: () => void; onNew: () => void;
+  onRetryRankings: () => void; onRoll: () => void; onReroll: () => void; onNew: () => void;
   onDraft: (seasonId: string, slot: Slot) => void;
   onReassign: (seasonId: string, slot: HitterSlot) => void;
  } = $props();
@@ -626,8 +626,11 @@
   {#if !wide}
    {@render reveal()}
    <button type="button" class="secondary open-field" aria-label={`Open your field ${draft.picks.length} / ${rosterSlots.length}`} onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>
-    Your field
+    Field
     <span class="field-count">{draft.picks.length} / {rosterSlots.length}</span>
+   </button>
+   <button type="button" class="secondary toolbar-new" aria-label="New draft" title="New draft" disabled={loading} onclick={onNew}>
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>
    </button>
   {/if}
  </div>
@@ -651,6 +654,14 @@
    {:else if loading || phase === 'revealing'}
     <p class="loading-copy muted" role="status">Finding eligible seasons…</p>
    {:else if showingCandidates}
+    {@const left = rerollsLeft(draft)}
+    <div class="reroll-row">
+     <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} onclick={() => { cancelSelection(); onReroll(); }}>
+      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M12.5 6A5 5 0 1 0 13 9.5M12.5 2.5V6H9"></path></svg>
+      Reroll franchise &amp; decade
+     </button>
+     <span class="muted">{left} of {draftRules(draft.schemaVersion).rerolls} rerolls left</span>
+    </div>
     <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
@@ -670,6 +681,11 @@
  .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; }
  .open-field { flex: none; display: flex; align-items: center; gap: .5rem; min-height: 3rem; padding-inline: .75rem; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+ .reroll-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-block: var(--space-2) var(--space-3); font-size: var(--text-xs); }
+ .reroll { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; }
+ .reroll svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+ .toolbar-new { flex: none; display: grid; place-items: center; width: 3rem; min-height: 3rem; padding: 0; }
+ .toolbar-new svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
  .board-columns { display: grid; min-width: 0; }
  .wide .board-columns { grid-template-columns: minmax(0, 1fr) 452px; gap: 28px; align-items: start; padding-top: 16px; }
  .wide .draft-toolbar { display: none; }

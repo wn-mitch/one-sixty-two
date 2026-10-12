@@ -2,7 +2,7 @@
 	import { onDestroy, untrack } from 'svelte';
 	import DraftBoard from '#lib/components/DraftBoard.svelte';
 	import ErrorDialog from '#lib/components/ErrorDialog.svelte';
-	import { commitPick, reassignPick, rollDraft } from '#lib/game/draft.ts';
+	import { commitPick, reassignPick, rerollDraft, rollDraft } from '#lib/game/draft.ts';
 	import type { Draft, HitterSlot, Profile, Slot } from '#lib/game/types.ts';
 	import type { WarRankings } from '#lib/rankings/types.ts';
 	import { createExampleFixtures, type ExampleFixtures } from './fixtures.ts';
@@ -125,6 +125,19 @@
 		}
 	}
 
+	function reroll(): void {
+		if (busy || phase !== 'choosing') return;
+		try {
+			draft = rerollDraft(draft, fixtures.manifest);
+			phase = 'revealing';
+			pool = [];
+			error = '';
+			beginReveal();
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : 'Could not reroll';
+		}
+	}
+
 	function replay(): void {
 		if (initial !== 'revealing') return;
 		clearRevealTimer();
@@ -209,6 +222,7 @@
 				{rankingError}
 				onRetryRankings={loadRankings}
 				onRoll={roll}
+				onReroll={reroll}
 				onDraft={draftPlayer}
 				onReassign={reassign}
 				onNew={reset}

@@ -178,14 +178,7 @@ test.describe('Draft board browsing', () => {
 		});
 		expect(header.centerDifference).toBeLessThan(1);
 		expect(header.paddingDifference).toBeLessThan(1);
-		const labelsFit = await page.getByRole('combobox', { name: 'Rank players & seasons', exact: true }).evaluate(node => {
-			const select = node as HTMLSelectElement;
-			const style = getComputedStyle(select);
-			const context = document.createElement('canvas').getContext('2d')!;
-			context.font = style.font;
-			const available = select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-			return [...select.options].every(option => context.measureText(option.label).width <= available);
-		});
+		const labelsFit = await page.getByRole('group', { name: 'Sort by', exact: true }).getByRole('button').evaluateAll(buttons => buttons.every(button => button.scrollWidth <= button.clientWidth));
 		expect(labelsFit).toBe(true);
 
 		await openStory(page, 'draft-board--partial-roster');
@@ -284,7 +277,7 @@ test.describe('Draft board browsing', () => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openChoosing(page);
 		const warOrder = await candidateGroups(page);
-		await page.getByRole('combobox', { name: 'Rank players & seasons', exact: true }).selectOption('metrics');
+		await page.getByRole('group', { name: 'Sort by', exact: true }).getByRole('button', { name: 'OPS / ERA', exact: true }).click();
 		await expect.poll(() => candidateGroups(page)).not.toEqual(warOrder);
 
 		await page.getByRole('button', { name: 'CF', exact: true }).click();
@@ -329,7 +322,7 @@ test.describe('Draft board browsing', () => {
 
 		await openStory(page, 'draft-board--rankings-unavailable');
 		await expect(page.getByRole('alert').filter({ hasText: /Example rankings are unavailable/ })).toBeVisible();
-		await page.getByRole('combobox', { name: 'Rank players & seasons', exact: true }).selectOption('war');
+		await page.getByRole('group', { name: 'Sort by', exact: true }).getByRole('button', { name: 'WAR', exact: true }).click();
 		const unavailableOrder = await candidateGroups(page);
 		await page.getByRole('button', { name: 'Retry rankings', exact: true }).click();
 		await expect.poll(() => candidateGroups(page)).not.toEqual(unavailableOrder);

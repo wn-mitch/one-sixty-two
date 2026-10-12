@@ -230,8 +230,10 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 		unregisterWall = wallSpotlights.register(wallRecord);
 	};
 
+	// Touch tilts the card while a finger is down; the gesture ends on lift or when the page takes over to scroll.
+	let touching = false;
 	const onMove = (event: PointerEvent) => {
-		if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+		if (event.pointerType === 'touch' ? !touching : event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
 		hovering = true;
 		if (options.enabled ?? true) {
 			const bounds = eventTarget.getBoundingClientRect();
@@ -244,8 +246,19 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 		registration.wake();
 	};
 
+	const onDown = (event: PointerEvent) => {
+		if (event.pointerType !== 'touch') return;
+		touching = true;
+		onMove(event);
+	};
+
+	const onTouchEnd = (event: PointerEvent) => {
+		if (event.pointerType === 'touch') onLeave(event);
+	};
+
 	const onLeave = (event: PointerEvent) => {
-		if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+		if (event.pointerType === 'touch') touching = false;
+		else if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
 		hovering = false;
 		pointerX = 0;
 		pointerY = 0;
@@ -267,15 +280,21 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 	};
 
 	const attachEvents = () => {
+		eventTarget.addEventListener('pointerdown', onDown);
 		eventTarget.addEventListener('pointermove', onMove);
 		eventTarget.addEventListener('pointerleave', onLeave);
+		eventTarget.addEventListener('pointerup', onTouchEnd);
+		eventTarget.addEventListener('pointercancel', onTouchEnd);
 		eventTarget.addEventListener('focusin', onFocusIn);
 		eventTarget.addEventListener('focusout', onFocusOut);
 	};
 
 	const detachEvents = () => {
+		eventTarget.removeEventListener('pointerdown', onDown);
 		eventTarget.removeEventListener('pointermove', onMove);
 		eventTarget.removeEventListener('pointerleave', onLeave);
+		eventTarget.removeEventListener('pointerup', onTouchEnd);
+		eventTarget.removeEventListener('pointercancel', onTouchEnd);
 		eventTarget.removeEventListener('focusin', onFocusIn);
 		eventTarget.removeEventListener('focusout', onFocusOut);
 	};

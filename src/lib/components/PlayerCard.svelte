@@ -52,6 +52,8 @@
 	} = $props();
 
 	const uid = $props.id();
+	/** Phones have no hover, so finished cards glint on their own in the draft gallery. */
+	const coarsePointer = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaStatus = $state<CardMediaStatus>('loading');
 	let artTrigger = $state<HTMLButtonElement>();
@@ -243,7 +245,7 @@
 					aria-label={`Select ${profile.year} ${profile.displayName}`}
 					onclick={event => select(event.currentTarget)}
 				>
-					<Card s={card} {compact} interactive={!compact} onDetails={() => undefined} />
+					<Card s={card} {compact} interactive={!compact} wall={coarsePointer} onDetails={() => undefined} />
 				</button>
 			{/if}
 		{:else}

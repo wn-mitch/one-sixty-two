@@ -7,6 +7,8 @@ import {
  legalSlots,
  reassignPick,
  replayInput,
+ rerollDraft,
+ rerollsLeft,
  rollDraft,
  selectHomeStadium,
  validateDraft,
@@ -137,6 +139,41 @@ function scarcePool(openCandidates: Candidate[], open: Slot[]): Manifest {
  });
  return makeManifest([...fillers, ...openCandidates], 'scarce-v1');
 }
+
+describe('rerolls', () => {
+ it('replaces the pending roll with a different one twice per draft, then refuses', () => {
+  const rolled = rollDraft(startDraft(manifest, 5), manifest);
+  expect(rerollsLeft(rolled)).toBe(2);
+  const once = rerollDraft(rolled, manifest);
+  expect(once.currentRoll).not.toEqual(rolled.currentRoll);
+  expect(once.actions.at(-1)).toEqual({ type: 'reroll' });
+  const twice = rerollDraft(once, manifest);
+  expect(twice.currentRoll).not.toEqual(once.currentRoll);
+  expect(rerollsLeft(twice)).toBe(0);
+  expect(() => rerollDraft(twice, manifest)).toThrow('No rerolls left');
+  expect(() => rerollDraft(startDraft(manifest, 5), manifest)).toThrow('Roll before rerolling');
+ });
+
+ it('replays rerolls exactly from the seed, through saves and share links', async () => {
+  let draft = rerollDraft(rollDraft(startDraft(manifest, 21), manifest), manifest);
+  const candidate = availableCandidates(draft, manifest)[0];
+  draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
+  draft = rerollDraft(rollDraft(draft, manifest), manifest);
+  expect(validateDraft(draft, manifest)).toEqual(draft);
+  const { db } = await memoryDb();
+  expect(await persistDraft(db, draft, 'draft')).toBeNull();
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft, phase: 'draft' });
+  // A forged roll after a reroll does not match the seeded stream.
+  expect(() => validateDraft({ ...draft, currentRoll: { franchiseId: candidate.franchiseId, decade: candidate.decade } }, manifest)).toThrow();
+  while (draft.picks.length < SLOTS.length) {
+   if (!draft.currentRoll) draft = rollDraft(draft, manifest);
+   const next = availableCandidates(draft, manifest)[0];
+   draft = commitPick(draft, manifest, next.seasonId, legalSlots(draft, next, manifest)[0]);
+  }
+  expect(decodeReplay(encodeReplay(draft), manifest)).toEqual(draft);
+  expect(validateReplay(replayInput(draft), manifest)).toEqual(draft);
+ });
+});
 
 describe('permanent deterministic drafting', () => {
  it.each(Array.from({ length: 32 }, (_, seed) => seed))('finishes seed %i with fourteen distinct identities and franchises', seed => {

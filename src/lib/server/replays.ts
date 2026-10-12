@@ -99,6 +99,7 @@ function action(value: unknown): DraftAction {
 	const item = value as Record<string, unknown>;
 	if (!item || typeof item !== 'object') throw new ReplayInvalidError();
 	if (item.type === 'roll') return { type: 'roll' };
+	if (item.type === 'reroll') return { type: 'reroll' };
 	if (item.type === 'select-stadium' && isString(item.stadiumId) && isString(item.stadiumVersion)) return { type: 'select-stadium', stadiumId: item.stadiumId, stadiumVersion: item.stadiumVersion };
 	if (item.type === 'pick' && isString(item.seasonId) && isSlot(item.slot)) return { type: 'pick', seasonId: item.seasonId, slot: item.slot };
 	if (item.type === 'reassign' && isString(item.seasonId) && (HITTER_SLOTS as readonly unknown[]).includes(item.slot)) return { type: 'reassign', seasonId: item.seasonId, slot: item.slot as Extract<DraftAction, { type: 'reassign' }>['slot'] };

@@ -75,6 +75,10 @@ describe('replay R2 storage', () => {
 		expect(input.schemaVersion).toBe(6);
 		expect(input.homeStadium).toEqual(manifest.stadiums[0].ref);
 		expect(input.actions.at(-1)?.type).toBe('reassign');
+		// Rerolls are part of the stored chronology.
+		const rerolled = { ...input, actions: [...input.actions.slice(0, 2), { type: 'reroll' as const }, ...input.actions.slice(2)] };
+		const stored = await storeReplay(bucket, rerolled, dataVersion);
+		expect((await loadReplay(bucket, stored.id, dataVersion)).actions[2]).toEqual({ type: 'reroll' });
 	});
 
 	it('rejects pre-cutover schemas and models before writing or returning stored replay bytes', async () => {

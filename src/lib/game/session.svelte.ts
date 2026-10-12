@@ -1,6 +1,6 @@
 import { goto } from '$app/navigation';
 import { loadChunk, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
-import { commitPick, createDraft, reassignPick, rollDraft, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
+import { commitPick, createDraft, reassignPick, rerollDraft, rollDraft, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
 import { libraryKey, saveSeason } from './library.ts';
 import { newStickers, type NewSticker } from '../collection/collection.ts';
 import { refreshStickers } from '../collection/store.svelte.ts';
@@ -300,12 +300,17 @@ export class Session {
    this.error = error instanceof Error ? error.message : 'Could not choose the stadium';
   }
  }
- async roll(): Promise<void> {
-  if (this.busy || this.phase !== 'ready' || !this.draft || !this.manifest) return;
+ /** Spends a reroll on the pending franchise and decade, then reveals the new pool. */
+ async reroll(): Promise<void> {
+  if (this.busy || this.phase !== 'choosing' || !this.draft?.currentRoll || !this.manifest) return;
+  await this.roll(true);
+ }
+ async roll(reroll = false): Promise<void> {
+  if (this.busy || this.phase !== (reroll ? 'choosing' : 'ready') || !this.draft || !this.manifest) return;
   const epoch = this.epoch;
   this.error = '';
   try {
-   this.draft = rollDraft(this.draft, this.manifest);
+   this.draft = reroll ? rerollDraft(this.draft, this.manifest) : rollDraft(this.draft, this.manifest);
    this.save('draft'); // The committed roll survives reload before any reveal choreography.
    this.phase = 'revealing';
    this.pool = [];

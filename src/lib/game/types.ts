@@ -116,6 +116,7 @@ export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =
  | { type: 'select-stadium'; stadiumId: string; stadiumVersion: string }
  | { type: 'roll' }
+ | { type: 'reroll' }
  | { type: 'pick'; seasonId: string; slot: Slot }
  | { type: 'reassign'; seasonId: string; slot: HitterSlot };
 export interface Replay {

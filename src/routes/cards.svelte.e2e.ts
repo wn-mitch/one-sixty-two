@@ -391,10 +391,7 @@ test.describe('normal card motion', () => {
 			});
 			observer.observe(root, { subtree: true, attributes: true, attributeFilter: ['style'] });
 		});
-		// Narrow layouts keep ranking behind the Filters toggle.
-		const filters = page.getByRole('button', { name: /^Filters/ });
-		if (await filters.isVisible()) await filters.click();
-		await page.getByRole('combobox', { name: 'Rank players & seasons' }).selectOption('metrics');
+		await page.getByRole('group', { name: 'Sort by' }).getByRole('button', { name: 'OPS / ERA' }).click();
 		await expect.poll(() => page.evaluate(() => (window as Window & { cardGridMoved?: boolean }).cardGridMoved)).toBe(true);
 		await expect.poll(() => page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.every(node => {
 			const style = (node as HTMLElement).style;
