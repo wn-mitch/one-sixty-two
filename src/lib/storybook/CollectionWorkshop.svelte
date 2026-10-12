@@ -11,6 +11,7 @@
 	import type { CollectedCard } from '#lib/collection/collection.ts';
 	import { seasonStickers, STICKER_BY_KIND, STICKER_SPOTS, type StickerFamily } from '#lib/collection/stickers.ts';
 	import { STORAGE_NOTICE } from '#lib/game/library.ts';
+	import type { Manifest } from '#lib/game/types.ts';
 	import { getExampleSeries } from './series-fixtures.ts';
 	import StoryFrame from './StoryFrame.svelte';
 
@@ -18,6 +19,7 @@
 	let saved: CollectedCard[] = [];
 	let cards = $state.raw<CollectedCard[]>([]);
 	let views = $state.raw<ReadonlyMap<string, CardViewModel>>(new Map());
+	let catalog = $state.raw<Pick<Manifest, 'candidates' | 'franchises'>>({ candidates: [], franchises: [] });
 	let status = $state('');
 	let loading = $state(true);
 	let error = $state('');
@@ -53,6 +55,7 @@
 					}
 				}
 				saved = [...byCard.values()];
+				catalog = { candidates: example.manifest.candidates, franchises: example.manifest.franchises };
 				const profiles = [...example.libraryProfiles.values()].flat();
 				views = new Map(profiles.flatMap(profile => {
 					const card = byCard.get(profile.seasonId);
@@ -73,7 +76,7 @@
 		{:else if error}
 			<p class="error" role="alert">{error}</p>
 		{:else}
-			<CollectionBinder {cards} {views} {status}
+			<CollectionBinder {cards} {views} candidates={catalog.candidates} franchises={catalog.franchises} {status}
 				onMove={(seasonId, family, x, y) => update(seasonId, family, sticker => ({ ...sticker, x, y }))}
 				onHide={(seasonId, family, hidden) => update(seasonId, family, sticker => ({ ...sticker, hidden }))} />
 		{/if}

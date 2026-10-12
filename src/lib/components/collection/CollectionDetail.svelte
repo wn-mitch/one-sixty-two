@@ -114,7 +114,7 @@
 			<div><dt>Drafted</dt><dd>{card.times}×</dd></div>
 			<div><dt>First</dt><dd>{date(card.firstAt)}</dd></div>
 			<div><dt>Latest</dt><dd>{date(card.lastAt)}</dd></div>
-			<div><dt>Best team</dt><dd>{card.best.wins}–{card.best.losses}{#if bestGrade} <GradeBadge grade={bestGrade} />{/if}</dd></div>
+			<div><dt>Best team</dt><dd class="best">{card.best.wins}–{card.best.losses}{#if bestGrade}<GradeBadge grade={bestGrade} />{/if}</dd></div>
 		</dl>
 		{#if line}
 			<p class="line">
@@ -164,6 +164,7 @@
 	dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: var(--space-3); margin: 0; }
 	dt { color: var(--muted); font-size: var(--text-xs); }
 	dd { margin: var(--space-1) 0 0; font-weight: 750; }
+	dd.best { display: flex; align-items: center; gap: var(--space-2); }
 	.line { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 	.stickers { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
 	.stickers li { display: flex; align-items: center; gap: var(--space-3); }

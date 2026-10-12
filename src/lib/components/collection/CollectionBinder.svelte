@@ -4,7 +4,8 @@
 	import type { CardViewModel } from '../../cards/view-model.ts';
 	import type { CollectedCard } from '../../collection/collection.ts';
 	import { faceStickers, type StickerFamily } from '../../collection/stickers.ts';
-	import { HITTER_SLOTS } from '../../game/types.ts';
+	import { completionPercent, shelveCollection, type Grouping } from '../../collection/shelves.ts';
+	import { HITTER_SLOTS, type Candidate, type Franchise } from '../../game/types.ts';
 	import { seasonGrade } from '../../game/grade.ts';
 	import GradeBadge from '../GradeBadge.svelte';
 	import { toasts } from '../../toast.svelte.ts';
@@ -14,11 +15,14 @@
 		cards: readonly CollectedCard[];
 		/** Card faces by player-season, for cards whose profiles have loaded. */
 		views: ReadonlyMap<string, CardViewModel>;
+		/** The game data's player-seasons and clubs, for grouping and completion. */
+		candidates: readonly Candidate[];
+		franchises: readonly Franchise[];
 		status: string;
 		onMove: (seasonId: string, family: StickerFamily, x: number, y: number) => void | Promise<void>;
 		onHide: (seasonId: string, family: StickerFamily, hidden: boolean) => void | Promise<void>;
 	}
-	let { cards, views, status, onMove, onHide }: Props = $props();
+	let { cards, views, candidates, franchises, status, onMove, onHide }: Props = $props();
 	const bestGrade = (card: CollectedCard) => seasonGrade(card.best.wins, card.best.losses);
 	$effect(() => { if (status) toasts.show(status, { id: 'collection', tone: /blocked|full|not saved|off in this tab/i.test(status) ? 'error' : 'info' }); });
 
@@ -26,6 +30,7 @@
 	let role = $state<Role>('all');
 	let stickeredOnly = $state(false);
 	let sort = $state<'recent' | 'drafted' | 'year'>('recent');
+	let grouping = $state<Grouping>('none');
 	let chosen = $state<string | null>(null);
 	let detail = $state<HTMLElement>();
 
@@ -39,6 +44,7 @@
 		.toSorted((a, b) => sort === 'drafted' ? b.times - a.times || b.lastAt.localeCompare(a.lastAt)
 			: sort === 'year' ? year(a) - year(b) || a.label.localeCompare(b.label)
 			: b.lastAt.localeCompare(a.lastAt)));
+	const progress = $derived(shelveCollection(cards, shown, candidates, franchises, grouping));
 	const stickerTotal = $derived(cards.reduce((sum, card) => sum + faceStickers(card.stickers).length, 0));
 	const selected = $derived(cards.find(card => card.seasonId === chosen) ?? null);
 	const noDetails = () => {};
@@ -59,7 +65,14 @@
 	</section>
 {:else}
 	<div class="toolbar">
-		<p class="count"><strong>{cards.length}</strong> {cards.length === 1 ? 'card' : 'cards'} · <strong>{stickerTotal}</strong> {stickerTotal === 1 ? 'sticker' : 'stickers'}</p>
+		<p class="count"><strong>{cards.length}</strong> {cards.length === 1 ? 'card' : 'cards'} · <strong>{progress.owned.toLocaleString('en-US')}</strong> of {progress.total.toLocaleString('en-US')} player-seasons, <strong>{completionPercent(progress.owned, progress.total)}</strong> · <strong>{stickerTotal}</strong> {stickerTotal === 1 ? 'sticker' : 'stickers'}</p>
+		<label>Group
+			<select bind:value={grouping}>
+				<option value="none">No grouping</option>
+				<option value="team">Team</option>
+				<option value="era">Era</option>
+			</select>
+		</label>
 		<label>Role
 			<select bind:value={role}>
 				<option value="all">All roles</option>
@@ -85,9 +98,9 @@
 		</div>
 	{/if}
 
-	{#if shown.length}
-		<ul class="grid" aria-label="Collected cards">
-			{#each shown as card (card.seasonId)}
+	{#snippet grid(list: readonly CollectedCard[], label: string)}
+		<ul class="grid" aria-label={label}>
+			{#each list as card (card.seasonId)}
 				{@const view = views.get(card.seasonId)}
 				<li>
 					<button type="button" class="tile" aria-pressed={chosen === card.seasonId} onclick={() => void open(card.seasonId)}>
@@ -95,13 +108,24 @@
 							{#if view}<Card s={view} face="front" interactive={false} stickers={card.stickers} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
 						</span>
 						<span class="name">{card.label}</span>
-						<span class="meta">Drafted {card.times}× · best {card.best.wins}–{card.best.losses}{#if bestGrade(card)} <GradeBadge grade={bestGrade(card)!} />{/if}</span>
+						<span class="meta">Drafted {card.times}× · best {card.best.wins}–{card.best.losses}{#if bestGrade(card)}<span class="grade"><GradeBadge grade={bestGrade(card)!} /></span>{/if}</span>
 					</button>
 				</li>
 			{/each}
 		</ul>
-	{:else}
+	{/snippet}
+
+	{#if !shown.length}
 		<p class="muted">No cards match these filters.</p>
+	{:else if grouping === 'none'}
+		{@render grid(shown, 'Collected cards')}
+	{:else}
+		{#each progress.shelves as shelf (shelf.key)}
+			<section class="shelf" aria-labelledby="shelf-{shelf.key}">
+				<h2 id="shelf-{shelf.key}">{shelf.label}{#if shelf.total}<span class="shelf-count">{shelf.owned} of {shelf.total.toLocaleString('en-US')} · {completionPercent(shelf.owned, shelf.total)}</span>{/if}</h2>
+				{@render grid(shelf.cards, `${shelf.label} cards`)}
+			</section>
+		{/each}
 	{/if}
 {/if}
 
@@ -125,5 +149,9 @@
 	.art { display: block; }
 	.placeholder { display: block; aspect-ratio: 5 / 7; border-radius: .5rem; background: var(--surface-raised); }
 	.name { font-weight: 750; font-size: var(--text-sm); line-height: 1.25; overflow-wrap: anywhere; }
-	.meta { color: var(--muted); font-size: var(--text-xs); }
+	.meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--muted); font-size: var(--text-xs); }
+	.meta .grade { font-size: var(--text-sm); line-height: 1; }
+	.shelf { display: grid; gap: var(--space-3); }
+	.shelf h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: var(--space-2) 0 0; padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); font-size: var(--text-lg); }
+	.shelf-count { color: var(--muted); font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; }
 </style>

@@ -98,8 +98,8 @@
 		<p class="muted" role="status">Loading your collection…</p>
 	{:else if error}
 		<p class="error" role="alert">{error}</p>
-	{:else}
-		<CollectionBinder {cards} {views} {status} {onMove} {onHide} />
+	{:else if manifest}
+		<CollectionBinder {cards} {views} candidates={manifest.candidates} franchises={manifest.franchises} {status} {onMove} {onHide} />
 	{/if}
 </main>
 

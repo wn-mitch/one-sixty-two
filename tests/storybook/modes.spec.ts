@@ -108,6 +108,21 @@ test('Collection lists every rostered card and arranges a card’s stickers', as
 	await expect(detail.getByRole('button', { name: /^Move .* sticker/ })).toHaveCount(before - 1);
 });
 
+test('Collection groups cards by team or era with completion that leaves bullpens out', async ({ page }) => {
+	await openStory(page, 'modes-collection--binder');
+	const all = page.getByRole('list', { name: 'Collected cards' }).getByRole('listitem');
+	await expect(all.first()).toBeVisible();
+	const total = await all.count();
+	// The example binder holds one team bullpen, which is collected but not counted.
+	await expect(page.locator('.count')).toContainText(`${total - 1} of`);
+	for (const grouping of ['Team', 'Era']) {
+		await page.getByLabel('Group').selectOption({ label: grouping });
+		const shelves = page.locator('section.shelf');
+		await expect(shelves.first().getByRole('heading')).toContainText(/\d+ of \d+ · [\d.]+%/);
+		expect(await shelves.getByRole('listitem').count()).toBe(total);
+	}
+});
+
 test('Collection explains an empty or blocked binder', async ({ page }) => {
 	await openStory(page, 'modes-collection--empty');
 	await expect(page.getByText('Finish a season and every card on that roster joins your collection.')).toBeVisible();
