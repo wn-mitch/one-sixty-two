@@ -21,17 +21,17 @@ The opening flow is seeded and replayable:
 
 1. select franchise and reveal the player's guaranteed rival;
 2. reveal the opening decree and the supported initial venue/package information before drafting;
-3. construct one finite shared cube and deal the proposed two-wave pass-the-pack table;
-4. take one card at each seat, pass the remaining pack, and reverse direction for the second wave;
+3. deal each seat two eight-card packs from the finite shared pool;
+4. each seat cracks both packs into one pile, takes one card and passes the pile left, for sixteen picks;
 5. run the opening transaction window, including trades, cuts/releases, waiver claims, and common-only cleanup under the chosen atomic ordering;
-6. validate fourteen active roles plus two reserves against the effective cap for every club;
+6. validate sixteen active roles plus two reserves against the effective cap for every club;
 7. persist the table and opening-league state for later D03 season play.
 
 ## In scope
 
 ### Real pass-the-pack draft
 
-- Eight seats, one shared finite cube, exclusive card ownership, two-way passing, auditable pick/pass events, and deterministic seat order.
+- Eight seats, one shared finite pool, exclusive card ownership, pass-left piles, auditable pick/pass events, and deterministic seat order. The player picks their franchise; the other seven clubs are drawn at random.
 - The player picks at the player's seat; seven AI GMs make actual picks from the pack they receive.
 - Preserve temporary over-cap drafting while requiring a legal submitted roster.
 - Keep finish, tier, salary, position, workload, and estimated contribution distinct in table information.
@@ -68,7 +68,7 @@ D02 is complete only when this is a real pass-the-pack table and opening recover
 ## Required open decisions before D02 acceptance
 
 - Which initial franchise packages and opening decree content make the first full-season slice, including the exact content-selection gate and its evidence.
-- Final pack allocation/order, deal/pass presentation, tie-break rules, and whether reserve targets receive explicit table guidance.
+- Deal/pass presentation, tie-break rules, and whether reserve targets receive explicit table guidance. Pack contents and pass order are decided in [D01](./01-pool-and-rosters.md).
 - Opening trade shape: multi-player/one-for-one limits, offer limits, AI-to-AI behavior status, transaction ordering, and waiver priority/timing.
 - How much schedule, rival, and venue information is visible before and during the opening draft.
 - The supported initial package/decree effect semantics and calibration bounds; any selected pitch/count, checked-swing, batting-position, or unusual-rule content must first satisfy the corresponding simulation-rule phase.

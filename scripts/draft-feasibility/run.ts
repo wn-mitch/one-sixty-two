@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { auditLedger, auditView, heldBy, transfer } from '../../src/lib/draft/ledger.ts';
-import { buildRunPool, cubeRole, isCommon, type RunPool } from '../../src/lib/draft/pool.ts';
+import { isCommon } from '../../src/lib/draft/cleanup.ts';
+import { buildRunPool, cubeRole, type RunPool } from '../../src/lib/draft/pool.ts';
 import { recoverOpeningRosters } from '../../src/lib/draft/recovery.ts';
 import { DRAFT_RULES, baselineBudget } from '../../src/lib/draft/rules.ts';
 import type { ClubAccount, DraftCard, LegalityFailure, Owner } from '../../src/lib/draft/types.ts';
@@ -43,7 +44,6 @@ export interface SeatSummary {
  cleanupPicks: number;
  finalPayroll: number | null;
  capRoom: number | null;
- minimumLegalPayroll: number | null;
  legal: boolean;
 }
 
@@ -52,21 +52,18 @@ export interface RunRecord {
  mode: PolicyMode;
  fingerprint: string;
  ms: number;
- cube: { size: number; roles: Record<string, number>; tiers: Record<string, number> };
+ cube: { size: number; roles: Record<string, number>; finishes: Record<string, number> };
  warnings: string[];
  failures: { stage: string; failure: LegalityFailure }[];
  seats: SeatSummary[];
- stockUsed: Record<string, number>;
+ cleanupUsed: Record<string, number>;
 }
 
-const ownerKey = (owner: Owner): string => owner.kind === 'roster' ? `seat${owner.seat}` : owner.kind === 'cube' ? `cube${owner.wave}.${owner.pack}` : owner.kind;
+const ownerKey = (owner: Owner): string => owner.kind === 'roster' ? `seat${owner.seat}` : owner.kind === 'pile' ? `pile${owner.pile}` : owner.kind;
 const count = <T extends string>(values: T[]): Record<string, number> => values.reduce<Record<string, number>>((tally, value) => ({ ...tally, [value]: (tally[value] ?? 0) + 1 }), {});
 
 function poolViews(pool: RunPool) {
- return [
-  ...pool.packs.flatMap((packs, wave) => packs.flatMap((pack, index) => pack.map(cardId => ({ cardId, owner: { kind: 'cube', wave, pack: index } as Owner })))),
-  ...pool.cleanupStock.map(cardId => ({ cardId, owner: { kind: 'cleanup-stock' } as Owner }))
- ];
+ return pool.packs.flatMap((packs, pile) => packs.flat().map(cardId => ({ cardId, owner: { kind: 'pile', pile } as Owner })));
 }
 
 /** One seeded run: pool, draft, opening recovery and submission, with ledger audits after each stage. */
@@ -92,10 +89,10 @@ export function executeRun(cards: readonly DraftCard[], seed: number, mode: Poli
   postDraftPayroll: seat.postDraft.payroll, overCap: seat.postDraft.overCap, missing: seat.postDraft.missing.length, surplus: seat.postDraft.surplus,
   surplusCuts: seat.cuts.filter(cut => cut.reason === 'surplus').length, overCapCuts: seat.cuts.filter(cut => cut.reason === 'over-cap').length,
   cleanupPicks: seat.cleanup.length, finalPayroll: seat.report?.payroll ?? null, capRoom: seat.report?.capRoom ?? null,
-  minimumLegalPayroll: seat.minimumLegalPayroll, legal: seat.report?.legal === true && !result.failures.some(failure => failure.code === 'unrecoverable-seat' && failure.seat === seat.seat)
+  legal: seat.report?.legal === true && !result.failures.some(failure => failure.code === 'unrecoverable-seat' && failure.seat === seat.seat)
  }));
  const fingerprint = createHash('sha256').update(JSON.stringify({
-  packs: pool.packs, stock: pool.cleanupStock,
+  packs: pool.packs,
   events: pool.ledger.events.map(event => [event.op, event.cardId, ownerKey(event.from), ownerKey(event.to)]),
   salaries: [...pool.ledger.instances.values()].map(instance => [instance.cardId, instance.startingSalary]),
   submissions: result.submissions
@@ -104,9 +101,9 @@ export function executeRun(cards: readonly DraftCard[], seed: number, mode: Poli
   pool,
   record: {
    seed, mode, fingerprint, ms: performance.now() - started,
-   cube: { size: cube.length, roles: count(cube.map(cubeRole)), tiers: count(cube.map(card => card.packTier)) },
+   cube: { size: cube.length, roles: count(cube.map(cubeRole)), finishes: count(cube.map(card => card.finish)) },
    warnings: pool.warnings, failures, seats,
-   stockUsed: count(result.seats.flatMap(seat => seat.cleanup.map(pick => pick.row ?? 'reserve')))
+   cleanupUsed: count(result.seats.flatMap(seat => seat.cleanup.map(pick => pick.row ?? 'reserve')))
   }
  };
 }

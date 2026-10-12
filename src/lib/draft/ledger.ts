@@ -6,7 +6,7 @@ export const UNOWNED: Owner = Object.freeze({ kind: 'unowned' });
 export function sameOwner(a: Owner, b: Owner): boolean {
  if (a.kind !== b.kind) return false;
  if (a.kind === 'roster') return a.seat === (b as typeof a).seat;
- if (a.kind === 'cube') return a.wave === (b as typeof a).wave && a.pack === (b as typeof a).pack;
+ if (a.kind === 'pile') return a.pile === (b as typeof a).pile;
  return true;
 }
 
@@ -40,7 +40,7 @@ export function transfer(ledger: Ledger, cardId: string, expected: Owner, to: Ow
 
 export function describeOwner(owner: Owner): string {
  if (owner.kind === 'roster') return `seat ${owner.seat}`;
- if (owner.kind === 'cube') return `cube wave ${owner.wave} pack ${owner.pack}`;
+ if (owner.kind === 'pile') return `pile ${owner.pile}`;
  return owner.kind;
 }
 

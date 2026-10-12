@@ -8,7 +8,7 @@ No interview is required to use this scaffold. Resolve an entry when preparing t
 
 Owner: [Draft size](draft-and-rosters.md). First relevant gate: [phase](phases/01-pool-and-rosters.md).
 
-Playtest the proposed two waves of eight picks with the selected common-only cleanup safety net. Tune the initial draft's decisions and coverage rather than relying on cleanup as routine high-value acquisition or adding bullpen granularity.
+Decided: two eight-card packs per seat, cracked into one pile and passed left for 16 picks; the pool grows each 27-game chapter. Open: whether the natural role mix needs pack guidance. Do not rely on cleanup as routine high-value acquisition or add bullpen granularity.
 
 ## 2. Salary and revenue
 
@@ -20,7 +20,7 @@ Calibrate all-card salaries, franchise constraints, cap ramp, minimum income, at
 
 Owner: [Cleanup delivery](draft-and-rosters.md). First relevant gate: [phase](phases/01-pool-and-rosters.md).
 
-Common-only opening repair is selected. Define finite stock, role/budget coverage, pack allocation and trade/cut/waiver ordering. The D01 harness provisionally reserves one 16-card kit of commons per seat (base finish, at most 15 units), cuts surplus and overpriced cards to the unowned pool, and runs guarded snake-order cleanup before submission. Stock size, pick format and waiver placement remain open. Ensure every club can submit an affordable legal roster without duplicated cards or fictional free call-ups.
+Decided: cleanup cards are commons (base finish, at most 15 units) from each club's own unlimited per-role stack, with only the top card visible. Surplus and overpriced cards are cut to the unowned pool and never resurface. Waiver placement remains open. Ensure every club can submit an affordable legal roster without duplicated cards or fictional free call-ups.
 
 ## 4. Information and selection
 

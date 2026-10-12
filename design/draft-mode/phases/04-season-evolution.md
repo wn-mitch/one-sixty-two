@@ -52,7 +52,7 @@ The result includes six chapters of 27 games and eighteen nine-game segments. Ch
 - Enforce the two-chapter per-player trade cooldown. A deadline survives release and waiver claims with its original deadline; ownership changes do not clear/restart it.
 - Preserve unique ownership, cap/role legality, atomic mutations, and upgrade/provenance transfer through trades, releases, claims, and acquisitions.
 - Implement a bounded, explainable market policy for the human club and deterministic public-information responses for AI clubs. AI-to-AI negotiation may remain a candidate if not needed for the first D04 market slice; do not silently claim it is complete.
-- Keep the small composite team-season bullpen and two-reserve structure; do not turn chapter acquisition into a lengthy reliever microdraft.
+- Keep the composite team-season bullpen, the two setup slots and the two-reserve structure; do not turn chapter acquisition into a lengthy reliever microdraft.
 
 ### Save/resume and reporting
 

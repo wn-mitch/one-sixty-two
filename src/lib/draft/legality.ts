@@ -1,18 +1,18 @@
-import { compareId, type Slot } from '../game/types.ts';
+import { compareId } from '../game/types.ts';
 import { ownerOf } from './ledger.ts';
 import { minimumCostAssignment } from './matching.ts';
-import { DRAFT_RULES, effectiveCap, rosterSize, validateBudget, type DraftRules } from './rules.ts';
-import type { DraftCard, Ledger, LegalityFailure, LegalityReport, PayrollBudget, Submission } from './types.ts';
+import { canFill, DRAFT_RULES, effectiveCap, validateBudget, type DraftRules } from './rules.ts';
+import type { DraftCard, DraftSlot, Ledger, LegalityFailure, LegalityReport, PayrollBudget, Submission } from './types.ts';
 import { POOL_CONTRACT_VERSION } from './versions.ts';
 
 /** A roster position: an active slot, or null for a reserve that any card may fill. */
-export type RosterRow = Slot | null;
+export type RosterRow = DraftSlot | null;
 export const rosterRows = (rules: DraftRules = DRAFT_RULES): RosterRow[] => [...rules.activeSlots, ...Array<null>(rules.reserves).fill(null)];
 
-export const fits = (card: DraftCard, row: RosterRow): boolean => row === null || card.eligibleSlots.includes(row);
+export const fits = (card: DraftCard, row: RosterRow): boolean => row === null || canFill(card, row);
 
 export interface Arrangement {
- active: Partial<Record<Slot, string>>;
+ active: Partial<Record<DraftSlot, string>>;
  reserves: string[];
  /** Owned cards with no roster position. */
  surplus: string[];
@@ -91,15 +91,4 @@ export function checkSubmission(submission: Submission, ledger: Ledger, budget: 
 
 export function submissionFrom(seat: number, arrangement: Arrangement): Submission {
  return { seat, active: { ...arrangement.active }, reserves: [...arrangement.reserves] };
-}
-
-/**
- * The cheapest legal roster a seat could field from its own cards plus `available` cards, ignoring
- * competition for those cards. Null when no legal roster exists in that set.
- */
-export function minimumLegalPayroll(owned: readonly DraftCard[], available: readonly DraftCard[], rules: DraftRules = DRAFT_RULES): number | null {
- const cards = [...owned, ...available];
- const rows = rosterRows(rules);
- if (cards.length < rosterSize(rules)) return null;
- return minimumCostAssignment(rows.length, cards.length, (row, column) => fits(cards[column], rows[row]) ? cards[column].salary : null)?.total ?? null;
 }

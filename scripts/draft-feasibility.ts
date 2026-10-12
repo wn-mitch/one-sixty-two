@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { DRAFT_RULES } from '../src/lib/draft/rules.ts';
+import { DRAFT_RULES, picksPerSeat } from '../src/lib/draft/rules.ts';
 import { DRAFT_RULES_VERSION, POOL_CONTRACT_VERSION, SALARY_VERSION } from '../src/lib/draft/versions.ts';
 import { HITTER_SLOTS, MODEL_VERSION, type Slot } from '../src/lib/game/types.ts';
 import { CONTACT_METHOD_VERSION } from '../src/lib/sim/contact-profile.ts';
-import { isCommon } from '../src/lib/draft/pool.ts';
+import { isCommon } from '../src/lib/draft/cleanup.ts';
 import { executeRun, negativeProofs, POLICY_MODES, type PolicyMode, type RunRecord } from './draft-feasibility/run.ts';
 import { loadDraftData } from './verification-data.ts';
 
@@ -70,11 +70,16 @@ async function main(): Promise<void> {
 	const proofs = negativeProofs(cards, options.seedStart);
 
 	const seats = runs.flatMap(run => run.seats);
-	const stockSlots = [...new Set(runs.flatMap(run => Object.keys(run.stockUsed)))].sort();
-	const stockUse = Object.fromEntries(stockSlots.map(slot => {
-		const used = runs.map(run => run.stockUsed[slot] ?? 0);
-		return [slot, { max: Math.max(...used), p95: quantile(used, 0.95), supply: DRAFT_RULES.cleanupKits * (slot === 'reserve' ? 2 : 1) }];
+	const cleanupRows = [...new Set(runs.flatMap(run => Object.keys(run.cleanupUsed)))].sort();
+	const cleanupUse = Object.fromEntries(cleanupRows.map(row => {
+		const used = runs.map(run => run.cleanupUsed[row] ?? 0);
+		return [row, { max: Math.max(...used), p95: quantile(used, 0.95) }];
 	}));
+	const finishes = ['gem', 'emboss', 'foil', 'base'].map(finish => {
+		const counts = runs.map(run => run.cube.finishes[finish] ?? 0);
+		return [finish, { mean: round(counts.reduce((sum, value) => sum + value, 0) / counts.length), min: Math.min(...counts), max: Math.max(...counts) }] as const;
+	});
+	const roles = ['hitter', 'SP', 'CL', 'BP'].map(role => [role, round(runs.reduce((sum, run) => sum + (run.cube.roles[role] ?? 0), 0) / runs.length)] as const);
 	const timings = runs.map(run => run.ms);
 	const runFailures = runs.filter(run => run.failures.length);
 	const legalSeats = seats.filter(seat => seat.legal);
@@ -82,7 +87,7 @@ async function main(): Promise<void> {
 	const recoveredMissing = legalSeats.filter(seat => seat.missing > 0).length;
 	const capRoom = legalSeats.map(seat => seat.capRoom ?? 0);
 	const gates = {
-		poolIntegrity: runs.every(run => run.cube.size === DRAFT_RULES.waves * DRAFT_RULES.seats * DRAFT_RULES.packSize && !run.failures.some(({ stage }) => stage === 'pool' || stage === 'draft')),
+		poolIntegrity: runs.every(run => run.cube.size === DRAFT_RULES.seats * picksPerSeat(DRAFT_RULES) && !run.failures.some(({ stage }) => stage === 'pool' || stage === 'draft')),
 		coverage: runFailures.length === 0 && legalSeats.length === seats.length,
 		negativeProofs: proofs.every(proof => proof.passed),
 		salaryRecovery: recoveredOverCap > 0 && recoveredMissing > 0,
@@ -99,7 +104,7 @@ async function main(): Promise<void> {
 			missingRoleAfterDraft: seats.filter(seat => seat.missing > 0).length, recoveredMissing,
 			surplusCuts: seats.reduce((sum, seat) => sum + seat.surplusCuts, 0), overCapCuts: seats.reduce((sum, seat) => sum + seat.overCapCuts, 0),
 			capRoom: { min: Math.min(...capRoom), p5: quantile(capRoom, 0.05), p50: quantile(capRoom, 0.5) },
-			stockUse, warnings: [...new Set(runs.flatMap(run => run.warnings))],
+			cubeFinishes: Object.fromEntries(finishes), cubeRoles: Object.fromEntries(roles), cleanupUse, warnings: [...new Set(runs.flatMap(run => run.warnings))],
 			failedRuns: runFailures.map(run => ({ seed: run.seed, mode: run.mode, failures: run.failures }))
 		},
 		negativeProofs: proofs,
@@ -116,7 +121,8 @@ async function main(): Promise<void> {
 		`Draft feasibility ${passed ? 'PASSED' : 'FAILED'} — ${runs.length} runs (${options.seeds} seeds × ${options.modes.join('/')}), data ${dataVersion.slice(0, 12)}, ${SALARY_VERSION} (provisional)`,
 		`Legal seats: ${legalSeats.length}/${seats.length}; over cap after draft ${report.aggregate.overCapAfterDraft} (recovered ${recoveredOverCap}); missing roles ${report.aggregate.missingRoleAfterDraft} (recovered ${recoveredMissing})`,
 		`Cuts: ${report.aggregate.surplusCuts} surplus, ${report.aggregate.overCapCuts} over-cap; cap room at submission min ${report.aggregate.capRoom.min}, p5 ${report.aggregate.capRoom.p5}, p50 ${report.aggregate.capRoom.p50}`,
-		`Cleanup stock use per run (max/p95 of supply): ${Object.entries(stockUse).map(([slot, use]) => `${slot} ${use.max}/${use.p95} of ${use.supply}`).join(', ') || 'none'}`,
+		`Table of ${DRAFT_RULES.seats * picksPerSeat(DRAFT_RULES)} (mean, min–max): ${finishes.map(([finish, use]) => `${finish} ${use.mean} (${use.min}–${use.max})`).join(', ')}; roles ${roles.map(([role, mean]) => `${role} ${mean}`).join(', ')}`,
+		`Cleanup cards per run (max/p95): ${Object.entries(cleanupUse).map(([row, use]) => `${row} ${use.max}/${use.p95}`).join(', ') || 'none'}`,
 		`Salary p50 by role: ${Object.entries(report.salary.byRole).map(([role, summary]) => `${role} ${summary.p50}`).join(', ')}; cap ${DRAFT_RULES.nominalCap}`,
 		...proofs.map(proof => `Proof ${proof.passed ? 'ok  ' : 'FAIL'} ${proof.name}: expected ${proof.expected}, observed ${proof.observed.join(', ') || 'nothing'}`),
 		`Replay: ${replayMismatches} mismatches in ${runs.length} reruns; runtime p50 ${report.runtime.runMs.p50} ms, p95 ${report.runtime.runMs.p95} ms (budget ${options.runtimeBudgetMs} ms), load ${report.runtime.loadMs} ms`,

@@ -1,30 +1,4 @@
 /**
- * Maximum bipartite matching (Kuhn's augmenting paths). `edges[left]` lists the right vertices it
- * may take. Returns the right vertex matched to each left vertex, or -1.
- */
-export function maximumMatching(edges: readonly (readonly number[])[], rightCount: number): Int32Array {
- const ownerOfRight = new Int32Array(rightCount).fill(-1);
- const matched = new Int32Array(edges.length).fill(-1);
- const seen = new Int32Array(rightCount).fill(-1);
- const augment = (left: number, stamp: number): boolean => {
-  for (const right of edges[left]) {
-   if (seen[right] === stamp) continue;
-   seen[right] = stamp;
-   if (ownerOfRight[right] < 0 || augment(ownerOfRight[right], stamp)) {
-    ownerOfRight[right] = left;
-    matched[left] = right;
-    return true;
-   }
-  }
-  return false;
- };
- for (let left = 0; left < edges.length; left++) augment(left, left);
- return matched;
-}
-
-export const matchedCount = (matching: Int32Array): number => matching.reduce((count, right) => count + (right >= 0 ? 1 : 0), 0);
-
-/**
  * Minimum-cost assignment of every row to a distinct column (rows <= columns), Hungarian method with
  * potentials. `cost(row, column)` returns null for a forbidden pair. Returns null when no complete
  * assignment exists.

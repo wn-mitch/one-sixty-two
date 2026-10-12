@@ -1,63 +1,72 @@
-import { MAX_SEASON_YEAR, MIN_SEASON_YEAR, SLOTS, type Slot } from '../game/types.ts';
-import type { LegalityFailure, PayrollBudget } from './types.ts';
+import type { Finish } from '../cards/finish.ts';
+import { HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, STARTER_SLOTS } from '../game/types.ts';
+import type { DraftCard, DraftSlot, LegalityFailure, PayrollBudget } from './types.ts';
 import { DRAFT_RULES_VERSION } from './versions.ts';
 
-/**
- * Draft rules for the current contract. Every number here is a provisional balancing input that the
- * feasibility harness reports; none is a settled design decision.
- */
 export type CubeRole = 'hitter' | 'SP' | 'CL' | 'BP';
-export interface TierQuota { high: number; mid: number; base: number }
 
+/** Card finishes from common to gem; a pack slot's floor admits its finish and every higher one. */
+export const FINISH_ORDER: readonly Finish[] = ['base', 'foil', 'emboss', 'gem'];
+export const atLeast = (finish: Finish, floor: Finish): boolean => FINISH_ORDER.indexOf(finish) >= FINISH_ORDER.indexOf(floor);
+
+/** Nine hitters, three starters, the closer, two setup relievers and the team bullpen. */
+export const DRAFT_SLOTS: readonly DraftSlot[] = Object.freeze([...HITTER_SLOTS, ...STARTER_SLOTS, 'CL', 'SU1', 'SU2', 'BP']);
+
+/** A card fills a setup slot when it could close; every other slot follows the card's historical eligibility. */
+export const canFill = (card: DraftCard, slot: DraftSlot): boolean => slot === 'SU1' || slot === 'SU2' ? card.eligibleSlots.includes('CL') : card.eligibleSlots.includes(slot);
+
+/** `count` slots in every pack, each drawn uniformly from the cards at or above `floor`. */
+export interface PackSlot { readonly floor: Finish; readonly count: number }
+
+/**
+ * Draft rules for the current contract. The table shape (eight seats, two eight-card packs each,
+ * the pack floors and the pass order) is settled; the cap and common salary are provisional
+ * balancing inputs that the feasibility harness reports.
+ */
 export interface DraftRules {
  readonly version: string;
  readonly provisional: boolean;
  readonly seats: number;
- readonly waves: number;
+ /** Packs dealt to each seat; a seat cracks them all into one pile before its first pick. */
+ readonly packsPerSeat: number;
  readonly packSize: number;
- readonly collation: Readonly<TierQuota>;
- readonly activeSlots: readonly Slot[];
+ readonly collation: readonly PackSlot[];
+ readonly activeSlots: readonly DraftSlot[];
  readonly reserves: number;
  readonly minYear: number;
  readonly maxYear: number;
  readonly nominalCap: number;
  readonly commonSalaryMax: number;
- readonly cleanupKits: number;
- readonly cubeQuota: Readonly<Record<CubeRole, Readonly<TierQuota>>>;
- readonly cubePositionMinimum: number;
 }
 
 export const DRAFT_RULES: DraftRules = Object.freeze({
  version: DRAFT_RULES_VERSION,
  provisional: true,
  seats: 8,
- waves: 2,
+ packsPerSeat: 2,
  packSize: 8,
- /** Per pack: one high-tier, two mid-tier, five base cards. */
- collation: Object.freeze({ high: 1, mid: 2, base: 5 }),
- activeSlots: SLOTS,
+ /**
+  * Per pack: a gold-or-gem slot, two silver-or-better slots and five common-or-better slots. Upgrades
+  * come at the pool's natural rates, so a table of 16 packs averages about 10 gems, 27 golds, 41
+  * silvers and 49 commons.
+  */
+ collation: Object.freeze([
+  Object.freeze({ floor: 'emboss', count: 1 }),
+  Object.freeze({ floor: 'foil', count: 2 }),
+  Object.freeze({ floor: 'base', count: 5 })
+ ]),
+ activeSlots: DRAFT_SLOTS,
  reserves: 2,
  minYear: MIN_SEASON_YEAR,
  maxYear: MAX_SEASON_YEAR,
- /** Salary units are $0.1M. */
+ /** Salary units are $0.1M. Provisional until playtested. */
  nominalCap: 1500,
- /** A cleanup-eligible common: base finish and salary at most this. */
- commonSalaryMax: 15,
- /** One full 16-card replacement roster per seat. */
- cleanupKits: 8,
- /**
-  * Cube composition by role and pack tier. Bullpens are always base finish. Totals match the
-  * collation: 16 high, 32 mid and 80 base cards; 72 hitters, 28 starters, 14 closers, 14 bullpens.
-  */
- cubeQuota: Object.freeze({
-  hitter: Object.freeze({ high: 10, mid: 18, base: 44 }),
-  SP: Object.freeze({ high: 4, mid: 8, base: 16 }),
-  CL: Object.freeze({ high: 2, mid: 6, base: 6 }),
-  BP: Object.freeze({ high: 0, mid: 0, base: 14 })
- }),
- /** Hitters eligible at each fielding position, filled from base hitters before random draws. */
- cubePositionMinimum: 9
-});
+ /** Cleanup cards are commons: base finish and salary at most this, so any all-common roster fits the cap. */
+ commonSalaryMax: 15
+}) satisfies DraftRules;
+
+/** Cards each seat drafts: its own packs' worth, taken one per pick from the passing piles. */
+export const picksPerSeat = (rules: DraftRules): number => rules.packsPerSeat * rules.packSize;
 
 export const rosterSize = (rules: DraftRules): number => rules.activeSlots.length + rules.reserves;
 

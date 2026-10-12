@@ -1,17 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { SLOTS, type Slot } from '../game/types.ts';
-import { arrangeRoster, checkSubmission, minimumLegalPayroll, submissionFrom } from './legality.ts';
+import { arrangeRoster, checkSubmission, submissionFrom } from './legality.ts';
 import { createLedger, transfer, UNOWNED } from './ledger.ts';
-import { maximumMatching, matchedCount, minimumCostAssignment } from './matching.ts';
-import { baselineBudget, effectiveCap, validateBudget } from './rules.ts';
+import { minimumCostAssignment } from './matching.ts';
+import { baselineBudget, DRAFT_SLOTS, effectiveCap, validateBudget } from './rules.ts';
 import { testCard, TEST_ROLES } from './test-fixtures.ts';
-import type { DraftCard, PayrollBudget } from './types.ts';
+import type { DraftCard, DraftSlot, PayrollBudget } from './types.ts';
 
-const roleOf = (slot: Slot): string => slot.startsWith('SP') ? 'SP' : slot === 'DH' ? 'C' : slot;
+const roleOf = (slot: DraftSlot): string => slot.startsWith('SP') ? 'SP' : slot.startsWith('SU') ? 'CL' : slot === 'DH' ? 'C' : slot;
 
 /** One card per active slot at `salary`, plus two reserves. */
 function rosterCards(prefix: string, salary: number): DraftCard[] {
- const cards = SLOTS.map((slot, index) => testCard(`${prefix}${index}:2000`, TEST_ROLES[roleOf(slot)], salary));
+ const cards = DRAFT_SLOTS.map((slot, index) => testCard(`${prefix}${index}:2000`, TEST_ROLES[roleOf(slot)], salary));
  return [...cards, testCard(`${prefix}r1:2000`, TEST_ROLES.CF, salary), testCard(`${prefix}r2:2000`, TEST_ROLES.SP, salary)];
 }
 
@@ -22,9 +21,6 @@ function ownedRoster(cards: DraftCard[], seat = 0) {
 }
 
 describe('matching primitives', () => {
- it('finds an augmenting reassignment greedy order would miss', () => {
-  expect(matchedCount(maximumMatching([[0, 1], [0]], 2))).toBe(2);
- });
  it('returns the minimum-cost complete assignment and rejects impossible ones', () => {
   expect(minimumCostAssignment(2, 3, (row, column) => [[4, 1, 3], [2, 0, 5]][row][column])?.total).toBe(3);
   expect(minimumCostAssignment(2, 2, (_, column) => column === 0 ? 1 : null)).toBeNull();
@@ -35,7 +31,7 @@ describe('roster legality', () => {
  it('accepts a full owned roster within the cap and counts reserves in payroll', () => {
   const { ledger, submission } = ownedRoster(rosterCards('a', 50));
   const report = checkSubmission(submission, ledger, baselineBudget());
-  expect(report).toMatchObject({ legal: true, payroll: 16 * 50, effectiveCap: 1500, capRoom: 700, failures: [] });
+  expect(report).toMatchObject({ legal: true, payroll: 18 * 50, effectiveCap: 1500, capRoom: 600, failures: [] });
  });
 
  it('names each defect instead of relaxing the roster', () => {
@@ -52,10 +48,10 @@ describe('roster legality', () => {
  });
 
  it('applies franchise adjustments, obligations and ceilings to the cap, never cash', () => {
-  const { ledger, submission } = ownedRoster(rosterCards('c', 90));
+  const { ledger, submission } = ownedRoster(rosterCards('c', 75));
   const tight: PayrollBudget = { nominalCap: 1500, franchiseAdjustment: 100, obligations: 300, ceiling: 1400 };
   expect(effectiveCap(tight)).toBe(1300);
-  expect(checkSubmission(submission, ledger, tight).failures).toEqual([{ code: 'over-cap', payroll: 1440, effectiveCap: 1300, excess: 140 }]);
+  expect(checkSubmission(submission, ledger, tight).failures).toEqual([{ code: 'over-cap', payroll: 1350, effectiveCap: 1300, excess: 50 }]);
   expect(checkSubmission(submission, ledger, { ...tight, ceiling: 1450, obligations: 0 }).legal).toBe(true);
   const account = { budget: tight, cash: 1_000_000 };
   expect(checkSubmission(submission, ledger, account.budget)).toEqual(checkSubmission(submission, ledger, tight));
@@ -65,16 +61,16 @@ describe('roster legality', () => {
  it('arranges active slots before reserves and leaves the rest as surplus', () => {
   const cards = [...rosterCards('d', 5), testCard('extra1:2000', TEST_ROLES.BP, 5), testCard('extra2:2000', TEST_ROLES.CL, 5)];
   const arrangement = arrangeRoster(cards);
-  expect(Object.keys(arrangement.active)).toHaveLength(14);
+  expect(Object.keys(arrangement.active)).toHaveLength(16);
   expect(arrangement.reserves).toHaveLength(2);
   expect(arrangement.surplus).toHaveLength(2);
-  expect(arrangeRoster(cards.filter(card => !card.eligibleSlots.includes('CL'))).open).toEqual(['CL']);
+  expect(arrangeRoster(cards.filter(card => !card.eligibleSlots.includes('CL'))).open).toEqual(['CL', 'SU1', 'SU2']);
  });
 
- it('finds the cheapest legal roster from owned and available cards', () => {
-  const pricey = rosterCards('e', 100);
-  const cheap = rosterCards('f', 5);
-  expect(minimumLegalPayroll(pricey, cheap)).toBe(16 * 5);
-  expect(minimumLegalPayroll(pricey.slice(0, 10), [])).toBeNull();
+ it('fills setup slots only with cards that could close', () => {
+  const { ledger, submission } = ownedRoster(rosterCards('s', 5));
+  const starter = submission.active.SP1!;
+  const report = checkSubmission({ ...submission, active: { ...submission.active, SU1: starter, SP1: submission.active.SU1 } }, ledger, baselineBudget());
+  expect(report.failures).toEqual([{ code: 'ineligible-role', slot: 'SP1', cardId: submission.active.SU1 }, { code: 'ineligible-role', slot: 'SU1', cardId: starter }]);
  });
 });

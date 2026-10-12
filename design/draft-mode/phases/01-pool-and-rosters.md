@@ -1,6 +1,6 @@
 # D01 — Pool, salary, and roster feasibility
 
-**Status: HARNESS AVAILABLE — provisional values, acceptance decisions open**  
+**Status: HARNESS AVAILABLE — table shape settled, salary values provisional**  
 **Purpose:** Prove that the finite shared player pool, salary model, opening recovery, and roster legality can support a real eight-seat draft before any season presentation is built.
 
 This phase is a contract-and-headless-proof phase, not a playable Draft Mode milestone. It should produce a runnable deterministic harness that exercises the real pool, pricing, cleanup, and roster validators. It must not introduce fictional replacement players or a second Classic engine.
@@ -9,12 +9,12 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 
 `just draft-feasibility` runs the proof against the compiled pool. The code lives in `src/lib/draft/`, with the harness in `scripts/draft-feasibility*`.
 
-**Contracts.** The versions are `draft-d01-v1` (rules), `salary-runs-v1` (the salary table in `draft-cards.json`, pinned by `dataVersion`) and `pool-v1` (ownership buckets, legality failure codes and report shape). D02 consumes these and does not define parallel validators.
+**Contracts.** The versions are `draft-d01-v2` (rules), `salary-runs-v1` (the salary table in `draft-cards.json`, pinned by `dataVersion`) and `pool-v2` (ownership buckets, legality failure codes and report shape). D02 consumes these and does not define parallel validators.
 
 **Identity and ownership.**
 - A `DraftCard` is immutable per data and salary version.
 - A run-owned `CardInstance` fixes its starting salary and original tier when created, and carries provenance and a trade deadline through every transfer.
-- One ledger records each card's single owner: cube pack, cleanup stock, unowned, released, or a seat roster.
+- One ledger records each card's single owner: a dealt pile, unowned, released, or a seat roster. Cleanup cards stay unowned until a club takes one.
 - Uniqueness is per player-season, so one pool may hold several seasons of the same athlete.
 - A pool never holds a team-season bullpen together with one of its member player-seasons.
 
@@ -28,31 +28,34 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 - Baserunning, park fit and platoon effects are not priced.
 - Finish and pack tier come from WAR and never enter the price.
 
-**Pool.**
-- Cleanup stock is reserved before drafting: one full 16-card kit of commons per seat. A common is a base-finish card costing at most 15 units.
-- The cube follows role and tier quotas:
-  - 72 hitters, with at least 9 eligible at each position;
-  - 28 starters, 14 closers and 14 bullpens;
-  - 16 high-tier, 32 mid-tier and 80 base cards, dealt into packs of 1/2/5.
-- A random cube would hold about five bullpens, too few for eight seats.
+**Pool and draft.**
+- Each of the eight seats is dealt two eight-card packs, so the opening pool is 128 cards and every club drafts 16.
+- Each pack has one gold-or-gem slot, two silver-or-better slots and five common-or-better slots. Common, silver, gold and gem are the base, foil, emboss and gem finishes.
+- Each slot draws a random free card at or above its floor, so upgrades come at the pool's natural rates. A table averages about 10 gems, 27 golds, 41 silvers and 50 commons.
+- Roles are not balanced: a table averages about 60 hitters, 29 starters, 36 closers and 3 bullpens. Cleanup covers missing roles.
+- The roster is 16 active roles (Classic's 14 plus setup relievers SU1 and SU2) and two reserves. Setup slots take any card eligible to close, and their cleanup comes from the closer stack.
+- A seat cracks both packs into one 16-card pile, takes one card and passes the pile left. Sixteen picks clear the table, and every pile visits every seat twice.
+- The pool grows at each 27-game chapter; that growth belongs to [D04](./04-season-evolution.md).
 
 **Opening recovery.**
 - The order is draft → cuts → common-only cleanup → submission.
 - Surplus cards and overpriced cards are cut to the unowned pool and are not reoffered as cleanup.
-- Cleanup runs in snake rounds. No pick may reduce how much of the remaining open demand the stock can serve.
+- Cleanup cards are always commons: base finish and at most 15 units, so an all-common roster fits any legal budget.
+- Each seat has its own unlimited stack per role (each position, DH, starter, closer and bullpen) in a seeded order, and sees only the top card. Taking it reveals the next. A reserve may come from any stack.
+- A card that has been in the run, or whose bullpen or bullpen member is in the run, never appears on top. Seats share the universe, so two stacks can rarely show the same card; whichever club takes it first gets it.
 - The legality predicate takes a `PayrollBudget` (nominal cap, franchise adjustment, obligations, ceiling) and no cash.
 
 **Provisional evidence.**
-- The default sweep (64 seeds × five placeholder pick policies, about 9 s on desktop Node) leaves every seat legal.
+- The default sweep (64 seeds × five placeholder pick policies) leaves every seat legal.
 - Most placeholder drafts finish over the 1,500-unit cap or short of a role; recovery repairs all of them.
-- Per-slot cleanup use stays below kit supply.
 - Named negative fixtures fail as designed.
-- Every run replays to the same fingerprint, at about 13 ms per run.
+- Every run replays to the same fingerprint, at about 11 ms per run.
 - Phone runtime is not measured.
 
 **Prerequisites recorded for D03.**
 - `validateTeam`/`validateSeason` in `src/lib/sim/validation.ts` reject duplicate `playerId`s and duplicate franchises. Draft rules must relax both before drafted rosters can be simulated, including two bullpens from one franchise, which share `bullpen:<franchise>`.
 - Two-way cards are priced at their best role only.
+- The engine has no setup relievers yet. Draft seasons need SU1 and SU2 usage as specified in [draft and rosters](../draft-and-rosters.md#shared-cube-and-pack-passing), with each setup reliever's availability tracked like the closer's. Setup relievers are currently priced at their closer value.
 
 ## Dependencies
 
@@ -68,7 +71,7 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 A command-line/headless fixture can construct a seeded finite run pool, price the selected player-seasons, allocate the proposed opening draft shape, generate common-only cleanup stock, and answer all of the following without hand-waving:
 
 1. no historical player-season is owned twice;
-2. all eight seats can reach fourteen active roles plus two reserves from finite, real cards;
+2. all eight seats can reach sixteen active roles plus two reserves from finite, real cards;
 3. every seat has a legal affordable submission after the defined recovery window;
 4. cuts, releases, and cleanup never create duplicate ownership or fictional cards;
 5. salaries remain payroll costs, while any future cash field is separate and does not silently buy cap space;
@@ -89,7 +92,7 @@ The proof should expose a machine-readable contract report and a human-readable 
 ### Salary and legal-roster contracts
 
 - Specify the nominal cap, franchise cap adjustments as inputs, fixed obligations/ceilings as distinct inputs, minimum salary policy, and the legality predicate.
-- Count all fourteen active selections and both reserves against payroll allowance.
+- Count all sixteen active selections and both reserves against payroll allowance.
 - Permit temporary over-cap draft states, then require a legal state at final submission after the opening recovery window.
 - Define role coverage for nine hitters, three starters, one closer, and one team-season bullpen, plus two reserve slots. Do not add a ten-reliever micro-roster.
 - Keep payroll allowance and banked development cash separate. D01 only proves the boundary; it does not implement payday or shops.
@@ -124,9 +127,8 @@ D01 is complete only when the report is backed by real compiled player data and 
 
 ## Required open decisions before D01 acceptance
 
-- Exact two-wave pack dimensions and whether the initial 128-card proposal is retained unchanged.
-- Salary valuation formula, baseline cap, minimum salary, franchise obligations/ceilings, and the initial cap-feasibility margin.
-- Cleanup stock size, common-tier definition, role quotas, affordability thresholds, pack granularity, and allocation order.
+- Salary valuation formula, baseline cap, minimum salary, franchise obligations/ceilings, and the initial cap-feasibility margin. These are tuned by playtest feel.
+- Whether the natural role mix (many closers, few bullpens) needs pack role guidance.
 - Whether preseason waivers occur before or after cleanup, and the atomic ordering of trades, cuts, claims, and replacements.
 - How a cleanup card's original tier and salary are displayed without turning cleanup into a superior acquisition path.
 - The canonical legality error/report shape for UI, AI, replay, and later checkpoint services.

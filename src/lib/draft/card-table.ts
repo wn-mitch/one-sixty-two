@@ -1,13 +1,12 @@
 import { SLOTS, type Candidate, type Slot } from '../game/types.ts';
 import type { DraftCardTable } from './salary.ts';
-import type { DraftCard, PackTier } from './types.ts';
+import type { DraftCard } from './types.ts';
 import { SALARY_VERSION } from './versions.ts';
 import type { Finish } from '../cards/finish.ts';
 
 export type StoredDraftCardTable = DraftCardTable & { dataVersion: string };
 
 const FINISHES: readonly Finish[] = ['base', 'foil', 'emboss', 'gem'];
-export const packTier = (finish: Finish): PackTier => finish === 'gem' || finish === 'emboss' ? 'high' : finish === 'foil' ? 'mid' : 'base';
 
 /** Joins the manifest candidates to the stored salary columns, rejecting any other data or salary version. */
 export function decodeDraftCards(candidates: readonly Candidate[], table: StoredDraftCardTable, dataVersion: string): DraftCard[] {
@@ -34,7 +33,7 @@ export function decodeDraftCards(candidates: readonly Candidate[], table: Stored
   }
   return {
    seasonId: candidate.seasonId, playerId: candidate.playerId, franchiseId: candidate.franchiseId, year,
-   eligibleSlots: candidate.eligibleSlots, finish, packTier: packTier(finish),
+   eligibleSlots: candidate.eligibleSlots, finish,
    valueRuns: table.valueRuns[index], pricedSlot, salary, conflicts: conflicts.get(candidate.seasonId) ?? []
   };
  });
