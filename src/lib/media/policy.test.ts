@@ -106,6 +106,12 @@ function review(): ApprovedPhotoReview {
 }
 describe('explicit review gate', () => {
 	const players = new Set(['player']), franchises = new Set(['A']);
+	it('records inspected sources awaiting evidence without granting approval', () => {
+		const blocked = { playerId: 'player', sourceId: 'commons:1', status: 'blocked' as const,
+			reason: 'Underlying photographic rights need evidence', evidenceUrl: url };
+		expect(() => validateReviews([blocked], players, franchises)).not.toThrow();
+		expect(() => validateReviews([{ ...blocked, reason: '' }], players, franchises)).toThrow('reason and evidence');
+	});
 	it('accepts reviewed card photographs without interpreting upload dates as capture evidence', () => {
 		const r = review();
 		expect(() => validateReviews([r], players, franchises)).not.toThrow();

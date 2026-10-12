@@ -184,6 +184,9 @@ describe('reviewed image acquisition and offline compilation', () => {
 		expect(selectPhoto(generated.manifest, 'synthetic01', 1996, 'AAA')?.sourceId).toBe(second.sourceId);
 		const originalVersion = generated.manifest.version;
 		expect((await generateMedia(input)).manifest.version).toBe(originalVersion);
+		const blocked = await generateMedia({ ...input, photoReviews: [{ playerId: first.playerId, sourceId: first.sourceId,
+			status: 'blocked', reason: 'Underlying publication rights need evidence', evidenceUrl: metadata.sourceUrl }] });
+		expect(selectPhoto(blocked.manifest, first.playerId, 1996, 'AAA')).toBeNull();
 		const asset = generated.manifest.players.synthetic01.photos[0]; const bytes = await readFile(join(root, 'published', originalVersion, asset.url.split('/').at(-1)!));
 		expect(asset.url).toContain(digest(bytes));
 		input.photoReviews[0] = { ...first, crop: { x: 0, y: 0, width: .5, height: 1 } };

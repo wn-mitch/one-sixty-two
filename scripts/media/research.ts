@@ -9,7 +9,7 @@ import { cachedCommonsMetadata } from './inventory.ts';
 import type { CandidateIdentity, CommonsMetadata, DataManifest, DataPointer, PhotoReview, WikidataMedia } from './types.ts';
 
 export type ResearchProvider = 'cached' | 'commons' | 'openverse' | 'loc' | 'manual';
-export const discoveryStrategy = (provider: ResearchProvider): string => provider === 'commons' ? 'names-subjects-categories-v3' : 'names-v1';
+export const discoveryStrategy = (provider: ResearchProvider): string => provider === 'commons' ? 'names-subjects-categories-v4' : 'names-v1';
 export const searchComplete = (provider: ResearchProvider, state?: SearchState): boolean => state?.status === 'complete'
 	&& (provider !== 'commons' || state.strategy === discoveryStrategy(provider));
 export interface SearchState {

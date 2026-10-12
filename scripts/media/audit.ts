@@ -22,6 +22,7 @@ interface AuditPlayer {
 
 export function candidateBlockers(candidate: PhotoCandidate, review?: PhotoReview, acquisition?: CandidateAcquisition, published = false): string[] {
 	if (review?.status === 'rejected') return [`rejected: ${review.reason}`];
+	if (review?.status === 'blocked') return [`review blocked: ${review.reason}`];
 	if (review?.status === 'approved' && published) return [];
 	const reasons = [review?.status === 'approved' ? 'approved image awaiting compilation' : 'unreviewed identity, uniform, context and crop'];
 	if (acquisition?.status === 'failed') reasons.push(`acquisition failure: ${acquisition.reason ?? 'image unavailable'}`);
@@ -70,7 +71,7 @@ export async function auditMedia(context: ResearchContext): Promise<Record<strin
 		for (const review of playerReviews) if (!discovered.has(review.sourceId)) {
 			discovered.set(review.sourceId, review.status === 'approved'
 				? { sourceId: review.sourceId, provider: 'manual', sourceUrl: review.metadata.sourceUrl, title: review.metadata.title, metadata: review.metadata, via: ['reviewed source'] }
-				: { sourceId: review.sourceId, provider: 'manual', sourceUrl: review.evidenceUrl, title: review.sourceId, via: ['rejected source'] });
+				: { sourceId: review.sourceId, provider: 'manual', sourceUrl: review.evidenceUrl, title: review.sourceId, via: [`${review.status} source`] });
 		}
 		const leads = [...discovered.values()].map(candidate => ({ sourceId: candidate.sourceId, title: candidate.title, sourceUrl: candidate.sourceUrl,
 			blockers: candidateBlockers(candidate, reviews.get(`${id}\0${candidate.sourceId}`), acquisitions.get(candidate.sourceId), photos.some(photo => photo.sourceId === candidate.sourceId)) }));

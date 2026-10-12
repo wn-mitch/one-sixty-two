@@ -140,7 +140,11 @@ export interface RejectedPhotoReview {
 	reason: string;
 	evidenceUrl: string;
 }
-export type PhotoReview = ApprovedPhotoReview | RejectedPhotoReview;
+/** Inspected but awaiting specific evidence. Retains legacy coverage without approving new use. */
+export interface BlockedPhotoReview extends Omit<RejectedPhotoReview, 'status'> {
+	status: 'blocked';
+}
+export type PhotoReview = ApprovedPhotoReview | RejectedPhotoReview | BlockedPhotoReview;
 
 export interface PreparedAsset extends MediaAsset {
 	filename: string;

@@ -95,7 +95,11 @@ export async function searchCommonsBatch(access: DiscoveryAccess, identities: Ca
 	// Keep these queries individual so unnamed photographs reach only their subject.
 	queries.push(...entities);
 	await commonsQueries(access, queries, onPage);
-	for (const identity of identities) for (const category of identity.commonsCategories ?? []) {
+	// Many player categories have no Wikidata Commons-category statement. Exact-name
+	// categories are discovery leads only; membership never establishes identity.
+	for (const identity of identities) for (const category of new Set([
+		...(identity.commonsCategories ?? []), identity.name, `${identity.name} (baseball)`
+	])) {
 		await discoverCommonsCollection(access, category, async (candidates, child) => {
 			const query = `Player category ${identity.playerId}: ${child}`;
 			queries.push(query);

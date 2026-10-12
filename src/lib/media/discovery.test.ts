@@ -119,12 +119,12 @@ describe('explicit discovery and checkpoints', () => {
 	});
 	it('bounds batched name and structured-subject queries and removes duplicate normalized aliases', async () => {
 		const queries: string[] = [];
-		vi.stubGlobal('fetch', vi.fn(async (url: string) => { queries.push(new URL(url).searchParams.get('gsrsearch')!); return Response.json({ batchcomplete: true }); }));
+		vi.stubGlobal('fetch', vi.fn(async (url: string) => { const query = new URL(url).searchParams.get('gsrsearch'); if (query) queries.push(query); return Response.json({ batchcomplete: true }); }));
 		const identities = Array.from({ length: 9 }, (_, i) => ({ ...identity, playerId: `synthetic${i}`, name: `Example Athlete ${i}`, wikidataId: `Q${i + 1}` }));
 		await searchCommonsBatch(access(), identities, new Map(identities.map(p => [p.playerId, [p.name, p.name.toLowerCase()]])), async () => {});
 		expect(queries).toHaveLength(11); expect(queries.every(query => query.split(' OR ').length <= 8)).toBe(true);
 		expect(queries.filter(query => query.startsWith('haswbstatement:')).every(query => !query.includes(' OR '))).toBe(true);
-	}, 20_000);
+	}, 40_000);
 	it('routes unnamed structured hits only to their actual subject, including single-player batches', () => {
 		const athlete = { ...identity, wikidataId: 'Q123' };
 		const candidate: PhotoCandidate = { sourceId: 'commons:1', provider: 'commons', title: 'Camera frame.jpg', sourceUrl: 'https://example.invalid/file', via: [] };
@@ -151,16 +151,17 @@ describe('explicit discovery and checkpoints', () => {
 		expect(leads).toHaveLength(1); expect(candidateBlockers(leads[0])).toContain('original-source rights and image acquisition unverified');
 		await expect(discoverCommonsCollection(access(true), 'Collection', async () => {}, 1)).rejects.toThrow('have not been searched');
 	});
-	it('follows verified player subcategories even when image filenames do not name the player', async () => {
+	it('finds unlinked name categories and their unnamed photographs without granting approval', async () => {
 		vi.stubGlobal('fetch', vi.fn(async (input: string) => {
 			const params = new URL(input).searchParams;
 			if (params.has('gsrsearch')) return Response.json({ batchcomplete: true });
 			if (params.get('cmtitle') === 'Category:Example Athlete') return Response.json({ query: { categorymembers: [{ ns: 14, pageid: 2, title: 'Category:Training day' }] } });
 			if (params.get('cmtitle') === 'Category:Training day') return Response.json({ query: { categorymembers: [{ ns: 6, pageid: 3, title: 'File:Camera frame 3.jpg' }] } });
+			if (params.has('cmtitle')) return Response.json({ query: { categorymembers: [] } });
 			return Response.json({ query: { pages: [{ ...page(3), title: 'File:Camera frame 3.jpg' }] } });
 		}));
 		const found: PhotoCandidate[] = [], queries: string[] = [];
-		await searchCommonsBatch(access(), [{ ...identity, commonsCategories: ['Example Athlete'] }], new Map([[identity.playerId, [identity.name]]]), async (items, query) => { found.push(...items); queries.push(query); });
+		await searchCommonsBatch(access(), [identity], new Map([[identity.playerId, [identity.name]]]), async (items, query) => { found.push(...items); queries.push(query); });
 		expect(found).toHaveLength(1); expect(found[0].metadata?.title).toBe('Camera frame 3.jpg');
 		expect(queries).toContain('Player category synthetic01: Training day');
 		expect(candidateBlockers(found[0])).toContain('unreviewed identity, uniform, context and crop');

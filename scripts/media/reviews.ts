@@ -16,8 +16,8 @@ export function validateReviews(reviews: PhotoReview[], playerIds: Set<string>, 
 		const key = `${review.playerId}\0${review.sourceId}`;
 		if (!playerIds.has(review.playerId) || typeof review.sourceId !== 'string' || !review.sourceId.trim() || seen.has(key)) throw new Error(`Invalid or duplicate photo review: ${key}`);
 		seen.add(key);
-		if (review.status === 'rejected') {
-			if (!review.reason?.trim() || !https(review.evidenceUrl)) throw new Error(`Rejected photo needs a reason and evidence: ${key}`);
+		if (review.status === 'rejected' || review.status === 'blocked') {
+			if (!review.reason?.trim() || !https(review.evidenceUrl)) throw new Error(`Unapproved photo needs a reason and evidence: ${key}`);
 			continue;
 		}
 		if (review.status !== 'approved' || review.visualReview !== true || !review.notes?.trim()) throw new Error(`Photo has not been reviewed: ${key}`);

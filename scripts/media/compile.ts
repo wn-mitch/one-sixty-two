@@ -228,7 +228,7 @@ export async function generateMedia(input: {
 	validatePlayerSources(input.playerSources, new Set(identities.map((identity) => identity.playerId)));
 	const reviews = input.photoReviews ?? [];
 	validateReviews(reviews, new Set(identities.map(identity => identity.playerId)), new Set(input.dataManifest.franchises.map(franchise => franchise.id)));
-	const reviewKeys = new Set(reviews.map(review => `${review.playerId}\0${review.sourceId}`));
+	const reviewKeys = new Set(reviews.filter(review => review.status !== 'blocked').map(review => `${review.playerId}\0${review.sourceId}`));
 	input.log(`Compiling reviewed inventory for ${identities.length} player identities`);
 	const candidateTitlesByPlayer = new Map<string, string[]>();
 	for (const identity of identities) {
