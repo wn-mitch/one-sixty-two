@@ -36,6 +36,7 @@
   wall = false,
   capture = false,
   stickers,
+  freshStickers,
   onDetails
  }: {
   s: CardViewModel;
@@ -48,6 +49,8 @@
   capture?: boolean;
   /** Overrides the collection's stickers for this card, e.g. while they are being arranged. */
   stickers?: readonly PlacedSticker[];
+  /** Sticker kinds just earned; they pop on and sparkle. */
+  freshStickers?: ReadonlySet<string>;
   onDetails: () => void;
  } = $props();
 	let root = $state<HTMLDivElement>();
@@ -85,7 +88,7 @@
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
  {#if face === 'front'}<Material {s} layer="over" {capture} />{/if}
  <!-- Explicit stickers (the collection editor) always show; elsewhere the player's setting decides. -->
- {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer stickers={stickers ?? cardStickers(s.seasonId)} />{/if}
+ {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer stickers={stickers ?? cardStickers(s.seasonId)} fresh={freshStickers} />{/if}
 </div>
 
 <style>

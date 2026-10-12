@@ -130,6 +130,7 @@
 				sharing={false}
 				shareStatus={shareStatus}
 				newStickers={exampleStickers}
+				newCards={season.profiles.slice(2, 5).map(profile => ({ seasonId: profile.seasonId, label: `${profile.displayName} ${profile.year}` }))}
 			/>
 		{:else if season}
 			<DraftWorkshop initial="ready" embedded />

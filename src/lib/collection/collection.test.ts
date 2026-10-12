@@ -4,7 +4,7 @@ import { NO_LEGACY } from '../storage/legacy.ts';
 import { migrate, MIGRATIONS } from '../storage/migrations.ts';
 import { seasonStatements } from '../storage/season-rows.ts';
 import { memoryDb } from '../storage/test-db.ts';
-import { collectionStatements, loadCollection, loadStickers, moveSticker, setStickerHidden, stickersFromSeason } from './collection.ts';
+import { collectionStatements, loadCollection, loadStickers, moveSticker, newCards, setStickerHidden, stickersFromSeason } from './collection.ts';
 
 const SLUGGER = 'slug:2001:NL:SFN';
 const ARM = 'arm:1999:AL:BOS';
@@ -35,6 +35,19 @@ describe('collection', () => {
   expect(slugger.best.line).toMatchObject({ HR: 45 });
   expect(slugger.stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['hr-40', day(0)], ['wins-100', day(0)]]);
   expect((await stickersFromSeason(db, 'k2'))).toEqual([]);
+ });
+
+ it('reports only player-seasons no earlier season rostered as new cards, even after a re-save', async () => {
+  const { db } = await memoryDb();
+  const profiles = [{ seasonId: SLUGGER, displayName: 'Slugger', year: 2001 }, { seasonId: ARM, displayName: 'Arm', year: 1999 }];
+  await db.run(save(entry('k1', 90, day(0))));
+  expect(await newCards(db, 'k1', profiles)).toEqual([{ seasonId: ARM, label: 'Arm 1999' }, { seasonId: SLUGGER, label: 'Slugger 2001' }]);
+  await db.run(save(entry('k1', 90, day(1))));
+  expect(await newCards(db, 'k1', profiles)).toHaveLength(2);
+  const next = entry('k2', 80, day(2));
+  next.roster = [...next.roster, { seasonId: 'fresh:2010:AL:NYA', label: 'Fresh 2010', slot: 'CF' }];
+  await db.run(save(next));
+  expect(await newCards(db, 'k2', profiles)).toEqual([{ seasonId: 'fresh:2010:AL:NYA', label: 'fresh:2010:AL:NYA' }]);
  });
 
  it('awards times-drafted stickers on the season that reaches them', async () => {

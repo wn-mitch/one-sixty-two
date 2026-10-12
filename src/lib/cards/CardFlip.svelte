@@ -21,7 +21,8 @@ let {
  sourceElement,
  onReturned,
  raisedOnly = false,
- flipInPlace = false
+ flipInPlace = false,
+ readerNav
 }: {
  s: CardViewModel;
  onDetails: () => void;
@@ -38,6 +39,8 @@ let {
  raisedOnly?: boolean;
  /** The raised reader turns between back and front where it is; only dismissal returns it. */
  flipInPlace?: boolean;
+ /** Controls beside the raised reader's turn button, such as stepping through a hand of cards. */
+ readerNav?: Snippet;
 } = $props();
 
 let stack = $state<HTMLDivElement>();
@@ -170,6 +173,7 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
    </div>
     {#if readerOpen}
      <button class="reader-return" type="button" aria-label={turned ? 'Show front' : 'Turn over'} onclick={readerToggle}><span aria-hidden="true">↻</span></button>
+     {#if readerNav}<div class="reader-nav">{@render readerNav()}</div>{/if}
     {/if}
    </div>
 </div>
@@ -180,6 +184,9 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
  .turn, .reader-return { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; font-size: 1.5rem; }
  .cardbox[data-face='back'] > .turn { visibility: hidden; pointer-events: none; }
  .reader-return { margin: 12px auto 0; }
+ /* Shares the turn button's row: its controls sit at either end with the turn button between. */
+ .reader-nav { position: absolute; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; height: 44px; pointer-events: none; }
+ .reader-nav > :global(*) { pointer-events: auto; }
  .slot, .reader { grid-column: 1; grid-row: 1; }
  .slot { width: min(100%, var(--card-front-width, 20rem)); aspect-ratio: 5 / 7; pointer-events: none; }
  .reader { display: block; position: relative; inset: auto; container-type: inline-size; width: min(100%, var(--card-front-width, 20rem)); margin: 0 auto; border: 0; padding: 0; overflow: visible; background: transparent; color: inherit; }

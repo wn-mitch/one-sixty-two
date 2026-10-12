@@ -12,9 +12,8 @@
 	import { createShareRenderModel } from '../share/model.ts';
 	import type { ShareAction, ShareFormat, SharePublication, ShareRenderModel } from '../share/types.ts';
 	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
-	import StickerBadge from '../collection/StickerBadge.svelte';
-	import { STICKER_BY_KIND } from '../collection/stickers.ts';
-	import type { NewSticker } from '../collection/collection.ts';
+	import type { NewCard, NewSticker } from '../collection/collection.ts';
+	import ResultsCollection from './ResultsCollection.svelte';
 	import GradeBadge from './GradeBadge.svelte';
 	import { gradeRange, seasonGrade } from '../game/grade.ts';
 	import SeasonCalendar from './SeasonCalendar.svelte';
@@ -42,6 +41,8 @@
 		challenge?: Challenge | null;
 		/** Stickers this season earned for the first time. */
 		newStickers?: readonly NewSticker[];
+		/** Player-seasons this season added to the collection for the first time. */
+		newCards?: readonly NewCard[];
 	}
 
 	let {
@@ -58,9 +59,9 @@
 		sharing,
 		shareStatus,
 		challenge = null,
-		newStickers = []
+		newStickers = [],
+		newCards = []
 	}: Props = $props();
-	const earnedByCard = $derived([...Map.groupBy(newStickers, item => item.seasonId).values()]);
 	const grade = $derived(seasonGrade(result.wins, result.losses));
 	const challengeVerdict = $derived(challenge
 		? result.wins > challenge.wins ? 'You beat their record.' : result.wins === challenge.wins ? 'You matched their record.' : 'You fell short of their record.'
@@ -119,6 +120,30 @@
 		review?.focusHeading();
 	}
 
+	/** The full hand in draft order, so the raised card steps through every player. */
+	const handOrder = $derived(resultsModel.cards.filter(card => cardViews.has(card.seasonId)));
+	const handIndex = $derived(handOrder.findIndex(card => card.seasonId === inspectedSeasonId));
+
+	async function stepHand(direction: -1 | 1): Promise<void> {
+		if (handIndex < 0 || !handOrder.length) return;
+		const next = handOrder[(handIndex + direction + handOrder.length) % handOrder.length];
+		// Keep the face the player was looking at; only the card changes.
+		const face = { turned, textBack, selectedMode };
+		inspectedSeasonId = next.seasonId;
+		await tick();
+		({ turned, textBack, selectedMode } = face);
+		document.querySelector<HTMLButtonElement>(`#${resultsReviewId} [data-hand-step="${direction}"]`)?.focus({ preventScroll: true });
+	}
+
+	function handKeys(event: KeyboardEvent): void {
+		if (!inspectedSeasonId || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+		if (event.target instanceof HTMLElement && event.target.closest('input, select, textarea, [contenteditable="true"]')) return;
+		if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+			event.preventDefault();
+			void stepHand(event.key === 'ArrowLeft' ? -1 : 1);
+		}
+	}
+
 	function closeInspection(): void {
 		const trigger = inspectionTrigger;
 		inspectedSeasonId = null;
@@ -147,6 +172,8 @@
 		return () => { disposed = true; };
 	});
 </script>
+
+<svelte:window onkeydown={handKeys} />
 
 <section class="results" aria-labelledby="results-heading">
 	{#if challenge}
@@ -200,30 +227,7 @@
 		</dl>
 	</header>
 
-	{#if earnedByCard.length}
-		<details class="new-stickers">
-			<summary>
-				<span class="new-stickers-head">
-					<h3 id="new-stickers-heading">New stickers</h3>
-					<span class="muted">{newStickers.length} on {earnedByCard.length} {earnedByCard.length === 1 ? 'card' : 'cards'}</span>
-				</span>
-				<span class="summary-badges" aria-hidden="true">
-					{#each [...new Set(newStickers.map(item => item.kind))].slice(0, 6) as kind (kind)}<StickerBadge definition={STICKER_BY_KIND.get(kind)!} />{/each}
-				</span>
-			</summary>
-			<ul aria-labelledby="new-stickers-heading">
-				{#each earnedByCard as earned (earned[0].seasonId)}
-					<li>
-						<span class="badges" aria-hidden="true">
-							{#each earned as item (item.kind)}<StickerBadge definition={STICKER_BY_KIND.get(item.kind)!} />{/each}
-						</span>
-						<span class="sticker-copy"><strong>{earned[0].label}</strong> {earned.map(item => item.title).join(' · ')}</span>
-					</li>
-				{/each}
-			</ul>
-			<a href="/collection">Open your collection</a>
-		</details>
-	{/if}
+	<ResultsCollection {newStickers} {newCards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 
 	<div class="awards-share">
 		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
@@ -250,6 +254,14 @@
 
 	<SeasonMoments {result} cards={resultsModel.cards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 
+	{#snippet handNav()}
+		{@const previous = handOrder[(handIndex - 1 + handOrder.length) % handOrder.length]}
+		{@const next = handOrder[(handIndex + 1) % handOrder.length]}
+		<button type="button" class="hand-step" data-hand-step="-1" aria-label={`Previous card: ${previous.profile.displayName}`} onclick={() => void stepHand(-1)}><span aria-hidden="true">‹</span></button>
+		<span class="hand-count" aria-live="polite">{handIndex + 1} / {handOrder.length}</span>
+		<span class="hand-gap" aria-hidden="true"></span>
+		<button type="button" class="hand-step" data-hand-step="1" aria-label={`Next card: ${next.profile.displayName}`} onclick={() => void stepHand(1)}><span aria-hidden="true">›</span></button>
+	{/snippet}
 	{#if inspectedCard && inspectedView}
 		{#key inspectedSeasonId}
 			<CardReview
@@ -262,6 +274,7 @@
 				bind:selectedMode
 				flipInPlace
 				onClose={closeInspection}
+				readerNav={handOrder.length > 1 ? handNav : undefined}
 			/>
 		{/key}
 	{/if}
@@ -409,22 +422,6 @@
 		padding-top: var(--space-4);
 		border-top: 1px solid var(--border);
 	}
-	.new-stickers { display: grid; gap: var(--space-3); border-block: 1px solid var(--border); }
-	.new-stickers summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); min-height: 3rem; padding-block: var(--space-2); cursor: pointer; list-style: none; }
-	.new-stickers summary::-webkit-details-marker { display: none; }
-	.new-stickers summary::after { content: '›'; color: var(--muted); font-size: var(--text-lg); transition: rotate .15s; }
-	.new-stickers[open] summary::after { rotate: 90deg; }
-	.new-stickers-head { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin-right: auto; }
-	.new-stickers-head .muted { font-size: var(--text-xs); }
-	.new-stickers h3 { margin: 0; font-size: var(--text-lg); }
-	.summary-badges { display: inline-flex; gap: var(--space-1); font-size: .1rem; padding: .2rem; }
-	.new-stickers a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--accent); font-size: var(--text-sm); }
-	.new-stickers ul { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-	.new-stickers li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); color: var(--muted); font-size: var(--text-sm); }
-	.new-stickers li strong { color: var(--text); }
-	.new-stickers .badges { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); font-size: .11rem; padding: .2rem; }
-	.new-stickers[open] .summary-badges { display: none; }
-	.sticker-copy { flex: 1 1 14rem; min-width: 0; }
 	dt { color: var(--muted); font-size: var(--text-xs); }
 	dd { margin: var(--space-1) 0 0; font-size: var(--text-lg); font-weight: 750; }
 	.season-ledger dd.perfect { color: var(--success); }
@@ -476,6 +473,10 @@
 	.sort-header.sorted { color: var(--text); }
 	.sort-header span { font-size: .6em; }
 
+	.hand-step { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; font-size: 1.5rem; line-height: 1; }
+	.hand-count { margin-left: var(--space-2); color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+	/* Leaves the middle of the row to the turn button. */
+	.hand-gap { flex: 1; }
 	@media (min-width: 48rem) {
 		.scoreboard {
 			grid-template-columns: minmax(15rem, 1fr) auto;

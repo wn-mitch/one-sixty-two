@@ -2,7 +2,7 @@ import { goto } from '$app/navigation';
 import { loadChunk, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
 import { commitPick, createDraft, reassignPick, rerollDraft, rollDraft, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
 import { libraryKey, saveSeason } from './library.ts';
-import { newStickers, type NewSticker } from '../collection/collection.ts';
+import { newCards, newStickers, type NewCard, type NewSticker } from '../collection/collection.ts';
 import { refreshStickers } from '../collection/store.svelte.ts';
 import { persistDraft, restoreDraft, RESUME_NOTICE, type Restore, type SavedPhase } from './persistence.ts';
 import { deviceDb } from '../storage/db.ts';
@@ -52,6 +52,8 @@ export class Session {
  publication = $state.raw<SharePublication | null>(null);
  /** Stickers the finished season earned for the first time, for Results. */
  newStickers = $state.raw<NewSticker[]>([]);
+ /** Player-seasons this season added to the collection for the first time. */
+ newCards = $state.raw<NewCard[]>([]);
  nativeShareReady = $state(false);
  imageDownloadFallback = $state(false);
  textCopyFallback = $state(false);
@@ -183,8 +185,9 @@ export class Session {
    const { db } = await deviceDb();
    notice = await saveSeason(db, draft, result, profiles, manifest, now);
    if (!notice) {
-    const earned = await newStickers(db, await libraryKey(draft), now.toISOString(), profiles);
-    if (epoch === this.epoch) this.newStickers = earned;
+    const key = await libraryKey(draft);
+    const [earned, added] = await Promise.all([newStickers(db, key, now.toISOString(), profiles), newCards(db, key, profiles)]);
+    if (epoch === this.epoch) { this.newStickers = earned; this.newCards = added; }
     void refreshStickers();
    }
   }
@@ -279,6 +282,7 @@ export class Session {
   this.pool = [];
   this.result = null;
   this.newStickers = [];
+  this.newCards = [];
   this.simulationInput = null;
   this.error = '';
   this.incompatible = false;
@@ -395,6 +399,7 @@ export class Session {
   this.revealed = 0;
   this.result = null;
   this.newStickers = [];
+  this.newCards = [];
   this.skipReveal = matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.save('simulating');
   const epoch = this.epoch;

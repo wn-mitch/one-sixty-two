@@ -192,6 +192,18 @@ test.describe('application workshop stories', () => {
 		const inspect = page.getByRole('button', { name: /inspect .* card/i }).first();
 		await inspect.click();
 		await expect(page.locator('.card-review')).toBeVisible();
+		// The raised card steps through the whole hand, wrapping at either end, by button or arrow key.
+		const review = page.locator('.card-review');
+		const first = await review.getAttribute('data-season-id');
+		const count = page.locator('.hand-count');
+		const [, start, total] = (await count.textContent())!.match(/(\d+) \/ (\d+)/)!.map(Number);
+		expect(total).toBe(example.draft.picks.length);
+		await page.getByRole('button', { name: /^Next card: / }).click();
+		await expect(count).toHaveText(`${start % total + 1} / ${total}`);
+		await expect(review).not.toHaveAttribute('data-season-id', first!);
+		await expect(page.getByRole('button', { name: /^Next card: / })).toBeFocused();
+		await page.keyboard.press('ArrowLeft');
+		await expect(review).toHaveAttribute('data-season-id', first!);
 		await page.keyboard.press('Escape');
 		await expect(page.locator('.card-review')).toBeVisible();
 		await page.getByRole('button', { name: 'Hide card', exact: true }).click();

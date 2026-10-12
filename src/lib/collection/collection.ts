@@ -105,6 +105,18 @@ export async function loadCollection(db: Db): Promise<CollectedCard[]> {
 /** A sticker a season earned for the first time, with the card's name for Results. */
 export interface NewSticker { seasonId: string; label: string; kind: string; title: string }
 
+export interface NewCard { seasonId: string; label: string }
+
+/** Player-seasons the season saved under `seasonKey` added to the collection: no other saved season rostered them. */
+export async function newCards(db: Db, seasonKey: string, profiles: readonly { seasonId: string; displayName: string; year: number }[]): Promise<NewCard[]> {
+ const names = new Map(profiles.map(profile => [profile.seasonId, `${profile.displayName} ${profile.year}`]));
+ const rows = await db.all<Row & { season_id: string }>(
+  'SELECT season_id FROM rostered r WHERE season_key = ? AND NOT EXISTS (SELECT 1 FROM rostered o WHERE o.season_id = r.season_id AND o.season_key <> r.season_key) ORDER BY season_id',
+  [seasonKey]
+ );
+ return rows.map(row => ({ seasonId: row.season_id, label: names.get(row.season_id) ?? row.season_id }));
+}
+
 /** Stickers first earned by the season saved under `seasonKey` at `earnedAt`. */
 export async function newStickers(db: Db, seasonKey: string, earnedAt: string, profiles: readonly { seasonId: string; displayName: string; year: number }[]): Promise<NewSticker[]> {
  const names = new Map(profiles.map(profile => [profile.seasonId, `${profile.displayName} ${profile.year}`]));
