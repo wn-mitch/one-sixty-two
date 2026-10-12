@@ -16,6 +16,8 @@
 	import StickerBadge from '../collection/StickerBadge.svelte';
 	import { STICKER_BY_KIND } from '../collection/stickers.ts';
 	import type { NewSticker } from '../collection/collection.ts';
+	import GradeBadge from './GradeBadge.svelte';
+	import { gradeRange, seasonGrade } from '../game/grade.ts';
 	import SeasonCalendar from './SeasonCalendar.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
 	import ResultsHand from './ResultsHand.svelte';
@@ -59,6 +61,7 @@
 		newStickers = []
 	}: Props = $props();
 	const earnedByCard = $derived([...Map.groupBy(newStickers, item => item.seasonId).values()]);
+	const grade = $derived(seasonGrade(result.wins, result.losses));
 	const challengeVerdict = $derived(challenge
 		? result.wins > challenge.wins ? 'You beat their record.' : result.wins === challenge.wins ? 'You matched their record.' : 'You fell short of their record.'
 		: '');
@@ -163,6 +166,7 @@
 				<i aria-hidden="true">–</i>
 				<span>{result.losses}<small>L</small></span>
 			</h2>
+			{#if grade}<p class="season-grade"><span class="badge"><GradeBadge {grade} /></span><span>Grade {grade} · {gradeRange(grade)}</span></p>{/if}
 		</div>
 
 		<div class="score-actions" aria-busy={sharing}>
@@ -360,6 +364,8 @@
 		border-block: 1px solid var(--border);
 	}
 	.record-block .eyebrow { margin: 0 0 var(--space-3); }
+	.season-grade { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-sm); font-weight: 650; }
+	.season-grade .badge { font-size: var(--text-2xl); }
 	.scoreboard h2 {
 		display: flex;
 		align-items: baseline;

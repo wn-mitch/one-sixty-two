@@ -5,6 +5,8 @@
 	import type { CollectedCard } from '../../collection/collection.ts';
 	import { faceStickers, type StickerFamily } from '../../collection/stickers.ts';
 	import { HITTER_SLOTS } from '../../game/types.ts';
+	import { seasonGrade } from '../../game/grade.ts';
+	import GradeBadge from '../GradeBadge.svelte';
 	import { toasts } from '../../toast.svelte.ts';
 	import CollectionDetail from './CollectionDetail.svelte';
 
@@ -17,6 +19,7 @@
 		onHide: (seasonId: string, family: StickerFamily, hidden: boolean) => void | Promise<void>;
 	}
 	let { cards, views, status, onMove, onHide }: Props = $props();
+	const bestGrade = (card: CollectedCard) => seasonGrade(card.best.wins, card.best.losses);
 	$effect(() => { if (status) toasts.show(status, { id: 'collection', tone: /blocked|full|not saved|off in this tab/i.test(status) ? 'error' : 'info' }); });
 
 	type Role = 'all' | 'hitters' | 'starters' | 'closers' | 'bullpens';
@@ -92,7 +95,7 @@
 							{#if view}<Card s={view} face="front" interactive={false} stickers={card.stickers} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
 						</span>
 						<span class="name">{card.label}</span>
-						<span class="meta">Drafted {card.times}× · best {card.best.wins}–{card.best.losses}</span>
+						<span class="meta">Drafted {card.times}× · best {card.best.wins}–{card.best.losses}{#if bestGrade(card)} <GradeBadge grade={bestGrade(card)!} />{/if}</span>
 					</button>
 				</li>
 			{/each}

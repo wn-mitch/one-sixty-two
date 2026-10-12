@@ -4,6 +4,8 @@
 	import type { CardViewModel } from '../../cards/view-model.ts';
 	import type { LibraryView } from '../../game/library.ts';
 	import { teamTitle } from '../../game/library-stats.ts';
+	import { seasonGrade } from '../../game/grade.ts';
+	import GradeBadge from '../GradeBadge.svelte';
 
 	/** One saved club as a team card: a collage of its stars over a nameplate. Ctrl/Cmd-click adds it to a comparison. */
 	let { entry, stars, tally, selected, onSelect }: {
@@ -14,6 +16,7 @@
 		selected: boolean;
 		onSelect: (event: MouseEvent | KeyboardEvent) => void;
 	} = $props();
+	const grade = $derived(seasonGrade(entry.record.wins, entry.record.losses));
 
 	/** The collage is a 3×3 grid whose first cell spans 2×2. */
 	const CELLS = 6;
@@ -39,7 +42,7 @@
 					{#if cell.photo}<img src={cell.photo} alt="" loading="lazy" />{:else}<span class="slot">{cell.label}</span>{/if}
 				</span>
 			{/each}
-			<span class="record">{entry.record.wins}–{entry.record.losses}</span>
+			<span class="record">{entry.record.wins}–{entry.record.losses}{#if grade}<span class="grade"><GradeBadge {grade} /></span>{/if}</span>
 		</span>
 		<span class="title" use:fit={{ max: 12, min: 7, wrapMin: 6, lines: 2, maxH: 15 }} data-fit data-max="12" data-min="7" data-wrap-min="6" data-lines="2" data-max-h="15">{teamTitle(entry)}</span>
 		<span class="park"><span class="dash" aria-hidden="true"></span>{entry.stadium?.name ?? 'No home park'}</span>
@@ -101,6 +104,7 @@
 	.cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; }
 	.slot { position: absolute; inset: 0; display: grid; place-items: center; color: var(--onRaised); font-weight: 800; font-size: 5cqw; letter-spacing: .08em; }
 	.cell:first-child .slot { font-size: 9cqw; }
+	.grade { margin-left: 2cqw; font-size: .85em; vertical-align: .08em; }
 	.record {
 		position: absolute;
 		left: 0;

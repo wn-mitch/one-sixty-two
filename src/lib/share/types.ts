@@ -2,8 +2,8 @@ import type { CardViewModel } from '../cards/view-model.ts';
 import type { DEFENSE_METHOD_VERSION, MODEL_VERSION, ReplaySchemaVersion, RULES_VERSION, Slot, VALUATION_VERSION } from '../game/types.ts';
 import type { ENVIRONMENT_VERSION, GEOMETRY_VERSION, Vec2 } from '../sim/park-types.ts';
 
-/** The season shares as one image: the draft field card with the final record. */
-export const SHARE_FORMATS = ['field'] as const;
+/** Each published season carries both images: the roster on the home park's field, and a fan of large cards. */
+export const SHARE_FORMATS = ['field', 'fan'] as const;
 export type ShareFormat = (typeof SHARE_FORMATS)[number];
 
 export function isShareFormat(value: unknown): value is ShareFormat {
@@ -11,7 +11,8 @@ export function isShareFormat(value: unknown): value is ShareFormat {
 }
 
 export const SHARE_DIMENSIONS = {
-	field: { width: 1080, height: 1350 }
+	field: { width: 1080, height: 1920 },
+	fan: { width: 1080, height: 1920 }
 } as const satisfies Record<ShareFormat, { width: number; height: number }>;
 
 export type ShareAction = 'challenge' | 'copy-link' | 'download' | 'copy-image';
@@ -65,6 +66,9 @@ export interface ShareRenderModel {
 	rankingVersion: string | null;
 	record: ShareRecord;
 	cards: readonly ShareRenderCard[];
+	/** Season ids of the nine hitters in batting order and the three starters in rotation order. */
+	battingOrder: readonly string[];
+	starterOrder: readonly string[];
 }
 
 export interface SharePublicationImage {

@@ -92,9 +92,12 @@ export class Session {
    replayId = stored.id;
    this.shareReplayId = stored.id;
   }
-  const image = await renderSharePng(model, 'field');
+  // Both formats publish together, so the player can switch between them without another upload.
+  const field = await renderSharePng(model, 'field');
   if (!this.shareIsCurrent(request, epoch)) throw new Error('Share request was replaced');
-  return publishShare(replayId, location.origin, model.record, { field: image });
+  const fan = await renderSharePng(model, 'fan');
+  if (!this.shareIsCurrent(request, epoch)) throw new Error('Share request was replaced');
+  return publishShare(replayId, location.origin, model.record, { field, fan });
  }
 
  async initialize(): Promise<void> {

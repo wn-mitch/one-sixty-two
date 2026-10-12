@@ -45,7 +45,7 @@ Hitter fronts show historical WAR/162, OPS, and a position-specific pre-season `
 
 Completed seasons are saved in a device-local library (`/seasons`), and every card the player rosters joins a device-local collection (`/collection`) where it earns cosmetic stickers that also show on that card in later drafts. Any two current-version replay links can meet in a deterministic best-of-five head-to-head series (`/h2h`) that recomputes both seasons for seeding; a series is shared as a link and never stored on the server.
 
-Sharing publishes one 1080×1350 field-card PNG that the player's browser draws from its own season. The server checks the replay's shape and versions and the image's format and size, then stores both immutably; it does not recompute the season, so a published record is trusted, not verified. Recipients recompute the season from the replay. A local preview is not presented as the stored publication. Links are released only after the image is stored; preparation errors preserve the replay and leave an explicit retry or download/copy alternative.
+Sharing publishes two 1080×1920 PNGs, a field layout and a cards layout, that the player's browser draws from its own season. The server checks the replay's shape and versions and the image's format and size, then stores both immutably; it does not recompute the season, so a published record is trusted, not verified. Recipients recompute the season from the replay. A local preview is not presented as the stored publication. Links are released only after the image is stored; preparation errors preserve the replay and leave an explicit retry or download/copy alternative.
 
 ## Accessibility & Inclusion
 

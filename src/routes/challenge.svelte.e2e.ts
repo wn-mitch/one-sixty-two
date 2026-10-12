@@ -34,8 +34,8 @@ async function publishChallenger(manifest: Manifest, origin: string) {
  const { id } = await storeReplay(completeDraft(manifest, 7, 0), origin, sameOrigin);
  // The record and artwork come from the challenger's browser; any 162-game record is publishable.
  const record = { wins: 101, losses: 61, firstLoss: 2, longestWinningStreak: 11, runsFor: 812, runsAgainst: 640 };
- const field = new Blob([new Uint8Array(solidPng(1080, 1350))], { type: 'image/png' });
- return { id, publication: await publishShare(id, origin, record, { field }, sameOrigin) };
+ const png = () => new Blob([new Uint8Array(solidPng(1080, 1920))], { type: 'image/png' });
+ return { id, publication: await publishShare(id, origin, record, { field: png(), fan: png() }, sameOrigin) };
 }
 
 test('a challenge link opens a challenge card, binds the next draft, and offers the series after its season', async ({ page, request, baseURL }) => {

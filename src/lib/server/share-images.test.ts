@@ -49,38 +49,41 @@ function fixture(withReplay = true): { bindings: ShareServerBindings; bucket: Me
 describe('browser-captured share publication', () => {
 	it('stores the uploaded PNG and record once, and serves the exact bytes', async () => {
 		const { bindings } = fixture();
-		const publication = await publishShare(bindings, REPLAY_ID, RECORD, { field: png(1080, 1350, 1) });
+		const publication = await publishShare(bindings, REPLAY_ID, RECORD, { field: png(1080, 1920, 1), fan: png(1080, 1920, 3) });
 		expect(publication).toMatchObject({ schemaVersion: 2, replayId: REPLAY_ID, replayUrl: `${ORIGIN}/r/${REPLAY_ID}`, record: RECORD });
-		expect(publication.images.field).toMatchObject({ url: `${ORIGIN}/api/replays/${REPLAY_ID}/share/field.png`, width: 1080, height: 1350 });
+		expect(publication.images.field).toMatchObject({ url: `${ORIGIN}/api/replays/${REPLAY_ID}/share/field.png`, width: 1080, height: 1920 });
+		expect(publication.images.fan).toMatchObject({ url: `${ORIGIN}/api/replays/${REPLAY_ID}/share/fan.png`, width: 1080, height: 1920 });
 		// The first publication wins; a later upload of a different image returns it unchanged.
-		expect(await publishShare(bindings, REPLAY_ID, { ...RECORD, wins: 162, losses: 0, firstLoss: null }, { field: png(1080, 1350, 2) })).toEqual(publication);
+		expect(await publishShare(bindings, REPLAY_ID, { ...RECORD, wins: 162, losses: 0, firstLoss: null }, { field: png(1080, 1920, 2), fan: png(1080, 1920, 4) })).toEqual(publication);
 		expect(await readSharePublication(bindings, REPLAY_ID)).toEqual(publication);
 		const served = await loadPublishedShareImage(bindings, REPLAY_ID, 'field');
-		expect([...served.bytes]).toEqual([...png(1080, 1350, 1)]);
+		expect([...served.bytes]).toEqual([...png(1080, 1920, 1)]);
+		expect([...(await loadPublishedShareImage(bindings, REPLAY_ID, 'fan')).bytes]).toEqual([...png(1080, 1920, 3)]);
 		expect(served.etag).toBe(`"${publication.images.field.sha256}"`);
 	});
 
-	it('rejects uploads that are not a 1080×1350 PNG of a 162-game record', async () => {
-		const reject = (record: unknown, image?: Uint8Array<ArrayBuffer>) => publishShare(fixture().bindings, REPLAY_ID, record, image ? { field: image } : {});
-		await expect(reject(RECORD, png(1080, 1349))).rejects.toThrow(ShareInvalidError);
+	it('rejects uploads that are not two 1080×1920 PNGs of a 162-game record', async () => {
+		const reject = (record: unknown, image?: Uint8Array<ArrayBuffer>) => publishShare(fixture().bindings, REPLAY_ID, record, image ? { field: image, fan: png(1080, 1920) } : {});
+		await expect(reject(RECORD, png(1080, 1350))).rejects.toThrow(ShareInvalidError);
+		await expect(publishShare(fixture().bindings, REPLAY_ID, RECORD, { field: png(1080, 1920) })).rejects.toThrow('fan share image is missing');
 		await expect(reject(RECORD, new Uint8Array(new TextEncoder().encode('<svg/>')))).rejects.toThrow(ShareInvalidError);
 		await expect(reject(RECORD)).rejects.toThrow('missing');
-		await expect(reject({ ...RECORD, losses: 45 }, png(1080, 1350))).rejects.toThrow('162-game');
-		await expect(reject({ ...RECORD, firstLoss: null }, png(1080, 1350))).rejects.toThrow('162-game');
-		await expect(reject({ ...RECORD, longestWinningStreak: 119 }, png(1080, 1350))).rejects.toThrow('162-game');
+		await expect(reject({ ...RECORD, losses: 45 }, png(1080, 1920))).rejects.toThrow('162-game');
+		await expect(reject({ ...RECORD, firstLoss: null }, png(1080, 1920))).rejects.toThrow('162-game');
+		await expect(reject({ ...RECORD, longestWinningStreak: 119 }, png(1080, 1920))).rejects.toThrow('162-game');
 	});
 
 	it('publishes only for a stored replay and a known format', async () => {
-		await expect(publishShare(fixture(false).bindings, REPLAY_ID, RECORD, { field: png(1080, 1350) })).rejects.toThrow(ShareNotFoundError);
-		await expect(publishShare(fixture().bindings, 'short', RECORD, { field: png(1080, 1350) })).rejects.toThrow(ShareNotFoundError);
+		await expect(publishShare(fixture(false).bindings, REPLAY_ID, RECORD, { field: png(1080, 1920), fan: png(1080, 1920) })).rejects.toThrow(ShareNotFoundError);
+		await expect(publishShare(fixture().bindings, 'short', RECORD, { field: png(1080, 1920), fan: png(1080, 1920) })).rejects.toThrow(ShareNotFoundError);
 		expect(() => parseShareFormat('wide')).toThrow(ShareNotFoundError);
 		expect(await readSharePublication(fixture().bindings, REPLAY_ID)).toBeNull();
 	});
 
 	it('refuses to serve stored bytes that no longer match the publication', async () => {
 		const { bindings, bucket } = fixture();
-		const publication = await publishShare(bindings, REPLAY_ID, RECORD, { field: png(1080, 1350, 1) });
-		bucket.objects.set(`shares/v2/images/${publication.images.field.sha256}.png`, png(1080, 1350, 9));
+		const publication = await publishShare(bindings, REPLAY_ID, RECORD, { field: png(1080, 1920, 1), fan: png(1080, 1920, 3) });
+		bucket.objects.set(`shares/v2/images/${publication.images.field.sha256}.png`, png(1080, 1920, 9));
 		await expect(loadPublishedShareImage(bindings, REPLAY_ID, 'field')).rejects.toThrow('does not match');
 	});
 });

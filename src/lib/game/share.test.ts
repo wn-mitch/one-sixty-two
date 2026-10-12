@@ -40,7 +40,8 @@ function publication(): SharePublication {
 		replayUrl: `${origin}/r/${replayId}`,
 		record,
 		images: {
-			field: { url: `${origin}/api/replays/${replayId}/share/field.png`, width: 1080, height: 1350, sha256: 'b'.repeat(64) }
+			field: { url: `${origin}/api/replays/${replayId}/share/field.png`, width: 1080, height: 1920, sha256: 'b'.repeat(64) },
+			fan: { url: `${origin}/api/replays/${replayId}/share/fan.png`, width: 1080, height: 1920, sha256: 'c'.repeat(64) }
 		}
 	};
 }
@@ -88,7 +89,7 @@ describe('explicit replay publication', () => {
 		expect(stored).toEqual({ id: replayId, replayUrl: `${origin}/r/${replayId}` });
 		expect(requests).toEqual([`${origin}/api/replays`]);
 
-		await expect(publishShare(stored.id, origin, record, { field: png }, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(stored.id, origin, record, { field: png, fan: png }, fetcher)).resolves.toEqual(publication());
 		expect(requests).toEqual([
 			`${origin}/api/replays`,
 			`${origin}/api/replays/${replayId}/share`
@@ -107,8 +108,8 @@ describe('explicit replay publication', () => {
 		});
 
 		const stored = await storeReplay(draft(), origin, fetcher);
-		await expect(publishShare(stored.id, origin, record, { field: png }, fetcher)).rejects.toThrow('Capture unavailable.');
-		await expect(publishShare(stored.id, origin, record, { field: png }, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(stored.id, origin, record, { field: png, fan: png }, fetcher)).rejects.toThrow('Capture unavailable.');
+		await expect(publishShare(stored.id, origin, record, { field: png, fan: png }, fetcher)).resolves.toEqual(publication());
 		expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/api/replays'))).toHaveLength(1);
 		expect(prepareAttempts).toBe(2);
 	});
@@ -119,15 +120,16 @@ describe('explicit replay publication', () => {
 			sent = init?.body as FormData;
 			return Response.json(publication());
 		});
-		await expect(publishShare(replayId, origin, record, { field: png }, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(replayId, origin, record, { field: png, fan: png }, fetcher)).resolves.toEqual(publication());
 		expect(fetcher).toHaveBeenCalledWith(`${origin}/api/replays/${replayId}/share`, expect.objectContaining({ method: 'POST' }));
 		expect(JSON.parse(String(sent!.get('record')))).toEqual(record);
 		expect((sent!.get('field') as Blob).type).toBe('image/png');
+		expect((sent!.get('fan') as Blob).type).toBe('image/png');
 	});
 
 	it('classifies current-model incompatibility and rejects forged publication metadata', async () => {
 		const incompatible = vi.fn(async () => Response.json({ message: 'Replay is incompatible with this dataset.' }, { status: 409 }));
-		const error = await publishShare(replayId, origin, record, { field: png }, incompatible).catch(value => value);
+		const error = await publishShare(replayId, origin, record, { field: png, fan: png }, incompatible).catch(value => value);
 		expect(isShareIncompatibility(error)).toBe(true);
 
 		const forged = publication();

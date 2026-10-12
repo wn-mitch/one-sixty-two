@@ -198,6 +198,8 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		mediaVersion: media?.version ?? null,
 		rankingVersion: rankings?.rankingVersion ?? null,
 		record,
-		cards
+		cards,
+		battingOrder: [...draft.battingOrder],
+		starterOrder: [...draft.starterOrder]
 	};
 }

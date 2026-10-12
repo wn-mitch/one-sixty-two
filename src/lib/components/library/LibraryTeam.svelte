@@ -5,6 +5,8 @@
 	import { average, innings, onBase, ra9, rate, slugging, teamTitle, teamTotals } from '../../game/library-stats.ts';
 	import type { SeriesRecord } from '../../game/series-history.ts';
 	import { tableScroll } from '../table-scroll.ts';
+	import { seasonGrade } from '../../game/grade.ts';
+	import GradeBadge from '../GradeBadge.svelte';
 
 	/** One saved club: its roster as cards, season lines, head-to-head history, and its actions. */
 	let { entry, cards, history, tally, onCopy, onRename, onDelete, onClose }: {
@@ -17,6 +19,7 @@
 		onDelete: (entry: LibraryView) => void;
 		onClose: () => void;
 	} = $props();
+	const grade = $derived(seasonGrade(entry.record.wins, entry.record.losses));
 
 	let renaming = $state(false);
 	let draftName = $state('');
@@ -50,6 +53,7 @@
 			<h2 id="team-heading">{teamTitle(entry)}</h2>
 			<p class="facts">
 				<strong>{entry.record.wins}–{entry.record.losses}</strong>
+				{#if grade}<GradeBadge {grade} />{/if}
 				<span>{differential > 0 ? '+' : differential < 0 ? '−' : ''}{Math.abs(differential)} runs</span>
 				<span>{entry.stadium?.name ?? 'No home park'}</span>
 				{#if tally.won || tally.lost}<span>Head-to-head series {tally.won}–{tally.lost}</span>{/if}

@@ -79,8 +79,8 @@ async function verifyPublication(
 	expect(html).toContain(`<title>${wins}-${losses} season | 162-0</title>`);
 	expect(html).toContain(`property=\"og:url\" content=\"${publication.replayUrl}\"`);
 	expect(html).toContain(`property=\"og:image\" content=\"${publication.images.field.url}\"`);
-	expect(html).toContain('property=\"og:image:width\" content=\"1080\"');
-	expect(html).toContain('property=\"og:image:height\" content=\"1350\"');
+	expect(html).toContain(`property=\"og:image:width\" content=\"${SHARE_DIMENSIONS.field.width}\"`);
+	expect(html).toContain(`property=\"og:image:height\" content=\"${SHARE_DIMENSIONS.field.height}\"`);
 	expect(html).toContain('name=\"twitter:card\" content=\"summary_large_image\"');
 	expect(html).toContain(firstLoss === null ? 'No losses.' : `First loss: Game ${firstLoss}.`);
 	expect(html).toContain(`Longest winning streak: ${longestWinningStreak} ${longestWinningStreak === 1 ? 'game' : 'games'}.`);
@@ -284,6 +284,13 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	if (!downloadPath) throw new Error('The PNG download has no saved file');
 	expect(createHash('sha256').update(await readFile(downloadPath)).digest('hex')).toBe(publication.images.field.sha256);
 	await expect(page.locator('[data-toast]')).toHaveText('Season PNG downloaded.');
+	// The Cards layout swaps the preview and the download to the fan PNG from the same publication.
+	await sharePanel.getByRole('radio', { name: 'Cards', exact: true }).click();
+	await expect(sharePanel.locator('.preview img')).toHaveAttribute('src', publication.images.fan.url);
+	const fanDownloadEvent = page.waitForEvent('download');
+	await sharePanel.getByRole('button', { name: 'Download PNG', exact: true }).click();
+	const fanDownload = await fanDownloadEvent;
+	expect(fanDownload.suggestedFilename()).toBe(`162-0-${publication.record.wins}-${publication.record.losses}-fan.png`);
 	expect(repeatPreparations).toEqual([]);
 	// The stored replay must survive a fresh HTTP read, not just the upload response.
 	const stored = await page.request.get(`/api/replays/${publication.replayId}`);

@@ -6,6 +6,8 @@
 	import type { SavedBatter, SavedPitcher } from '../../game/library.ts';
 	import { innings, onBase, ra9, rate } from '../../game/library-stats.ts';
 	import StickerBadge from '../../collection/StickerBadge.svelte';
+	import { seasonGrade } from '../../game/grade.ts';
+	import GradeBadge from '../GradeBadge.svelte';
 
 	interface Props {
 		card: CollectedCard;
@@ -44,6 +46,7 @@
 	}));
 	const handles = $derived(faceStickers(placed));
 	const line = $derived(card.best.line);
+	const bestGrade = $derived(seasonGrade(card.best.wins, card.best.losses));
 	const isBatter = (value: SavedBatter | SavedPitcher): value is SavedBatter => 'PA' in value;
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 	const noDetails = () => {};
@@ -111,7 +114,7 @@
 			<div><dt>Drafted</dt><dd>{card.times}×</dd></div>
 			<div><dt>First</dt><dd>{date(card.firstAt)}</dd></div>
 			<div><dt>Latest</dt><dd>{date(card.lastAt)}</dd></div>
-			<div><dt>Best team</dt><dd>{card.best.wins}–{card.best.losses}</dd></div>
+			<div><dt>Best team</dt><dd>{card.best.wins}–{card.best.losses}{#if bestGrade} <GradeBadge grade={bestGrade} />{/if}</dd></div>
 		</dl>
 		{#if line}
 			<p class="line">

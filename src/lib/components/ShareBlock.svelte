@@ -4,6 +4,7 @@
 	import { toasts } from '#lib/toast.svelte.ts';
 	import {
 		SHARE_DIMENSIONS,
+		SHARE_FORMATS,
 		type ShareAction,
 		type ShareFormat,
 		type SharePublication,
@@ -19,7 +20,8 @@
 	}
 
 	let { model, publication, sharing, status, onShare }: Props = $props();
-	const format: ShareFormat = 'field';
+	const FORMAT_LABELS: Record<ShareFormat, string> = { field: 'Field', fan: 'Cards' };
+	let format = $state<ShareFormat>(SHARE_FORMATS[0]);
 	let publishedImage = $derived(publication?.images[format] ?? null);
 	let previewRecord = $derived(publication?.record ?? model.record);
 	// The live preview renders at the published pixel size and scales down, so compact card minimums
@@ -43,6 +45,12 @@
 			<h3 id="share-art-heading">Challenge a friend</h3>
 		</div>
 	</header>
+
+	<div class="formats" role="radiogroup" aria-label="Share image layout">
+		{#each SHARE_FORMATS as option (option)}
+			<button type="button" role="radio" aria-checked={format === option} onclick={() => (format = option)}>{FORMAT_LABELS[option]}</button>
+		{/each}
+	</div>
 
 	<div class="preview" bind:clientWidth={previewWidth} style:aspect-ratio={publishedImage ? undefined : `${SHARE_DIMENSIONS[format].width} / ${SHARE_DIMENSIONS[format].height}`}>
 		{#if publishedImage}
@@ -130,6 +138,26 @@
 		color: var(--muted);
 		font-size: var(--text-xs);
 	}
+	/* Layout choice: two equal segments above the preview. */
+	.formats {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+	.formats button {
+		min-height: 2.5rem;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: var(--muted);
+		font: inherit;
+		font-size: var(--text-sm);
+		font-weight: 700;
+	}
+	.formats button + button { border-left: 1px solid var(--border); }
+	.formats button[aria-checked='true'] { background: var(--surface-raised); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
 	/* One primary action, then the secondary ways to share joined into a single control. */
 	.actions {
 		display: grid;
