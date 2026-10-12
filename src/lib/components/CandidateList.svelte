@@ -9,6 +9,7 @@
  import type { CandidateEntry, CandidateGroup, RankingKind, RankingSort } from './candidate-ranking.ts';
  import { candidateGridMotion, createCandidateGridMotion } from '../cards/grid-motion.ts';
  import PlayerCard from './PlayerCard.svelte';
+ import { appSettings } from '../game/settings.svelte.ts';
 
  type FilterSlot = Slot | 'All';
 
@@ -64,7 +65,7 @@
  let filter = $state<FilterSlot>('All');
  let page = $state(0);
  let flippedPlayerId = $state<string | null>(null);
- let showBlocked = $state(false);
+ const showBlocked = $derived(appSettings.showBlockedCards);
  let browseRevision = $state(0);
  let sort = $state<RankingSort>('war');
  let filtersOpen = $state(false);
@@ -167,10 +168,14 @@
   flippedPlayerId = null;
   onResetBrowse();
  }
- function toggleBlocked() {
-  showBlocked = !showBlocked;
+ /** Set by a sort or filter change so the grid gathers and re-sorts instead of reflowing. */
+ let gatherNext = false;
+ function reshuffle(change: () => void): void {
+  gatherNext = true;
+  change();
   resetBrowse();
  }
+
  function selectSeason(seasonId: string, group: CandidateGroup, trigger: HTMLButtonElement) {
   flippedPlayerId = null;
   onSelect(seasonId, group.entries.map(item => item.profile), trigger);
@@ -202,16 +207,10 @@
  function handleFocusIn(event: FocusEvent) {
   closeFlipIfOutside(event.target);
  }
- function sectionDescription(kind: RankingKind): string {
-  if (sort === 'metrics') return kind === 'Hitters' ? 'Displayed season OPS, highest first' : 'Displayed season ERA, lowest first';
-  if (rankings) return `Displayed season ${kind === 'Hitters' ? 'batting' : 'pitching'} WAR/162, highest first`;
-  return 'WAR order unavailable · stable ID order';
- }
  $effect(() => {
   draftBrowseKey;
   untrack(() => {
    flippedPlayerId = null;
-   showBlocked = false;
    page = 0;
    browseRevision++;
   });
@@ -238,12 +237,14 @@
    next.filter !== previous.filter ||
    next.sort !== previous.sort ||
    next.rankings !== previous.rankings;
+  const gather = gatherNext;
+  gatherNext = false;
   if (next.draftKey !== previous.draftKey || !reordered) {
    if (next.draftKey !== previous.draftKey || next.page !== previous.page) gridMotion.skip();
    return;
   }
   const revision = gridMotion.capture();
-  void tick().then(() => gridMotion.play(revision));
+  void tick().then(() => gridMotion.play(revision, gather ? 'gather' : 'reflow'));
  });
 </script>
 
@@ -265,8 +266,8 @@
   <div class="sort-row" role="group" aria-labelledby="{uid}-sort-label">
    <span id="{uid}-sort-label" class="sort-label">Sort by</span>
    <span class="sort-options">
-    <button type="button" aria-pressed={sort === 'war'} disabled={busy} onclick={() => { if (sort !== 'war') { sort = 'war'; resetBrowse(); } }}>WAR</button>
-    <button type="button" aria-pressed={sort === 'metrics'} disabled={busy} onclick={() => { if (sort !== 'metrics') { sort = 'metrics'; resetBrowse(); } }}>OPS / ERA</button>
+    <button type="button" aria-pressed={sort === 'war'} disabled={busy} onclick={() => { if (sort !== 'war') reshuffle(() => sort = 'war'); }}>WAR</button>
+    <button type="button" aria-pressed={sort === 'metrics'} disabled={busy} onclick={() => { if (sort !== 'metrics') reshuffle(() => sort = 'metrics'); }}>OPS / ERA</button>
    </span>
   </div>
   <!-- Phones keep the position filter behind its toggle so the first cards sit near the top. -->
@@ -276,7 +277,7 @@
     <div class="filter-options" role="group" aria-label="Qualifies for position">
      {#each filterOptions as option}
       {@const count = option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0}
-      <button type="button" class="quiet filter" aria-pressed={activeFilter === option} aria-label={option} onclick={() => { filter = option; resetBrowse(); }}>
+      <button type="button" class="quiet filter" aria-pressed={activeFilter === option} aria-label={option} onclick={() => { if (activeFilter !== option) reshuffle(() => filter = option); }}>
        <span>{option}</span><span class="filter-count">{count}</span>
       </button>
      {/each}
@@ -291,18 +292,12 @@
     <button type="button" class="secondary" onclick={onRetryRankings}>Retry rankings</button>
    </div>
   {/if}
-  {#if wide && blockedGroupCount > 0}
-   <div class="blocked-toggle">
-    <button type="button" class="quiet" aria-label={showBlocked ? 'Hide blocked cards' : 'Show blocked cards'} aria-pressed={showBlocked} onclick={toggleBlocked}>{showBlocked ? 'Hide blocked cards' : 'Show blocked cards'}</button>
-    <span class="muted">{blockedGroupCount} unavailable</span>
-   </div>
-  {/if}
  </div>
  <div class="candidate-content" id="{uid}-results" tabindex="-1">
   {#if !draft.currentRoll}
    <p class="notice">Roll a franchise and era to open your next player pool.</p>
   {:else if groups.length === 0 && wide && !showBlocked && blockedGroupCount > 0}
-   <p class="notice">These players have no open position. Show blocked cards to select a season and make room on your field.</p>
+   <p class="notice">These players have no open position. Turn on Blocked players in Settings to select one and make room on your field.</p>
   {:else if groups.length === 0}
    {#if query.trim() || activeFilter !== 'All'}
     <div class="empty">
@@ -319,7 +314,6 @@
      <section class="player-section" aria-label={section.kind}>
       <div class="section-heading">
        <h3>{section.kind}</h3>
-       <span class="muted">{section.groups.length} {section.groups.length === 1 ? 'player' : 'players'} · {sectionDescription(section.kind)}</span>
       </div>
       <div class="card-grid">
        {#each section.groups as group (`${browseRevision}:${group.key}`)}
@@ -399,7 +393,6 @@
  /* On phones the first section sits right under search so its cards start above the fold. */
  .candidates:not(.candidates-wide) .player-section:first-of-type .section-heading { margin-top: var(--space-3); }
  .section-heading h3 { font-size: var(--text-lg); }
- .section-heading span { font-size: var(--text-xs); }
  .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; align-items: start; }
  .candidate-card { display: grid; gap: var(--space-2); width: 100%; max-width: 24rem; min-width: 0; margin-inline: auto; }
  /* A player with no open position stays browsable but reads as unavailable. */
@@ -418,8 +411,6 @@
  .sort-options button { flex: 1; min-height: 2.5rem; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--muted); font-size: var(--text-base); }
  .sort-options button[aria-pressed='true'] { background: var(--text); color: var(--background); }
  .ranking-status { font-size: var(--text-sm); }
- .blocked-toggle { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .6rem; margin-top: var(--space-4); font-size: var(--text-xs); }
- .blocked-toggle button { min-height: 2.75rem; padding-inline: 0; text-decoration: underline; text-underline-offset: .2em; }
  .pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: min(100%, 17.25rem); box-sizing: border-box; margin: var(--space-6) auto 0; padding: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
  .page-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-3); border: 0; background: transparent; font-size: var(--text-sm); font-weight: 650; }
  .page-button:not(:disabled):hover { background: var(--surface-hover); }
@@ -433,6 +424,8 @@
   .candidates-wide .filter-rail { position: sticky; top: 72px; max-height: calc(100dvh - 88px); overflow-y: auto; overscroll-behavior: contain; padding: 0 .25rem .25rem; }
   .candidates-wide .filter-options { display: grid; gap: 3px; }
   .candidates-wide .filter { display: flex; justify-content: space-between; align-items: center; gap: .45rem; width: 100%; min-height: 44px; padding: 0 10px; border-radius: 4px; }
+  /* The first heading lines up with Your field: the panel's border plus its header padding. */
+  .candidates-wide .player-section:first-of-type .section-heading { margin-top: calc(1rem + 1px); }
   .candidates-wide .section-heading h3 { font: italic 900 1.5rem/1 'Barlow Condensed', sans-serif; text-transform: uppercase; }
   .candidates-wide .search-row { grid-template-columns: minmax(0, 1fr); margin-block: 0 20px; }
   .candidates-wide .sort-row { display: grid; gap: var(--space-2); margin-bottom: 20px; }

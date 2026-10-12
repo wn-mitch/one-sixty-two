@@ -40,6 +40,8 @@ export const MOTION = {
 	pickStamp: 320,
 	/** The next pack rising into place once the candidates have left. */
 	packEnter: 460,
+	/** How long the pack or dealt card waits untouched before its caption says what to tap. */
+	tapHint: 2600,
 	/** One idle turn of the franchise-mark coin on a sealed pack. */
 	markSpin: 2800,
 	/** How many times faster the coin spins while the pack tears and the card pulls. */
@@ -62,6 +64,10 @@ export const MOTION = {
 	fieldFlip: 640,
 	/** A field card sliding between slots: base plus distance, capped; divided by the card speed setting. */
 	fieldSlide: { base: 360, perPixel: .8, max: 700 },
+	/** A sort or filter change scooping the leaving candidate cards into one pile. */
+	gather: 380,
+	/** Gap between consecutive cards scooped up or rising in after a sort or filter change. */
+	gatherStagger: 22,
 	gridExit: 180,
 	gridMove: 320,
 	gridEnter: 240,

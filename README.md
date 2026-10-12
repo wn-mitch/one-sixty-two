@@ -40,7 +40,7 @@ Season in review and game boxes share a dense scorebook treatment: compact name/
 
 Exported season artwork uses static SVG field geometry, flat card compositing, and a font/image/text-fit readiness gate before capture. Repeated captures of the same publication must produce identical PNG bytes.
 
-Settings contains Motion, Card review animation, Card speed, Season playback (Slow 120ms, Normal 70ms or Fast 35ms per revealed game; Normal by default), Stickers on cards, Interface era (Modern, Vintage, Kraft, Neon, Chrome), and Roster first click. All preferences persist locally in `162-zero:settings:v1`; a save missing newer preferences keeps its values and uses the defaults for the rest; denied storage leaves the controls usable for the session. Motion governs movement and transitions throughout the game. Card review animation controls card travel and rotation independently; Card speed ranges from 0.5× to 2×, with a default 1× duration of 780ms. System reduced motion overrides both animation switches without overwriting saved preferences. Ambient motion uses a fixed amount of 2.5× and speed of 1×. One visibility-aware scheduler drives wall rows, card drift/finish lighting, spotlights, and marquees only while subscribers are visible.
+Settings contains Motion, Card review animation, Card speed, Season playback (Slow 120ms, Normal 70ms or Fast 35ms per revealed game; Normal by default), Stickers on cards, Interface era (Modern, Vintage, Kraft, Neon, Chrome), Roster first click, and Blocked players (wide-screen drafting also lists players with no open position; off by default). All preferences persist locally in `162-zero:settings:v1`; a save missing newer preferences keeps its values and uses the defaults for the rest; denied storage leaves the controls usable for the session. Motion governs movement and transitions throughout the game. Card review animation controls card travel and rotation independently; Card speed ranges from 0.5× to 2×, with a default 1× duration of 780ms. System reduced motion overrides both animation switches without overwriting saved preferences. Ambient motion uses a fixed amount of 2.5× and speed of 1×. One visibility-aware scheduler drives wall rows, card drift/finish lighting, spotlights, and marquees only while subscribers are visible.
 
 Card text fitting batches font writes and layout reads across unique labels, including SVG arcs. Resize and text changes use geometry keys; font loading and option changes force fresh measurement.
 
@@ -54,7 +54,7 @@ Start/Resume/New draft and interaction plays stay inside workshop-local state; t
 just storybook
 just storybook --port 6016
 just storybook-build
-STORYBOOK_TEST_PORT=6017 just storybook-test
+STORYBOOK_TEST_PORT=6017 AGENTATION_TEST_PORT=4749 just storybook-test
 ```
 
 The manager's Controls and native DialKit panels update card era, role, finish, width, and reverse presentation live. Home and historical-gallery panels adjust only their real preview targets. Reset story restores current args and declared initial review state without resetting saved Settings preferences or persisting dial values. Replay animation uses the current dials and card-speed preference. The operating-system reduced-motion preference remains authoritative.

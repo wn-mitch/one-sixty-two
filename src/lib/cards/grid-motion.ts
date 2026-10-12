@@ -12,7 +12,8 @@ export interface CandidateGridMotion {
 	attach(root: HTMLElement): void;
 	detach(root: HTMLElement): void;
 	capture(): number;
-	play(revision: number): void;
+	/** `gather` scoops leaving cards into one pile, slides the rest up into place, and lifts new cards in from below. */
+	play(revision: number, style?: 'reflow' | 'gather'): void;
 	skip(): void;
 	destroy(): void;
 }
@@ -128,8 +129,10 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			}
 			return revision;
 		},
-		play(nextRevision) {
+		play(nextRevision, style = 'reflow') {
 			if (nextRevision !== revision || !root || !motionEnabled) return;
+			const gather = style === 'gather';
+			const bounds = root.getBoundingClientRect();
 			const nodes = after();
 			const departures: HTMLElement[] = [];
 			const survivors: { node: HTMLElement; x: number; y: number }[] = [];
@@ -173,6 +176,35 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 					if (nextRevision === revision && --remaining === 0) complete();
 				});
 			};
+			if (gather) {
+				// The hand scoops the leaving cards toward the top of the grid in reading order.
+				const pileX = bounds.left + bounds.width / 2;
+				const pileY = Math.max(bounds.top, 0) + 40;
+				departures.forEach((node, index) => {
+					const rect = node.getBoundingClientRect();
+					run(node, {
+						translateX: [0, pileX - (rect.left + rect.width / 2)], translateY: [0, pileY - (rect.top + rect.height / 2)],
+						scale: [1, .45], rotate: [0, (index % 2 ? 1 : -1) * (4 + (index % 3) * 2)], opacity: [1, 0],
+						duration: MOTION.gather, delay: index * MOTION.gatherStagger, ease: 'inOutQuart'
+					}, () => {
+						ghosts.delete(node);
+						node.remove();
+					});
+				});
+				// Then the cards that stay filter up into the gaps while new ones rise in behind them.
+				const lead = departures.length ? MOTION.gather * .5 : 0;
+				survivors.forEach(({ node, x, y }) => {
+					node.style.transform = `translate(${x}px, ${y}px)`;
+					run(node, { translateX: [x, 0], translateY: [y, 0], duration: MOTION.gridMove, delay: lead, ease: 'outQuart' }, () => restore(node));
+				});
+				entrants
+					.map(node => ({ node, rect: node.getBoundingClientRect() }))
+					.sort((a, b) => Math.round(a.rect.top - b.rect.top) || a.rect.left - b.rect.left)
+					.forEach(({ node }, index) => {
+						run(node, { translateY: [48, 0], opacity: [0, 1], duration: MOTION.gridMove, delay: lead + MOTION.gridMove * .3 + Math.min(index, 12) * MOTION.gatherStagger, ease: 'outQuart' }, () => restore(node));
+					});
+				return;
+			}
 			stage(departures, (node, complete) => {
 				run(node, { opacity: [1, 0], duration: MOTION.gridExit, ease: 'outQuart' }, () => {
 					ghosts.delete(node);

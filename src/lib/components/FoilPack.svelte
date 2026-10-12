@@ -8,7 +8,7 @@
 	import TeamLogo from './TeamLogo.svelte';
 	import { loadMedia, selectLogo } from '../media/client.ts';
 
-	let { roll, franchiseName, years, teamColor, pickNumber, pickCount, marks = [], disabled = false, flyTarget, onOpen, onArrive, onDealt }: {
+	let { roll, franchiseName, years, teamColor, pickNumber, pickCount, marks = [], disabled = false, rerolls, rerollDisabled = false, flyTarget, onOpen, onReroll, onArrive, onDealt }: {
 		/** The committed roll; it arrives after `onOpen` commits it. */
 		roll: Roll | null;
 		franchiseName?: string;
@@ -19,10 +19,16 @@
 		/** Franchise ids the sealed pack's coin turns through. */
 		marks?: readonly string[];
 		disabled?: boolean;
+		/** Rerolls left of the draft's allowance; the dealt card offers one while any remain. */
+		rerolls?: { left: number; total: number };
+		/** The session cannot spend a reroll yet, such as while the dealt roll's pool loads. */
+		rerollDisabled?: boolean;
 		/** Where the dealt card lands: the header's roll identity. */
 		flyTarget: () => HTMLElement | null;
 		/** Commits the roll. */
 		onOpen: () => void;
+		/** Spends a reroll on the dealt roll; the new roll arrives through `roll`. */
+		onReroll?: () => void;
 		/** The card is reaching the rail; the rail may show the roll. Fires before `onDealt`. */
 		onArrive: () => void;
 		/** The dealt card has landed, or dealing was abandoned. */
@@ -33,6 +39,16 @@
 	type Stage = 'sealed' | 'opening' | 'dealt' | 'taking';
 	let stage = $state<Stage>('sealed');
 	let packGone = $state(false);
+	let rerolling = $state(false);
+	/** The caption names what to tap only after the player hesitates, so the pack and card teach themselves. */
+	let hinting = $state(false);
+	$effect(() => {
+		if (stage !== 'sealed' && stage !== 'dealt') return;
+		void roll;
+		hinting = false;
+		const timer = setTimeout(() => hinting = true, MOTION.tapHint);
+		return () => clearTimeout(timer);
+	});
 	let pack = $state<HTMLElement>();
 	let seal = $state<HTMLElement>();
 	let card = $state<HTMLButtonElement>();
@@ -98,9 +114,21 @@
 		card?.focus({ preventScroll: true });
 	}
 
+	/** Turns the dealt card face down, spends a reroll, and turns the new roll face up. */
+	async function reroll(): Promise<void> {
+		if (stage !== 'dealt' || rerolling || rerollDisabled || !onReroll) return;
+		rerolling = true;
+		const motion = appSettings.effectiveEnabled;
+		if (motion) await play(flipper, [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(180deg)' }], { duration: MOTION.deal / 2, easing: EASE_IN_OUT });
+		onReroll();
+		await tick();
+		if (motion) await play(flipper, [{ transform: 'rotateY(180deg)' }, { transform: 'rotateY(0deg)' }], { duration: MOTION.deal });
+		rerolling = false;
+	}
+
 	/** Slides the dealt card into the rail; the rail then grows the franchise name and era. */
 	async function take(): Promise<void> {
-		if (stage !== 'dealt') return;
+		if (stage !== 'dealt' || rerolling) return;
 		stage = 'taking';
 		if (appSettings.effectiveEnabled) await fly();
 		onArrive();
@@ -191,7 +219,16 @@
 			<span class="seal bottom" aria-hidden="true"></span>
 		</button>
 	</div>
-	<p class="caption" aria-hidden="true">{stage === 'sealed' ? 'Roll next franchise' : stage === 'dealt' ? 'Take the card' : 'Dealing…'}</p>
+	<p class="caption" class:hidden={!hinting} aria-hidden="true">{stage === 'sealed' ? 'Roll next franchise' : 'Take the card'}</p>
+	{#if rerolls && onReroll && (stage === 'dealt' || stage === 'taking')}
+		<div class="reroll-row">
+			<button type="button" class="secondary reroll" disabled={stage !== 'dealt' || rerolling || rerollDisabled || rerolls.left <= 0} onclick={reroll}>
+				<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M12.5 6A5 5 0 1 0 13 9.5M12.5 2.5V6H9"></path></svg>
+				Reroll
+			</button>
+			<span class="muted">{rerolls.left} of {rerolls.total} left</span>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -308,7 +345,12 @@
 	}
 	.front strong { font: italic 900 1.35rem / 1 'Barlow Condensed', sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
 	.years { font: italic 800 1.1rem / 1 'Barlow Condensed', sans-serif; }
-	.caption { margin: 0; color: var(--muted); font-size: var(--text-sm); font-weight: 650; letter-spacing: .02em; }
+	.caption { margin: 0; color: var(--muted); font-size: var(--text-sm); font-weight: 650; letter-spacing: .02em; transition: opacity var(--motion-deal) var(--ease-out); }
+	/* The caption keeps its line while hidden so the hint appears without moving the stage. */
+	.caption.hidden { opacity: 0; }
+	.reroll-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-2) var(--space-3); font-size: var(--text-xs); }
+	.reroll { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; }
+	.reroll svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 	@keyframes glint { 0%, 55% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
 	:global([data-motion='off']) .pack::after { animation: none; }
 	@media (prefers-reduced-motion: reduce) { .pack::after { animation: none; } }

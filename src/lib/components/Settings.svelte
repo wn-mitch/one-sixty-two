@@ -14,6 +14,7 @@
 	const cardSpeedId = `${uid}-card-speed`;
 	const rosterLabelId = `${uid}-roster-first-click`;
 	const stickersId = `${uid}-stickers`;
+	const blockedId = `${uid}-blocked`;
 	const playbackLabelId = `${uid}-playback`;
 	const eraLabelId = `${uid}-era`;
 	const playbackLabels = { slow: 'Slow', normal: 'Normal', fast: 'Fast' } as const;
@@ -154,6 +155,23 @@
 						aria-label="Stickers on cards"
 						disabled={!ready}
 						onclick={() => appSettings.setShowStickers(!appSettings.showStickers)}
+					><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
+				</div>
+
+				<div class="setting-row">
+					<div class="setting-copy">
+						<label for={blockedId}>Blocked players</label>
+						<p>While drafting on a wide screen, also list players with no open position, so you can pick one and rearrange your field. Phones always list them last.</p>
+					</div>
+					<button
+						id={blockedId}
+						type="button"
+						class="settings-switch"
+						role="switch"
+						aria-checked={appSettings.showBlockedCards}
+						aria-label="Blocked players"
+						disabled={!ready}
+						onclick={() => appSettings.setShowBlockedCards(!appSettings.showBlockedCards)}
 					><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
 				</div>
 

@@ -23,6 +23,8 @@ export interface AppPreferences {
 	showStickers: boolean;
 	playbackSpeed: PlaybackSpeed;
 	interfaceEra: InterfaceEra;
+	/** Desktop drafting also lists players with no open position on the field. */
+	showBlockedCards: boolean;
 }
 
 export interface AppSettingsSnapshot extends AppPreferences {
@@ -63,7 +65,8 @@ function validStored(value: unknown): AppPreferences | null {
 			// Preferences added later fall back to their defaults when an older save lacks them.
 			showStickers: typeof candidate.showStickers === 'boolean' ? candidate.showStickers : true,
 			playbackSpeed: PLAYBACK_SPEEDS.includes(candidate.playbackSpeed as PlaybackSpeed) ? candidate.playbackSpeed as PlaybackSpeed : 'normal',
-			interfaceEra: INTERFACE_ERAS.some(era => era.id === candidate.interfaceEra) ? candidate.interfaceEra as InterfaceEra : 'modern'
+			interfaceEra: INTERFACE_ERAS.some(era => era.id === candidate.interfaceEra) ? candidate.interfaceEra as InterfaceEra : 'modern',
+			showBlockedCards: typeof candidate.showBlockedCards === 'boolean' ? candidate.showBlockedCards : false
 		}
 		: null;
 }
@@ -91,6 +94,7 @@ export class AppSettingsState {
 	showStickers = $state(true);
 	playbackSpeed = $state<PlaybackSpeed>('normal');
 	interfaceEra = $state<InterfaceEra>('modern');
+	showBlockedCards = $state(false);
 	reducedMotion = $state(false);
 	storageAvailable = $state(true);
 
@@ -124,6 +128,7 @@ export class AppSettingsState {
 			showStickers: this.showStickers,
 			playbackSpeed: this.playbackSpeed,
 			interfaceEra: this.interfaceEra,
+			showBlockedCards: this.showBlockedCards,
 			reducedMotion: this.reducedMotion,
 			effectiveEnabled: this.effectiveEnabled,
 			animateCards: this.animateCards,
@@ -178,6 +183,7 @@ export class AppSettingsState {
 				this.showStickers = stored.showStickers;
 				this.playbackSpeed = stored.playbackSpeed;
 				this.interfaceEra = stored.interfaceEra;
+				this.showBlockedCards = stored.showBlockedCards;
 			}
 		} catch {
 			this.storageAvailable = false;
@@ -235,7 +241,8 @@ export class AppSettingsState {
 				rosterFirstClick: this.rosterFirstClick,
 				showStickers: this.showStickers,
 				playbackSpeed: this.playbackSpeed,
-				interfaceEra: this.interfaceEra
+				interfaceEra: this.interfaceEra,
+				showBlockedCards: this.showBlockedCards
 			} satisfies AppPreferences));
 		} catch {
 			this.storageAvailable = false;
@@ -279,6 +286,13 @@ export class AppSettingsState {
 	setPlaybackSpeed(playbackSpeed: PlaybackSpeed): void {
 		if (!PLAYBACK_SPEEDS.includes(playbackSpeed) || playbackSpeed === this.playbackSpeed) return;
 		this.playbackSpeed = playbackSpeed;
+		this.#persist();
+		this.#notify();
+	}
+
+	setShowBlockedCards(showBlockedCards: boolean): void {
+		if (showBlockedCards === this.showBlockedCards) return;
+		this.showBlockedCards = showBlockedCards;
 		this.#persist();
 		this.#notify();
 	}

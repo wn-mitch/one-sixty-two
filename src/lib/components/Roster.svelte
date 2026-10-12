@@ -7,18 +7,18 @@
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import type { StadiumSummary } from '../sim/park-types.ts';
+ import { venuePhoto } from '../media/venue.ts';
  import { STOCK, roles } from '../cards/tokens.ts';
  import RosterItem from './RosterItem.svelte';
  import StadiumCard from './StadiumCard.svelte';
  import TeamLogo from './TeamLogo.svelte';
- import { venuePhoto } from '../media/venue.ts';
  import { FIELD, fieldArt } from './field-layout.ts';
  import { captureField, slideField } from './field-motion.ts';
 
  type Preview = { profile: Profile; slot: Slot };
 
  const pct = (value: number, total: number) => `${(value / total) * 100}%`;
- const { window: fieldWindow, nameplate, stadium: stadiumPoint } = FIELD;
+ const { window: fieldWindow, staffPlate, nameplate, stadium: stadiumPoint } = FIELD;
 
  let {
   draft,
@@ -158,6 +158,8 @@
 
  const field = $derived.by(() => HITTER_SLOTS.map(slot => slotState(slot)));
  const staff = $derived.by(() => pitcherSlots.map(slot => slotState(slot)));
+ const stadiumPhoto = $derived(stadium ? venuePhoto(media, stadium.franchiseId) : null);
+ let failedPhoto = $state('');
  const art = $derived(fieldArt(stadium));
  const palette = $derived(stadiumColor ? roles({ primary: stadiumColor, secondary: STOCK }) : null);
  const cardStyle = $derived(palette ? `--stock: ${palette.field}; --stock-ink: ${palette.onField};` : undefined);
@@ -166,8 +168,6 @@
   return dimension ? [`${label} ${Math.round(dimension.distanceFt)}`] : [];
  }));
  let turned = $state(false);
- const stadiumPhoto = $derived(stadium ? venuePhoto(media, stadium.franchiseId) : null);
- let failedPhoto = $state('');
 </script>
 
 <aside bind:this={root} class="roster" class:compact aria-label={`Your field, ${pickedCount} of ${slots.length} roster slots filled`}>
@@ -190,7 +190,7 @@
      <circle class="mound" cx={art.mound.x} cy={art.mound.y} r="8"></circle>
      {#each art.bases as base}<rect class="base" x={base.x - 4.5} y={base.y - 4.5} width="9" height="9" transform="rotate(45 {base.x} {base.y})"></rect>{/each}
      <path class="base" d="M{art.home.x - 5} {art.home.y - 4}h10v4l-5 5l-5 -5z"></path>
-     <rect class="staff-plate" x={fieldWindow.x} y={nameplate.y + nameplate.height + 4} width={fieldWindow.width} height={FIELD.height - nameplate.y - nameplate.height - 14} rx="6"></rect>
+     <rect class="staff-plate" x={fieldWindow.x} y={staffPlate.y} width={fieldWindow.width} height={staffPlate.height} rx="6"></rect>
     </svg>
     <div class="nameplate" style={`--top:${pct(nameplate.y, FIELD.height)};--height:${pct(nameplate.height, FIELD.height)}`}>
      {#if stadium}<TeamLogo franchiseId={stadium.franchiseId} label={stadiumFranchise ?? stadium.franchiseId} size="small" />{/if}
@@ -221,7 +221,6 @@
         {/if}
        </span>
        <span class="mini-name">{stadium.name}</span>
-       {#if dimensions.length}<span class="mini-dimensions">{#each dimensions as dimension}<span>{dimension}</span>{/each}</span>{/if}
       </span>
       <span class="mini-caption" aria-hidden="true">Park</span>
      </button>
@@ -437,7 +436,7 @@
  .stadium-mini:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
  .mini-card {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: calc(100cqi * 2 / 424);
   width: var(--mini-width);
   aspect-ratio: 5 / 7;
@@ -453,7 +452,6 @@
  .mini-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
  .mini-photo :global(.team-mark) { width: 70%; height: auto; aspect-ratio: 1; flex-basis: auto; overflow: hidden; }
  .mini-name { font: italic 900 calc(100cqi * 7.5 / 424) / .95 'Barlow Condensed', sans-serif; text-align: left; text-transform: uppercase; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
- .mini-dimensions { display: grid; font: 700 calc(100cqi * 5.5 / 424) / 1.1 'Barlow Condensed', sans-serif; letter-spacing: .04em; text-align: left; font-variant-numeric: tabular-nums; }
  .mini-caption { color: var(--muted); font: 800 calc(100cqi * 9 / 424) / 1 'Barlow Condensed', sans-serif; letter-spacing: .06em; text-transform: uppercase; }
  @media (prefers-reduced-motion: reduce) { .stadium-mini, .mini-card { transition: none; } }
  .slot-placeholder b { font-size: calc(100cqi * 15 / 424); }

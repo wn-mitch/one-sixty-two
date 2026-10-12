@@ -486,11 +486,11 @@
   if (arrival) void tick().then(() => {
    if (disposed || !draftBoard) return;
    arriveAtTop();
-   // The chosen park's card shrinks onto the field's stadium card while the board rises around it;
+   // The chosen park's card shrinks onto the field nameplate's team mark while the board rises around it;
    // phones keep the field in a sheet, so the card settles into the sealed pack instead.
    const from = arrival.rects.get('card');
    const clone = arrival.clones.get('card');
-   const target = draftBoard.querySelector<HTMLElement>('.field-panel .stadium-mini .mini-card') ?? draftBoard.querySelector<HTMLElement>('.foil-pack .pack');
+   const target = draftBoard.querySelector<HTMLElement>('.field-panel .nameplate .team-mark') ?? draftBoard.querySelector<HTMLElement>('.foil-pack .pack');
    if (from && clone && target) morphInto(clone, from, target);
    riseIn(draftBoard.querySelectorAll<HTMLElement>(':scope > .draft-header, :scope > .draft-toolbar, .field-panel'));
   });
@@ -610,6 +610,17 @@
 {/snippet}
 
 <div bind:this={draftBoard} class="draft-board" class:wide>
+{#snippet rerollControl()}
+ {#if showingCandidates}
+  {@const left = rerollsLeft(draft)}
+  {@const total = draftRules(draft.schemaVersion).rerolls}
+  <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} aria-label={`Reroll franchise and decade, ${left} of ${total} left`} title="Reroll franchise & decade" onclick={() => { cancelSelection(); onReroll(); }}>
+   <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M12.5 6A5 5 0 1 0 13 9.5M12.5 2.5V6H9"></path></svg>
+   <span class="reroll-word">Reroll</span>
+   <span class="reroll-count" aria-hidden="true">{left}/{total}</span>
+  </button>
+ {/if}
+{/snippet}
 {#snippet reveal()}
  <Reveal {roll} {manifest} compact={wide} bar={!wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
 {/snippet}
@@ -617,6 +628,8 @@
   <header class="draft-header">
    <a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>
    {@render reveal()}
+   {@render rerollControl()}
+   {#if roll && !(dealing && !dealtArrived)}<p class="eyebrow header-pick">Pick {draft.picks.length + 1} of {rosterSlots.length}</p>{/if}
    <a class="rules-link" href="/about">Rules &amp; model</a>
    <Settings />
    <button class="secondary new-draft" disabled={loading} onclick={onNew}>New draft</button>
@@ -626,6 +639,7 @@
  <div class="draft-toolbar">
   {#if !wide}
    {@render reveal()}
+   {@render rerollControl()}
    <button type="button" class="secondary open-field" aria-label={`Open your field ${draft.picks.length} / ${rosterSlots.length}`} onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>
     Field
     <span class="field-count">{draft.picks.length} / {rosterSlots.length}</span>
@@ -647,6 +661,9 @@
      pickCount={rosterSlots.length}
      marks={manifest.franchises.map(franchise => franchise.id)}
      disabled={busy && !dealing}
+     rerolls={{ left: rerollsLeft(draft), total: draftRules(draft.schemaVersion).rerolls }}
+     rerollDisabled={busy || phase !== 'choosing'}
+     {onReroll}
      flyTarget={() => draftBoard?.querySelector<HTMLElement>('[data-roll-mark]') ?? null}
      onOpen={() => { dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
      onArrive={() => dealtArrived = true}
@@ -655,14 +672,6 @@
    {:else if loading || phase === 'revealing'}
     <p class="loading-copy muted" role="status">Finding eligible seasons…</p>
    {:else if showingCandidates}
-    {@const left = rerollsLeft(draft)}
-    <div class="reroll-row">
-     <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} onclick={() => { cancelSelection(); onReroll(); }}>
-      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M12.5 6A5 5 0 1 0 13 9.5M12.5 2.5V6H9"></path></svg>
-      Reroll franchise &amp; decade
-     </button>
-     <span class="muted">{left} of {draftRules(draft.schemaVersion).rerolls} rerolls left</span>
-    </div>
     <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
@@ -682,8 +691,17 @@
  .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; }
  .open-field { flex: none; display: flex; align-items: center; gap: .5rem; min-height: 3rem; padding-inline: .75rem; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
- .reroll-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-block: var(--space-2) var(--space-3); font-size: var(--text-xs); }
- .reroll { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; }
+ .reroll { flex: none; display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; padding-inline: .75rem; font-size: .875rem; }
+ /* Reroll waits for the roll identity to finish growing so it never upstages the reveal. */
+ .reroll, .header-pick { animation: reroll-in calc(var(--motion-deal) * .7) var(--ease-out) var(--motion-deal) both; }
+ @keyframes reroll-in { from { opacity: 0; transform: translateX(-1.5rem); } }
+ :global([data-motion='off']) :is(.reroll, .header-pick) { animation: none; }
+ @media (prefers-reduced-motion: reduce) { .reroll, .header-pick { animation: none; } }
+ .header-pick { flex: none; margin: 0; white-space: nowrap; }
+ .reroll-count { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+ /* Phones keep the toolbar to icons and counts so the roll identity keeps its room. */
+ .draft-toolbar .reroll { min-height: 3rem; padding-inline: .5rem; gap: .3rem; }
+ .draft-toolbar .reroll-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
  .reroll svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
  .toolbar-new { flex: none; display: grid; place-items: center; width: 3rem; min-height: 3rem; padding: 0; }
  .toolbar-new svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }

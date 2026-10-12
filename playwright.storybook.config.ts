@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const port = Number(process.env.STORYBOOK_TEST_PORT ?? 6006);
+const agentationPort = Number(process.env.AGENTATION_TEST_PORT ?? 4748);
 
 export default defineConfig({
 	testDir: './tests/storybook',
@@ -20,8 +21,8 @@ export default defineConfig({
 	projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
 	webServer: [
 		{
-			command: 'AGENTATION_STORE=memory npx --no-install agentation-mcp server --host 127.0.0.1 --port 4748',
-			url: 'http://127.0.0.1:4748/health',
+			command: `AGENTATION_STORE=memory npx --no-install agentation-mcp server --host 127.0.0.1 --port ${agentationPort}`,
+			url: `http://127.0.0.1:${agentationPort}/health`,
 			reuseExistingServer: false,
 			timeout: 120000
 		},
@@ -31,7 +32,7 @@ export default defineConfig({
 			reuseExistingServer: false,
 			timeout: 120000,
 			env: {
-				VITE_AGENTATION_ENDPOINT: 'http://127.0.0.1:4748'
+				VITE_AGENTATION_ENDPOINT: `http://127.0.0.1:${agentationPort}`
 			}
 		}
 	]

@@ -218,7 +218,7 @@ test.describe('draft interaction boundaries', () => {
 		await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeVisible();
 	});
 
-	test('hides fully blocked desktop groups until the explicit toggle and drops filled-position filters', async ({ page, request }) => {
+	test('hides fully blocked desktop groups until the Blocked players setting and drops filled-position filters', async ({ page, request }) => {
 		const manifest = await currentManifest(request);
 		const scenario = await blockedScenario(request, manifest);
 		await openSavedDraft(page, scenario.draft);
@@ -226,9 +226,10 @@ test.describe('draft interaction boundaries', () => {
 
 		const group = page.locator(`[data-candidate-group="${scenario.profile.playerId}"]`);
 		await expect(group).toHaveCount(0);
-		const toggle = page.getByRole('button', { name: 'Show blocked cards', exact: true });
-		await expect(toggle).toBeVisible();
-		await toggle.click();
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+		await settings.getByRole('switch', { name: 'Blocked players', exact: true }).click();
+		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
 		await expect(group).toBeVisible();
 
 		// Every slot this blocked player qualifies for is filled, so none of them is offered as a filter.

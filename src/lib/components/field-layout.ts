@@ -18,7 +18,8 @@ const FALLBACK_OUTLINE: readonly (readonly [number, number])[] = Array.from({ le
 });
 
 /**
- * The field is a card: a 424×594 face (5:7) with the field window above a nameplate and staff plate.
+ * The field is a card: a 424×594 face (5:7) with the field window above the staff plate, and the
+ * stadium nameplate, which never changes during a draft, at the foot.
  * Card art, base positions, and every slot anchor share these units, so cards stay on their positions at every width.
  */
 export const FIELD = {
@@ -28,9 +29,11 @@ export const FIELD = {
 	card: 56,
 	window: { x: 10, y: 10, width: 404, height: 404 },
 	home: { x: 212, y: 350 },
-	nameplate: { y: 426, height: 34 },
-	/** The compact stadium card, mirroring the DH across home plate. */
+	/** The compact stadium card in the third-base corner, mirroring the DH across home plate. */
 	stadium: { x: 46, y: 344 },
+	/** Room for the staff cards and their name captions, no more. */
+	staffPlate: { y: 422, height: 120 },
+	nameplate: { y: 548, height: 34 },
 	/** Center of each roster card's artwork; the caption hangs below it. */
 	slots: {
 		LF: { x: 76, y: 76 },
@@ -38,19 +41,20 @@ export const FIELD = {
 		RF: { x: 348, y: 76 },
 		SS: { x: 148, y: 160 },
 		'2B': { x: 276, y: 160 },
-		'3B': { x: 72, y: 240 },
-		'1B': { x: 352, y: 240 },
+		// The corners sit high enough that their two-line captions clear the DH and stadium cards below them.
+		'3B': { x: 72, y: 220 },
+		'1B': { x: 352, y: 220 },
 		C: { x: 212, y: 342 },
 		DH: { x: 378, y: 344 },
-		SP1: { x: 38, y: 508 },
-		SP2: { x: 96, y: 508 },
-		SP3: { x: 154, y: 508 },
-		CL: { x: 212, y: 508 },
-		RP1: { x: 270, y: 508 },
-		RP2: { x: 328, y: 508 },
-		RP3: { x: 386, y: 508 },
+		SP1: { x: 38, y: 466 },
+		SP2: { x: 96, y: 466 },
+		SP3: { x: 154, y: 466 },
+		CL: { x: 212, y: 466 },
+		RP1: { x: 270, y: 466 },
+		RP2: { x: 328, y: 466 },
+		RP3: { x: 386, y: 466 },
 		/** Older saved seasons drafted a team bullpen; it takes the first relief spot. */
-		BP: { x: 270, y: 508 }
+		BP: { x: 270, y: 466 }
 	}
 } as const satisfies {
 	width: number;
@@ -58,8 +62,9 @@ export const FIELD = {
 	card: number;
 	window: { x: number; y: number; width: number; height: number };
 	home: Point;
-	nameplate: { y: number; height: number };
 	stadium: Point;
+	staffPlate: { y: number; height: number };
+	nameplate: { y: number; height: number };
 	slots: Record<RosterSlot, Point>;
 };
 

@@ -56,6 +56,43 @@ test.describe('Draft board browsing', () => {
 		await expect.poll(() => page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.reduce((count, node) => count + node.getAnimations().length, 0))).toBe(0);
 	});
 
+	test('rerolls the dealt card before it is taken and hints only after a pause', async ({ page }) => {
+		await page.setViewportSize({ width: 1212, height: 788 });
+		await openStoryByName(page, 'Draft/Board', 'Partial roster');
+		const caption = page.locator('.foil-pack .caption');
+		await expect(caption).toHaveCSS('opacity', '0');
+		await page.getByRole('button', { name: 'Roll next franchise', exact: true }).click();
+		const take = page.getByRole('button', { name: /^Take / });
+		await expect(take).toBeFocused();
+		await expect(caption).toHaveCSS('opacity', '0');
+		const reroll = page.locator('.foil-pack').getByRole('button', { name: 'Reroll' });
+		const before = await take.getAttribute('aria-label');
+		await reroll.click();
+		await expect(page.locator('.foil-pack .reroll-row .muted')).toHaveText('1 of 2 left');
+		await expect(take).not.toHaveAttribute('aria-label', before!);
+		await expect(caption).toHaveText('Take the card');
+		await expect(caption).toHaveCSS('opacity', '1', { timeout: 6000 });
+		const franchise = await page.locator('.dealt-card .front strong').textContent();
+		await take.click();
+		await expect(page.locator('.candidates')).toBeVisible({ timeout: 6000 });
+		await expect(page.locator('.reveal h2')).toHaveText(franchise!);
+	});
+
+	test('gathers leaving cards into a pile and settles the filtered grid when a filter changes', async ({ page }) => {
+		await page.setViewportSize({ width: 1512, height: 828 });
+		await openChoosing(page);
+		await expect.poll(() => page.locator('[data-candidate-group]').count()).toBeGreaterThan(12);
+		await page.locator('.filters').getByRole('button', { name: 'CF', exact: true }).click();
+		// Cards that leave are scooped up as fixed ghosts, shrinking toward one pile.
+		const ghosts = page.locator('body > [inert][aria-hidden="true"]');
+		await expect.poll(() => ghosts.count()).toBeGreaterThan(0);
+		await expect.poll(() => ghosts.first().evaluate(node => getComputedStyle(node).transform)).not.toBe('none');
+		// Then the pile is gone and every remaining card rests in place, fully shown.
+		await expect(ghosts).toHaveCount(0);
+		const settled = await page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.every(node => (node as HTMLElement).style.transform === '' && getComputedStyle(node).opacity === '1'));
+		expect(settled).toBe(true);
+	});
+
 	test('skips the deal choreography with reduced motion', async ({ page }) => {
 		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await openStoryByName(page, 'Draft/Board', 'Partial roster');
@@ -540,19 +577,17 @@ test('picks a home stadium from the real park deck', async ({ page }) => {
 	await expect(submit).toBeDisabled();
 });
 
-test('the compact stadium card mirrors the DH and turns the field to the park details', async ({ page }) => {
+test('the stadium nameplate sits at the foot of the field and turns it to the park details', async ({ page }) => {
 	await page.setViewportSize({ width: 1212, height: 788 });
-	await openStory(page, 'draft-board--ready');
-	const stadium = page.getByRole('button', { name: /\. Turn over for stadium details\.$/ });
-	const dh = page.locator('.field-slot[data-slot="DH"]');
-	const catcher = page.locator('.field-slot[data-slot="C"]');
-	const [stadiumBox, dhBox, catcherBox] = await Promise.all([stadium.boundingBox(), dh.boundingBox(), catcher.boundingBox()]);
-	// Same row as the DH, the same distance from the catcher on the other side.
-	expect(Math.abs(stadiumBox!.y - dhBox!.y)).toBeLessThan(2);
-	const centre = (box: { x: number; width: number }) => box.x + box.width / 2;
-	expect(Math.abs((centre(catcherBox!) - centre(stadiumBox!)) - (centre(dhBox!) - centre(catcherBox!)))).toBeLessThan(2);
-	await stadium.click();
-	await expect(page.locator('.field-card')).toHaveClass(/turned/);
+	await openStoryByName(page, 'Draft/Board', 'Partial roster');
+	const nameplate = page.locator('.field-panel .nameplate');
+	const staffBottom = await page.locator('.field-panel .staff-slot').evaluateAll(slots => Math.max(...slots.map(slot => slot.getBoundingClientRect().bottom)));
+	expect((await nameplate.boundingBox())!.y).toBeGreaterThanOrEqual(staffBottom);
+	// The first-base corner and its caption stay clear of the DH below it.
+	const [first, dh] = await Promise.all(['1B', 'DH'].map(slot => page.locator(`.field-panel .field-slot[data-slot="${slot}"]`).boundingBox()));
+	expect(first!.y + first!.height).toBeLessThanOrEqual(dh!.y);
+	await nameplate.getByRole('button', { name: /^Turn over: / }).click();
+	await expect(page.locator('.field-panel .field-card')).toHaveClass(/turned/);
 	await page.getByRole('button', { name: 'Show field', exact: true }).click();
-	await expect(page.locator('.field-card')).not.toHaveClass(/turned/);
+	await expect(page.locator('.field-panel .field-card')).not.toHaveClass(/turned/);
 });

@@ -56,7 +56,8 @@
 		</div>
 	{/if}
 	<div class="reveal-copy" onanimationend={event => { if (event.animationName.endsWith('grow-sideways')) unveiling = false; }}>
-		<p class="eyebrow">Pick {pickNumber} of {policy.slots.length}</p>
+		<!-- The wide header shows a rolled pick's count beside its controls instead. -->
+		{#if !(compact && roll)}<p class="eyebrow">Pick {pickNumber} of {policy.slots.length}</p>{/if}
 		{#if roll}
 			<div class="roll-copy">
 				<h2>{franchise?.name ?? roll.franchiseId}</h2>

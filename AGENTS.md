@@ -65,6 +65,6 @@ Use Node >=24.12, npm, and rustup with `wasm-pack`. Prefer existing `just` recip
 - `just storybook`: isolated component workshop.
 - `just storybook-test`: workshop browser suite when relevant.
 
-Development and builds prepare assets automatically. Initial preparation requires network access and ImageMagick. Generated assets and caches stay out of source control. Browser tests require `npx playwright install chromium`; use an isolated `PLAYWRIGHT_PORT` or `STORYBOOK_TEST_PORT` when needed. Automated verification uses local Worker/R2 fixtures.
+Development and builds prepare assets automatically. Initial preparation requires network access and ImageMagick. Generated assets and caches stay out of source control. Browser tests require `npx playwright install chromium`; use an isolated `PLAYWRIGHT_PORT`, `STORYBOOK_TEST_PORT`, or `AGENTATION_TEST_PORT` when needed. Automated verification uses local Worker/R2 fixtures.
 
 Use `jj`, not raw `git`. Leave other workspaces and unrelated changes alone. Run browsers headlessly without audio or taking focus. Update existing documentation when behavior changes; do not add standalone reports or architectural essays unless requested.

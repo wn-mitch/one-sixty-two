@@ -8,7 +8,7 @@
 	/** The draft field card printed from the home park, every roster card on its slot with a large surname caption. */
 	let { model }: { model: ShareRenderModel } = $props();
 	const pct = (value: number, total: number) => `${(value / total) * 100}%`;
-	const { window: fieldWindow, nameplate, stadium: stadiumPoint } = FIELD;
+	const { window: fieldWindow, staffPlate, nameplate, stadium: stadiumPoint } = FIELD;
 	const stadium = $derived(model.homeStadium);
 	const art = $derived(fieldArt({ outline: [...stadium.outline] }));
 	const palette = $derived(stadium.color ? roles({ primary: stadium.color, secondary: STOCK }) : null);
@@ -36,7 +36,7 @@
 		<circle class="mound" cx={art.mound.x} cy={art.mound.y} r="8"></circle>
 		{#each art.bases as base}<rect class="base" x={base.x - 4.5} y={base.y - 4.5} width="9" height="9" transform="rotate(45 {base.x} {base.y})"></rect>{/each}
 		<path class="base" d="M{art.home.x - 5} {art.home.y - 4}h10v4l-5 5l-5 -5z"></path>
-		<rect class="staff-plate" x={fieldWindow.x} y={nameplate.y + nameplate.height + 4} width={fieldWindow.width} height={FIELD.height - nameplate.y - nameplate.height - 14} rx="6"></rect>
+		<rect class="staff-plate" x={fieldWindow.x} y={staffPlate.y} width={fieldWindow.width} height={staffPlate.height} rx="6"></rect>
 	</svg>
 	<div class="nameplate" style={`--top:${pct(nameplate.y, FIELD.height)};--height:${pct(nameplate.height, FIELD.height)}`}>
 		<strong>{stadium.name}</strong>
@@ -73,11 +73,11 @@
 	.nameplate strong { font:italic 900 calc(100cqi * 17 / 424) / .95 'Barlow Condensed', sans-serif; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.nameplate span { font:700 calc(100cqi * 10.5 / 424) / 1 'Barlow Condensed', sans-serif; letter-spacing:.08em; }
 	.park, .slot { position:absolute; left:var(--x); display:grid; justify-items:center; transform:translateX(-50%); }
-	.park { --mini:calc(100cqi * 56 / 424); top:calc(var(--y) - var(--mini) * .7); gap:calc(100cqi * 3 / 424); width:calc(var(--mini) * 8 / 7); }
-	.park-card { display:block; width:var(--mini); aspect-ratio:5 / 7; padding:calc(100cqi * 3 / 424); box-sizing:border-box; overflow:hidden; border-radius:calc(100cqi * 4 / 424); background:var(--stock, oklch(27% .016 255)); box-shadow:0 .3rem .7rem oklch(8% .01 255 / .4); }
-	.park-card b { display:-webkit-box; overflow:hidden; color:var(--stock-ink, oklch(97% .006 255)); font:italic 900 calc(100cqi * 8 / 424) / .95 'Barlow Condensed', sans-serif; text-transform:uppercase; -webkit-line-clamp:4; line-clamp:4; -webkit-box-orient:vertical; }
-	.park-card img { display:block; width:100%; height:100%; object-fit:cover; border-radius:calc(100cqi * 2 / 424); }
 	.caption { color:oklch(88% .01 255); font:800 calc(100cqi * 10 / 424) / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; }
+	.park-card img { display:block; width:100%; height:100%; object-fit:cover; border-radius:calc(100cqi * 2 / 424); }
+	.park-card b { display:-webkit-box; overflow:hidden; color:var(--stock-ink, oklch(97% .006 255)); font:italic 900 calc(100cqi * 8 / 424) / .95 'Barlow Condensed', sans-serif; text-transform:uppercase; -webkit-line-clamp:4; line-clamp:4; -webkit-box-orient:vertical; }
+	.park-card { display:block; width:var(--mini); aspect-ratio:5 / 7; padding:calc(100cqi * 3 / 424); box-sizing:border-box; overflow:hidden; border-radius:calc(100cqi * 4 / 424); background:var(--stock, oklch(27% .016 255)); box-shadow:0 .3rem .7rem oklch(8% .01 255 / .4); }
+	.park { --mini:calc(100cqi * 56 / 424); top:calc(var(--y) - var(--mini) * .7); gap:calc(100cqi * 3 / 424); width:calc(var(--mini) * 8 / 7); }
 	.slot { --mini:calc(100cqi * 56 / 424); top:calc(var(--y) - var(--mini) * .7); gap:calc(100cqi * 2 / 424); width:calc(100cqi * 70 / 424); }
 	.miniature { display:block; width:var(--mini); }
 	.identity { display:grid; width:100%; gap:calc(100cqi * 1.5 / 424); text-align:center; }
