@@ -4,3 +4,5 @@ export const DRAFT_RULES_VERSION = 'draft-d01-v2' as const;
 export const SALARY_VERSION = 'salary-runs-v1' as const;
 /** Ownership buckets, legality failure codes and report shape shared with later draft phases. */
 export const POOL_CONTRACT_VERSION = 'pool-v2' as const;
+/** Saved Draft Mode run: setup fields and the action vocabulary replayed to rebuild a run. */
+export const RUN_VERSION = 'draft-run-v1' as const;

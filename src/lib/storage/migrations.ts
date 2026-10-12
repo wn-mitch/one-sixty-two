@@ -102,6 +102,21 @@ export const MIGRATIONS: readonly Migration[] = [
    const entries = seasonEntries(seasons, query<CardRow>(db, 'SELECT * FROM season_cards'));
    for (const entry of entries) for (const statement of collectionStatements(entry, entry.savedAt)) db.exec(statement);
   }
+ },
+ {
+  version: 3,
+  up(db) {
+   // Draft Mode runs: the setup and the player's action log, from which the run is replayed.
+   exec(db, `CREATE TABLE draft_runs (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    setup_json TEXT NOT NULL,
+    actions_json TEXT NOT NULL,
+    phase TEXT NOT NULL
+   )`);
+   exec(db, 'CREATE INDEX draft_runs_by_update ON draft_runs (updated_at)');
+  }
  }
 ];
 

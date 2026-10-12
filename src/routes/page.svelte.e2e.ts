@@ -12,6 +12,14 @@ import { imagePixelDigest } from './image-test-helpers.ts';
 
 /** Every game in the results calendar, one control per game, including both halves of a doubleheader. */
 const SEASON_GAME = '[aria-controls="season-game-detail"]';
+/** Moment card text without the sticker layer, which a second tab on a memory database does not have. */
+function momentText(region: Locator): Promise<(string | null)[]> {
+	return region.locator('.moment-card').evaluateAll(nodes => nodes.map(node => {
+		const copy = node.cloneNode(true) as Element;
+		for (const layer of copy.querySelectorAll('.stickers')) layer.remove();
+		return copy.textContent;
+	}));
+}
 function gameLabels(region: Locator): Promise<(string | null)[]> {
 	return region.locator(SEASON_GAME).evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')));
 }
@@ -228,7 +236,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await expect(moments.locator('.moment-card .empty')).toHaveCount(0);
 	await expect(moments.locator('.moment-card .story')).toHaveCount(2);
 	await expect(moments.getByRole('img', { name: /^Win chance through game \d+/ })).toHaveCount(2);
-	const momentCopy = await moments.locator('.moment-card').allTextContents();
+	const momentCopy = await momentText(moments);
 	for (const copy of momentCopy) {
 		expect(copy).toMatch(/Game \d+/);
 		expect(copy).toMatch(/\d+\.\d% → \d+\.\d%/);
@@ -302,7 +310,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await expect(replayGames.locator(SEASON_GAME)).toHaveCount(162);
 	const replayMoments = replay.getByRole('region', { name: 'Season turning points', exact: true });
 	await expect(replayMoments.locator('.moment-card .story')).toHaveCount(2);
-	expect(await replayMoments.locator('.moment-card').allTextContents()).toEqual(momentCopy);
+	expect(await momentText(replayMoments)).toEqual(momentCopy);
 	expect(await gameLabels(replayGames)).toEqual(scores);
 	const replayUrl = replay.url();
 	for (const [name, id] of [['Batting totals', 'batting-heading'], ['Pitching totals', 'pitching-heading'], ['All 162 games', 'game-log-heading']]) {

@@ -50,6 +50,16 @@ describe('device database migrations', () => {
   expect(await db.all('SELECT json FROM draft')).toEqual([{ json: '{"saved":"run"}' }]);
  });
 
+ it('adds Draft Mode runs to a version 2 database without touching its saves', async () => {
+  const { db, raw } = await memoryDb({ ...NO_LEGACY, draft: '{"saved":"run"}', library: JSON.stringify([entry('k1', 120)]) }, MIGRATIONS.filter(step => step.version <= 2));
+  const before = { library: await readLibrary(db), rostered: await db.all('SELECT * FROM rostered'), draft: await db.all('SELECT json FROM draft') };
+  expect(await db.all("SELECT name FROM sqlite_master WHERE name = 'draft_runs'")).toEqual([]);
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 2, to: SCHEMA_VERSION });
+  expect({ library: await readLibrary(db), rostered: await db.all('SELECT * FROM rostered'), draft: await db.all('SELECT json FROM draft') }).toEqual(before);
+  expect(before.rostered).toHaveLength(2);
+  expect(await db.all('SELECT * FROM draft_runs')).toEqual([]);
+ });
+
  it('leaves the database at the last good version when a migration fails', async () => {
   const failing: Migration[] = [...MIGRATIONS, {
    version: SCHEMA_VERSION + 1,

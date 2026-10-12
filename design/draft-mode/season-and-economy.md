@@ -30,7 +30,7 @@ The **opening decree is revealed before the initial draft**, along with franchis
 
 **Trade shape (decided):** a trade moves up to three cards each way, uneven counts allowed. The player proposes to any AI club, and AI clubs send the player offers, such as an over-cap club trying to move a gem. AI clubs do not trade with each other. An AI club accepts an offer that improves it by its own roster needs and cap room, rejects it, or makes one counteroffer; each club takes a limited number of offers per window. Because cleanup can always repair a roster, a trade checks only ownership and cooldowns; legality is enforced at submission. In the opening window, cut cards go to a waiver pool that clubs may claim from until submission; unclaimed cards return to the unowned pool and never resurface as cleanup.
 
-**Proposed details, to confirm:** three offers per AI club per window; at most one unsolicited AI offer per club per window; waiver claim priority to the club with the lowest drafted value; an opening trade's cooldown runs two chapters from game 0, so the card is tradeable again after game 54.
+**Confirmed details:** three offers per AI club per window; at most one unsolicited AI offer per club per window; waiver claim priority to the club with the lowest drafted value; an opening trade's cooldown runs two chapters from game 0, so the card is tradeable again after game 54.
 
 Open transaction details include transaction ordering within the window and chapter-checkpoint waiver timing. Release and claim operations must preserve the player's existing protection deadline.
 

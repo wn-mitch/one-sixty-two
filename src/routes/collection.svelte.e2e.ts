@@ -30,7 +30,7 @@ test('a saved season fills the collection with stickers that can be hidden and m
  await page.goto('/collection');
  const grid = page.getByRole('list', { name: 'Collected cards' });
  await expect(grid.getByRole('button')).toHaveCount(2);
- await expect(page.getByText(/2\s+cards · 6\s+stickers/)).toBeVisible();
+ await expect(page.getByText(/2\s+cards · 2\s+of [\d,]+ player-seasons, <0\.01% · 6\s+stickers/)).toBeVisible();
  const tile = grid.getByRole('button', { name: new RegExp(hitterLabel) });
  // The card face shows the highest tier of each family: 120 wins, MVP, 60 HR, 130 RBI, .400 OBP.
  const faceFamilies = () => tile.locator('.stickers [data-family]').evaluateAll(nodes => nodes.map(node => `${node.getAttribute('data-family')}:${node.textContent}`));
