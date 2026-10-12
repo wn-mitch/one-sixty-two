@@ -52,7 +52,7 @@ function showcaseCards(): ShowcaseCard[] {
  return Array.from({ length: 32 }, (_, index) => {
   const value = profile(`showcase-${index}`, 1950 + Math.floor(index / 4) * 10);
   const slot = value.eligibleSlots[0];
-  if (!slot) throw new Error('Showcase fixture requires an eligible slot');
+  if (!slot || slot === 'BP') throw new Error('Showcase fixture requires a draftable slot');
   return { profile: value, slot };
  });
 }

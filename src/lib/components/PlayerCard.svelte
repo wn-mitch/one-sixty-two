@@ -68,7 +68,9 @@
 		if (!unique.has(profile.seasonId)) unique.set(profile.seasonId, profile);
 		return [...unique.values()].sort((left, right) => left.year - right.year || compareId(left.seasonId, right.seasonId));
 	});
-	const available = $derived(legalSlots ? profile.eligibleSlots.filter(slot => legalSlots.includes(slot)) : []);
+	/** Draftable slots this season qualifies for; a collected team bullpen's BP is not one. */
+	const eligible = $derived(profile.eligibleSlots.filter((slot): slot is Slot => slot !== 'BP'));
+	const available = $derived(legalSlots ? eligible.filter(slot => legalSlots.includes(slot)) : []);
 	const card = $derived(createCardViewModel({
 		profile,
 		slot: assignedSlot ?? null,
@@ -167,7 +169,7 @@
 					<span class="fixed-season"><span class="sr-only">Exact season</span><strong>{profile.year}</strong></span>
 				{/if}
 				<span class="placement-list" aria-label={`Preview placement for ${profile.displayName} ${profile.year}`}>
-					{#each profile.eligibleSlots as slot}
+					{#each eligible as slot}
 						{@const open = available.includes(slot)}
 						<button
 							type="button"
@@ -211,7 +213,7 @@
 				<div class="qualification" aria-label="Season qualifications and availability">
 					<div role="group" aria-label="Qualifies for">
 						<span class="qualification-label">Qualifies for</span>
-						<span class="slot-list">{#each profile.eligibleSlots as slot}<span class:available-slot={legalSlots?.includes(slot)} class:assigned-slot={assignedSlot === slot}>{slot}</span>{/each}</span>
+						<span class="slot-list">{#each eligible as slot}<span class:available-slot={legalSlots?.includes(slot)} class:assigned-slot={assignedSlot === slot}>{slot}</span>{/each}</span>
 					</div>
 					{#if legalSlots !== undefined}
 						<div role="group" aria-label="Available now"><span class="qualification-label">Available now</span><strong>{available.length ? available.join(' · ') : 'None'}</strong></div>

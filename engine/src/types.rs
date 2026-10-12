@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub const POSITIONS: [&str; 8] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
-pub const SLOTS: [&str; 14] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "SP1", "SP2", "SP3", "CL", "BP"];
+pub const SLOTS: [&str; 16] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "SP1", "SP2", "SP3", "CL", "RP1", "RP2", "RP3"];
 pub const MODEL_VERSION: &str = "contact-v1";
 pub const RULES_VERSION: &str = "classic-v2";
 
@@ -154,6 +154,9 @@ pub struct Opponent {
     pub hitters: Vec<Profile>,
     pub starters: Vec<Profile>,
     pub closer: Profile,
+    /// Named relievers in leverage order: the 8th, the 7th, then middle relief.
+    pub relievers: Vec<Profile>,
+    /// The remainder arm: the rest of the club's real bullpen, pooled.
     pub bullpen: Profile,
 }
 
@@ -165,6 +168,8 @@ pub struct SimulationData {
     pub valuation_version: String,
     pub opponents: Vec<Opponent>,
     pub stadiums: Vec<StadiumConfig>,
+    /// The drafted club's remainder arm, the same for every roster.
+    pub bullpen: Profile,
     #[serde(flatten)]
     pub environment: DefensiveEnvironment,
 }
@@ -276,6 +281,9 @@ pub struct BatterLine {
 pub enum PitcherRole {
     Starter,
     Closer,
+    /// A named reliever: the 8th, the 7th or middle relief.
+    Reliever,
+    /// The remainder arm for relief innings no available named pitcher takes.
     Support,
 }
 

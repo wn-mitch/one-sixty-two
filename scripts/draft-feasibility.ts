@@ -53,7 +53,7 @@ function salarySummary(cards: Awaited<ReturnType<typeof loadDraftData>>['cards']
 		cards: salaries.length, min: Math.min(...salaries), p50: quantile(salaries, 0.5), p90: quantile(salaries, 0.9), max: Math.max(...salaries),
 		atMinimum: salaries.filter(salary => salary === Math.min(...salaries)).length
 	}]));
-	const commonsBySlot = Object.fromEntries(([...HITTER_SLOTS, 'SP1', 'CL', 'BP'] as Slot[]).map(slot => [slot, cards.filter(card => isCommon(card) && card.eligibleSlots.includes(slot)).length]));
+	const commonsBySlot = Object.fromEntries(([...HITTER_SLOTS, 'SP1', 'CL'] as Slot[]).map(slot => [slot, cards.filter(card => isCommon(card) && card.eligibleSlots.includes(slot)).length]));
 	return { byRole, commonsBySlot };
 }
 
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
 		const counts = runs.map(run => run.cube.finishes[finish] ?? 0);
 		return [finish, { mean: round(counts.reduce((sum, value) => sum + value, 0) / counts.length), min: Math.min(...counts), max: Math.max(...counts) }] as const;
 	});
-	const roles = ['hitter', 'SP', 'CL', 'BP'].map(role => [role, round(runs.reduce((sum, run) => sum + (run.cube.roles[role] ?? 0), 0) / runs.length)] as const);
+	const roles = ['hitter', 'SP', 'CL'].map(role => [role, round(runs.reduce((sum, run) => sum + (run.cube.roles[role] ?? 0), 0) / runs.length)] as const);
 	const timings = runs.map(run => run.ms);
 	const runFailures = runs.filter(run => run.failures.length);
 	const legalSeats = seats.filter(seat => seat.legal);

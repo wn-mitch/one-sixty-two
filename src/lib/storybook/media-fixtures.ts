@@ -1,6 +1,7 @@
 import { setMediaLoader } from '../media/__mocks__/client.ts';
 import { loadMedia } from '#lib/media/client.ts';
 import type { AtmospherePhoto, MediaAsset, MediaManifest, PlayerMedia, TeamMedia } from '#lib/media/types.ts';
+import { SLOTS } from '#lib/game/types.ts';
 
 export type MediaFixtureMode = 'ready' | 'missing' | 'loading' | 'unavailable' | 'brokenImage' | 'runtime';
 
@@ -12,7 +13,7 @@ export interface MediaLoaderController {
 }
 const FIXTURE_VERSION = 'f'.repeat(64);
 const BROKEN_IMAGE_URL = 'data:image/svg+xml;base64,not-valid-base64!';
-const rosterIds = Array.from({ length: 14 }, (_, index) => `roster-${index}`);
+const rosterIds = Array.from({ length: SLOTS.length }, (_, index) => `roster-${index}`);
 const candidateIds = Array.from({ length: 24 }, (_, index) => `candidate-${String(index + 1).padStart(2, '0')}`);
 const playerIds = [...rosterIds, ...candidateIds];
 const photoIds: Record<string, true> = Object.fromEntries([...rosterIds, ...candidateIds.slice(0, 8)].map(id => [id, true]));
@@ -75,7 +76,7 @@ function players(withPhotos: boolean): Record<string, PlayerMedia> {
 }
 
 function teams(withLogo: boolean): Record<string, TeamMedia> {
-	return Object.fromEntries(Array.from({ length: 14 }, (_, index) => {
+	return Object.fromEntries(Array.from({ length: SLOTS.length }, (_, index) => {
 		const id = `F${index}`;
 		return [id, {
 			name: `Illustrative Club ${id}`,

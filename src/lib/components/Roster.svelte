@@ -368,6 +368,8 @@
   transform: translateX(-50%);
   transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
  }
+ /* Seven staff cards sit 58 units apart, so their slots stay narrower than the spacing. */
+ .staff-slot { --roster-slot-width: calc(100cqi * 57 / 424); }
  .field-slot:hover:not(:disabled), .staff-slot:hover:not(:disabled) { background: transparent; }
  .field-slot:active:not(:disabled), .staff-slot:active:not(:disabled) { transform: translate(-50%, 1px); }
  .field-slot:focus-visible, .staff-slot:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }

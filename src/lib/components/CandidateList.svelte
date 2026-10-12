@@ -2,7 +2,7 @@
  import { tick, untrack } from 'svelte';
  import { availableCandidates, legalSlots } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
- import type { Draft, Manifest, Profile, Slot } from '../game/types.ts';
+ import type { Draft, Manifest, Profile, RosterSlot, Slot } from '../game/types.ts';
  import { rankingForSeason } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import { compareEntries, isHitter, rankGroups, warValue } from './candidate-ranking.ts';
@@ -86,7 +86,7 @@
   return candidate && viableSeasonIds.has(seasonId) ? legalSlots(draft, candidate, manifest) : [];
  }
  const qualificationSlots = $derived.by(() => {
-  const found = new Set<Slot>();
+  const found = new Set<RosterSlot>();
   for (const profile of profiles) {
    if (!candidateIndex.has(profile.seasonId)) continue;
    for (const slot of profile.eligibleSlots) found.add(slot);
@@ -134,7 +134,7 @@
  const pageCount = $derived(Math.max(1, Math.ceil(groups.length / 20)));
  const currentPage = $derived(Math.min(page, pageCount - 1));
  const pagedGroups = $derived(groups.slice(currentPage * 20, (currentPage + 1) * 20));
- const sectionKinds: RankingKind[] = ['Hitters', 'Pitchers', 'Bullpens'];
+ const sectionKinds: RankingKind[] = ['Hitters', 'Pitchers'];
  const sections = $derived(sectionKinds.map(kind => ({ kind, groups: pagedGroups.filter(group => group.kind === kind) })));
  const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll?.franchiseId ?? ''}:${draft.currentRoll?.decade ?? ''}`);
 
@@ -149,7 +149,6 @@
   return (wide ? group.entries.find(entry => viableSeasonIds.has(entry.profile.seasonId)) : undefined) ?? group.entries[0];
  }
  function cardRankingKind(profile: Profile): RankingKind {
-  if (profile.eligibleSlots.includes('BP')) return 'Bullpens';
   return profile.eligibleSlots.some(isHitter) ? 'Hitters' : 'Pitchers';
  }
  function profileMatchesFilter(profile: Profile, option: FilterSlot): boolean {
@@ -199,7 +198,6 @@
   closeFlipIfOutside(event.target);
  }
  function sectionDescription(kind: RankingKind): string {
-  if (kind === 'Bullpens') return 'Lowest pooled ERA first, then workload';
   if (sort === 'metrics') return kind === 'Hitters' ? 'Displayed season OPS, highest first' : 'Displayed season ERA, lowest first';
   if (rankings) return `Displayed season ${kind === 'Hitters' ? 'batting' : 'pitching'} WAR/162, highest first`;
   return 'WAR order unavailable · stable ID order';

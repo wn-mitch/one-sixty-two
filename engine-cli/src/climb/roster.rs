@@ -1,4 +1,4 @@
-//! A Classic roster as search state: fourteen slot picks, a home stadium, and both orders.
+//! A Classic roster as search state: sixteen slot picks, a home stadium, and both orders.
 use super::data::{Dataset, HITTERS, MODEL_VERSION, RULES_VERSION, SLOTS, STARTERS};
 use engine::random::Mulberry32;
 use engine::types::{ParkRef, RosterPick, SeasonRequest};
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Roster {
     /// Candidate index per slot, in `SLOTS` order.
-    pub picks: [usize; 14],
+    pub picks: [usize; 16],
     pub stadium: usize,
     /// Hitter slot index at each batting-order spot.
     pub batting: [usize; HITTERS],
@@ -30,7 +30,7 @@ pub struct RosterIds {
 pub struct SlotPick { pub slot: String, pub season_id: String, pub display_name: String, pub franchise_id: String }
 
 impl Roster {
-    /// Fourteen distinct franchises and players, each eligible at its slot, with valid orders.
+    /// Sixteen distinct franchises and players, each eligible at its slot, with valid orders.
     pub fn legal(&self, data: &Dataset) -> bool {
         for (slot, &candidate) in self.picks.iter().enumerate() {
             if data.candidates[candidate].value[slot].is_none() { return false; }
@@ -70,7 +70,7 @@ impl Roster {
 
     pub fn from_ids(ids: &RosterIds, data: &Dataset) -> Result<Self, String> {
         let slot_of = |name: &str| SLOTS.iter().position(|slot| *slot == name).ok_or_else(|| format!("Unknown slot {name}"));
-        let mut picks = [usize::MAX; 14];
+        let mut picks = [usize::MAX; 16];
         for pick in &ids.picks {
             let slot = slot_of(&pick.slot)?;
             picks[slot] = data.candidates.iter().position(|candidate| candidate.profile.season_id == pick.season_id).ok_or_else(|| format!("{} is not in this dataset", pick.season_id))?;
@@ -85,13 +85,13 @@ impl Roster {
         Ok(roster)
     }
 
-    /// Linear value of the fourteen picks at their slots.
+    /// Linear value of the sixteen picks at their slots.
     pub fn linear_value(&self, data: &Dataset) -> f64 {
         self.picks.iter().enumerate().fold(0.0, |sum, (slot, &candidate)| sum + data.candidates[candidate].value[slot].unwrap_or(f64::NEG_INFINITY))
     }
 }
 
-/// Maximum-weight assignment of 14 slots to distinct franchises (Hungarian method on costs).
+/// Maximum-weight assignment of 16 slots to distinct franchises (Hungarian method on costs).
 fn assign(weights: &[Vec<f64>]) -> Vec<usize> {
     let rows = weights.len();
     let cols = weights[0].len();
@@ -144,7 +144,7 @@ pub fn linear_start(data: &Dataset, stadium: usize) -> Result<Roster, String> {
         best(slot, franchise, &[]).map_or(MISSING, |candidate| data.candidates[candidate].value[slot].unwrap())
     }).collect()).collect();
     let columns = assign(&weights);
-    let mut picks = [0usize; 14];
+    let mut picks = [0usize; 16];
     let mut players: Vec<&str> = Vec::new();
     // Highest-value slots claim a shared player first; the rest take their franchise's next best.
     let mut order: Vec<usize> = (0..SLOTS.len()).collect();

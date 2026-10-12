@@ -42,7 +42,7 @@ fn bench(arguments: &[String]) -> Result<(), String> {
     let time = |runs: usize, work: &mut dyn FnMut()| median((0..runs).map(|_| { let start = std::time::Instant::now(); work(); start.elapsed().as_secs_f64() * 1e3 }).collect());
     let prepare = time(3, &mut || { Engine::from_json(&json).expect("engine"); });
     let engine = Engine::from_json(&json)?;
-    let challenge = engine::season::draft_team(&request, "challenge", "Your team")?;
+    let challenge = engine::season::draft_team(&request, &engine.data.bullpen, "challenge", "Your team")?;
     let matchups_ms = time(5, &mut || { engine.season_matchups(&challenge).expect("matchups"); });
     let matchups = engine.season_matchups(&challenge)?;
     let full = time(5, &mut || { engine.simulate_prepared(&request, &challenge, &matchups, engine::SeasonOptions::FULL, &mut |_| {}).expect("season"); });

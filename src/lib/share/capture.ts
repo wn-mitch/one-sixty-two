@@ -1,3 +1,4 @@
+import { SLOTS } from '../game/types.ts';
 import { SHARE_DIMENSIONS, type ShareFormat } from './types.ts';
 
 export interface ShareCaptureOptions {
@@ -91,7 +92,7 @@ function assertDimensions(root: HTMLElement, format: ShareFormat): void {
 
 function fittingIsSettled(root: HTMLElement): boolean {
 	// Every roster card is drawn once on the field.
-	const expectedCards = 14;
+	const expectedCards = SLOTS.length;
 	const captureCards = root.querySelectorAll<HTMLElement>('[data-card][data-capture=\"true\"]');
 	const fittedRoots = [...root.querySelectorAll<HTMLElement>('[data-card]')];
 	return captureCards.length === expectedCards && fittedRoots.length >= captureCards.length &&

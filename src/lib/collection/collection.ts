@@ -1,5 +1,5 @@
 import type { LibraryEntry, SavedBatter, SavedPitcher } from '../game/library.ts';
-import type { Slot } from '../game/types.ts';
+import type { RosterSlot } from '../game/types.ts';
 import { json, parseJson, type Db, type Row, type Statement } from '../storage/sql.ts';
 import { LOYALTY_STICKERS, seasonStickers, STICKER_BY_KIND, STICKER_SPOTS, type PlacedSticker, type StickerFamily } from './stickers.ts';
 
@@ -68,7 +68,7 @@ export async function setStickerHidden(db: Db, seasonId: string, family: Sticker
 export interface CollectedCard {
  seasonId: string;
  label: string;
- slots: Slot[];
+ slots: RosterSlot[];
  times: number;
  firstAt: string;
  lastAt: string;
@@ -88,7 +88,7 @@ export async function loadCollection(db: Db): Promise<CollectedCard[]> {
   const line = parseJson<SavedBatter | SavedPitcher>(row.line_json) ?? null;
   if (!card) {
    cards.set(row.season_id, {
-    seasonId: row.season_id, label: row.label, slots: [row.slot as Slot], times: 1, firstAt: row.rostered_at, lastAt: row.rostered_at,
+    seasonId: row.season_id, label: row.label, slots: [row.slot as RosterSlot], times: 1, firstAt: row.rostered_at, lastAt: row.rostered_at,
     best: { wins: row.wins, losses: row.losses, line }, stickers: stickers.get(row.season_id) ?? []
    });
    continue;
@@ -96,7 +96,7 @@ export async function loadCollection(db: Db): Promise<CollectedCard[]> {
   card.times++;
   card.lastAt = row.rostered_at;
   card.label = row.label;
-  if (!card.slots.includes(row.slot as Slot)) card.slots.push(row.slot as Slot);
+  if (!card.slots.includes(row.slot as RosterSlot)) card.slots.push(row.slot as RosterSlot);
   if (row.wins > card.best.wins) card.best = { wins: row.wins, losses: row.losses, line };
  }
  return [...cards.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt) || a.seasonId.localeCompare(b.seasonId));

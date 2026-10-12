@@ -4,12 +4,12 @@ import type { RosterRow } from './legality.ts';
 import { DRAFT_RULES, type DraftRules } from './rules.ts';
 import type { DraftCard, DraftSlot, Ledger } from './types.ts';
 
-/** One cleanup stack per fielding position, DH, starter, closer and bullpen. */
-export const STACK_ROLES = [...POSITIONS, 'DH', 'SP', 'CL', 'BP'] as const;
+/** One cleanup stack per fielding position, DH, starter and reliever. */
+export const STACK_ROLES = [...POSITIONS, 'DH', 'SP', 'CL'] as const;
 export type StackRole = typeof STACK_ROLES[number];
 
-/** The stack that fills an active row; setup relievers come from the closer stack, and reserves may take from any stack. */
-export const stackFor = (row: DraftSlot): StackRole => row === 'SP1' || row === 'SP2' || row === 'SP3' ? 'SP' : row === 'SU1' || row === 'SU2' ? 'CL' : row;
+/** The stack that fills an active row; named relievers come from the closer stack, and reserves may take from any stack. */
+export const stackFor = (row: DraftSlot): StackRole => row === 'SP1' || row === 'SP2' || row === 'SP3' ? 'SP' : row.startsWith('RP') ? 'CL' : row as StackRole;
 const stackSlot = (role: StackRole): Slot => role === 'SP' ? 'SP1' : role;
 
 export const isCommon = (card: DraftCard, rules: DraftRules = DRAFT_RULES): boolean => card.finish === 'base' && card.salary <= rules.commonSalaryMax;
@@ -17,8 +17,7 @@ export const isCommon = (card: DraftCard, rules: DraftRules = DRAFT_RULES): bool
 /**
  * Each seat's cleanup stacks: for every role, an unlimited face-down stack of real commons in a
  * seeded order, with only the top card visible. A card is never on top once any club has held it
- * in this run (drafted, cut, or taken as cleanup), or while its bullpen or a bullpen member is in
- * the run. Seats share the universe but not stacks, so another club's choice changes a seat's top
+ * in this run (drafted, cut, or taken as cleanup). Seats share the universe but not stacks, so another club's choice changes a seat's top
  * card only in the rare case that both stacks showed the same card.
  */
 export interface CleanupStacks {
@@ -32,7 +31,7 @@ export function createCleanupStacks(seed: number, ledger: Ledger, universe: read
  const eligible = new Map(STACK_ROLES.map(role => [role, commons.filter(card => card.eligibleSlots.includes(stackSlot(role)))]));
  const tops = new Map<string, DraftCard>();
  const streams = new Map<string, () => number>();
- const free = (card: DraftCard): boolean => !ledger.instances.has(card.seasonId) && !card.conflicts.some(conflict => ledger.instances.has(conflict));
+ const free = (card: DraftCard): boolean => !ledger.instances.has(card.seasonId);
  return {
   empty: STACK_ROLES.filter(role => eligible.get(role)!.length === 0),
   peek(seat, role) {

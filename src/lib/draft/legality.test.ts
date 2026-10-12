@@ -6,7 +6,7 @@ import { baselineBudget, DRAFT_SLOTS, effectiveCap, validateBudget } from './rul
 import { testCard, TEST_ROLES } from './test-fixtures.ts';
 import type { DraftCard, DraftSlot, PayrollBudget } from './types.ts';
 
-const roleOf = (slot: DraftSlot): string => slot.startsWith('SP') ? 'SP' : slot.startsWith('SU') ? 'CL' : slot === 'DH' ? 'C' : slot;
+const roleOf = (slot: DraftSlot): string => slot.startsWith('SP') ? 'SP' : slot.startsWith('RP') ? 'CL' : slot === 'DH' ? 'C' : slot;
 
 /** One card per active slot at `salary`, plus two reserves. */
 function rosterCards(prefix: string, salary: number): DraftCard[] {
@@ -31,7 +31,7 @@ describe('roster legality', () => {
  it('accepts a full owned roster within the cap and counts reserves in payroll', () => {
   const { ledger, submission } = ownedRoster(rosterCards('a', 50));
   const report = checkSubmission(submission, ledger, baselineBudget());
-  expect(report).toMatchObject({ legal: true, payroll: 18 * 50, effectiveCap: 1500, capRoom: 600, failures: [] });
+  expect(report).toMatchObject({ legal: true, payroll: 20 * 50, effectiveCap: 1500, capRoom: 500, failures: [] });
  });
 
  it('names each defect instead of relaxing the roster', () => {
@@ -48,10 +48,10 @@ describe('roster legality', () => {
  });
 
  it('applies franchise adjustments, obligations and ceilings to the cap, never cash', () => {
-  const { ledger, submission } = ownedRoster(rosterCards('c', 75));
+  const { ledger, submission } = ownedRoster(rosterCards('c', 70));
   const tight: PayrollBudget = { nominalCap: 1500, franchiseAdjustment: 100, obligations: 300, ceiling: 1400 };
   expect(effectiveCap(tight)).toBe(1300);
-  expect(checkSubmission(submission, ledger, tight).failures).toEqual([{ code: 'over-cap', payroll: 1350, effectiveCap: 1300, excess: 50 }]);
+  expect(checkSubmission(submission, ledger, tight).failures).toEqual([{ code: 'over-cap', payroll: 1400, effectiveCap: 1300, excess: 100 }]);
   expect(checkSubmission(submission, ledger, { ...tight, ceiling: 1450, obligations: 0 }).legal).toBe(true);
   const account = { budget: tight, cash: 1_000_000 };
   expect(checkSubmission(submission, ledger, account.budget)).toEqual(checkSubmission(submission, ledger, tight));
@@ -59,18 +59,18 @@ describe('roster legality', () => {
  });
 
  it('arranges active slots before reserves and leaves the rest as surplus', () => {
-  const cards = [...rosterCards('d', 5), testCard('extra1:2000', TEST_ROLES.BP, 5), testCard('extra2:2000', TEST_ROLES.CL, 5)];
+  const cards = [...rosterCards('d', 5), testCard('extra1:2000', TEST_ROLES.SP, 5), testCard('extra2:2000', TEST_ROLES.CL, 5)];
   const arrangement = arrangeRoster(cards);
-  expect(Object.keys(arrangement.active)).toHaveLength(16);
+  expect(Object.keys(arrangement.active)).toHaveLength(18);
   expect(arrangement.reserves).toHaveLength(2);
   expect(arrangement.surplus).toHaveLength(2);
-  expect(arrangeRoster(cards.filter(card => !card.eligibleSlots.includes('CL'))).open).toEqual(['CL', 'SU1', 'SU2']);
+  expect(arrangeRoster(cards.filter(card => !card.eligibleSlots.includes('CL'))).open).toEqual(['CL', 'RP1', 'RP2', 'RP3', 'RP4', 'RP5']);
  });
 
- it('fills setup slots only with cards that could close', () => {
+ it('fills named relief slots only with cards that could close', () => {
   const { ledger, submission } = ownedRoster(rosterCards('s', 5));
   const starter = submission.active.SP1!;
-  const report = checkSubmission({ ...submission, active: { ...submission.active, SU1: starter, SP1: submission.active.SU1 } }, ledger, baselineBudget());
-  expect(report.failures).toEqual([{ code: 'ineligible-role', slot: 'SP1', cardId: submission.active.SU1 }, { code: 'ineligible-role', slot: 'SU1', cardId: starter }]);
+  const report = checkSubmission({ ...submission, active: { ...submission.active, RP4: starter, SP1: submission.active.RP4 } }, ledger, baselineBudget());
+  expect(report.failures).toEqual([{ code: 'ineligible-role', slot: 'RP4', cardId: starter }, { code: 'ineligible-role', slot: 'SP1', cardId: submission.active.RP4 }]);
  });
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
- import type { Draft, HitterSlot, Manifest, Profile } from '../game/types.ts';
+ import { RELIEF_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile } from '../game/types.ts';
  import { draftRules } from '../game/rules.ts';
  import Card from '../cards/Card.svelte';
  import CardReview from '../cards/CardReview.svelte';
@@ -53,8 +53,13 @@
  const bySeasonPick = $derived(new Map(draft.picks.map(pick => [pick.seasonId, pick])));
  const closerPick = $derived(draft.picks.find(pick => pick.slot === 'CL'));
  const closer = $derived(closerPick ? bySeason.get(closerPick.seasonId) : undefined);
- const bullpenPick = $derived(draft.picks.find(pick => pick.slot === 'BP'));
- const bullpen = $derived(bullpenPick ? bySeason.get(bullpenPick.seasonId) : undefined);
+ /** Named relievers in leverage order, with the job each one does. */
+ const RELIEF_ROLES: Record<typeof RELIEF_SLOTS[number], string> = { RP1: 'Eighth inning', RP2: 'Seventh inning', RP3: 'Middle relief' };
+ const relievers = $derived(RELIEF_SLOTS.flatMap(slot => {
+  const pick = draft.picks.find(item => item.slot === slot);
+  const profile = pick ? bySeason.get(pick.seasonId) : undefined;
+  return profile ? [{ slot, profile }] : [];
+ }));
  const complete = $derived(draft.picks.length === draftRules(draft.schemaVersion).slots.length && draft.battingOrder.length === 9 && draft.starterOrder.length === 3 && draft.picks.every(pick => bySeason.has(pick.seasonId)));
  const cardViews = $derived(new Map(draft.picks.flatMap(pick => {
   const profile = bySeason.get(pick.seasonId);
@@ -324,9 +329,9 @@
     {:else}
      <li><span class="order-number fixed-label">CL</span><span class="muted identity">Loading selected closer…</span></li>
     {/if}
-    {#if bullpen}{@render fixedPlayer(bullpen, 'BP', 'Bullpen remainder')}{/if}
+    {#each relievers as { slot, profile } (slot)}{@render fixedPlayer(profile, slot, RELIEF_ROLES[slot])}{/each}
    </ul>
-   <p class="workload muted">The closer pitches the ninth when tied or ahead by 1–3, one inning at a time, with an innings cap and rest after two straight games. The pooled bullpen covers every other relief inning.</p>
+   <p class="workload muted">With a lead of 0–3 runs the closer takes the ninth, RP1 the eighth and RP2 the seventh; RP3 takes the first other relief inning. Each pitches one inning at most, within an innings cap and with rest after two straight days. A league-average relief pool covers every other inning.</p>
   </section>
  </div>
  {#if inspectedCard}
@@ -370,11 +375,7 @@
    <span class="season">{profile.year}</span>
   </div>
   <div class="meta">
-   {#if profile.bullpen}
-    <span class="muted pool">Relief pool · {profile.bullpen.members.length} pitchers</span>
-   {:else}
-    {@render stats(profile, 'closer')}
-   {/if}
+   {@render stats(profile, 'closer')}
   </div>
  </li>
 {/snippet}
@@ -461,7 +462,6 @@
  .stat { display: grid; justify-items: end; min-width: 2.75rem; line-height: 1.2; }
  .stat .value { font-size: var(--text-sm); font-weight: 650; }
  .stat .label { color: var(--muted); font-size: var(--text-xs); }
- .pool { font-size: var(--text-xs); }
 
  .fixed-player { grid-template-areas: 'num card identity identity' 'num card meta meta'; }
  .card-trigger { display: block; width: 56px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }

@@ -12,6 +12,7 @@
 	import { seasonStickers, STICKER_BY_KIND, STICKER_SPOTS, type StickerFamily } from '#lib/collection/stickers.ts';
 	import { STORAGE_NOTICE } from '#lib/game/library.ts';
 	import type { Manifest } from '#lib/game/types.ts';
+	import { exampleBullpen } from './fixtures.ts';
 	import { getExampleSeries } from './series-fixtures.ts';
 	import StoryFrame from './StoryFrame.svelte';
 
@@ -54,9 +55,18 @@
 						});
 					}
 				}
+				// A team bullpen collected before named relievers: shown in the binder, not counted toward completion.
+				const relief = [...example.libraryProfiles.values()].flat().find(profile => profile.eligibleSlots.includes('CL'))!;
+				const bullpen = exampleBullpen(relief);
+				const first = example.library.at(-1)!;
+				byCard.set(bullpen.seasonId, {
+					seasonId: bullpen.seasonId, label: bullpen.displayName, slots: ['BP'], times: 1, firstAt: first.savedAt, lastAt: first.savedAt,
+					best: { wins: first.record.wins, losses: first.record.losses, line: null }, stickers: []
+				});
 				saved = [...byCard.values()];
-				catalog = { candidates: example.manifest.candidates, franchises: example.manifest.franchises };
-				const profiles = [...example.libraryProfiles.values()].flat();
+				const bullpenCandidate = { seasonId: bullpen.seasonId, playerId: bullpen.playerId, franchiseId: bullpen.franchiseId, decade: Math.floor(bullpen.year / 10) * 10, eligibleSlots: bullpen.eligibleSlots };
+				catalog = { candidates: [...example.manifest.candidates, bullpenCandidate], franchises: example.manifest.franchises };
+				const profiles = [...[...example.libraryProfiles.values()].flat(), bullpen];
 				views = new Map(profiles.flatMap(profile => {
 					const card = byCard.get(profile.seasonId);
 					return card ? [[profile.seasonId, createCardViewModel({ profile, slot: card.slots[0], manifest: example.manifest })] as const] : [];

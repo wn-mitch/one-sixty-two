@@ -24,9 +24,9 @@
 	import Card from '#lib/cards/Card.svelte';
 	import CardReview from '#lib/cards/CardReview.svelte';
 	import { createCardViewModel, type CardViewModel } from '#lib/cards/view-model.ts';
-	import type { Profile, Slot } from '#lib/game/types.ts';
+	import type { Profile, RosterSlot } from '#lib/game/types.ts';
 	import { createExampleMedia } from './media-fixtures.ts';
-	import { createExampleFixtures, getExampleFinishRanking, type ExampleCardRole } from './fixtures.ts';
+	import { createExampleFixtures, exampleBullpen, getExampleFinishRanking, type ExampleCardRole } from './fixtures.ts';
 	import StoryFrame from './StoryFrame.svelte';
 
 	let {
@@ -77,7 +77,7 @@
 		hitter: profileForSlot('2B'),
 		starter: profileForSlot('SP1'),
 		closer: profileForSlot('CL'),
-		bullpen: profileForSlot('BP')
+		bullpen: exampleBullpen(profileForSlot('CL'))
 	};
 	let instance = $state(0);
 	let flipKey = $state(0);
@@ -155,7 +155,7 @@
 		};
 	}
 
-	function slotFor(nextRole: CardWorkshopRole): Slot {
+	function slotFor(nextRole: CardWorkshopRole): RosterSlot {
 		if (nextRole === 'starter') return 'SP1';
 		if (nextRole === 'closer') return 'CL';
 		if (nextRole === 'bullpen') return 'BP';
@@ -171,7 +171,7 @@
 		return { year, seasonId: `storybook-card-${nextRole}:${year}:AL:T` };
 	}
 
-	function profileForSlot(slot: Slot): Profile {
+	function profileForSlot(slot: RosterSlot): Profile {
 		const pick = fixtures.completeDraft.picks.find(pick => pick.slot === slot);
 		const profile = fixtures.profiles.find(profile => profile.seasonId === pick?.seasonId);
 		if (!profile) throw new Error(`Example fixture is missing ${slot}`);

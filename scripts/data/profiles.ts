@@ -1,4 +1,4 @@
-import { compareId, HITTER_SLOTS, POSITIONS, type Franchise, type Position, type Profile, type Slot } from '../../src/lib/game/types.ts';
+import { compareId, HITTER_SLOTS, POSITIONS, RELIEF_SLOTS, type Franchise, type Position, type Profile, type Slot } from '../../src/lib/game/types.ts';
 import { contactRecord } from '../../src/lib/sim/contact-profile.ts';
 import { battingEvents, pitchingEvents, prepareRates } from '../../src/lib/sim/rates.ts';
 import { buildBaselines, type Baselines } from './baselines.ts';
@@ -92,7 +92,7 @@ export function compileProfiles(tables: Tables): CompiledProfiles {
    for (const field of pitcher.group.missing) profile.estimatedFields.push(`pitching.${field}.estimated`);
    const counts = pitcher.counts;
    if (counts.GS >= 10 && counts.IPouts >= 180 && counts.GS / counts.G >= 0.6) profile.eligibleSlots.push('SP1', 'SP2', 'SP3');
-   if (counts.IPouts >= 60 && counts.G > 0 && counts.GS / counts.G <= 0.2) profile.eligibleSlots.push('CL');
+   if (counts.IPouts >= 60 && counts.G > 0 && counts.GS / counts.G <= 0.2) profile.eligibleSlots.push('CL', ...RELIEF_SLOTS);
   }
   profile.contact = contactRecord(profile);
   profiles.push(profile);

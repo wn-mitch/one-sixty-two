@@ -225,10 +225,10 @@ test.describe('Draft board browsing', () => {
 		await search.click();
 		await expect(page.locator('.field-footer')).toHaveCount(0);
 		await expect(search).toBeFocused();
-		await expect(page.locator('.picked-count')).toHaveText('0 / 14');
+		await expect(page.locator('.picked-count')).toHaveText('0 / 16');
 		await preview.click();
 		await confirmation.getByRole('button', { name: 'Draft at 2B', exact: true }).click();
-		await expect(page.locator('.picked-count')).toHaveText('1 / 14');
+		await expect(page.locator('.picked-count')).toHaveText('1 / 16');
 		await expect(page.locator('.field-footer')).toHaveCount(0);
 	});
 
@@ -368,7 +368,7 @@ test.describe('Draft board field sheet', () => {
 		await select.click();
 		const sheet = page.locator('dialog.draft-sheet[open]');
 		await expect(sheet).toBeVisible();
-		await expect(page.locator('.picked-count')).toHaveText('0 / 14');
+		await expect(page.locator('.picked-count')).toHaveText('0 / 16');
 		await page.keyboard.press('Escape');
 		await expect(sheet).toHaveCount(0);
 		await expect(select).toBeFocused();
@@ -377,7 +377,7 @@ test.describe('Draft board field sheet', () => {
 		await select.click();
 		await expect(sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', '2B');
 		await sheet.getByRole('button', { name: 'Draft at 2B', exact: true }).click();
-		await expect(page.getByRole('button', { name: /Open your field 1 \/ 14/ })).toBeVisible();
+		await expect(page.getByRole('button', { name: /Open your field 1 \/ 16/ })).toBeVisible();
 		await expect(page.locator('.pick-confirmation')).toHaveCount(0);
 	});
 
@@ -399,7 +399,7 @@ test.describe('Draft board field sheet', () => {
 		await expect(sheet).toBeVisible();
 		await expect(confirmation).toHaveAttribute('data-selected-season', selectedSeason ?? '');
 		await expect(confirmation).toHaveAttribute('data-pending-slot', '2B');
-		await expect(page.locator('.picked-count')).toHaveText('0 / 14');
+		await expect(page.locator('.picked-count')).toHaveText('0 / 16');
 
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await expect(page.locator('dialog.draft-sheet[open]')).toHaveCount(0);
@@ -440,7 +440,7 @@ test.describe('Draft board field sheet', () => {
 		await owner.getByRole('button', { name: /^Show text version for / }).click();
 		await owner.getByRole('button', { name: 'Show front', exact: true }).click();
 		await owner.getByRole('tab', { name: 'Field', exact: true }).click();
-		await owner.locator('[data-slot="SP1"]').click();
+		await owner.locator('[data-slot="RP3"]').click();
 		await expect(owner.locator('.card-review.raised-only [data-cardbox]')).toHaveAttribute('data-face', 'front');
 		await owner.locator('.card-review.raised-only').getByRole('button', { name: 'Turn over', exact: true }).click();
 		await owner.getByRole('button', { name: /^Show text version for / }).click();
@@ -450,7 +450,7 @@ test.describe('Draft board field sheet', () => {
 			await expect(owner.locator('.card-review.raised-only').getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
 			await expect(owner.locator('.pick-confirmation')).toHaveAttribute('data-selected-season', selected!);
 			await expect(owner.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', destination!);
-			await expect(page.locator('.picked-count')).toHaveText('6 / 14');
+			await expect(page.locator('.picked-count')).toHaveText('6 / 16');
 			await expect(page.locator('dialog[open]')).toHaveCount(width === 402 ? 1 : 0);
 		}
 		await owner.getByRole('button', { name: 'Show front', exact: true }).click();
@@ -461,7 +461,7 @@ test.describe('Draft board field sheet', () => {
 		await owner.getByRole('tab', { name: 'Field', exact: true }).click();
 		expect(await page.evaluate(() => ['162-zero:v1', '162-zero:settings:v1'].map(key => localStorage.getItem(key)))).toEqual(stored);
 		await owner.getByRole('button', { name: `Draft at ${destination}`, exact: true }).click();
-		await expect(page.getByRole('button', { name: /Open your field 7 \/ 14/ })).toBeVisible();
+		await expect(page.getByRole('button', { name: /Open your field 7 \/ 16/ })).toBeVisible();
 	});
 });
 

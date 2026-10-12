@@ -47,26 +47,13 @@ describe('candidate role ranking', () => {
   expect(groups[0].key).toBe('same-player');
   expect(groups[0].entries.map(item => item.profile.seasonId)).toEqual(['other-season', 'same-season']);
  });
- it('puts bullpen units in their own section ordered by ERA, workload, then season ID without WAR', () => {
-  const lowEra = entry('low-era', ['BP'], 'bullpen:A');
-  lowEra.profile.pitching!.ER = 20;
-  const moreOuts = entry('more-outs', ['BP'], 'bullpen:B');
-  const fewerOuts = entry('fewer-outs', ['BP'], 'bullpen:C');
-  fewerOuts.profile.pitching!.IPouts = 200;
-  fewerOuts.profile.pitching!.ER = 20;
-  const data = rankings({
-   'low-era': { battingWAR162: 99, pitchingWAR162: 99 },
-   'more-outs': { battingWAR162: null, pitchingWAR162: 50 },
-   'fewer-outs': { battingWAR162: null, pitchingWAR162: 60 }
-  });
-  const groups = rankGroups([fewerOuts, moreOuts, lowEra], 'war', data);
-  expect(groups.map(group => `${group.kind}:${group.playerId}`)).toEqual([
-   'Bullpens:bullpen:A',
-   'Bullpens:bullpen:B',
-   'Bullpens:bullpen:C'
-  ]);
-  expect(warValue(lowEra, 'Bullpens', data)).toBeNull();
-  expect(compareEntries(entry('a', ['BP']), entry('z', ['BP']), 'Bullpens', 'war', data)).toBeLessThan(0);
+ it('ranks relievers with the pitchers by pitching WAR', () => {
+  const closer = entry('closer', ['CL', 'RP1', 'RP2', 'RP3'], 'closer');
+  const starter = entry('starter', ['SP1', 'SP2', 'SP3'], 'starter');
+  const data = rankings({ closer: { battingWAR162: null, pitchingWAR162: 3 }, starter: { battingWAR162: null, pitchingWAR162: 2 } });
+  expect(rankGroups([starter, closer], 'war', data).map(group => `${group.kind}:${group.playerId}`)).toEqual(['Pitchers:closer', 'Pitchers:starter']);
+  expect(warValue(closer, 'Pitchers', data)).toBe(3);
+  expect(warValue(closer, 'Hitters', data)).toBeNull();
  });
  it('uses stable identity order without rankings, never an implicit OPS fallback', () => {
   const a = entry('a'), z = entry('z');

@@ -3,8 +3,12 @@ import type { ParkRef, StadiumConfig, StadiumSummary } from '../sim/park-types.t
 
 export const HITTER_SLOTS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const;
 export const STARTER_SLOTS = ['SP1', 'SP2', 'SP3'] as const;
-export const SLOTS = [...HITTER_SLOTS, ...STARTER_SLOTS, 'CL', 'BP'] as const;
+/** Named relievers in leverage order: RP1 takes the 8th, RP2 the 7th, RP3 middle relief. */
+export const RELIEF_SLOTS = ['RP1', 'RP2', 'RP3'] as const;
+export const SLOTS = [...HITTER_SLOTS, ...STARTER_SLOTS, 'CL', ...RELIEF_SLOTS] as const;
 export type Slot = typeof SLOTS[number];
+/** A slot a card or saved season may carry. BP is the retired team-bullpen slot: collected bullpen cards and older saved seasons keep it, and no draft offers it. */
+export type RosterSlot = Slot | 'BP';
 export type Position = 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
 export type HitterSlot = Position | 'DH';
 export const MIN_SEASON_YEAR = 1950;
@@ -38,7 +42,7 @@ export interface DefensivePosition extends DefensiveSkills {
 export interface Profile {
  seasonId: string; playerId: string; displayName: string; franchiseId: string; teamId: string;
  year: number; league: string; historicalTeam: string; teamGames: number; bats: string; throws: string;
- eligibleSlots: Slot[]; primaryHitterSlot: HitterSlot | null; appearances: Partial<Record<HitterSlot, number>>;
+ eligibleSlots: RosterSlot[]; primaryHitterSlot: HitterSlot | null; appearances: Partial<Record<HitterSlot, number>>;
  batting?: BattingCounts; pitching?: PitchingCounts;
  battingRates?: Rates; pitchingRates?: Rates;
  fielding: Partial<Record<Position, FieldingCounts>>;
@@ -52,7 +56,9 @@ export interface Profile {
   excluded: { seasonId: string; playerId: string; displayName: string };
  };
 }
-export interface Candidate { seasonId: string; playerId: string; franchiseId: string; decade: number; eligibleSlots: Slot[] }
+export interface Candidate { seasonId: string; playerId: string; franchiseId: string; decade: number; eligibleSlots: RosterSlot[] }
+/** Every candidate but the collected team bullpens; Draft Mode prices and deals only these. */
+export const draftableCandidates = <T extends { eligibleSlots: readonly RosterSlot[] }>(candidates: readonly T[]): T[] => candidates.filter(candidate => !candidate.eligibleSlots.includes('BP'));
 export interface ShowcaseCard { profile: Profile; slot: Slot }
 export interface Franchise { id: string; name: string; decades: number[] }
 export interface Attribution { title: string; credit: string; sourceUrl: string; license: string; licenseUrl: string; sourceCommit: string; changes: string; fullNotice: string }
@@ -65,7 +71,8 @@ export interface Manifest {
  /** The 2025 reference stadium deck, one per current franchise. */
  stadiums: StadiumSummary[];
 }
-export interface Opponent { id: string; name: string; homeStadium: ParkRef; hitters: Profile[]; starters: Profile[]; closer: Profile; bullpen: Profile }
+/** A 2025 club: the closer, its next three relievers by relief outs as named relievers, and the rest of its relief pooled as the remainder arm. */
+export interface Opponent { id: string; name: string; homeStadium: ParkRef; hitters: Profile[]; starters: Profile[]; closer: Profile; relievers: Profile[]; bullpen: Profile }
 export interface DefensiveEnvironment {
  leagueRates: Rates;
  leagueErrorRates: Record<Position, number>;
@@ -86,8 +93,8 @@ export interface Roll { franchiseId: string; decade: number }
 export interface Pick extends Roll { seasonId: string; slot: Slot }
 export const CURRENT_REPLAY_SCHEMA_VERSION = 5 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
-export const MODEL_VERSION = 'contact-v1' as const;
-export const RULES_VERSION = 'classic-v2' as const;
+export const MODEL_VERSION = 'contact-v2' as const;
+export const RULES_VERSION = 'classic-v3' as const;
 export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
 export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =

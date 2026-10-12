@@ -323,7 +323,7 @@
 					{#each result.pitching as line}
 						<tr>
 							<th scope="row">
-								<span class="stat-identity">{pitcherName(line)}<small>{line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : 'SP'} · {line.year}</small></span>
+								<span class="stat-identity">{pitcherName(line)}<small>{line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : line.role === 'reliever' ? 'RP' : 'SP'} · {line.year}</small></span>
 							</th>
 							<td>{innings(line.outs)}</td><td>{line.H}</td><td>{line.BB}</td>
 							<td>{line.HBP}</td><td>{line.SO}</td><td class="stat-group">{line.R}</td><td class="stat-key">{ra9(line)}</td>
@@ -333,7 +333,7 @@
 				</tbody>
 			</table>
 		</div>
-		<p class="support-note muted">Support bullpen covers every relief inning not assigned to your closer.</p>
+		<p class="support-note muted">A league-average relief pool, listed as BP, covers every relief inning your closer and named relievers do not take.</p>
 	</section>
 	</section>
 

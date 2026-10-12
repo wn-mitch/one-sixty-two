@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import type { Draft, Manifest, Profile, Slot } from '../lib/game/types.ts';
 import { selectLogo, selectPhoto } from '../lib/media/client.ts';
-import { rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
+import { isHitter, rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
 import type { WarRankings } from '../lib/rankings/types.ts';
 import {
 	deviceDraft,
@@ -114,7 +114,7 @@ async function confirmNarrowPick(page: Page, scenario: CardScenario): Promise<Dr
 test('keeps a changed exact season in the narrow designed-back sheet through ranking arrival, then drafts that season', async ({ page, request }) => {
 	const [manifest, media] = await Promise.all([currentManifest(request), currentMedia(request)]);
 	const scenario = await cardScenario(request, manifest, (candidate, profile) =>
-		!candidate.eligibleSlots.includes('BP') && !!media.players[candidate.playerId]?.photos.length && profile.playerId === candidate.playerId
+		!!media.players[candidate.playerId]?.photos.length && profile.playerId === candidate.playerId
 	);
 	const changedProfile = scenario.profiles.find(profile => profile.playerId === scenario.profile.playerId
 		&& profile.seasonId !== scenario.profile.seasonId
@@ -175,7 +175,7 @@ test('keeps a no-photo card draftable through the wide in-place flip when rankin
 	await page.setViewportSize({ width: 1280, height: 900 });
 	const [manifest, media] = await Promise.all([currentManifest(request), currentMedia(request)]);
 	const scenario = await cardScenario(request, manifest, candidate =>
-		!candidate.eligibleSlots.includes('BP') && !media.players[candidate.playerId]?.photos.length
+		!media.players[candidate.playerId]?.photos.length
 	);
 	await page.route('**/rankings/current.json', route => route.abort());
 	await openSavedDraft(page, scenario.draft);
@@ -199,7 +199,7 @@ test('keeps a no-photo card draftable through the wide in-place flip when rankin
 
 test('keeps an inspectable card draftable when the optional media index fails', async ({ page, request }) => {
 	const manifest = await currentManifest(request);
-	const scenario = await cardScenario(request, manifest, candidate => !candidate.eligibleSlots.includes('BP'));
+	const scenario = await cardScenario(request, manifest, () => true);
 	await page.route('**/media/current.json', route => route.abort());
 	await openSavedDraft(page, scenario.draft);
 	const { card, sheet, era } = await selectNarrowCard(page, scenario);
@@ -214,7 +214,7 @@ test('keeps an inspectable card draftable when the optional media index fails', 
 test('an image load failure preserves the chosen exact season and draft action', async ({ page, request }) => {
 	const [manifest, media] = await Promise.all([currentManifest(request), currentMedia(request)]);
 	const scenario = await cardScenario(request, manifest, candidate =>
-		!candidate.eligibleSlots.includes('BP') && !!media.players[candidate.playerId]?.photos.length
+		!!media.players[candidate.playerId]?.photos.length
 	);
 	const photo = selectPhoto(media, scenario.candidate.playerId, scenario.profile.year, scenario.profile.franchiseId);
 	expect(photo).not.toBeNull();
@@ -231,23 +231,6 @@ test('an image load failure preserves the chosen exact season and draft action',
 	expect(saved.actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.candidate.seasonId, slot: scenario.slot });
 });
 
-test('shows a bullpen designed back, readable members and excluded saves leader, and no composite WAR before drafting', async ({ page, request }) => {
-	const manifest = await currentManifest(request);
-	const scenario = await cardScenario(request, manifest, candidate => candidate.eligibleSlots.includes('BP'));
-	expect(scenario.profile.bullpen).toBeDefined();
-	await openSavedDraft(page, scenario.draft);
-	const { card, sheet, era } = await selectNarrowCard(page, scenario);
-	await expect(card).toHaveAttribute('data-season-id', scenario.candidate.seasonId);
-	await openNarrowBack(sheet, era);
-	const text = await openTextVersion(sheet);
-	await expect(text).toContainText(/excludes saves leader/i);
-	await expect(text).toContainText(/WAR\/162 unavailable/i);
-	for (const member of scenario.profile.bullpen!.members) await expect(text).toContainText(member.displayName);
-	await expect(text).toContainText(scenario.profile.bullpen!.excluded.displayName);
-	const saved = await confirmNarrowPick(page, scenario);
-	expect(saved.picks.at(-1)).toMatchObject({ seasonId: scenario.candidate.seasonId, slot: 'BP' });
-});
-
 test('keeps the two-way finish and both readable stat families through ordinary roster inspection and sheet transfer', async ({ page, request }) => {
 	const [manifest, rankings] = await Promise.all([currentManifest(request), currentRankings(request)]);
 	const scenario = await cardScenario(request, manifest, (candidate, profile) => {
@@ -255,12 +238,12 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 		if (typeof ranking?.battingWAR162 !== 'number' || typeof ranking.pitchingWAR162 !== 'number') return false;
 		const battingTier = ranking.battingWAR162 >= 6 ? 'gem' : ranking.battingWAR162 >= 4 ? 'emboss' : ranking.battingWAR162 >= 2 ? 'foil' : 'base';
 		const pitchingTier = ranking.pitchingWAR162 >= 6 ? 'gem' : ranking.pitchingWAR162 >= 4 ? 'emboss' : ranking.pitchingWAR162 >= 2 ? 'foil' : 'base';
-		return !candidate.eligibleSlots.includes('BP') && !!profile.batting && !!profile.pitching
-			&& candidate.eligibleSlots.some(slot => !slot.startsWith('SP') && slot !== 'CL' && slot !== 'BP')
+		return !!profile.batting && !!profile.pitching
+			&& candidate.eligibleSlots.some(isHitter)
 			&& ranking.pitchingWAR162 > ranking.battingWAR162 && pitchingTier !== battingTier;
 	});
 	const hitterSlot = legalSlots(scenario.draft, scenario.candidate, manifest)
-		.find(slot => !slot.startsWith('SP') && slot !== 'CL' && slot !== 'BP');
+		.find(isHitter);
 	expect(hitterSlot).toBeDefined();
 	const hitterScenario: CardScenario = { ...scenario, slot: hitterSlot! };
 	const ranking = rankings.seasons[scenario.candidate.seasonId];

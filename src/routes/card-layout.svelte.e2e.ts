@@ -3,7 +3,7 @@ import { build } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Manifest, Profile, Slot } from '../lib/game/types.ts';
+import type { Manifest, Profile, RosterSlot } from '../lib/game/types.ts';
 import { selectPhoto } from '../lib/media/client.ts';
 import type { CaptureDate, MediaManifest, MediaPointer } from '../lib/media/types.ts';
 import { photoLabel } from '../lib/media/photo-policy.ts';
@@ -20,7 +20,7 @@ test.setTimeout(180000);
 interface Specimen {
 	label: string;
 	profile: Profile;
-	slot: Slot | null;
+	slot: RosterSlot | null;
 }
 
 interface HarnessAssets {
@@ -53,7 +53,7 @@ async function currentRankings(request: APIRequestContext): Promise<WarRankings>
 	return getJson<WarRankings>(request, pointer.manifestUrl);
 }
 
-function slotFor(profile: Profile): Slot | null {
+function slotFor(profile: Profile): RosterSlot | null {
 	return profile.eligibleSlots.find(isHitter)
 		?? profile.eligibleSlots.find(slot => !isHitter(slot))
 		?? null;
@@ -74,7 +74,7 @@ async function selectSpecimens(
 	manifest: Manifest,
 	media: MediaManifest
 ): Promise<Specimen[]> {
-	const predicates: Array<[string, (profile: Profile) => boolean, (profile: Profile) => Slot | null]> = [
+	const predicates: Array<[string, (profile: Profile) => boolean, (profile: Profile) => RosterSlot | null]> = [
 		['player-with-photo', profile => !profile.bullpen && profile.eligibleSlots.some(isHitter) && selectedPhoto(media, profile), slotFor],
 		['pitcher', profile => !profile.bullpen && !!profile.pitching && profile.eligibleSlots.some(slot => !isHitter(slot)) && !isTwoWay(profile), profile => profile.eligibleSlots.find(slot => !isHitter(slot)) ?? null],
 		['two-way', isTwoWay, profile => profile.eligibleSlots.find(isHitter) ?? null],

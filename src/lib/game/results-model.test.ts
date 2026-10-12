@@ -75,7 +75,7 @@ function fixture(): Fixture {
 		playerId: profile.playerId,
 		year: profile.year,
 		displayName: profile.displayName,
-		role: index === 4 ? 'support' : index === 3 ? 'closer' : 'starter',
+		role: index > 3 ? 'reliever' : index === 3 ? 'closer' : 'starter',
 		outs: 3,
 		H: 0,
 		BB: index,
@@ -181,10 +181,6 @@ describe('createResultsModel awards', () => {
 		sp1.SO = 12;
 		sp2.SO = 8;
 		setPitcherWar(sp3, -3);
-		const bullpen = lineForSlot(source, 'BP') as PitcherLine;
-		bullpen.R = 0;
-		bullpen.SO = 999;
-		bullpen.pitchingRunsAboveNeutral = 10_000;
 		source.draft.picks.reverse();
 
 		const model = createResultsModel(source);
@@ -197,8 +193,7 @@ describe('createResultsModel awards', () => {
 		]);
 		expect(cardFor(model, '1B').awards.map(award => award.key)).toContain('mvp');
 		expect(cardFor(model, '1B').awards.map(award => award.key)).not.toContain('home-runs');
-		expect(cardFor(model, 'BP').awards).toEqual([]);
-		expect(model.rest).toHaveLength(11);
+		expect(model.rest).toHaveLength(13);
 		expect(cardFor(model, '1B').inspection.simulated.awardChips.map(award => award.key)).toContain('mvp');
 		expect(model.rest.map(card => card.slot)).toEqual(SLOTS.filter(slot => !['C', 'SP1', 'SP3'].includes(slot)));
 
@@ -222,9 +217,6 @@ describe('createResultsModel awards', () => {
 		starter.BF = 1;
 		starter.R = 1;
 		setPitcherWar(starter, -0.0001);
-		const bullpen = lineForSlot(source, 'BP') as PitcherLine;
-		bullpen.BF = 1;
-		bullpen.pitchingRunsAboveNeutral = 1_000;
 		source.rankings.seasons[starter.seasonId].pitchingWAR162 = 99;
 
 		const model = createResultsModel(source);
@@ -233,12 +225,11 @@ describe('createResultsModel awards', () => {
 		expect(model.featured.find(entry => entry.metrics.some(metric => metric.key === 'lvp'))?.metrics.find(metric => metric.key === 'lvp')?.formattedValue).toBe('0.00 WAR');
 		expect(model.featured.some(entry => entry.metrics.some(metric => metric.key === 'runs-allowed'))).toBe(false);
 		expect(cardFor(model, 'SP1').awards.map(award => award.key)).toContain('strikeouts');
-		expect(cardFor(model, 'BP').awards).toEqual([]);
 	});
 });
 
 describe('createResultsModel inspection', () => {
-	it('ranks unrounded role cohorts, includes BP for supported pitching rows, and withholds unavailable source measurements', () => {
+	it('ranks unrounded role cohorts, includes named relievers among pitchers, and withholds unavailable source measurements', () => {
 		const source = fixture();
 		const catcherProfile = cardProfile(source, 'C');
 		const firstProfile = cardProfile(source, '1B');
@@ -251,12 +242,14 @@ describe('createResultsModel inspection', () => {
 		cardProfile(source, 'SP1').pitching!.ER = 1;
 		cardProfile(source, 'SP2').pitching!.IPouts = 30;
 		cardProfile(source, 'CL').pitching!.IPouts = 0;
-		cardProfile(source, 'BP').pitching!.BB = 0;
+		cardProfile(source, 'RP3').pitching!.BB = 0;
 
 		source.rankings.seasons[catcherProfile.seasonId] = { battingWAR162: 2, pitchingWAR162: 9 };
 		source.rankings.seasons[cardProfile(source, 'SP1').seasonId] = { battingWAR162: 8, pitchingWAR162: 3 };
 		cardProfile(source, 'SP3').pitching!.IPouts = 29;
-		cardProfile(source, 'BP').pitching!.IPouts = 28;
+		cardProfile(source, 'RP3').pitching!.IPouts = 28;
+		cardProfile(source, 'RP1').pitching!.IPouts = 27;
+		cardProfile(source, 'RP2').pitching!.IPouts = 26;
 		(lineForSlot(source, 'SP1') as PitcherLine).R = 0;
 		const model = createResultsModel(source);
 		expect(rowFor(model, 'C', 'actual', 'avg')).toMatchObject({ formattedValue: '.333', rank: { rank: 1, total: 8, best: true } });
@@ -265,14 +258,13 @@ describe('createResultsModel inspection', () => {
 		expect(rowFor(model, '2B', 'actual', 'h')).toMatchObject({ formattedValue: '—', rank: null });
 		expect(rowFor(model, 'C', 'actual', 'war').formattedValue).toBe('2.00');
 		expect(rowFor(model, 'SP1', 'actual', 'war').formattedValue).toBe('3.00');
-		expect(rowFor(model, 'SP1', 'actual', 'ip')).toMatchObject({ formattedValue: '10.1', rank: { rank: 1, total: 5 } });
+		expect(rowFor(model, 'SP1', 'actual', 'ip')).toMatchObject({ formattedValue: '10.1', rank: { rank: 1, total: 7 } });
 		expect(rowFor(model, 'SP1', 'actual', 'g-gs').rank).toBeNull();
 		expect(rowFor(model, 'CL', 'actual', 'era')).toMatchObject({ formattedValue: '—', rank: null });
-		expect(rowFor(model, 'SP1', 'actual', 'era').rank).toMatchObject({ rank: 1, total: 4, best: true });
-		expect(rowFor(model, 'SP1', 'simulated', 'ra9').rank).toMatchObject({ rank: 1, total: 5, best: true });
-		expect(rowFor(model, 'BP', 'actual', 'war')).toMatchObject({ formattedValue: '—', rank: null });
-		expect(rowFor(model, 'BP', 'actual', 'bb').rank).toMatchObject({ rank: 1, total: 5, best: true });
-		expect(rowFor(model, 'BP', 'simulated', 'bb').rank?.total).toBe(5);
+		expect(rowFor(model, 'SP1', 'actual', 'era').rank).toMatchObject({ rank: 1, total: 6, best: true });
+		expect(rowFor(model, 'SP1', 'simulated', 'ra9').rank).toMatchObject({ rank: 1, total: 7, best: true });
+		expect(rowFor(model, 'RP3', 'actual', 'bb').rank).toMatchObject({ rank: 1, total: 7, best: true });
+		expect(rowFor(model, 'RP3', 'simulated', 'bb').rank?.total).toBe(7);
 		expect(rowFor(model, 'C', 'simulated', 'war').rank?.total).toBe(9);
 		expect(cardFor(model, 'C').inspection.actual.awardChips).toEqual([]);
 	});

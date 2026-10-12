@@ -1,6 +1,5 @@
 //! Team inputs and box totals (`src/lib/sim/team.ts`, `createBox` in `game.ts`).
 use crate::types::{BatterLine, DefensiveRunComponents, PitcherLine, PitcherRole, Profile, TeamBox, POSITIONS};
-use crate::workload::closer_budget;
 
 #[derive(Clone, Debug)]
 pub struct TeamInput<'p> {
@@ -12,9 +11,12 @@ pub struct TeamInput<'p> {
     pub pitchers: Vec<&'p Profile>,
     pub starter_index: usize,
     pub closer_index: usize,
+    /// Named relievers in leverage order: RP1 takes the 8th, RP2 the 7th, the rest middle relief.
+    pub relievers: Vec<usize>,
+    /// The remainder arm for relief innings no available named pitcher takes.
     pub bullpen_index: usize,
-    pub closer_available: bool,
-    pub closer_outs_remaining: f64,
+    /// Whether each pitcher may enter today, by pitcher index; read for the closer and named relievers.
+    pub available: Vec<bool>,
 }
 
 pub fn create_box(team: &TeamInput) -> TeamBox {
@@ -29,7 +31,8 @@ pub fn create_box(team: &TeamInput) -> TeamBox {
         }).collect(),
         pitching: team.pitchers.iter().enumerate().map(|(index, profile)| PitcherLine {
             season_id: profile.season_id.clone(), player_id: profile.player_id.clone(), display_name: profile.display_name.clone(), year: profile.year,
-            role: if index == team.bullpen_index { PitcherRole::Support } else if index == team.closer_index { PitcherRole::Closer } else { PitcherRole::Starter },
+            role: if index == team.bullpen_index { PitcherRole::Support } else if index == team.closer_index { PitcherRole::Closer }
+                else if team.relievers.contains(&index) { PitcherRole::Reliever } else { PitcherRole::Starter },
             outs: 0, h: 0, bb: 0, hbp: 0, so: 0, r: 0,
             starts: (index == team.starter_index) as i32, appearances: (index == team.starter_index) as i32,
             bf: 0, pitching_runs_above_neutral: 0.0,
@@ -74,4 +77,3 @@ pub fn accumulate_box(totals: &mut TeamBox, game: &TeamBox) -> Result<(), String
     Ok(())
 }
 
-pub fn closer_cap(team: &TeamInput) -> Result<f64, String> { closer_budget(team.pitchers[team.closer_index]) }

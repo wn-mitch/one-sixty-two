@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
 import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.ts';
-import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, type Draft, type Slot } from '../lib/game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, SLOTS, type Draft, type Slot } from '../lib/game/types.ts';
 import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
 import type { SharePublication } from '../lib/share/types.ts';
 import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, deviceDraft, deviceDraftText } from './draft-test-fixtures.ts';
@@ -145,9 +145,9 @@ async function finishRoster(page: Page, request: APIRequestContext) {
 	await page.getByRole('button', { name: /Start draft/ }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	for (let index = 0; index < 14; index++) {
+	for (let index = 0; index < SLOTS.length; index++) {
 		await pickFirstSeason(page, request);
-		if (index < 13) await openPack(page);
+		if (index < SLOTS.length - 1) await openPack(page);
 	}
 }
 
@@ -208,13 +208,13 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect((await deviceDraft(page)).currentRoll).toEqual(savedRoll);
-	for (let index = 0; index < 14; index++) {
+	for (let index = 0; index < SLOTS.length; index++) {
 		await pickFirstSeason(page, request);
-		if (index < 13) await openPack(page);
+		if (index < SLOTS.length - 1) await openPack(page);
 	}
 	// One franchise can be drafted only once per roster.
 	const franchises: string[] = (await deviceDraft<Draft>(page)).picks.map(pick => pick.franchiseId);
-	expect(new Set(franchises).size).toBe(14);
+	expect(new Set(franchises).size).toBe(SLOTS.length);
 	await expect(page.getByRole('button', { name: 'Simulate 162 games', exact: true })).toBeEnabled();
 	const before = (await deviceDraft(page)).battingOrder;
 	await page.getByRole('button', { name: /down in batting order/ }).first().click();
@@ -460,9 +460,9 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
 	await chooseStadium(page);
-	for (let index = 0; index < 14; index++) {
+	for (let index = 0; index < SLOTS.length; index++) {
 		await pickFirstSeason(page, request);
-		if (index < 13) await openPack(page);
+		if (index < SLOTS.length - 1) await openPack(page);
 	}
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator(SEASON_GAME)).toHaveCount(162);

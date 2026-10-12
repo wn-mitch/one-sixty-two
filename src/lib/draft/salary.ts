@@ -1,5 +1,5 @@
 import { finishFor, type Finish, type FinishRole } from '../cards/finish.ts';
-import { HITTER_SLOTS, STARTER_SLOTS, type DefensiveEnvironment, type Profile, type Rates, type Slot } from '../game/types.ts';
+import { HITTER_SLOTS, STARTER_SLOTS, type DefensiveEnvironment, type HitterSlot, type Position, type Profile, type Rates, type Slot } from '../game/types.ts';
 import { createContactReference, type ContactReference, type EventRunWeights, type MatchupFit, type MatchupQuery, type ParkRunValue } from '../engine/node.ts';
 import { closerBudget, starterBudget } from '../sim/workload.ts';
 import { neutralPark, stadiumRef } from '../sim/park.ts';
@@ -19,10 +19,10 @@ export const SALARY_METHOD = Object.freeze({
  omitted: Object.freeze(['baserunning', 'park fit', 'platoon'])
 });
 
-/** Replacement levels group the three rotation slots. */
-export type PricingRole = Exclude<Slot, 'SP1' | 'SP2' | 'SP3'> | 'SP';
-const PRICING_ROLES: readonly PricingRole[] = [...HITTER_SLOTS, 'SP', 'CL', 'BP'];
-const pricingRole = (slot: Slot): PricingRole => (STARTER_SLOTS as readonly Slot[]).includes(slot) ? 'SP' : slot as PricingRole;
+/** Replacement levels group the three rotation slots, and the closer with the named relievers. */
+export type PricingRole = HitterSlot | 'SP' | 'CL';
+const PRICING_ROLES: readonly PricingRole[] = [...HITTER_SLOTS, 'SP', 'CL'];
+const pricingRole = (slot: Slot): PricingRole => (STARTER_SLOTS as readonly Slot[]).includes(slot) ? 'SP' : slot === 'CL' || slot.startsWith('RP') ? 'CL' : slot as HitterSlot;
 const roleSlot = (role: PricingRole): Slot => role === 'SP' ? 'SP1' : role;
 
 export interface DraftCardTable {
@@ -31,11 +31,10 @@ export interface DraftCardTable {
  provisional: true;
  method: typeof SALARY_METHOD & {
   hitterPlateAppearances: number;
-  bullpenOuts: number;
   /** Season runs at each role's replacement percentile. */
   replacement: Partial<Record<PricingRole, number>>;
  };
- /** Columns aligned to `manifest.candidates`. */
+ /** Columns aligned to the draftable manifest candidates (`draftableCandidates`). */
  seasonId: string[];
  year: number[];
  salary: number[];
@@ -43,8 +42,6 @@ export interface DraftCardTable {
  /** Runs above replacement, rounded to 0.1. */
  valueRuns: number[];
  pricedSlot: Slot[];
- /** Bullpen card id to the member player-seasons it aggregates. */
- bullpenMembers: Record<string, string[]>;
 }
 
 export interface CardWar { battingWAR162: number | null; pitchingWAR162: number | null }
@@ -70,13 +67,14 @@ function percentile(values: number[], share: number): number {
 
 function finishRole(slot: Slot): FinishRole {
  const role = pricingRole(slot);
- return role === 'SP' ? 'starter' : role === 'CL' ? 'closer' : role === 'BP' ? 'bullpen' : 'hitter';
+ return role === 'SP' ? 'starter' : role === 'CL' ? 'closer' : 'hitter';
 }
 
 /**
  * Prices every candidate by modeled season runs above its role's replacement level: shared-engine
  * linear weights against a league-average opponent in a neutral park, plus fielding runs at the
- * position, scaled by the role's workload. Finish is cosmetic and never enters the price.
+ * position, scaled by the role's workload. Named relievers price as closers. Finish is cosmetic
+ * and never enters the price. `candidates` are the draftable ones; team bullpens are not priced.
  */
 export function buildDraftCardTable(candidates: readonly Profile[], environment: DefensiveEnvironment, war: (seasonId: string) => CardWar | undefined): DraftCardTable {
  const league = environment.leagueRates;
@@ -86,16 +84,18 @@ export function buildDraftCardTable(candidates: readonly Profile[], environment:
  // Each role prices against a league-average opponent at unknown side and average speed.
  const query = (battingRates: Rates, pitchingRates: Rates, label: string): MatchupQuery => ({ battingRates, bats: '', pitchingRates, throws: '', speed: 0.5, unknownSide: true, label });
  const queries: MatchupQuery[] = [];
- const pricedRoles = candidates.map(profile => new Set(profile.eligibleSlots.map(pricingRole)));
+ const pricedRoles = candidates.map(profile => {
+  if (profile.bullpen) throw new Error(`${profile.seasonId}: team bullpens are not draftable`);
+  return new Set(profile.eligibleSlots.map(slot => pricingRole(slot as Slot)));
+ });
  const pricesHitter = (roles: Set<PricingRole>) => [...roles].some(role => (HITTER_SLOTS as readonly string[]).includes(role));
- const pricesPitcher = (roles: Set<PricingRole>) => roles.has('SP') || roles.has('CL') || roles.has('BP');
+ const pricesPitcher = (roles: Set<PricingRole>) => roles.has('SP') || roles.has('CL');
  candidates.forEach((profile, index) => {
   if (pricesHitter(pricedRoles[index]) && profile.battingRates) queries.push(query(profile.battingRates, league, profile.seasonId));
   if (pricesPitcher(pricedRoles[index]) && profile.pitchingRates) queries.push(query(league, profile.pitchingRates, profile.seasonId));
  });
  const fits = reference.fitMatchups(queries);
  let nextFit = 0;
- const bullpenOuts = SALARY_METHOD.teamOuts - STARTER_SLOTS.length * SALARY_METHOD.starts * SALARY_METHOD.leagueStarterOuts - SALARY_METHOD.closerOutsCap;
 
  // Season runs relative to league average at each eligible role.
  const seasonRuns = candidates.map((profile, index) => {
@@ -108,16 +108,16 @@ export function buildDraftCardTable(candidates: readonly Profile[], environment:
    const batting = runValues(battingFit, weights).perPa * hitterPlateAppearances;
    for (const role of roles) {
     if (role === 'DH') runs.set(role, batting);
-    else if ((HITTER_SLOTS as readonly string[]).includes(role)) runs.set(role, batting + (profile.defense.positions[role as Exclude<PricingRole, 'DH' | 'SP' | 'CL' | 'BP'>]?.expectedRunsSaved162 ?? 0));
+    else if ((HITTER_SLOTS as readonly string[]).includes(role)) runs.set(role, batting + (profile.defense.positions[role as Position]?.expectedRunsSaved162 ?? 0));
    }
   }
-  const pitcherRoles = [...roles].filter(role => role === 'SP' || role === 'CL' || role === 'BP');
+  const pitcherRoles = [...roles].filter(role => role === 'SP' || role === 'CL');
   if (pitcherRoles.length) {
    if (!pitchingFit) throw new Error(`${profile.seasonId}: pitcher has no pitching rates`);
    const allowed = runValues(pitchingFit, weights);
    const savedPerOut = -allowed.perPa / allowed.outsPerPa;
    for (const role of pitcherRoles) {
-    const outs = role === 'SP' ? SALARY_METHOD.starts * starterBudget(profile) : role === 'CL' ? Math.min(closerBudget(profile), SALARY_METHOD.closerOutsCap) : bullpenOuts;
+    const outs = role === 'SP' ? SALARY_METHOD.starts * starterBudget(profile) : Math.min(closerBudget(profile), SALARY_METHOD.closerOutsCap);
     runs.set(role, savedPerOut * outs);
    }
   }
@@ -134,8 +134,8 @@ export function buildDraftCardTable(candidates: readonly Profile[], environment:
 
  const table: DraftCardTable = {
   schemaVersion: 1, salaryVersion: SALARY_VERSION, provisional: true,
-  method: { ...SALARY_METHOD, hitterPlateAppearances, bullpenOuts, replacement },
-  seasonId: [], year: [], salary: [], finish: [], valueRuns: [], pricedSlot: [], bullpenMembers: {}
+  method: { ...SALARY_METHOD, hitterPlateAppearances, replacement },
+  seasonId: [], year: [], salary: [], finish: [], valueRuns: [], pricedSlot: []
  };
  candidates.forEach((profile, index) => {
   let best: { role: PricingRole; value: number } | null = null;
@@ -152,7 +152,6 @@ export function buildDraftCardTable(candidates: readonly Profile[], environment:
   table.pricedSlot.push(slot);
   table.salary.push(SALARY_METHOD.minSalary + Math.round(SALARY_METHOD.pricePerRun * Math.max(0, valueRuns)));
   table.finish.push(finishFor(finishRole(slot), cardWar?.battingWAR162, cardWar?.pitchingWAR162));
-  if (profile.bullpen) table.bullpenMembers[profile.seasonId] = profile.bullpen.members.map(member => member.seasonId);
  });
  return table;
 }
@@ -181,7 +180,7 @@ export function buildParkFits(candidates: readonly Profile[], environment: Defen
  ];
  const [neutral, ...parks] = reference.parkRunValues([neutralPark(), ...stadiums].map(stadium => parkBasis(reference, stadium)), queries);
  const perOut = (value: ParkRunValue): number => value.runs / value.outs;
- const { hitterPlateAppearances, bullpenOuts } = table.method;
+ const { hitterPlateAppearances } = table.method;
  return stadiums.map((stadium, park) => {
   const values = parks[park];
   const leaguePa = values[0].runs - neutral[0].runs;
@@ -193,7 +192,7 @@ export function buildParkFits(candidates: readonly Profile[], environment: Defen
    let runs: number;
    if (isHitterSlot(slot)) runs = (here.runs - there.runs - leaguePa) * hitterPlateAppearances;
    else {
-    const outs = slot === 'BP' ? bullpenOuts : slot === 'CL' ? Math.min(closerBudget(profile), SALARY_METHOD.closerOutsCap) : SALARY_METHOD.starts * starterBudget(profile);
+    const outs = slot === 'CL' ? Math.min(closerBudget(profile), SALARY_METHOD.closerOutsCap) : SALARY_METHOD.starts * starterBudget(profile);
     runs = -(perOut(here) - perOut(there) - leagueOut) * outs;
    }
    if (!Number.isFinite(runs)) throw new Error(`${profile.seasonId}: non-finite park fit at ${stadium.id}`);

@@ -1,31 +1,26 @@
 import { historicalBatting, historicalEra } from '../game/format.ts';
 import { compareId } from '../game/types.ts';
-import type { HitterSlot, Profile, Slot } from '../game/types.ts';
+import type { HitterSlot, Profile, RosterSlot } from '../game/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 
-export type RankingKind = 'Hitters' | 'Pitchers' | 'Bullpens';
+export type RankingKind = 'Hitters' | 'Pitchers';
 export type RankingSort = 'war' | 'metrics';
-export type CandidateEntry = { profile: Profile; slots: Slot[] };
+export type CandidateEntry = { profile: Profile; slots: readonly RosterSlot[] };
 export type CandidateGroup = { key: string; name: string; playerId: string; kind: RankingKind; entries: CandidateEntry[] };
-const kindOrder: Record<RankingKind, number> = { Hitters: 0, Pitchers: 1, Bullpens: 2 };
+const kindOrder: Record<RankingKind, number> = { Hitters: 0, Pitchers: 1 };
 
-export function isHitter(slot: Slot): slot is HitterSlot {
- return slot !== 'CL' && slot !== 'BP' && !slot.startsWith('SP');
+export function isHitter(slot: RosterSlot): slot is HitterSlot {
+ return slot !== 'CL' && slot !== 'BP' && !slot.startsWith('SP') && !slot.startsWith('RP');
 }
 
 export function warValue(entry: CandidateEntry, kind: RankingKind, rankings: WarRankings | null): number | null {
- if (kind === 'Bullpens' || !entry.slots.some(slot => isHitter(slot) === (kind === 'Hitters'))) return null;
+ if (!entry.slots.some(slot => isHitter(slot) === (kind === 'Hitters'))) return null;
  const value = rankings?.seasons[entry.profile.seasonId]?.[kind === 'Hitters' ? 'battingWAR162' : 'pitchingWAR162'];
  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 export function compareEntries(a: CandidateEntry, b: CandidateEntry, kind: RankingKind, sort: RankingSort, rankings: WarRankings | null): number {
- if (kind === 'Bullpens') {
-  const ap = a.profile.pitching;
-  const bp = b.profile.pitching;
-  if (!!ap !== !!bp) return ap ? -1 : 1;
-  if (ap && bp) return historicalEra(ap) - historicalEra(bp) || bp.IPouts - ap.IPouts || compareId(a.profile.seasonId, b.profile.seasonId);
- } else if (sort === 'war') {
+ if (sort === 'war') {
   const av = warValue(a, kind, rankings), bv = warValue(b, kind, rankings);
   if (av !== null && bv !== null) return bv - av || compareId(a.profile.seasonId, b.profile.seasonId);
   if (av !== bv) return av === null ? 1 : -1;
@@ -55,12 +50,7 @@ export function rankGroups(entries: CandidateEntry[], sort: RankingSort, ranking
  }
  const groups = [...groupedEntries].map(([playerId, source]) => {
   const values = [...source.entries.values()];
-  let kind: RankingKind = 'Pitchers';
-  if (values.some(entry => entry.slots.includes('BP'))) {
-   kind = 'Bullpens';
-  } else if (values.some(entry => entry.slots.some(isHitter))) {
-   kind = 'Hitters';
-  }
+  const kind: RankingKind = values.some(entry => entry.slots.some(isHitter)) ? 'Hitters' : 'Pitchers';
   values.sort((a, b) => compareEntries(a, b, kind, sort, rankings));
   return { key: playerId, playerId, name: source.name, kind, entries: values };
  });

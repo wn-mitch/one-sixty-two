@@ -1,6 +1,6 @@
 import { average, formatDefEstimate, historicalBatting, historicalEra, innings } from '../game/format.ts';
 import { POSITIONS } from '../game/types.ts';
-import type { HitterSlot, Manifest, Position, Profile, Slot } from '../game/types.ts';
+import type { HitterSlot, Manifest, Position, Profile, RosterSlot } from '../game/types.ts';
 import { selectLogo, selectPhoto } from '../media/client.ts';
 import type { MediaAsset, MediaManifest, PlayerPhoto } from '../media/types.ts';
 import { logoShapeFor, type LogoShape } from '../media/logo-shapes.ts';
@@ -108,7 +108,7 @@ export interface CardFront {
 export interface CardViewModel extends CardFront { b: CardBack; details: Supplemental }
 export interface CreateCardViewModelInput {
 	profile: Profile;
-	slot?: Slot | null;
+	slot?: RosterSlot | null;
 	ranking?: WarSeasonRanking | null;
 	war?: number | null;
 	media?: MediaManifest | null;
@@ -206,23 +206,23 @@ export function eraForYear(year: number): CardEra {
 	const decade = finite(year) ? Math.min(2020, Math.max(1950, Math.floor(year / 10) * 10)) : 1950;
 	return `${decade}s` as CardEra;
 }
-export function cardRole(profile: Pick<Profile, 'bullpen' | 'eligibleSlots'>, slot?: Slot | null): CardRole {
+export function cardRole(profile: Pick<Profile, 'bullpen' | 'eligibleSlots'>, slot?: RosterSlot | null): CardRole {
 	if (profile.bullpen || slot === 'BP') return 'bullpen';
 	if (slot) return isHitter(slot) ? 'batting' : 'pitching';
 	return profile.eligibleSlots.some(isHitter) ? 'batting' : 'pitching';
 }
-function representedHitterSlot(profile: Profile, slot: Slot | null | undefined): HitterSlot | null {
+function representedHitterSlot(profile: Profile, slot: RosterSlot | null | undefined): HitterSlot | null {
 	if (slot && isHitter(slot)) return slot;
 	return profile.primaryHitterSlot;
 }
-function representedDefense(profile: Profile, slot: Slot | null | undefined): { position: Position | null; value: number | null } {
+function representedDefense(profile: Profile, slot: RosterSlot | null | undefined): { position: Position | null; value: number | null } {
 	const hitterSlot = representedHitterSlot(profile, slot);
 	if (!hitterSlot || hitterSlot === 'DH') return { position: null, value: null };
 	const defense = profile.defense.positions[hitterSlot];
 	if (!defense) throw new Error(`Missing defensive record for ${profile.seasonId} at ${hitterSlot}.`);
 	return { position: hitterSlot, value: defense.expectedRunsSaved162 };
 }
-function position(profile: Profile, slot: Slot | null | undefined, role: CardRole): string {
+function position(profile: Profile, slot: RosterSlot | null | undefined, role: CardRole): string {
 	if (role === 'bullpen') return 'BP';
 	if (slot && slot !== 'BP') return slot;
 	const batting = profile.primaryHitterSlot;
@@ -306,7 +306,7 @@ function logoRows(logo: CardMedia | null, mediaStatus: CardMediaStatus): Supplem
 		{ k: 'Source', v: logo.sourceUrl, href: logo.sourceUrl }
 	] };
 }
-function finishRole(profile: Profile, slot: Slot | null | undefined, role: CardRole): FinishRole {
+function finishRole(profile: Profile, slot: RosterSlot | null | undefined, role: CardRole): FinishRole {
 	if (role === 'bullpen') return 'bullpen';
 	if (role === 'batting') return 'hitter';
 	return slot === 'CL' || (!slot && profile.eligibleSlots.includes('CL') && !profile.eligibleSlots.some(value => value.startsWith('SP'))) ? 'closer' : 'starter';

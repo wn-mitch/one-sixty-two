@@ -73,8 +73,8 @@ export function availableCandidates(draft: Draft, manifest: Manifest, roll: Roll
  const analysis = analyzeDraft(draft, manifest);
  return analysis.unused.filter(candidate => {
   if (roll && (candidate.franchiseId !== roll.franchiseId || candidate.decade !== roll.decade)) return false;
-  return candidate.eligibleSlots.some(slot =>
-   analysis.slots.includes(slot) && isViableForSlot(analysis, candidate, slot)
+  return analysis.slots.some(slot =>
+   candidate.eligibleSlots.includes(slot) && isViableForSlot(analysis, candidate, slot)
   );
  });
 }

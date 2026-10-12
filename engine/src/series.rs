@@ -2,9 +2,9 @@
 use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::random::{stream_seed, GameStreams};
 use crate::season::{draft_team, Engine, SeasonOptions};
-use crate::team::{accumulate_box, closer_cap, create_totals_box, TeamInput};
+use crate::team::{accumulate_box, create_totals_box, TeamInput};
 use crate::types::{GameResult, ParkRef, PitcherRole, SeasonMoment, SeasonRequest, TeamBox, WinPoint};
-use crate::workload::CloserUsage;
+use crate::workload::ReliefUsage;
 use serde::{Deserialize, Serialize};
 
 pub const SERIES_RULES_VERSION: &str = "h2h-bo5-v1";
@@ -242,12 +242,11 @@ impl Engine {
             records.push((team.id, team.key.as_str(), season.wins, season.losses));
         }
         let (seed_one, seed_two) = seed_order(&[(records[0].0, records[0].1, records[0].2), (records[1].0, records[1].1, records[1].2)]);
-        let mut clubs: Vec<TeamInput> = request.teams.iter().map(|team| draft_team(&team.season, team.id.name(), &team.name)).collect::<Result<_, _>>()?;
+        let mut clubs: Vec<TeamInput> = request.teams.iter().map(|team| draft_team(&team.season, &self.data.bullpen, team.id.name(), &team.name)).collect::<Result<_, _>>()?;
         let parks = request.teams.iter().map(|team| self.park(&team.season.home_stadium)).collect::<Result<Vec<_>, _>>()?;
         let defenses = clubs.iter().map(|club| team_defense(club, &self.data.environment.league_error_rates)).collect::<Result<Vec<_>, _>>()?;
         let batting = [self.matchups(&clubs[0].hitters, &clubs[1].pitchers)?, self.matchups(&clubs[1].hitters, &clubs[0].pitchers)?];
-        let caps = [closer_cap(&clubs[0])?, closer_cap(&clubs[1])?];
-        let mut usage = [CloserUsage::default(); 2];
+        let mut usage = [ReliefUsage::new(&clubs[0])?, ReliefUsage::new(&clubs[1])?];
         let mut totals = [create_totals_box(&clubs[0]), create_totals_box(&clubs[1])];
         let keys = [first.key.as_str(), second.key.as_str()];
         let seed = series_seed(&first.key, &second.key);
@@ -264,8 +263,7 @@ impl Engine {
             for id in [TeamId::A, TeamId::B] {
                 let club = &mut clubs[id.index()];
                 club.starter_index = index % 3;
-                club.closer_outs_remaining = caps[id.index()] - usage[id.index()].outs;
-                club.closer_available = usage[id.index()].ready(i64::from(day), caps[id.index()]);
+                usage[id.index()].prepare(club, i64::from(day));
             }
             let mut win_trace = Vec::new();
             let game = simulate_game(GameInput {
@@ -276,8 +274,7 @@ impl Engine {
             }, &models, &mut GameStreams::new(seed, number), Some(&mut win_trace))?;
             let boxes = |id: TeamId| if id == home_id { &game.home } else { &game.away };
             for id in [TeamId::A, TeamId::B] {
-                let closer = &boxes(id).pitching[clubs[id.index()].closer_index];
-                usage[id.index()].record(i64::from(day), closer.outs, closer.appearances > 0);
+                usage[id.index()].record(i64::from(day), &boxes(id).pitching);
                 accumulate_box(&mut totals[id.index()], boxes(id))?;
             }
             let winner_id = if game.win { TeamId::A } else { TeamId::B };

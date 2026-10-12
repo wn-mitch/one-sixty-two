@@ -8,22 +8,24 @@ use engine::Engine;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-pub const SLOTS: [&str; 14] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "SP1", "SP2", "SP3", "CL", "BP"];
+pub const SLOTS: [&str; 16] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "SP1", "SP2", "SP3", "CL", "RP1", "RP2", "RP3"];
 pub const HITTERS: usize = 9;
 pub const STARTERS: std::ops::Range<usize> = 9..12;
 /// The app's current replay contract; the engine echoes these into results.
-pub const MODEL_VERSION: &str = "contact-v1";
-pub const RULES_VERSION: &str = "classic-v2";
+pub const MODEL_VERSION: &str = "contact-v2";
+pub const RULES_VERSION: &str = "classic-v3";
 
 // Draft pricing constants (`SALARY_METHOD` in `src/lib/draft/salary.ts`).
 const STARTS: f64 = 54.0;
 const CLOSER_OUTS_CAP: f64 = 195.0;
-const BULLPEN_OUTS: f64 = 162.0 * 27.0 - 3.0 * STARTS * 18.0 - CLOSER_OUTS_CAP;
+/// Mean season outs of RP1, RP2 and RP3 over sixteen sampled seasons; each is also capped by the
+/// pitcher's own relief workload. Linear values only rank and seed candidates; seasons decide.
+const RELIEVER_OUTS: [f64; 3] = [90.0, 65.0, 130.0];
 
 pub struct Candidate {
     pub profile: Profile,
     /// Linear season runs relative to league average at each slot; `None` where ineligible.
-    pub value: [Option<f64>; 14],
+    pub value: [Option<f64>; 16],
 }
 
 pub struct Dataset {
@@ -79,7 +81,7 @@ impl Dataset {
             for row in rows {
                 let saved: Vec<Option<f64>> = SLOTS[..8].iter().map(|slot| row["defense"]["positions"][*slot]["expectedRunsSaved162"].as_f64()).collect();
                 let profile: Profile = serde_json::from_value(row).map_err(|error| format!("{key}: {error}"))?;
-                let mut value = [None; 14];
+                let mut value = [None; 16];
                 let eligible = |slot: &str| profile.eligible_slots.iter().any(|name| name == slot);
                 if SLOTS[..HITTERS].iter().any(|slot| eligible(slot)) {
                     if let Some(batting) = &profile.batting_rates {
@@ -92,14 +94,14 @@ impl Dataset {
                     }
                 }
                 if let Some(pitching) = &profile.pitching_rates {
-                    let pitcher_slots: Vec<usize> = (HITTERS..14).filter(|index| eligible(SLOTS[*index])).collect();
+                    let pitcher_slots: Vec<usize> = (HITTERS..SLOTS.len()).filter(|index| eligible(SLOTS[*index])).collect();
                     if !pitcher_slots.is_empty() {
                         let (per_pa, outs_per_pa) = run_values(&engine, &weights, &league, pitching)?;
                         let saved_per_out = -per_pa / outs_per_pa;
                         for index in pitcher_slots {
                             let outs = match SLOTS[index] {
                                 "CL" => closer_budget(&profile)?.min(CLOSER_OUTS_CAP),
-                                "BP" => BULLPEN_OUTS,
+                                "RP1" | "RP2" | "RP3" => closer_budget(&profile)?.min(RELIEVER_OUTS[index - 13]),
                                 _ => match starter_budget(&profile) { Ok(budget) => STARTS * f64::from(budget), Err(_) => continue },
                             };
                             value[index] = Some(saved_per_out * outs);

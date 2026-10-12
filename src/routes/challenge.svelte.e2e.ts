@@ -91,7 +91,7 @@ test('a draft in progress can answer the challenge instead of being replaced', a
   if (!localStorage.getItem(key)) localStorage.setItem(key, value);
  }, { key: STORAGE_KEY, value: JSON.stringify({ ...current, phase: 'draft' }) });
  await page.goto(`/c/${id}`);
- await expect(page.getByText('You have a draft in progress · 0 of 14 picked')).toBeVisible();
+ await expect(page.getByText(`You have a draft in progress · 0 of ${SLOTS.length} picked`)).toBeVisible();
  await expect(page.getByRole('button', { name: 'Draft your team', exact: true })).toHaveCount(0);
  await page.getByRole('button', { name: 'Answer with my current draft', exact: true }).click();
  // It resumes straight into the same draft rather than replacing it.

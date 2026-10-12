@@ -67,7 +67,7 @@ const SCARCITY_RUNS = 6;
 const favors = (archetype: Archetype, slot: Slot): boolean =>
  archetype === 'lineup' ? (HITTER_SLOTS as readonly Slot[]).includes(slot)
   : archetype === 'rotation' ? slot === 'SP1' || slot === 'SP2' || slot === 'SP3'
-  : archetype === 'bullpen' ? slot === 'CL' || slot === 'BP'
+  : archetype === 'bullpen' ? slot === 'CL' || slot.startsWith('RP')
   : false;
 
 /** Where a card lands in a seat's best arrangement. */

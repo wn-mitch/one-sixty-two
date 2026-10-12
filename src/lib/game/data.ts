@@ -161,11 +161,11 @@ export async function loadSimulation(manifest: Manifest): Promise<SimulationData
     typeof opponent.name !== 'string' || !opponent.name ||
     !Array.isArray(opponent.hitters) || opponent.hitters.length !== 9 ||
     !Array.isArray(opponent.starters) || opponent.starters.length !== 5 ||
-    !opponent.closer || !opponent.bullpen) {
+    !opponent.closer || !Array.isArray(opponent.relievers) || opponent.relievers.length !== 3 || !opponent.bullpen) {
     throw new Error('Simulation dataset is incompatible');
    }
    if (resolveStadium(data, opponent.homeStadium).franchiseId !== opponent.id) throw new Error('Simulation dataset is incompatible');
-   const pitchers = [...opponent.starters, opponent.closer, opponent.bullpen];
+   const pitchers = [...opponent.starters, opponent.closer, ...opponent.relievers, opponent.bullpen];
    for (const profile of [...opponent.hitters, ...pitchers]) validateCanonicalProfile(profile);
    if (opponent.starters.some(profile => !profile.pitching || profile.pitching.GS <= 0)) {
     throw new Error('Simulation dataset is incompatible');
@@ -182,9 +182,9 @@ export async function loadSimulation(manifest: Manifest): Promise<SimulationData
     pitchers,
     starterIndex: 0,
     closerIndex: 5,
-    bullpenIndex: 6,
-    closerAvailable: true,
-    closerOutsRemaining: 0
+    relievers: [6, 7, 8],
+    bullpenIndex: 9,
+    available: pitchers.map(() => true)
    });
   }
  });

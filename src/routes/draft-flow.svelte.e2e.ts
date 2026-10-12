@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
+import { HITTER_SLOTS, SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
 import { deviceDraft, cardScenario, currentManifest, openSavedDraft, type CardScenario } from './draft-test-fixtures.ts';
 
 test.setTimeout(180000);
@@ -32,27 +32,33 @@ async function expectNoPersistenceChange(page: Page, before: Draft): Promise<voi
 
 async function findPitcherScenario(request: APIRequestContext, manifest: Manifest): Promise<CardScenario> {
 	const chunks = new Map<string, Profile[]>();
-	for (let seed = 1; seed <= 500; seed++) {
-		const draft = rollDraft(selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id), manifest);
-		const roll = draft.currentRoll;
-		if (!roll) continue;
-		const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
-		let profiles = chunks.get(chunkUrl);
-		if (!profiles) {
-			const response = await request.get(chunkUrl);
-			expect(response.ok()).toBe(true);
-			profiles = await response.json() as Profile[];
-			chunks.set(chunkUrl, profiles);
-		}
-		for (const candidate of availableCandidates(draft, manifest)) {
-			const slots = legalSlots(draft, candidate, manifest);
-			const [slot] = slots;
-			if (candidate.eligibleSlots.some(position => HITTER_SLOTS.includes(position as HitterSlot)) || slots.length !== 1 || !slot) continue;
-			const profile = profiles.find(item => item.seasonId === candidate.seasonId);
-			if (profile) return { draft, candidate, profile, profiles, slot };
+	// Relievers qualify for four relief slots, so a one-slot pitcher appears only once most of the staff is drafted.
+	for (let seed = 1; seed <= 100; seed++) {
+		let draft = selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id);
+		while (draft.picks.length < SLOTS.length) {
+			draft = rollDraft(draft, manifest);
+			const roll = draft.currentRoll;
+			if (!roll) break;
+			const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
+			let profiles = chunks.get(chunkUrl);
+			if (!profiles) {
+				const response = await request.get(chunkUrl);
+				expect(response.ok()).toBe(true);
+				profiles = await response.json() as Profile[];
+				chunks.set(chunkUrl, profiles);
+			}
+			const available = availableCandidates(draft, manifest);
+			for (const candidate of available) {
+				const slots = legalSlots(draft, candidate, manifest);
+				const [slot] = slots;
+				if (candidate.eligibleSlots.some(position => HITTER_SLOTS.includes(position as HitterSlot)) || slots.length !== 1 || !slot) continue;
+				const profile = profiles.find(item => item.seasonId === candidate.seasonId);
+				if (profile) return { draft, candidate, profile, profiles, slot };
+			}
+			draft = commitPick(draft, manifest, available[0].seasonId, legalSlots(draft, available[0], manifest)[0]);
 		}
 	}
-	throw new Error('Current data did not produce a one-slot pitcher scenario in 500 deterministic rolls');
+	throw new Error('Current data did not produce a one-slot pitcher scenario in 100 deterministic drafts');
 }
 
 async function retentionScenario(request: APIRequestContext, manifest: Manifest): Promise<RetentionScenario> {
@@ -102,7 +108,7 @@ async function blockedScenario(request: APIRequestContext, manifest: Manifest): 
 	const bySeason = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
 	for (let seed = 1; seed <= 20; seed++) {
 		let draft = selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id);
-		for (let pick = 0; pick < 13; pick++) {
+		for (let pick = 0; pick < SLOTS.length - 1; pick++) {
 			draft = rollDraft(draft, manifest);
 			const roll = draft.currentRoll!;
 			const available = availableCandidates(draft, manifest);

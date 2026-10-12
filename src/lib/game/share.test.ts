@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Draft } from './types.ts';
+import { MODEL_VERSION, RULES_VERSION, type Draft } from './types.ts';
 import type { SeasonResult } from '../sim/types.ts';
 import type { SharePublication, ShareRenderModel } from '../share/types.ts';
 import {
@@ -50,8 +50,8 @@ function draft(): Draft {
 	return {
 		schemaVersion: 5,
 		dataVersion: 'data-version',
-		modelVersion: 'contact-v1',
-		rulesVersion: 'classic-v2',
+		modelVersion: MODEL_VERSION,
+		rulesVersion: RULES_VERSION,
 		seed: 162,
 		homeStadium: { id: 'F00-2025', version: 'synthetic-F00' },
 		picks: [],

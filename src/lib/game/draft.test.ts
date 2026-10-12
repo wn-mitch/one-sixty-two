@@ -223,13 +223,13 @@ describe('permanent deterministic drafting', () => {
   }, manifest)).toThrow('saved roll');
   const candidate = availableCandidates(draft, manifest)[0];
   const next = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
-  expect(() => commitPick(next, manifest, candidate.seasonId, candidate.eligibleSlots[0])).toThrow('Roll before');
+  expect(() => commitPick(next, manifest, candidate.seasonId, candidate.eligibleSlots[0] as Slot)).toThrow('Roll before');
   expect(availableCandidates(next, manifest, null).some(item => item.playerId === candidate.playerId)).toBe(false);
   expect(availableCandidates(next, manifest, null).some(item => item.franchiseId === candidate.franchiseId)).toBe(false);
  });
 
  it('preserves a closing-pitcher-only final roll', () => {
-  let finalDraft = startDraft(manifest, 25);
+  let finalDraft = startDraft(manifest, 21);
   while (finalDraft.picks.length < SLOTS.length - 1) {
    finalDraft = rollDraft(finalDraft, manifest);
    const candidate = availableCandidates(finalDraft, manifest)[0];
@@ -391,7 +391,7 @@ describe('permanent deterministic drafting', () => {
   const source = makeManifest([selected, remaining, ...fillers], 'stranding-v1');
   const picked = [selected, ...fillers].map(candidate => ({
    seasonId: candidate.seasonId,
-   slot: candidate === selected ? 'C' as const : candidate.eligibleSlots[0],
+   slot: candidate === selected ? 'C' as const : candidate.eligibleSlots[0] as Slot,
    franchiseId: candidate.franchiseId,
    decade: candidate.decade
   }));
@@ -448,7 +448,7 @@ describe('permanent deterministic drafting', () => {
    ...startDraft(source, 1),
    picks: [selected, ...fillers].map(candidate => ({
     seasonId: candidate.seasonId,
-    slot: candidate === selected ? 'C' as const : candidate.eligibleSlots[0],
+    slot: candidate === selected ? 'C' as const : candidate.eligibleSlots[0] as Slot,
     franchiseId: candidate.franchiseId,
     decade: candidate.decade
    })),
@@ -457,14 +457,14 @@ describe('permanent deterministic drafting', () => {
   expect(() => reassignPick(draft, source, selected.seasonId, '1B')).toThrow('current roll');
  });
 
- it('reserves a scarce bullpen franchise when evaluating individual picks', () => {
+ it('reserves a scarce relief franchise when evaluating individual picks', () => {
   const open = [
    { seasonId: 'hitter-a:1982:AL:A', playerId: 'hitter-a', franchiseId: 'A', decade: 1980, eligibleSlots: ['C'] },
    { seasonId: 'hitter-b:1982:AL:B', playerId: 'hitter-b', franchiseId: 'B', decade: 1980, eligibleSlots: ['C'] },
-   { seasonId: 'bullpen:1982:AL:A', playerId: 'bullpen:A', franchiseId: 'A', decade: 1980, eligibleSlots: ['BP'] }
+   { seasonId: 'reliever-a:1982:AL:A', playerId: 'reliever-a', franchiseId: 'A', decade: 1980, eligibleSlots: ['RP1'] }
   ] satisfies Candidate[];
-  const pool = scarcePool(open, ['C', 'BP']);
-  const draft = draftWithOnlySlotsOpen(pool, ['C', 'BP']);
+  const pool = scarcePool(open, ['C', 'RP1']);
+  const draft = draftWithOnlySlotsOpen(pool, ['C', 'RP1']);
   expect(legalSlots(draft, open[0], pool)).toEqual([]);
   expect(legalSlots(draft, open[1], pool)).toEqual(['C']);
  });

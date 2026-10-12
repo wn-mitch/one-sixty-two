@@ -53,8 +53,7 @@ export function heldBy(ledger: Ledger, owner: Owner): string[] {
 
 /**
  * Replays the event log from the unowned universe and checks it reproduces every instance's owner,
- * that each move started where the card actually was, that every card is real, and that no
- * bullpen shares the run with one of its member player-seasons.
+ * that each move started where the card actually was, and that every card is real.
  */
 export function auditLedger(ledger: Ledger): LegalityFailure[] {
  const failures: LegalityFailure[] = [];
@@ -69,9 +68,6 @@ export function auditLedger(ledger: Ledger): LegalityFailure[] {
   if (!card) { failures.push({ code: 'fictional-card', cardId: instance.cardId }); continue; }
   const actual = replayed.get(instance.cardId) ?? null;
   if (!actual || !sameOwner(actual, instance.owner)) failures.push({ code: 'bucket-mismatch', cardId: instance.cardId, expected: instance.owner, actual });
-  for (const conflict of card.conflicts) {
-   if (ledger.instances.has(conflict) && compareId(instance.cardId, conflict) < 0) failures.push({ code: 'bullpen-member-overlap', cardId: instance.cardId, conflict });
-  }
  }
  return failures;
 }

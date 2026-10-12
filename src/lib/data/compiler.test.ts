@@ -310,14 +310,22 @@ describe('historical data compiler', () => {
   const simulation = first.files['simulation.json'] as {
    defenseMethodVersion: string;
    valuationVersion: string;
-   opponents: { hitters: { eligibleSlots: string[]; defense: { positions: Record<string, unknown> } }[]; starters: unknown[] }[];
+   opponents: { hitters: { eligibleSlots: string[]; defense: { positions: Record<string, unknown> } }[]; starters: unknown[]; closer: { seasonId: string }; relievers: { seasonId: string; eligibleSlots: string[] }[]; bullpen: { seasonId: string } }[];
   };
   expect(simulation).toMatchObject({ defenseMethodVersion: 'defense-v2', valuationVersion: 'sim-war-v2' });
   expect(first.manifest.candidates.some(candidate => candidate.seasonId === 'bullpen:1950:AL:OLD0' && candidate.eligibleSlots.includes('BP'))).toBe(true);
   expect((first.files['F0-1950.json'] as { eligibleSlots: string[] }[]).some(profile => profile.eligibleSlots.includes('BP'))).toBe(true);
+  // Collected team bullpens stay in the chunks but are never priced for Draft Mode.
+  const priced = (first.files['draft-cards.json'] as { seasonId: string[] }).seasonId;
+  expect(priced.some(id => id.startsWith('bullpen:'))).toBe(false);
+  expect(priced).toHaveLength(first.manifest.candidates.filter(candidate => !candidate.eligibleSlots.includes('BP')).length);
   expect(simulation.opponents).toHaveLength(30);
   for (const team of simulation.opponents) {
    expect(team.starters).toHaveLength(5);
+   // The closer, three named relievers and the pooled remainder are separate arms.
+   expect(team.relievers).toHaveLength(3);
+   expect(new Set([team.closer.seasonId, ...team.relievers.map(profile => profile.seasonId), team.bullpen.seasonId]).size).toBe(5);
+   for (const reliever of team.relievers) expect(reliever.eligibleSlots).toEqual(expect.arrayContaining(['CL', 'RP1', 'RP2', 'RP3']));
    for (const hitter of team.hitters) {
     const slot = hitter.eligibleSlots[0];
     if (slot !== 'DH') expect(hitter.defense.positions[slot]).toBeDefined();

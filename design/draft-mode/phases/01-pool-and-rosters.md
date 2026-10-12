@@ -32,8 +32,8 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 - Each of the eight seats is dealt two eight-card packs, so the opening pool is 128 cards and every club drafts 16.
 - Each pack has one gold-or-gem slot, two silver-or-better slots and five common-or-better slots. Common, silver, gold and gem are the base, foil, emboss and gem finishes.
 - Each slot draws a random free card at or above its floor, so upgrades come at the pool's natural rates. A table averages about 10 gems, 27 golds, 41 silvers and 50 commons.
-- Roles are not balanced: a table averages about 60 hitters, 29 starters, 36 closers and 3 bullpens. Cleanup covers missing roles.
-- The roster is 16 active roles (Classic's 14 plus setup relievers SU1 and SU2) and two reserves. Setup slots take any card eligible to close, and their cleanup comes from the closer stack.
+- Roles are not balanced: a table averages about 62 hitters, 30 starters and 37 relievers. Cleanup covers missing roles.
+- The roster is 18 active roles (Classic's 16 plus RP4 and RP5) and two reserves. Every named relief slot takes any card eligible to close, and its cleanup comes from the closer stack. Team-season bullpen cards are not dealt or priced.
 - A seat cracks both packs into one 16-card pile, takes one card and passes the pile left. Sixteen picks clear the table, and every pile visits every seat twice.
 - The pool grows at each 27-game chapter; that growth belongs to [D04](./04-season-evolution.md).
 
@@ -41,8 +41,8 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 - The order is draft → cuts → common-only cleanup → submission.
 - Surplus cards and overpriced cards are cut to the unowned pool and are not reoffered as cleanup.
 - Cleanup cards are always commons: base finish and at most 15 units, so an all-common roster fits any legal budget.
-- Each seat has its own unlimited stack per role (each position, DH, starter, closer and bullpen) in a seeded order, and sees only the top card. Taking it reveals the next. A reserve may come from any stack.
-- A card that has been in the run, or whose bullpen or bullpen member is in the run, never appears on top. Seats share the universe, so two stacks can rarely show the same card; whichever club takes it first gets it.
+- Each seat has its own unlimited stack per role (each position, DH, starter and reliever) in a seeded order, and sees only the top card. Taking it reveals the next. A reserve may come from any stack.
+- A card that has been in the run never appears on top. Seats share the universe, so two stacks can rarely show the same card; whichever club takes it first gets it.
 - The legality predicate takes a `PayrollBudget` (nominal cap, franchise adjustment, obligations, ceiling) and no cash.
 
 **Provisional evidence.**
@@ -53,9 +53,9 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 - Phone runtime is not measured.
 
 **Prerequisites recorded for D03.**
-- `validateTeam`/`validateSeason` in `src/lib/sim/validation.ts` reject duplicate `playerId`s and duplicate franchises. Draft rules must relax both before drafted rosters can be simulated, including two bullpens from one franchise, which share `bullpen:<franchise>`.
+- `validateTeam`/`validateSeason` in `src/lib/sim/validation.ts` reject duplicate `playerId`s and duplicate franchises. Draft rules must relax both before drafted rosters can be simulated.
 - Two-way cards are priced at their best role only.
-- The engine has no setup relievers yet. The implemented D01 roster (16 active roles with SU1, SU2 and BP) is superseded by [named bullpens](../../simulation/model.md#7-pitcher-calibration-workload-and-expectancy): 18 active roles with RP1–RP5 and no bullpen card. Setup relievers are currently priced at their closer value.
+- The engine plays any number of named relievers, but the Classic season request carries RP1–RP3; RP4 and RP5 reach the engine with D03. Named relievers are priced at their closer value.
 
 ## Dependencies
 

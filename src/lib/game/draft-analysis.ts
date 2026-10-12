@@ -1,4 +1,4 @@
-import { compareId, type Candidate, type Draft, type Manifest, type Slot } from './types.ts';
+import { compareId, type Candidate, type Draft, type Manifest, type RosterSlot, type Slot } from './types.ts';
 import { draftRules, type DraftRulePolicy } from './rules.ts';
 
 interface CandidatePair {
@@ -54,7 +54,7 @@ function unusedCandidates(draft: Draft, manifest: Manifest, policy: DraftRulePol
   if (candidate) usedPlayers.add(candidate.playerId);
   if (policy.uniqueFranchises) usedFranchises.add(pick.franchiseId);
  }
- const openSlotSet = new Set(slots);
+ const openSlotSet = new Set<RosterSlot>(slots);
  return manifest.candidates.filter((candidate, index) => {
   const year = years[index];
   return year >= 0 && year >= policy.minYear && year <= policy.maxYear &&
@@ -66,7 +66,7 @@ function unusedCandidates(draft: Draft, manifest: Manifest, policy: DraftRulePol
 
 /** Hall's condition for legacy drafts, where only athlete identity is unique. */
 function canFinishByPlayer(candidates: Candidate[], slots: Slot[]): boolean {
- const players = new Map<Slot, Set<string>>(slots.map(slot => [slot, new Set()]));
+ const players = new Map<RosterSlot, Set<string>>(slots.map(slot => [slot, new Set()]));
  for (const candidate of candidates) {
   for (const slot of candidate.eligibleSlots) players.get(slot)?.add(candidate.playerId);
  }
@@ -87,7 +87,7 @@ function canFinishByPlayer(candidates: Candidate[], slots: Slot[]): boolean {
 }
 
 function playerPoolIsPlentiful(candidates: Candidate[], slots: Slot[]): boolean {
- const players = new Map(slots.map(slot => [slot, new Set<string>()]));
+ const players = new Map<RosterSlot, Set<string>>(slots.map(slot => [slot, new Set<string>()]));
  for (const candidate of candidates) {
   for (const slot of candidate.eligibleSlots) {
    const set = players.get(slot);
@@ -98,12 +98,11 @@ function playerPoolIsPlentiful(candidates: Candidate[], slots: Slot[]): boolean 
 }
 
 /**
- * This sufficient proof is intentionally stronger than a matching. Individual
- * slots need n deep franchises with n athletes apiece. BP instead needs n
- * franchises with a valid unit because each franchise has one composite ID.
+ * This sufficient proof is intentionally stronger than a matching: each open
+ * slot needs n deep franchises with n athletes apiece.
  */
 function jointPoolIsPlentiful(candidates: Candidate[], slots: Slot[]): boolean {
- const bySlot = new Map(slots.map(slot => [slot, new Map<string, Set<string>>()]));
+ const bySlot = new Map<RosterSlot, Map<string, Set<string>>>(slots.map(slot => [slot, new Map<string, Set<string>>()]));
  for (const candidate of candidates) {
   for (const slot of candidate.eligibleSlots) {
    const franchises = bySlot.get(slot);
@@ -118,7 +117,6 @@ function jointPoolIsPlentiful(candidates: Candidate[], slots: Slot[]): boolean {
  }
  return slots.every(slot => {
   const franchises = bySlot.get(slot)!;
-  if (slot === 'BP') return franchises.size >= slots.length;
   let deepFranchises = 0;
   for (const players of franchises.values()) {
    if (players.size >= slots.length && ++deepFranchises >= slots.length) return true;
@@ -132,8 +130,8 @@ function canFinishJointly(candidates: Candidate[], slots: Slot[]): boolean {
  if (slots.length === 0) return true;
  if (jointPoolIsPlentiful(candidates, slots)) return true;
 
- const pairsBySlot = new Map<Slot, CandidatePair[]>(slots.map(slot => [slot, []]));
- const seenBySlot = new Map<Slot, Map<string, Set<string>>>(slots.map(slot => [slot, new Map()]));
+ const pairsBySlot = new Map<RosterSlot, CandidatePair[]>(slots.map(slot => [slot, []]));
+ const seenBySlot = new Map<RosterSlot, Map<string, Set<string>>>(slots.map(slot => [slot, new Map()]));
  for (const candidate of candidates) {
   for (const slot of candidate.eligibleSlots) {
    const seenByFranchise = seenBySlot.get(slot);

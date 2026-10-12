@@ -7,7 +7,7 @@
 	let { boxes, label, idPrefix }: { boxes: readonly TeamBox[]; label: string; idPrefix: string } = $props();
 
 	function roleLabel(line: PitcherLine): string {
-		return line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : 'SP';
+		return line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : line.role === 'reliever' ? 'RP' : 'SP';
 	}
 
 	function ra9(line: PitcherLine): string {

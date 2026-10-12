@@ -28,14 +28,19 @@ export interface BatterLine {
  defensiveComponents: DefensiveRunComponents; fieldingOuts: number; caughtAdvancing: number;
 }
 export interface PitcherLine {
- seasonId: string; playerId: string; displayName: string; year: number; role: 'starter' | 'closer' | 'support';
+ seasonId: string; playerId: string; displayName: string; year: number; role: 'starter' | 'closer' | 'reliever' | 'support';
  outs: number; H: number; BB: number; HBP: number; SO: number; R: number; starts: number; appearances: number;
  BF: number; pitchingRunsAboveNeutral: number;
 }
 export interface TeamInput {
  id: string; name: string; hitters: Profile[]; defense: Record<Position, number>;
- pitchers: Profile[]; starterIndex: number; closerIndex: number; bullpenIndex: number;
- closerAvailable: boolean; closerOutsRemaining: number;
+ pitchers: Profile[]; starterIndex: number; closerIndex: number;
+ /** Named relievers in leverage order: the 8th, the 7th, then middle relief. */
+ relievers: number[];
+ /** The remainder arm for relief innings no available named pitcher takes. */
+ bullpenIndex: number;
+ /** Whether each pitcher may enter today, by pitcher index. */
+ available: boolean[];
 }
 export interface TeamBox {
  id: string; name: string; runs: number; innings: (number | null)[];

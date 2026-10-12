@@ -54,8 +54,8 @@ describe('opening recovery', () => {
   expect(result.failures).toEqual([]);
   expect(result.seats[0].postDraft.overCap).toBe(true);
   expect(result.seats[0].cuts.some(cut => cut.reason === 'over-cap')).toBe(true);
-  expect(result.seats[1].postDraft.missing).toEqual(expect.arrayContaining(['SP1', 'SP2', 'SP3', 'CL', 'SU1', 'SU2', 'BP']));
-  expect(result.seats[1].cleanup.map(pick => pick.row)).toEqual(expect.arrayContaining(['SP1', 'SP2', 'SP3', 'CL', 'SU1', 'SU2', 'BP']));
+  expect(result.seats[1].postDraft.missing).toEqual(expect.arrayContaining(['SP1', 'SP2', 'SP3', 'CL', 'RP1', 'RP2', 'RP3', 'RP4', 'RP5']));
+  expect(result.seats[1].cleanup.map(pick => pick.row)).toEqual(expect.arrayContaining(['SP1', 'SP2', 'SP3', 'CL', 'RP1', 'RP2', 'RP3', 'RP4', 'RP5']));
   for (const seat of result.seats) {
    expect(seat.report).toMatchObject({ legal: true });
    expect(seat.report!.payroll).toBeLessThanOrEqual(seat.effectiveCap);

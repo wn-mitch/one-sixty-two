@@ -21,7 +21,7 @@ export interface RunPool {
 export function cubeRole(card: DraftCard): CubeRole {
  const slot = card.pricedSlot;
  if ((HITTER_SLOTS as readonly Slot[]).includes(slot)) return 'hitter';
- return slot === 'CL' ? 'CL' : slot === 'BP' ? 'BP' : 'SP';
+ return slot === 'CL' ? 'CL' : 'SP';
 }
 
 /** The pile `seat` holds at `pick`. Piles pass left, to the next seat up, after every pick. */
@@ -32,8 +32,7 @@ export function pileHeldBy(seat: number, pick: number, seats = DRAFT_RULES.seats
 /**
  * Builds one run's pool from real cards. Every seat is dealt its packs; each pack slot draws a
  * random free card at or above its floor, so upgrades come at the universe's natural finish rates.
- * Everything else stays in the unowned universe, where the cleanup stacks draw from it. No pool
- * holds a bullpen together with one of its member player-seasons.
+ * Everything else stays in the unowned universe, where the cleanup stacks draw from it.
  */
 export function buildRunPool(seed: number, cards: readonly DraftCard[], rules: DraftRules = DRAFT_RULES): RunPool {
  const universe = cards.filter(card => card.year >= rules.minYear && card.year <= rules.maxYear).sort((a, b) => compareId(a.seasonId, b.seasonId));
@@ -51,7 +50,6 @@ export function buildRunPool(seed: number, cards: readonly DraftCard[], rules: D
    const card = order.cards[order.next++];
    if (blocked.has(card.seasonId)) continue;
    blocked.add(card.seasonId);
-   for (const conflict of card.conflicts) blocked.add(conflict);
    return card;
   }
   return null;

@@ -31,10 +31,10 @@ test('My seasons sorts clubs and opens a club from the all-time leaders', async 
 test('My seasons shows a club’s cards, lines, and history, and renames and deletes it', async ({ page }) => {
 	await openStory(page, 'modes-my-seasons--club');
 	const club = page.getByRole('region', { name: 'Example Aces', exact: true });
-	await expect(club.getByRole('list', { name: 'Roster' }).getByRole('listitem')).toHaveCount(14);
+	await expect(club.getByRole('list', { name: 'Roster' }).getByRole('listitem')).toHaveCount(16);
 	await expect(club.locator('.roster .card [data-card]').first()).toBeVisible();
 	await expect(club.getByRole('region', { name: 'Example Aces batting' }).locator('tbody tr')).toHaveCount(9);
-	await expect(club.getByRole('region', { name: 'Example Aces pitching' }).locator('tbody tr')).toHaveCount(4);
+	await expect(club.getByRole('region', { name: 'Example Aces pitching' }).locator('tbody tr')).toHaveCount(7);
 	await expect(club.getByRole('link', { name: /^(Won|Lost) 3–[0-2] vs Example Rivals$|^(Won|Lost) [0-2]–3 vs Example Rivals$/ })).toHaveAttribute('href', /^\/h2h#a=/);
 	await expect(club.getByRole('button', { name: 'Copy challenge link' })).toBeVisible();
 

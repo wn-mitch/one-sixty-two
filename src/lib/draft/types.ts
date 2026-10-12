@@ -1,10 +1,10 @@
 import type { Finish } from '../cards/finish.ts';
 import type { Slot } from '../game/types.ts';
 
-/** Draft Mode's two setup relievers, who take the 8th and 7th innings of close games ahead of the closer. */
-export type SetupSlot = 'SU1' | 'SU2';
-/** A Draft Mode active roster slot: every Classic slot plus the setup relievers. */
-export type DraftSlot = Slot | SetupSlot;
+/** Draft Mode's middle relievers beyond Classic's three named relievers. */
+export type DeepReliefSlot = 'RP4' | 'RP5';
+/** A Draft Mode active roster slot: every Classic slot plus RP4 and RP5. */
+export type DraftSlot = Slot | DeepReliefSlot;
 
 /**
  * One historical player-season as a draftable card. Immutable for a data and salary version.
@@ -21,8 +21,6 @@ export interface DraftCard {
  readonly valueRuns: number;
  readonly pricedSlot: Slot;
  readonly salary: number;
- /** Player-seasons that cannot share a run pool with this card: bullpen members and their bullpen. */
- readonly conflicts: readonly string[];
 }
 
 /** Where a run-owned card currently sits. Every card has exactly one owner at a time. */
@@ -83,7 +81,6 @@ export type LegalityFailure =
  | { code: 'cap-below-guarantee'; effectiveCap: number; guarantee: number }
  | { code: 'duplicate-ownership'; cardId: string }
  | { code: 'bucket-mismatch'; cardId: string; expected: Owner; actual: Owner | null }
- | { code: 'bullpen-member-overlap'; cardId: string; conflict: string }
  | { code: 'fictional-card'; cardId: string }
  /** No common can fill this row from the seat's cleanup stacks. */
  | { code: 'stock-role-shortfall'; slot: DraftSlot | 'reserve' }

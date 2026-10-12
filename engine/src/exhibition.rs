@@ -19,9 +19,10 @@ pub struct ExhibitionTeam {
     pub pitchers: Vec<Profile>,
     pub starter_index: usize,
     pub closer_index: usize,
+    pub relievers: Vec<usize>,
     pub bullpen_index: usize,
-    pub closer_available: bool,
-    pub closer_outs_remaining: f64,
+    /// Whether each pitcher may enter, by pitcher index.
+    pub available: Vec<bool>,
 }
 
 /// One game in `stadium`, drawing from the streams for (`seed`, `game`).
@@ -45,13 +46,13 @@ impl ExhibitionTeam {
             if index >= self.hitters.len() { return Err(format!("{}: fielder at {name} is outside the lineup", self.id)); }
             defense[position] = index;
         }
-        for index in [self.starter_index, self.closer_index, self.bullpen_index] {
+        for &index in [self.starter_index, self.closer_index, self.bullpen_index].iter().chain(&self.relievers) {
             if index >= self.pitchers.len() { return Err(format!("{}: pitcher index is outside the staff", self.id)); }
         }
         Ok(TeamInput {
             id: self.id.clone(), name: self.name.clone(), hitters: self.hitters.iter().collect(), defense, pitchers: self.pitchers.iter().collect(),
-            starter_index: self.starter_index, closer_index: self.closer_index, bullpen_index: self.bullpen_index,
-            closer_available: self.closer_available, closer_outs_remaining: self.closer_outs_remaining,
+            starter_index: self.starter_index, closer_index: self.closer_index, relievers: self.relievers.clone(), bullpen_index: self.bullpen_index,
+            available: self.available.clone(),
         })
     }
 }

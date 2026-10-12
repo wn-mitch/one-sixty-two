@@ -1,23 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { isCommon } from './cleanup.ts';
-import { auditLedger, auditView } from './ledger.ts';
+import { auditView } from './ledger.ts';
 import { buildRunPool, pileHeldBy } from './pool.ts';
 import { atLeast, DRAFT_RULES, picksPerSeat } from './rules.ts';
 import { testUniverse } from './test-fixtures.ts';
-import type { DraftCard } from './types.ts';
-
-/** Bullpen i aggregates closer i, so the two may never share a pool. */
-function conflictedUniverse(): DraftCard[] {
- const cards = testUniverse(120);
- const closers = cards.filter(card => card.pricedSlot === 'CL');
- const bullpens = cards.filter(card => card.pricedSlot === 'BP');
- const partner = new Map<string, string>();
- bullpens.forEach((bullpen, index) => { partner.set(bullpen.seasonId, closers[index].seasonId); partner.set(closers[index].seasonId, bullpen.seasonId); });
- return cards.map(card => partner.has(card.seasonId) ? { ...card, conflicts: [partner.get(card.seasonId)!] } : card);
-}
 
 describe('run pool', () => {
- const cards = conflictedUniverse();
+ const cards = testUniverse(120);
  const byId = new Map(cards.map(card => [card.seasonId, card]));
  const pool = buildRunPool(7, cards);
 
@@ -40,10 +29,6 @@ describe('run pool', () => {
   const upgraded = pool.packs.flat(2).filter(id => atLeast(byId.get(id)!.finish, 'foil')).length;
   expect(upgraded).toBeGreaterThan(60);
   expect(pool.packs.flat(2).filter(id => byId.get(id)!.finish === 'base').length).toBeGreaterThan(0);
- });
-
- it('never pools a bullpen with one of its members', () => {
-  expect(auditLedger(pool.ledger)).toEqual([]);
  });
 
  it('reproduces the pool from the seed', () => {

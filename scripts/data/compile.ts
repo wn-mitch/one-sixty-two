@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, POSITIONS, SLOTS, VALUATION_VERSION, type Attribution, type DefensiveEnvironment, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../../src/lib/game/types.ts';
+import { compareId, DEFENSE_METHOD_VERSION, draftableCandidates, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, POSITIONS, SLOTS, VALUATION_VERSION, type Attribution, type DefensiveEnvironment, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../../src/lib/game/types.ts';
 import { validateDefensiveEnvironment, validateProfile, validateStadiumDeck } from '../../src/lib/sim/validation.ts';
 import { createContactReference, type MatchupQuery } from '../../src/lib/engine/node.ts';
 import { contactRecord, FIT_TOLERANCE, type ContactModel } from '../../src/lib/sim/contact-profile.ts';
@@ -39,7 +39,7 @@ export const APPROXIMATIONS = [
  'Missing optional handedness, fielding components and baserunning evidence is explicitly neutral and labelled.',
  'When source sacrifice flies are unavailable, SF remains an explicitly labelled unavailable zero and PA is a conservative recorded lower bound; no sacrifice-fly count is reconstructed.',
  'Drafted bullpen remainders BFP-weight every relief-dominant pitcher-season after the saves leader; source counts do not split starter and relief appearances.',
- 'Three starters each make 54 starts. A workload-limited, rested closer is supported by a bullpen with an unlimited support-pool workload abstraction.',
+ 'Three starters each make 54 starts. The closer and named relievers are workload-limited and rested; relief innings none of them can take go to an unlimited remainder arm. The drafted club\'s remainder is the pooled 2025 league relief; each 2025 club\'s is the rest of its own relief.',
  'Pitcher simulation reports runs allowed and RA9, not reconstructed official earned runs, wins or saves.',
  'The schedule is a seeded 162-game challenge against all thirty 2025 clubs, not an official club schedule.'
 ];
@@ -218,13 +218,14 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  compiled.candidates.push(...buildBullpenCandidates(compiled));
  const candidates = compiled.candidates;
  const { opponents, bullpen } = buildOpponents(compiled, new Map(stadiums.configs.map(stadium => [stadium.franchiseId, stadiumRef(stadium)])));
- for (const profile of [...candidates, bullpen, ...opponents.flatMap(team => [...team.hitters, ...team.starters, team.closer, team.bullpen])]) {
+ for (const profile of [...candidates, bullpen, ...opponents.flatMap(team => [...team.hitters, ...team.starters, team.closer, ...team.relievers, team.bullpen])]) {
   if (profile.battingRates || profile.pitchingRates) profile.contact = contactRecord(profile);
  }
  const contactFits = contactFitDiagnostics(candidates, defenseEnvironment);
  const cardWar = showcaseWar(joinedWar);
- const draftCards = buildDraftCardTable(candidates, defenseEnvironment, seasonId => cardWar.get(seasonId));
- const parkFits = buildParkFits(candidates, defenseEnvironment, stadiums.configs, draftCards, cachedParkBasis);
+ const draftable = draftableCandidates(candidates);
+ const draftCards = buildDraftCardTable(draftable, defenseEnvironment, seasonId => cardWar.get(seasonId));
+ const parkFits = buildParkFits(draftable, defenseEnvironment, stadiums.configs, draftCards, cachedParkBasis);
  const simulationBase = {
   schemaVersion: 1 as const,
   ...defenseEnvironment,
@@ -326,7 +327,7 @@ function validateCompiled(candidates: Profile[], simulation: Omit<SimulationData
  if (simulation.opponents.length !== 30 || new Set(simulation.opponents.map(team => team.id)).size !== 30) throw new Error('Expected thirty opponents');
  if (new Set(candidates.map(profile => profile.seasonId)).size !== candidates.length) throw new Error('Duplicate season identity');
  for (const slot of SLOTS) if (!candidates.some(profile => profile.eligibleSlots.includes(slot))) throw new Error(`Unfillable global slot: ${slot}`);
- const all = [...candidates, simulation.bullpen, ...simulation.opponents.flatMap(team => [...team.hitters, ...team.starters, team.closer, team.bullpen])];
+ const all = [...candidates, simulation.bullpen, ...simulation.opponents.flatMap(team => [...team.hitters, ...team.starters, team.closer, ...team.relievers, team.bullpen])];
  all.forEach(validateProfile);
  for (const profile of all) {
   if (profile.year < MIN_SEASON_YEAR || profile.year > MAX_SEASON_YEAR || !['AL', 'NL'].includes(profile.league)) throw new Error(`Out-of-era profile: ${profile.seasonId}`);

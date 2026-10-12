@@ -51,7 +51,7 @@ describe('season library', () => {
   await db.run([{ sql: "UPDATE seasons SET model_version = 'pa-v3', schema_version = 4" }]);
   const { entries } = await loadLibrary(db, manifest);
   expect(entries[0].status).toBe('retired');
-  expect(entries[0].roster).toHaveLength(14);
+  expect(entries[0].roster).toHaveLength(SLOTS.length);
   expect((await loadLibrary(db, { ...manifest, dataVersion: 'library-v2' })).entries[0].status).toBe('retired');
  });
  it('keeps every season, most recently saved first', async () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { decodeReplay, encodeReplay } from '../src/lib/game/share.ts';
-import { SLOTS } from '../src/lib/game/types.ts';
+import { RELIEF_SLOTS, SLOTS } from '../src/lib/game/types.ts';
 import { simulateSeason } from '../src/lib/engine/node.ts';
 import { prepareSeasonInput } from '../src/lib/game/season-input.ts';
 import type { SeasonResult } from '../src/lib/sim/types.ts';
@@ -49,7 +49,7 @@ function assertConcreteSeason(result: SeasonResult): void {
 
 async function main(): Promise<void> {
 	const options = parseOptions(process.argv.slice(2));
-	assert.equal(SLOTS.length, 14, 'Current smoke contract requires fourteen roster slots');
+	assert.equal(SLOTS.length, 16, 'Current smoke contract requires sixteen roster slots');
 	const { manifest, simulation } = await loadVerificationData();
 	const stadium = stadiumId(manifest, options.stadium);
 	const { draft, profiles } = await draftRoster(manifest, options.seed, options.policy, stadium, new ProfileChunks(manifest));
@@ -59,10 +59,14 @@ async function main(): Promise<void> {
 
 	const prepared = prepareSeasonInput(draft, profiles, simulation);
 	const result = simulateSeason(prepared);
-	const draftedBullpen = prepared.roster.find(pick => pick.slot === 'BP')!.profile;
 	assert.equal(result.modelVersion, prepared.modelVersion, 'Season result did not preserve the validated model version');
-	assert.equal(result.pitching[4].seasonId, draftedBullpen.seasonId, 'Season did not deploy the drafted bullpen remainder');
-	assert.equal(result.pitching[4].displayName, draftedBullpen.displayName, 'Season did not preserve the drafted bullpen identity');
+	RELIEF_SLOTS.forEach((slot, index) => {
+		const line = result.pitching[4 + index];
+		assert.equal(line.seasonId, prepared.roster.find(pick => pick.slot === slot)!.profile.seasonId, `Season did not deploy ${slot} as a named reliever`);
+		assert.equal(line.role, 'reliever', `${slot} did not pitch as a named reliever`);
+		assert.ok(line.outs > 0, `${slot} never pitched`);
+	});
+	assert.equal(result.pitching[7].seasonId, simulation.bullpen.seasonId, 'Season did not use the league remainder arm');
 	assertConcreteSeason(result);
 	assert.equal(result.games.filter(game => game.isHome).length, 81, 'Smoke schedule must contain exactly 81 home games');
 	for (const opponent of simulation.opponents) {

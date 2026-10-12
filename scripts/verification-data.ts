@@ -45,10 +45,10 @@ function validateGeneratedSimulation(simulation: SimulationData): void {
 	for (const opponent of simulation.opponents) {
 		if (!opponent || !Array.isArray(opponent.hitters) || opponent.hitters.length !== 9 ||
 			!Array.isArray(opponent.starters) || opponent.starters.length !== 5 ||
-			!opponent.closer || !opponent.bullpen) {
+			!opponent.closer || !Array.isArray(opponent.relievers) || opponent.relievers.length !== 3 || !opponent.bullpen) {
 			throw new Error('Generated simulation contains an invalid opponent');
 		}
-		for (const profile of [...opponent.hitters, ...opponent.starters, opponent.closer, opponent.bullpen]) {
+		for (const profile of [...opponent.hitters, ...opponent.starters, opponent.closer, ...opponent.relievers, opponent.bullpen]) {
 			validateGeneratedProfile(profile);
 		}
 	}

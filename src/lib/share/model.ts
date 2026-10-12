@@ -70,7 +70,7 @@ function validateDraftShape(draft: Draft, manifest: Manifest): ValidatedShareDra
 		draft.rulesVersion !== RULES_VERSION || draft.dataVersion !== manifest.dataVersion) {
 		throw new Error('Share draft is incompatible with the current dataset');
 	}
-	if (draft.picks.length !== SLOTS.length) throw new Error('Share roster must contain all 14 slots');
+	if (draft.picks.length !== SLOTS.length) throw new Error(`Share roster must contain all ${SLOTS.length} slots`);
 	const bySlot = new Map<Slot, Draft['picks'][number]>();
 	const bySeason = new Map<string, Draft['picks'][number]>();
 	for (const pick of draft.picks) {
@@ -116,7 +116,7 @@ function validateProfiles(
 	profiles: readonly Profile[],
 	draft: ValidatedShareDraft
 ): Map<string, Profile> {
-	if (profiles.length !== SLOTS.length) throw new Error('Share roster must provide exactly 14 profiles');
+	if (profiles.length !== SLOTS.length) throw new Error(`Share roster must provide exactly ${SLOTS.length} profiles`);
 	const bySeason = new Map<string, Profile>();
 	for (const profile of profiles) {
 		validateProfile(profile);

@@ -61,7 +61,7 @@ function makeTeam(id: string, data: SimulationData, hitterRates = data.leagueRat
 	const hitters = HITTER_SLOTS.map((slot, index) => commonProfile(`${id}-h${index}`, slot, index === 0 ? hitterRates : data.leagueRates, data));
 	const starter = commonProfile(`${id}-starter`, 'SP1', starterRates, data);
 	const closer = commonProfile(`${id}-closer`, 'CL', data.leagueRates, data);
-	const bullpen = commonProfile(`${id}-support`, 'BP', data.leagueRates, data);
+	const bullpen = commonProfile(`${id}-support`, 'CL', data.leagueRates, data);
 	bullpen.displayName = `${id} bullpen remainder`;
 	bullpen.pitching!.G = 60;
 	bullpen.pitching!.GS = 0;
@@ -74,9 +74,9 @@ function makeTeam(id: string, data: SimulationData, hitterRates = data.leagueRat
 		pitchers: [starter, closer, bullpen],
 		starterIndex: 0,
 		closerIndex: 1,
+		relievers: [],
 		bullpenIndex: 2,
-		closerAvailable: true,
-		closerOutsRemaining: 486
+		available: [true, true, true]
 	};
 }
 

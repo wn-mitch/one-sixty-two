@@ -3,7 +3,7 @@ import { collectionStatements } from '../collection/collection.ts';
 import { seasonEntries, seasonStatements, type CardRow, type SeasonRow } from '../storage/season-rows.ts';
 import type { Db } from '../storage/sql.ts';
 import { decodeReplay, encodeReplay } from './share.ts';
-import { compareId, CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, type Draft, type Manifest, type Profile, type Slot } from './types.ts';
+import { compareId, CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, type Draft, type Manifest, type Profile, type RosterSlot } from './types.ts';
 import { estimatedHitterWar, estimatedPitcherWar } from '../sim/value.ts';
 import type { SeasonResult } from '../sim/types.ts';
 
@@ -11,13 +11,13 @@ export const STORAGE_NOTICE = 'Your season library is unavailable: browser stora
 
 /** A hitter's simulated season line as the library keeps it; `war` is the estimated hitter WAR. */
 export interface SavedBatter {
- seasonId: string; label: string; slot: Slot;
+ seasonId: string; label: string; slot: RosterSlot;
  PA: number; AB: number; H: number; doubles: number; triples: number; HR: number; BB: number; HBP: number; SF: number; RBI: number; SB: number;
  war: number;
 }
 /** A drafted pitcher's simulated season line; the pooled support bullpen is not kept. */
 export interface SavedPitcher {
- seasonId: string; label: string; slot: Slot;
+ seasonId: string; label: string; slot: RosterSlot;
  outs: number; H: number; BB: number; SO: number; R: number; starts: number;
  war: number;
 }
@@ -38,7 +38,7 @@ export interface LibraryEntry {
  batting: SavedBatter[];
  pitching: SavedPitcher[];
  stadium: { id: string; name: string } | null;
- roster: { seasonId: string; label: string; slot: Slot }[];
+ roster: { seasonId: string; label: string; slot: RosterSlot }[];
  mvp?: { seasonId: string; label: string };
  nickname?: string;
 }

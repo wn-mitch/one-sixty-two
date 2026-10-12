@@ -1,5 +1,5 @@
 //! `hill-climb`: searches for the Classic roster with the most expected wins and estimates whether
-//! 162-0 is reachable. Rolls are ignored; any legal roster of fourteen franchises and a stadium counts.
+//! 162-0 is reachable. Rolls are ignored; any legal roster of sixteen franchises and a stadium counts.
 pub mod data;
 pub mod evaluate;
 pub mod report;
@@ -132,7 +132,7 @@ mod tests {
         let evaluator = Evaluator::new(&data).unwrap();
         for candidate in [&start, &roster] {
             let request = candidate.request(&data, 11);
-            let challenge = draft_team(&request, "challenge", "Your team").unwrap();
+            let challenge = draft_team(&request, &data.engine.data.bullpen, "challenge", "Your team").unwrap();
             let expected = data.engine.season_matchups(&challenge).unwrap();
             let cached = evaluator.matchups(candidate).unwrap();
             for (a, b) in expected.iter().zip(&cached) {

@@ -83,7 +83,7 @@
 			const field = canvasElement.querySelector<HTMLElement>('.field-panel');
 			if (!field) throw new Error('The wide field panel is unavailable.');
 			await expect(field.querySelector('.pick-confirmation')).toHaveAttribute('data-pending-slot', '2B');
-			await expect(canvasElement.querySelector('.picked-count')).toHaveTextContent('0 / 14');
+			await expect(canvasElement.querySelector('.picked-count')).toHaveTextContent('0 / 16');
 			return;
 		}
 
@@ -92,12 +92,12 @@
 		await userEvent.click(within(field).getByRole('button', { name: /^2B, open\. Place at open 2B\./ }));
 		await expect(field.querySelector('.pick-confirmation')).toHaveAttribute('data-pending-slot', '2B');
 		await expect(field).toBeVisible();
-		await expect(canvasElement.querySelector('.picked-count')).toHaveTextContent('0 / 14');
+		await expect(canvasElement.querySelector('.picked-count')).toHaveTextContent('0 / 16');
 	};
 
 	const rosterReviewPlay: Play = async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
-		const openField = canvas.queryByRole('button', { name: /Open your field 6 \/ 14/ });
+		const openField = canvas.queryByRole('button', { name: /Open your field 6 \/ 16/ });
 		if (openField) await userEvent.click(openField);
 
 		const owner = openField

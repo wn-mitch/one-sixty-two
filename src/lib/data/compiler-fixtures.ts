@@ -12,7 +12,8 @@ export function syntheticTables(): Tables {
   for (let index = 0; index < teamCount; index++) {
    const key: Row = { yearID: String(year), lgID: index % 2 ? 'NL' : 'AL', teamID: year === 2025 ? `NEW${index}` : `OLD${index}` };
    tables.Teams.push({ ...key, franchID: `F${index}`, name: year === 2025 ? `Current club ${index}` : `Historical club ${index}`, G: '162', R: '720', BPF: '100', PPF: '100' });
-   for (let player = 0; player < 16; player++) {
+   // Current clubs carry five relievers: a closer, three named relievers and a remainder.
+   for (let player = 0; player < (year === 2025 ? 19 : 16); player++) {
     const playerID = `anonymous-${year}-${index}-${player}`;
     const row = { ...key, playerID };
     tables.People.push({ ID: String(tables.People.length), playerID, nameFirst: 'Player', nameLast: String(tables.People.length), bats: 'R', throws: 'R' });

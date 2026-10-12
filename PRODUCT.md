@@ -18,7 +18,7 @@ Baseball fans drafting on phones while watching a game, then inspecting and shar
 
 ## Product Purpose
 
-Draft fourteen exact historical selections into a legal roster and challenge a deterministic 162-game season: nine hitters, three starters, one closer, and one historical team-season bullpen remainder. Choices, real identities, and credible baseball results are the product. Original decade-styled baseball cards make exact seasons comparable and collected picks recognizable, without misrepresenting photo years or inventing ratings. Results retell the season through factual totals, every game box, role-specific ranks, participant-wide awards, app-estimated realized value, and the biggest positive and negative plays from a clearly labelled neutral league-rate win-expectancy estimate.
+Draft sixteen exact historical selections into a legal roster and challenge a deterministic 162-game season: nine hitters, three starters, one closer, and three named relievers. Choices, real identities, and credible baseball results are the product. Original decade-styled baseball cards make exact seasons comparable and collected picks recognizable, without misrepresenting photo years or inventing ratings. Results retell the season through factual totals, every game box, role-specific ranks, participant-wide awards, app-estimated realized value, and the biggest positive and negative plays from a clearly labelled neutral league-rate win-expectancy estimate.
 
 ## Brand Personality
 

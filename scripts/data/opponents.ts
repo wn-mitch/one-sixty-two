@@ -57,6 +57,9 @@ export function poolBullpen(profiles: Profile[], id: string): Profile {
  return pooled;
 }
 
+/** Named relievers per opponent: after the saves leader, the clubs' most-used relief arms. */
+const OPPONENT_RELIEVERS = 3;
+
 /** Current clubs; each plays home games in its own 2025 reference stadium. */
 export function buildOpponents(compiled: CompiledProfiles, homeStadiums: ReadonlyMap<string, ParkRef>): { opponents: Opponent[]; bullpen: Profile } {
  const contemporary = compiled.profiles.filter(profile => profile.year === 2025);
@@ -69,10 +72,13 @@ export function buildOpponents(compiled: CompiledProfiles, homeStadiums: Readonl
   const starters = players.filter(profile => profile.pitching && profile.pitching.GS > 0).sort((a, b) => b.pitching!.GS - a.pitching!.GS || b.pitching!.IPouts - a.pitching!.IPouts || compareId(a.seasonId, b.seasonId)).slice(0, 5);
   if (starters.length !== 5) throw new Error(`Opponent lacks five starters: ${team.franchID}`);
   const relief = players.filter(isReliefProfile).sort((a, b) => b.pitching!.SV - a.pitching!.SV || b.pitching!.IPouts - a.pitching!.IPouts || compareId(a.seasonId, b.seasonId));
-  if (relief.length < 2) throw new Error(`Opponent lacks closer/support relief: ${team.franchID}`);
+  if (relief.length < 2 + OPPONENT_RELIEVERS) throw new Error(`Opponent lacks closer, named relievers and remainder relief: ${team.franchID}`);
+  const [closer, ...rest] = relief;
+  const relievers = [...rest].sort((a, b) => b.pitching!.IPouts - a.pitching!.IPouts || compareId(a.seasonId, b.seasonId)).slice(0, OPPONENT_RELIEVERS);
+  const remainder = rest.filter(profile => !relievers.includes(profile));
   const homeStadium = homeStadiums.get(team.franchID);
   if (!homeStadium) throw new Error(`Missing opponent home stadium: ${team.franchID}`);
-  return { id: team.franchID, name: team.name, homeStadium, hitters, starters, closer: relief[0], bullpen: poolBullpen(relief.slice(1), `${team.franchID}:bullpen`) };
+  return { id: team.franchID, name: team.name, homeStadium, hitters, starters, closer, relievers, bullpen: poolBullpen(remainder, `${team.franchID}:bullpen`) };
  });
  return { opponents, bullpen };
 }

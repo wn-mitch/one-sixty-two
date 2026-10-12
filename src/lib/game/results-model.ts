@@ -32,7 +32,7 @@ export type {
 
 const EM_DASH = '—';
 
-type CardRole = 'hitter' | 'pitcher' | 'bullpen';
+type CardRole = 'hitter' | 'pitcher';
 type AwardCandidate = { id: string; value: number };
 type InternalCard = {
 	seasonId: string;
@@ -65,7 +65,6 @@ function finite(value: unknown): value is number {
 }
 
 function roleFor(slot: Slot): CardRole {
-	if (slot === 'BP') return 'bullpen';
 	return HITTER_SLOTS.includes(slot as typeof HITTER_SLOTS[number]) ? 'hitter' : 'pitcher';
 }
 
@@ -153,7 +152,7 @@ function actualStats(card: InternalCard, rankings: CreateResultsModelInput['rank
 		measured(card.profile, 'pitching', field, pitching?.[field]);
 	const g = value('G'), gs = value('GS'), outs = value('IPouts'), er = value('ER'), so = value('SO'), bb = value('BB');
 	const era = outs !== null && er !== null && outs > 0 ? er * 27 / outs : null;
-	const war = card.role === 'bullpen' || !finite(ranking?.pitchingWAR162) ? null : ranking.pitchingWAR162;
+	const war = !finite(ranking?.pitchingWAR162) ? null : ranking.pitchingWAR162;
 	return [
 		stat('war', 'WAR / 162', war, formatNumber(war, 2), 'higher'),
 		stat('g-gs', 'G / GS', null, `${formatNumber(g)} / ${formatNumber(gs)}`, null),
@@ -177,7 +176,7 @@ function stat(
 function rankedViews(cards: readonly InternalCard[], stats: readonly RawStat[][], label: InspectionSeasonView['label']): InspectionSeasonView[] {
 	const output: InspectionSeasonView[] = cards.map(() => ({ label, rows: [], awardChips: [] }));
 	for (const role of ['hitter', 'pitcher'] as const) {
-		const indices = cards.flatMap((card, index) => card.role === role || (role === 'pitcher' && card.role === 'bullpen') ? [index] : []);
+		const indices = cards.flatMap((card, index) => card.role === role ? [index] : []);
 		const keys = new Set(indices.flatMap(index => stats[index].filter(row => row.direction).map(row => row.key)));
 		const ranks = new Map<string, Map<string, TeamRank | null>>();
 		for (const key of keys) {
@@ -249,9 +248,7 @@ export function createResultsModel(input: CreateResultsModelInput): ResultsModel
 		if (role === 'hitter' && !batter || role !== 'hitter' && !pitcher) {
 			throw new Error(`Missing result line for ${profile.seasonId}.`);
 		}
-		const estimatedWar = role === 'hitter'
-			? estimatedHitterWar(batter!)
-			: role === 'pitcher' ? estimatedPitcherWar(pitcher!) : null;
+		const estimatedWar = role === 'hitter' ? estimatedHitterWar(batter!) : estimatedPitcherWar(pitcher!);
 		return { seasonId: profile.seasonId, slot, profile, role, batter, pitcher, estimatedWar } satisfies InternalCard;
 	});
 

@@ -17,6 +17,8 @@ export interface ExampleFixtures {
 }
 
 const SEED = 162;
+/** The example draft's seed: its first roll is F2 in the 2020s. */
+const DRAFT_SEED = 22;
 const F2 = 'F2';
 const F2_DECADE = 2020;
 
@@ -65,9 +67,33 @@ function cloneProfile(profile: Profile): Profile {
 }
 
 function fixtureName(index: number, slot: Slot): string {
- if (slot === 'BP') return 'Example Club bullpen';
- if (slot === 'CL' || slot.startsWith('SP')) return `Example Pitcher ${String(index + 1).padStart(2, '0')}`;
+ if (slot === 'CL' || slot.startsWith('SP') || slot.startsWith('RP')) return `Example Pitcher ${String(index + 1).padStart(2, '0')}`;
  return `Example Batter ${String(index + 1).padStart(2, '0')}`;
+}
+
+/**
+ * A team-season bullpen card as collected before named relievers replaced it: still shown in the
+ * collection and older saved seasons, never drafted. Built from a relief profile's franchise and pitching.
+ */
+export function exampleBullpen(relief: Profile): Profile {
+ return {
+  ...cloneProfile(relief),
+  seasonId: `bullpen:${relief.year}:AL:TB`,
+  playerId: `bullpen:${relief.franchiseId}`,
+  teamId: 'TB',
+  displayName: 'Example Club bullpen',
+  eligibleSlots: ['BP'],
+  primaryHitterSlot: null,
+  batting: undefined,
+  battingRates: undefined,
+  bullpen: {
+   members: [
+    { seasonId: `example-bullpen-member-01:${relief.year}:AL:TB`, playerId: 'example-bullpen-member-01', displayName: 'Example Relief Member 01' },
+    { seasonId: `example-bullpen-member-02:${relief.year}:AL:TB`, playerId: 'example-bullpen-member-02', displayName: 'Example Relief Member 02' }
+   ],
+   excluded: { seasonId: `example-bullpen-excluded:${relief.year}:AL:TB`, playerId: 'example-bullpen-excluded', displayName: 'Example Relief Exclusion' }
+  }
+ };
 }
 
 function withOutfieldFlexibility(profile: Profile, slot: Slot): Profile {
@@ -92,18 +118,6 @@ function canonicalProfiles(): { roster: RosterProfile[]; simulationData: Simulat
   fixture.displayName = fixtureName(index, slot);
   fixture.historicalTeam = `Example Club ${fixture.franchiseId}`;
   fixture = withOutfieldFlexibility(fixture, slot);
-  if (slot === 'BP') {
-   fixture = {
-    ...fixture,
-    bullpen: {
-     members: [
-      { seasonId: 'example-bullpen-member-01:2025:AL:T', playerId: 'example-bullpen-member-01', displayName: 'Example Relief Member 01' },
-      { seasonId: 'example-bullpen-member-02:2025:AL:T', playerId: 'example-bullpen-member-02', displayName: 'Example Relief Member 02' }
-     ],
-     excluded: { seasonId: 'example-bullpen-excluded:2025:AL:T', playerId: 'example-bullpen-excluded', displayName: 'Example Relief Exclusion' }
-    }
-   };
-  }
   return { profile: fixture, slot };
  });
  return { roster, simulationData: season.data };
@@ -200,7 +214,7 @@ function canonicalForRoll(draft: Draft, roster: RosterProfile[]): RosterProfile 
 }
 
 function draftStates(manifest: Manifest, roster: RosterProfile[]): Pick<ExampleFixtures, 'initialDraft' | 'choosingDraft' | 'partialDraft' | 'completeDraft'> {
- const initialDraft = selectHomeStadium(createDraft(manifest, SEED), manifest, manifest.stadiums[0].ref.id);
+ const initialDraft = selectHomeStadium(createDraft(manifest, DRAFT_SEED), manifest, manifest.stadiums[0].ref.id);
  let draft = rollDraft(initialDraft, manifest);
  const choosingDraft = draft;
  let partialDraft: Draft | null = null;
@@ -223,7 +237,7 @@ function draftStates(manifest: Manifest, roster: RosterProfile[]): Pick<ExampleF
 function rankingsFor(profiles: Profile[], dataVersion: string): WarRankings {
  const seasons = Object.fromEntries(profiles.map((profile, index) => {
   const hitter = profile.eligibleSlots.some(slot => HITTER_SLOTS.includes(slot as typeof HITTER_SLOTS[number]));
-  const pitcher = profile.eligibleSlots.some(slot => slot.startsWith('SP') || slot === 'CL');
+  const pitcher = profile.eligibleSlots.some(slot => slot.startsWith('SP') || slot.startsWith('RP') || slot === 'CL');
   return [profile.seasonId, {
    battingWAR162: hitter ? Number(((index % 7) + 0.5).toFixed(1)) : null,
    pitchingWAR162: pitcher ? Number(((index % 5) * 1.25).toFixed(2)) : null
@@ -245,7 +259,7 @@ function rankingsFor(profiles: Profile[], dataVersion: string): WarRankings {
   coverage: {
    candidates: profiles.length,
    batting: profiles.filter(profile => profile.eligibleSlots.some(slot => HITTER_SLOTS.includes(slot as typeof HITTER_SLOTS[number]))).length,
-   pitching: profiles.filter(profile => profile.eligibleSlots.some(slot => slot.startsWith('SP') || slot === 'CL')).length,
+   pitching: profiles.filter(profile => profile.eligibleSlots.some(slot => slot.startsWith('SP') || slot.startsWith('RP') || slot === 'CL')).length,
    missing: 0
   }
  };
@@ -265,5 +279,8 @@ export function createExampleFixtures(): ExampleFixtures {
  if (states.choosingDraft.currentRoll?.franchiseId !== F2 || states.choosingDraft.currentRoll.decade !== F2_DECADE) {
   throw new Error('Example fixture seed no longer rolls F2/2020 first');
  }
- return { manifest, profiles, rankings: rankingsFor(profiles, simulationData.dataVersion), simulationData, ...states };
+ const rankings = rankingsFor(profiles, simulationData.dataVersion);
+ // The canonical F2 player's alternate season ranks last, so choosing it moves the player to a later ranking page.
+ rankings.seasons[extraProfiles[0].seasonId] = { battingWAR162: 0, pitchingWAR162: null };
+ return { manifest, profiles, rankings, simulationData, ...states };
 }

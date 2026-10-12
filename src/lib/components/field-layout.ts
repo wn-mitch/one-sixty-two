@@ -1,4 +1,4 @@
-import type { Slot } from '../game/types.ts';
+import type { RosterSlot } from '../game/types.ts';
 import type { StadiumSummary } from '../sim/park-types.ts';
 
 export interface Point { x: number; y: number }
@@ -42,11 +42,15 @@ export const FIELD = {
 		'1B': { x: 352, y: 240 },
 		C: { x: 212, y: 342 },
 		DH: { x: 378, y: 344 },
-		SP1: { x: 52, y: 508 },
-		SP2: { x: 132, y: 508 },
-		SP3: { x: 212, y: 508 },
-		CL: { x: 292, y: 508 },
-		BP: { x: 372, y: 508 }
+		SP1: { x: 38, y: 508 },
+		SP2: { x: 96, y: 508 },
+		SP3: { x: 154, y: 508 },
+		CL: { x: 212, y: 508 },
+		RP1: { x: 270, y: 508 },
+		RP2: { x: 328, y: 508 },
+		RP3: { x: 386, y: 508 },
+		/** Older saved seasons drafted a team bullpen; it takes the first relief spot. */
+		BP: { x: 270, y: 508 }
 	}
 } as const satisfies {
 	width: number;
@@ -56,7 +60,7 @@ export const FIELD = {
 	home: Point;
 	nameplate: { y: number; height: number };
 	stadium: Point;
-	slots: Record<Slot, Point>;
+	slots: Record<RosterSlot, Point>;
 };
 
 export interface FieldArt {

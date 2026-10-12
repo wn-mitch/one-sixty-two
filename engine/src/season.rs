@@ -5,11 +5,11 @@ use crate::flight::PreparedPark;
 use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::physical_expectation::{PhysicalReference, INFINITY_TARGET};
 use crate::random::{random_stream, shuffle, GameStreams};
-use crate::team::{accumulate_box, closer_cap, create_totals_box, TeamInput};
+use crate::team::{accumulate_box, create_totals_box, TeamInput};
 use crate::types::{GameResult, Opponent, ParkRef, Profile, SeasonRequest, SeasonResult, SimulationData, StadiumConfig, WinPoint, POSITIONS};
 use crate::value::RunValueModel;
 use crate::win_expectancy::WinExpectancyModel;
-use crate::workload::CloserUsage;
+use crate::workload::ReliefUsage;
 
 /// Simulation data plus every table derived from it once.
 pub struct Engine {
@@ -81,7 +81,7 @@ impl Engine {
     fn defense(&self, team: &TeamInput) -> Result<PreparedDefense, String> { team_defense(team, &self.data.environment.league_error_rates) }
 
     pub fn simulate_season(&self, request: &SeasonRequest, on_game: &mut dyn FnMut(&GameResult)) -> Result<SeasonResult, String> {
-        let challenge = draft_team(request, "challenge", "Your team")?;
+        let challenge = draft_team(request, &self.data.bullpen, "challenge", "Your team")?;
         let matchups = self.season_matchups(&challenge)?;
         self.simulate_prepared(request, &challenge, &matchups, SeasonOptions::FULL, on_game)
     }
@@ -93,16 +93,15 @@ impl Engine {
         let home_park = self.park(&request.home_stadium)?;
         let ids: Vec<&str> = data.opponents.iter().map(|opponent| opponent.id.as_str()).collect();
         let schedule = build_schedule(request.seed, &ids)?;
-        let mut challenge_usage = CloserUsage::default();
-        let challenge_cap = closer_cap(&challenge)?;
+        let mut challenge_usage = ReliefUsage::new(&challenge)?;
         let challenge_defense = self.defense(&challenge)?;
-        struct Prepared<'p> { team: TeamInput<'p>, cap: f64, park: usize, appearances: usize, usage: CloserUsage, defense: PreparedDefense }
+        struct Prepared<'p> { team: TeamInput<'p>, park: usize, appearances: usize, usage: ReliefUsage, defense: PreparedDefense }
         let mut opponents = data.opponents.iter().map(|opponent| {
             let team = opponent_team(opponent)?;
             let park = data.stadiums.iter().position(|stadium| stadium.id == opponent.home_stadium.id && stadium.version == opponent.home_stadium.version)
                 .ok_or("Opponent home stadium is incompatible with this dataset")?;
             let defense = self.defense(&team)?;
-            Ok(Prepared { cap: closer_cap(&team)?, team, park, appearances: 0, usage: CloserUsage::default(), defense })
+            Ok(Prepared { usage: ReliefUsage::new(&team)?, team, park, appearances: 0, defense })
         }).collect::<Result<Vec<_>, String>>()?;
         if matchups.len() != opponents.len() { return Err("Season matchups must cover every opponent".into()); }
         let mut totals = create_totals_box(&challenge);
@@ -121,12 +120,10 @@ impl Engine {
             let opponent = &mut opponents[scheduled.opponent];
             let number = index as u32 + 1;
             challenge.starter_index = index % 3;
-            challenge.closer_outs_remaining = challenge_cap - challenge_usage.outs;
-            challenge.closer_available = challenge_usage.ready(i64::from(number), challenge_cap);
+            challenge_usage.prepare(&mut challenge, i64::from(number));
             opponent.team.starter_index = opponent.appearances % 5;
             opponent.appearances += 1;
-            opponent.team.closer_outs_remaining = opponent.cap - opponent.usage.outs;
-            opponent.team.closer_available = opponent.usage.ready(i64::from(number), opponent.cap);
+            opponent.usage.prepare(&mut opponent.team, i64::from(number));
             let pair = &matchups[scheduled.opponent];
             let (home, away, home_defense, away_defense) = if scheduled.is_home {
                 (&challenge, &opponent.team, challenge_defense.clone(), opponent.defense.clone())
@@ -141,10 +138,8 @@ impl Engine {
                 away_matchups: if scheduled.is_home { &pair.opponent_batting } else { &pair.challenge_batting },
             }, &models, &mut GameStreams::new(request.seed, number), Some(&mut trace))?;
             let (challenge_box, opponent_box) = if scheduled.is_home { (&game.home, &game.away) } else { (&game.away, &game.home) };
-            let closer = &challenge_box.pitching[challenge.closer_index];
-            let opponent_closer = &opponent_box.pitching[opponent.team.closer_index];
-            challenge_usage.record(i64::from(number), closer.outs, closer.appearances > 0);
-            opponent.usage.record(i64::from(number), opponent_closer.outs, opponent_closer.appearances > 0);
+            challenge_usage.record(i64::from(number), &challenge_box.pitching);
+            opponent.usage.record(i64::from(number), &opponent_box.pitching);
             if let Some(moment) = &game.highlight {
                 if result.highlight.as_ref().is_none_or(|best| moment.swing > best.swing) {
                     result.highlight = Some(moment.clone());
@@ -180,8 +175,10 @@ impl Engine {
     }
 }
 
-/// The drafted club: batting order hitters, SP1-SP3 in starter order, then closer and support bullpen.
-pub fn draft_team<'p>(request: &'p SeasonRequest, id: &str, name: &str) -> Result<TeamInput<'p>, String> {
+/// The drafted club: batting order hitters, SP1-SP3 in starter order, the closer, named relievers
+/// RP1 onward in slot order, then `remainder`, the league remainder arm every club shares.
+pub fn draft_team<'p>(request: &'p SeasonRequest, remainder: &'p Profile, id: &str, name: &str) -> Result<TeamInput<'p>, String> {
+    if request.roster.iter().any(|pick| pick.slot == "BP") { return Err("Roster slot BP is not part of this model".into()); }
     let profile = |season_id: &str| request.roster.iter().find(|pick| pick.profile.season_id == season_id).map(|pick| &pick.profile).ok_or_else(|| format!("Missing roster profile {season_id}"));
     let slot = |slot: &str| request.roster.iter().find(|pick| pick.slot == slot).map(|pick| &pick.profile).ok_or_else(|| format!("Missing roster slot {slot}"));
     let hitters = request.batting_order.iter().map(|id| profile(id)).collect::<Result<Vec<_>, _>>()?;
@@ -191,16 +188,19 @@ pub fn draft_team<'p>(request: &'p SeasonRequest, id: &str, name: &str) -> Resul
         defense[position] = hitters.iter().position(|hitter| std::ptr::eq(*hitter, fielder)).ok_or("Fielder is missing from the batting order")?;
     }
     let mut pitchers = request.starter_order.iter().map(|id| profile(id)).collect::<Result<Vec<_>, _>>()?;
-    let closer = slot("CL")?;
-    pitchers.push(closer);
-    pitchers.push(slot("BP")?);
+    pitchers.push(slot("CL")?);
+    let named = request.roster.iter().filter(|pick| pick.slot.starts_with("RP")).count();
+    for number in 1..=named { pitchers.push(slot(&format!("RP{number}"))?); }
+    pitchers.push(remainder);
+    let available = vec![true; pitchers.len()];
     Ok(TeamInput {
         id: id.to_string(), name: name.to_string(), hitters, defense, pitchers,
-        starter_index: 0, closer_index: 3, bullpen_index: 4, closer_available: true, closer_outs_remaining: crate::workload::closer_budget(closer)?,
+        starter_index: 0, closer_index: 3, relievers: (4..4 + named).collect(), bullpen_index: 4 + named, available,
     })
 }
 
-/// A fixed 2025 opponent: hitters assigned to their single listed position, five starters, closer, bullpen.
+/// A fixed 2025 opponent: hitters assigned to their single listed position, five starters, closer,
+/// named relievers, then the pooled remainder of its bullpen.
 pub fn opponent_team(opponent: &Opponent) -> Result<TeamInput<'_>, String> {
     if opponent.starters.len() != 5 { return Err("Invalid opponent rotation".into()); }
     let mut defense = [0usize; 8];
@@ -210,10 +210,13 @@ pub fn opponent_team(opponent: &Opponent) -> Result<TeamInput<'_>, String> {
     }
     let mut pitchers: Vec<&Profile> = opponent.starters.iter().collect();
     pitchers.push(&opponent.closer);
+    pitchers.extend(opponent.relievers.iter());
     pitchers.push(&opponent.bullpen);
+    let named = opponent.relievers.len();
+    let available = vec![true; pitchers.len()];
     Ok(TeamInput {
         id: opponent.id.clone(), name: opponent.name.clone(), hitters: opponent.hitters.iter().collect(), defense, pitchers,
-        starter_index: 0, closer_index: 5, bullpen_index: 6, closer_available: true, closer_outs_remaining: crate::workload::closer_budget(&opponent.closer)?,
+        starter_index: 0, closer_index: 5, relievers: (6..6 + named).collect(), bullpen_index: 6 + named, available,
     })
 }
 

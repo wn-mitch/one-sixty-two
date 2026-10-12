@@ -35,6 +35,8 @@ import { validateStadium } from './park.ts';
 import type { ParkRef, StadiumConfig } from './park-types.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
 
+const hitterSlotSet: ReadonlySet<string> = new Set(HITTER_SLOTS);
+
 const DEFENSIVE_SKILLS: readonly DefensiveSkillName[] = [
  'hitPrevention',
  'doublePlay',
@@ -120,7 +122,7 @@ function validateDefensivePosition(position: Position, defense: DefensivePositio
 function validateProfileDefense(profile: Profile): void {
  if (!profile.defense || !profile.defense.positions || !Array.isArray(profile.eligibleSlots) ||
   new Set(profile.eligibleSlots).size !== profile.eligibleSlots.length ||
-  profile.eligibleSlots.some(slot => !SLOTS.includes(slot))) {
+  profile.eligibleSlots.some(slot => slot !== 'BP' && !SLOTS.includes(slot))) {
   throw new Error('Invalid profile defensive contract');
  }
  const hitterSlots = profile.eligibleSlots.filter((slot): slot is typeof HITTER_SLOTS[number] =>
@@ -243,8 +245,8 @@ export function validateTeam(team: TeamInput): void {
   defense.some(index => !Number.isInteger(index) || index < 0 || index >= team.hitters.length)) {
   throw new Error('Invalid defensive alignment');
  }
- const indices = [team.starterIndex, team.closerIndex, team.bullpenIndex];
- if (new Set(indices).size !== 3 ||
+ const indices = [team.starterIndex, team.closerIndex, team.bullpenIndex, ...team.relievers];
+ if (new Set(indices).size !== indices.length ||
   indices.some(index => !Number.isInteger(index) || index < 0 || index >= team.pitchers.length)) {
   throw new Error('Invalid pitching roles');
  }
@@ -256,8 +258,7 @@ export function validateTeam(team: TeamInput): void {
   }
  }
  team.pitchers.forEach(validatePitcher);
- if (!Number.isFinite(team.closerOutsRemaining) || team.closerOutsRemaining < 0 ||
-  team.pitchers[team.starterIndex].pitching!.GS <= 0) {
+ if (team.available.length !== team.pitchers.length || team.pitchers[team.starterIndex].pitching!.GS <= 0) {
   throw new Error('Invalid available pitching workload');
  }
 }
@@ -287,13 +288,12 @@ export function validateSeason(input: SeasonInput): void {
    (profile.league !== 'AL' && profile.league !== 'NL')) {
    throw new Error('Invalid roster eligibility');
   }
-  if (slot === 'CL' || slot === 'BP' || slot.startsWith('SP')) validatePitcher(profile);
+  if (!hitterSlotSet.has(slot)) validatePitcher(profile);
   else validateHitter(profile);
   if (slot.startsWith('SP') && profile.pitching!.GS <= 0) throw new Error('Starter requires positive starts');
  }
- const hitterSlots: readonly Slot[] = HITTER_SLOTS;
  for (const [order, expected] of [
-  [input.battingOrder, input.roster.filter(pick => hitterSlots.includes(pick.slot)).map(pick => pick.profile.seasonId)],
+  [input.battingOrder, input.roster.filter(pick => hitterSlotSet.has(pick.slot)).map(pick => pick.profile.seasonId)],
   [input.starterOrder, input.roster.filter(pick => pick.slot.startsWith('SP')).map(pick => pick.profile.seasonId)]
  ]) {
   if (order.length !== expected.length || new Set(order).size !== expected.length ||
@@ -331,6 +331,8 @@ export function validateSeason(input: SeasonInput): void {
    if (starter.pitching!.GS <= 0) throw new Error('Opponent starter requires positive starts');
   }
   validatePitcher(opponent.closer);
+  if (opponent.relievers.length !== 3) throw new Error('Invalid opponent relievers');
+  opponent.relievers.forEach(validatePitcher);
   validatePitcher(opponent.bullpen);
  }
 }

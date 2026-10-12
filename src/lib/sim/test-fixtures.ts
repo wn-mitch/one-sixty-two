@@ -1,5 +1,5 @@
 import { loadContactModel } from '../../../scripts/data/contact-model.ts';
-import { DEFENSE_METHOD_VERSION, MODEL_VERSION, POSITIONS, RULES_VERSION, SLOTS, VALUATION_VERSION, CURRENT_REPLAY_SCHEMA_VERSION, type DefensiveEnvironment, type Position, type SimulationData } from '../game/types.ts';
+import { DEFENSE_METHOD_VERSION, MODEL_VERSION, POSITIONS, RULES_VERSION, SLOTS, VALUATION_VERSION, CURRENT_REPLAY_SCHEMA_VERSION, type DefensiveEnvironment, type Position, type Profile, type SimulationData } from '../game/types.ts';
 import { neutralDefensivePosition } from './defense.ts';
 import { AVERAGE_RATES, syntheticProfile, syntheticStadium } from './fixtures.ts';
 import { stadiumRef } from './park.ts';
@@ -15,14 +15,18 @@ export function testTeam(id: string): TeamInput {
   profile.stealAttempt = 0;
   return profile;
  });
- const pitchers = ['starter', 'closer', 'support'].map(role => syntheticProfile(`${id}-${role}`));
- pitchers[2].displayName = `${id} support bullpen`;
- pitchers[2].pitching!.G = 60;
- pitchers[2].pitching!.GS = 0;
- pitchers[2].pitching!.IPouts = 486;
+ const pitchers = ['starter', 'closer', 'rp1', 'rp2', 'rp3', 'support'].map(role => syntheticProfile(`${id}-${role}`));
+ for (const reliever of pitchers.slice(1)) relieve(reliever);
+ pitchers[5].displayName = `${id} support bullpen`;
+ pitchers[5].pitching!.IPouts = 486;
  return { id, name: `Club ${id}`, hitters, defense: Object.fromEntries(POSITIONS.map((position, index) => [position, index])) as Record<Position, number>,
-  pitchers, starterIndex: 0, closerIndex: 1, bullpenIndex: 2,
-  closerAvailable: true, closerOutsRemaining: 100 };
+  pitchers, starterIndex: 0, closerIndex: 1, relievers: [2, 3, 4], bullpenIndex: 5, available: pitchers.map(() => true) };
+}
+/** Makes a synthetic pitcher relief-only: sixty games, no starts. */
+function relieve(profile: Profile): void {
+ profile.pitching!.G = 60;
+ profile.pitching!.GS = 0;
+ profile.pitching!.IPouts = 200;
 }
 export function testDefenseEnvironment(): DefensiveEnvironment {
  return {
@@ -43,19 +47,14 @@ function seasonFixture(seed: number): SeasonInput {
   profile.eligibleSlots = [slot];
   profile.primaryHitterSlot = POSITIONS.includes(slot as Position) ? slot as Position : 'DH';
   if (profile.primaryHitterSlot !== 'DH') profile.defense.positions[profile.primaryHitterSlot] = neutralDefensivePosition(profile.primaryHitterSlot);
-  if (slot === 'BP') {
-   profile.displayName = 'Synthetic Club bullpen remainder';
-   profile.pitching!.G = 60;
-   profile.pitching!.GS = 0;
-   profile.pitching!.IPouts = 486;
-  }
+  if (slot.startsWith('RP')) relieve(profile);
   return { profile, slot };
  });
  const stadiums = Array.from({ length: 30 }, (_, index) => testStadium(`opponent-${index}`));
  const opponents = Array.from({ length: 30 }, (_, index) => {
   const team = testTeam(`opponent-${index}`);
   return { id: team.id, name: team.name, homeStadium: stadiumRef(stadiums[index]), hitters: team.hitters,
-   starters: Array.from({ length: 5 }, (_, rotation) => syntheticProfile(`${team.id}-sp${rotation}`)), closer: team.pitchers[1], bullpen: team.pitchers[2] };
+   starters: Array.from({ length: 5 }, (_, rotation) => syntheticProfile(`${team.id}-sp${rotation}`)), closer: team.pitchers[1], relievers: team.pitchers.slice(2, 5), bullpen: team.pitchers[5] };
  });
  const bullpen = syntheticProfile('pooled-support');
  bullpen.displayName = 'League support bullpen';

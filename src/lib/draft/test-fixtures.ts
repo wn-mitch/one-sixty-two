@@ -3,17 +3,19 @@ import { POSITIONS, STARTER_SLOTS, type Slot } from '../game/types.ts';
 import { applyAction, heldPile, type DraftRun, type RunAction } from './run.ts';
 import type { DraftCard } from './types.ts';
 
-export function testCard(seasonId: string, eligibleSlots: readonly Slot[], salary = 5, finish: Finish = 'base', conflicts: readonly string[] = []): DraftCard {
+export function testCard(seasonId: string, eligibleSlots: readonly Slot[], salary = 5, finish: Finish = 'base'): DraftCard {
  const [playerId, year = '2000'] = seasonId.split(':');
  return {
   seasonId, playerId, franchiseId: 'TST', year: Number(year), eligibleSlots, finish,
-  valueRuns: salary - 5, pricedSlot: eligibleSlots[0], salary, conflicts
+  valueRuns: salary - 5, pricedSlot: eligibleSlots[0], salary
  };
 }
 
 export const TEST_ROLES: Record<string, readonly Slot[]> = {
  ...Object.fromEntries(POSITIONS.map(position => [position, [position, 'DH'] as const])),
- SP: STARTER_SLOTS, CL: ['CL'], BP: ['BP']
+ SP: STARTER_SLOTS, CL: ['CL', 'RP1', 'RP2', 'RP3'],
+ /** A second relief group: every club needs six relief arms. */
+ RP: ['CL', 'RP1', 'RP2', 'RP3']
 };
 
 /**

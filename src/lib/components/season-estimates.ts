@@ -1,6 +1,6 @@
 import { formatDefEstimate } from '../game/format.ts';
 import { POSITIONS } from '../game/types.ts';
-import type { DefensiveEvidence, DefensiveSkillName, DefensivePosition, Position, Profile, Slot } from '../game/types.ts';
+import type { DefensiveEvidence, DefensiveSkillName, DefensivePosition, Position, Profile, RosterSlot } from '../game/types.ts';
 import { isHitter } from './candidate-ranking.ts';
 
 const positionNames: Record<Position, string> = { C: 'catcher', '1B': 'first base', '2B': 'second base', '3B': 'third base', SS: 'shortstop', LF: 'left field', CF: 'center field', RF: 'right field' };
@@ -53,8 +53,8 @@ function defensivePositionNotes(position: Position, defense: DefensivePosition |
 /** Restrict compiler-wide flags and canonical defensive evidence to roles the user can actually assign. */
 export function seasonEstimates(
  profile: Pick<Profile, 'estimatedFields' | 'defense'>,
- legalSlots: Slot[],
- selectedSlot: Slot | null = null
+ legalSlots: RosterSlot[],
+ selectedSlot: RosterSlot | null = null
 ): string[] {
  const roles = selectedSlot && legalSlots.includes(selectedSlot) ? [selectedSlot] : legalSlots;
  const batting = roles.some(isHitter), pitching = roles.some(slot => !isHitter(slot));

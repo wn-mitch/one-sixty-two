@@ -42,11 +42,11 @@ describe('AI general manager', () => {
   const personality = BALANCED;
   const scores = scorePile(view([better, catcher], [{ ...closer, valueRuns: 30 }]), personality, () => 0);
   const byId = Object.fromEntries(scores.map(score => [score.cardId, score.marginal]));
-  // A second closer still has an open setup slot, so it counts in full.
+  // A second closer still has an open named relief slot, so it counts in full.
   expect(byId['cl2:2000']).toBe(40);
   expect(byId['c1:2000']).toBe(20);
-  // With all three closer-capable slots filled, a fourth closer only reaches a reserve row.
-  const pen = [30, 25, 20].map((value, index) => ({ ...testCard(`pen${index}:2000`, TEST_ROLES.CL, 100), valueRuns: value }));
+  // With all six closer-capable slots filled, a seventh closer only reaches a reserve row.
+  const pen = [30, 25, 20, 20, 20, 20].map((value, index) => ({ ...testCard(`pen${index}:2000`, TEST_ROLES.CL, 100), valueRuns: value }));
   const [fourth] = scorePile(view([better], pen), personality, () => 0);
   expect(fourth.marginal).toBeCloseTo(20 + 0.25 * 20);
  });
@@ -89,9 +89,9 @@ describe('AI general manager', () => {
   const star = { ...testCard('star:2000', TEST_ROLES.SS, 1400), valueRuns: 60 };
   const [loose] = scorePile(view([star]), { ...BALANCED, thrift: 0.5 }, () => 0);
   const [tight] = scorePile(view([star]), { ...BALANCED, thrift: 1.5 }, () => 0);
-  // 1400 + 17 open rows at 15 = 1655, 155 over a 1500 cap, at 4 salary units per run.
-  expect(loose.capPenalty).toBeCloseTo(155 / 4 * 0.5);
-  expect(tight.capPenalty).toBeCloseTo(155 / 4 * 1.5);
+  // 1400 + 19 open rows at 15 = 1685, 185 over a 1500 cap, at 4 salary units per run.
+  expect(loose.capPenalty).toBeCloseTo(185 / 4 * 0.5);
+  expect(tight.capPenalty).toBeCloseTo(185 / 4 * 1.5);
   expect(chooseAiPick([{ ...loose, cardId: 'b', score: 1 }, { ...loose, cardId: 'a', score: 1 }]).cardId).toBe('a');
  });
 });

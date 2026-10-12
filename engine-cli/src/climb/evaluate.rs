@@ -1,5 +1,5 @@
 //! Season evaluation for search: cached matchup rows per candidate, fast seasons across a seed panel.
-use super::data::Dataset;
+use super::data::{Dataset, SLOTS};
 use super::roster::Roster;
 use engine::contact_profile::{matchup_row, MatchupRow, PreparedMatchups};
 use engine::season::{draft_team, opponent_team, OpponentMatchups};
@@ -27,13 +27,22 @@ pub struct Evaluator<'d> {
     batting_rows: Mutex<HashMap<usize, Arc<Vec<MatchupRow>>>>,
     /// Pitcher candidate -> rows for every opponent hitter against it, opponent-major.
     pitching_rows: Mutex<HashMap<usize, Arc<Vec<MatchupRow>>>>,
+    /// Rows for every opponent hitter against the shared remainder arm, opponent-major.
+    remainder_rows: Arc<Vec<MatchupRow>>,
 }
 
 impl<'d> Evaluator<'d> {
     pub fn new(data: &'d Dataset) -> Result<Self, String> {
         let opponents = data.engine.data.opponents.iter().map(opponent_team).collect::<Result<Vec<_>, _>>()?;
         let opponent_index = data.engine.data.opponents.iter().enumerate().map(|(index, opponent)| (opponent.id.as_str(), index)).collect();
-        Ok(Self { data, opponents, opponent_index, batting_rows: Mutex::default(), pitching_rows: Mutex::default() })
+        let mut evaluator = Self { data, opponents, opponent_index, batting_rows: Mutex::default(), pitching_rows: Mutex::default(), remainder_rows: Arc::default() };
+        evaluator.remainder_rows = Arc::new(evaluator.pitching_rows_for(&data.engine.data.bullpen)?);
+        Ok(evaluator)
+    }
+
+    fn pitching_rows_for(&self, pitcher: &Profile) -> Result<Vec<MatchupRow>, String> {
+        self.opponents.iter().flat_map(|team| team.hitters.iter().map(move |batter| (*batter, pitcher)))
+            .map(|(batter, pitcher)| self.row(batter, pitcher)).collect()
     }
 
     fn row(&self, batter: &Profile, pitcher: &Profile) -> Result<MatchupRow, String> {
@@ -53,10 +62,7 @@ impl<'d> Evaluator<'d> {
             Ok((candidate, Arc::new(rows)))
         }).collect::<Result<Vec<_>, String>>()?;
         let pitching = missing_pitching.par_iter().map(|&candidate| {
-            let pitcher = &candidates[candidate].profile;
-            let rows = self.opponents.iter().flat_map(|team| team.hitters.iter().map(move |batter| (*batter, pitcher)))
-                .map(|(batter, pitcher)| self.row(batter, pitcher)).collect::<Result<Vec<_>, _>>()?;
-            Ok((candidate, Arc::new(rows)))
+            Ok((candidate, Arc::new(self.pitching_rows_for(&candidates[candidate].profile)?)))
         }).collect::<Result<Vec<_>, String>>()?;
         self.batting_rows.lock().unwrap().extend(batting);
         self.pitching_rows.lock().unwrap().extend(pitching);
@@ -69,8 +75,9 @@ impl<'d> Evaluator<'d> {
         let batting_cache = self.batting_rows.lock().unwrap();
         let pitching_cache = self.pitching_rows.lock().unwrap();
         let hitters: Vec<Arc<Vec<MatchupRow>>> = roster.batting.iter().map(|&slot| batting_cache[&roster.picks[slot]].clone()).collect();
-        let staff: Vec<usize> = roster.rotation.iter().copied().chain([12, 13]).collect();
-        let pitchers: Vec<Arc<Vec<MatchupRow>>> = staff.iter().map(|&slot| pitching_cache[&roster.picks[slot]].clone()).collect();
+        let staff: Vec<usize> = roster.rotation.iter().copied().chain(12..SLOTS.len()).collect();
+        let pitchers: Vec<Arc<Vec<MatchupRow>>> = staff.iter().map(|&slot| pitching_cache[&roster.picks[slot]].clone())
+            .chain([self.remainder_rows.clone()]).collect();
         let mut batting_offset = 0;
         let mut pitching_offset = 0;
         Ok(self.opponents.iter().map(|team| {
@@ -95,7 +102,7 @@ impl<'d> Evaluator<'d> {
         let matchups = self.matchups(roster)?;
         seeds.par_iter().enumerate().map(|(index, &seed)| {
             let request = roster.request(self.data, seed);
-            let challenge = draft_team(&request, "challenge", "Your team")?;
+            let challenge = draft_team(&request, &self.data.engine.data.bullpen, "challenge", "Your team")?;
             let result = self.data.engine.simulate_prepared(&request, &challenge, &matchups, SeasonOptions::FAST, &mut |game| {
                 visit(index, GameOutcome { opponent: self.opponent_index[game.opponent_id.as_str()], is_home: game.is_home, rotation: (game.number as usize - 1) % 3, win: game.win });
             })?;

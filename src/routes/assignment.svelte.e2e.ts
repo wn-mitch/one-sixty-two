@@ -13,7 +13,7 @@ import {
 import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Profile } from '../lib/game/types.ts';
 import { currentManifest, openSavedDraft, deviceDraft } from './draft-test-fixtures.ts';
 
-const FIXTURE_SEED = 2;
+const FIXTURE_SEED = 1;
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(180000);
@@ -50,8 +50,9 @@ function pendingAssignmentScenario(manifest: Manifest): AssignmentScenario {
 		draft = rollDraft(draft, manifest);
 		for (const target of displayedCandidates(draft, manifest)) {
 			if (legalSlots(draft, target, manifest).length > 0) continue;
-			for (const targetSlot of target.eligibleSlots) {
-				if (!HITTER_SLOTS.includes(targetSlot as HitterSlot)) continue;
+			for (const eligible of target.eligibleSlots) {
+				if (!HITTER_SLOTS.includes(eligible as HitterSlot)) continue;
+				const targetSlot = eligible as HitterSlot;
 				const occupant = draft.picks.find(pick => pick.slot === targetSlot);
 				if (!occupant) continue;
 				for (const move of legalReassignments(draft, manifest, occupant.seasonId)) {
