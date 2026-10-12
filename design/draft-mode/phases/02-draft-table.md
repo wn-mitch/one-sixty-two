@@ -69,6 +69,7 @@ D02 is complete only when this is a real pass-the-pack table and opening recover
 
 - The player picks their franchise; the other seven clubs are drawn at random. All 30 franchises are pickable. In the first playable, a franchise brings its home park and guaranteed rival; package perks and decrees are labelled as later content.
 - Every AI pick appears live in a pick ticker, and any club's roster and payroll can be opened during the draft.
+- A club may hold two seasons of the same player: each season is a distinct card. Classic keeps one season per player. Revisit only if the pack structure changes.
 - Legality is shown as a live roster checklist and cap bar: each slot reads filled or missing, payroll is drawn against the effective cap, and Submit stays disabled with a one-line reason per blocking item. The checklist reads the `pool-v2` legality failure codes.
 - Opening trades follow the decided trade shape in [season and economy](../season-and-economy.md): up to 3-for-3, player and AI offers, no AI-to-AI trades, accept/reject/one counter, and a waiver pool for cards cut during the window.
 
