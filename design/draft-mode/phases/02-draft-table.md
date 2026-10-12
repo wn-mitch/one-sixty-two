@@ -65,11 +65,18 @@ The opening flow is seeded and replayable:
 
 D02 is complete only when this is a real pass-the-pack table and opening recovery loop, not a scripted list of cards or a compile-only shell.
 
+## Decided for D02
+
+- The player picks their franchise; the other seven clubs are drawn at random. All 30 franchises are pickable. In the first playable, a franchise brings its home park and guaranteed rival; package perks and decrees are labelled as later content.
+- Every AI pick appears live in a pick ticker, and any club's roster and payroll can be opened during the draft.
+- Legality is shown as a live roster checklist and cap bar: each slot reads filled or missing, payroll is drawn against the effective cap, and Submit stays disabled with a one-line reason per blocking item. The checklist reads the `pool-v2` legality failure codes.
+- Opening trades follow the decided trade shape in [season and economy](../season-and-economy.md): up to 3-for-3, player and AI offers, no AI-to-AI trades, accept/reject/one counter, and a waiver pool for cards cut during the window.
+
 ## Required open decisions before D02 acceptance
 
 - Which initial franchise packages and opening decree content make the first full-season slice, including the exact content-selection gate and its evidence.
 - Deal/pass presentation, tie-break rules, and whether reserve targets receive explicit table guidance. Pack contents and pass order are decided in [D01](./01-pool-and-rosters.md).
-- Opening trade shape: multi-player/one-for-one limits, offer limits, AI-to-AI behavior status, transaction ordering, and waiver priority/timing.
+- Confirm the proposed offer limits, waiver claim priority and opening cooldown; settle transaction ordering within the window.
 - How much schedule, rival, and venue information is visible before and during the opening draft.
 - The supported initial package/decree effect semantics and calibration bounds; any selected pitch/count, checked-swing, batting-position, or unusual-rule content must first satisfy the corresponding simulation-rule phase.
 - Whether the opening table may be replayed with alternate human choices while preserving the same seed and public information.

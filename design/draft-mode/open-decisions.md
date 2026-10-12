@@ -74,7 +74,7 @@ Basic prices are recipient-independent by family before franchise modifiers; dim
 
 Owner: [Trading and waivers](season-and-economy.md). First relevant gate: [phase](phases/02-draft-table.md).
 
-Define multi-player trades, offers, AI-to-AI behavior, preseason cooldowns, release windows, waiver priority/timing and atomic legality. The two-chapter trade deadline already survives release/claim unchanged; do not reopen it as an unchosen rule.
+Decided: up to 3-for-3, player and AI offers, no AI-to-AI trades, accept/reject/one counter with offer limits, opening waivers until submission, legality at submission. See [trading](season-and-economy.md). Open: the proposed limits, claim priority and opening cooldown, and transaction ordering. The two-chapter trade deadline already survives release/claim unchanged; do not reopen it as an unchosen rule.
 
 ## 13. Pittsburgh and Detroit
 
