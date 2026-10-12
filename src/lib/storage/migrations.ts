@@ -124,6 +124,42 @@ export const MIGRATIONS: readonly Migration[] = [
    // A run's league season: lineups and played chapters, kept as results rather than replayed.
    exec(db, 'ALTER TABLE draft_runs ADD COLUMN season_json TEXT');
   }
+ },
+ {
+  version: 5,
+  up(db) {
+   // Stickers move to the card's frame edges, and one season keeps only its top tier per family.
+   // Spots and tiers are frozen here as they stood for this step.
+   const families: Record<string, { kinds: readonly string[]; from: [number, number]; to: [number, number] }> = {
+    mvp: { kinds: ['mvp'], from: [0.17, 0.3], to: [0.1, 0.22] },
+    team: { kinds: ['perfect', 'wins-120', 'wins-100'], from: [0.83, 0.3], to: [0.9, 0.22] },
+    contact: { kinds: ['hits-200'], from: [0.17, 0.49], to: [0.1, 0.37] },
+    ace: { kinds: ['ace'], from: [0.17, 0.49], to: [0.1, 0.37] },
+    power: { kinds: ['hr-60', 'hr-40'], from: [0.83, 0.49], to: [0.9, 0.37] },
+    strikeouts: { kinds: ['k-600', 'k-400'], from: [0.83, 0.49], to: [0.9, 0.37] },
+    eye: { kinds: ['obp-400'], from: [0.17, 0.68], to: [0.1, 0.52] },
+    production: { kinds: ['rbi-130'], from: [0.83, 0.68], to: [0.9, 0.52] },
+    closer: { kinds: ['closer'], from: [0.83, 0.68], to: [0.9, 0.52] },
+    speed: { kinds: ['sb-30'], from: [0.38, 0.71], to: [0.1, 0.67] },
+    loyalty: { kinds: ['drafted-10', 'drafted-5'], from: [0.62, 0.71], to: [0.9, 0.67] }
+   };
+   for (const { kinds, from, to } of Object.values(families)) {
+    const list = kinds.map(() => '?').join(', ');
+    // Stickers still at the old default spot move; ones the player placed stay where they put them.
+    db.exec({ sql: `UPDATE stickers SET x = ?, y = ? WHERE kind IN (${list}) AND abs(x - ?) < 1e-6 AND abs(y - ?) < 1e-6`, bind: [...to, ...kinds, ...from] });
+    // Kinds are listed highest tier first: drop each lower tier earned in the same season as a higher one.
+    // Loyalty tiers are earned on separate saves and stay as the rostering history awarded them.
+    if (kinds[0].startsWith('drafted-')) continue;
+    kinds.forEach((kind, index) => {
+     const higher = kinds.slice(0, index);
+     if (higher.length === 0) return;
+     db.exec({
+      sql: `DELETE FROM stickers WHERE kind = ? AND EXISTS (SELECT 1 FROM stickers AS higher WHERE higher.season_id = stickers.season_id AND higher.season_key IS stickers.season_key AND higher.kind IN (${higher.map(() => '?').join(', ')}))`,
+      bind: [kind, ...higher]
+     });
+    });
+   }
+  }
  }
 ];
 

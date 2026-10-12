@@ -67,6 +67,33 @@ describe('device database migrations', () => {
   expect(await db.all('SELECT * FROM draft_runs')).toEqual([{ id: 'run', created_at: 'a', updated_at: 'b', setup_json: '{}', actions_json: '[]', phase: 'window', season_json: null }]);
  });
 
+ it('moves default-placed stickers to the frame edges and keeps one tier per family per season', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 4));
+  const sticker = (seasonId: string, kind: string, seasonKey: string | null, x: number, y: number) =>
+   ({ sql: 'INSERT INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)', bind: [seasonId, kind, 't', seasonKey, x, y] });
+  await db.run([
+   sticker('a', 'perfect', 'k1', 0.83, 0.3),
+   sticker('a', 'wins-120', 'k1', 0.83, 0.3),
+   sticker('a', 'wins-100', 'k1', 0.83, 0.3),
+   sticker('a', 'hr-40', 'k1', 0.42, 0.15),
+   sticker('b', 'wins-100', 'k0', 0.83, 0.3),
+   sticker('b', 'wins-120', 'k1', 0.83, 0.3),
+   sticker('b', 'drafted-5', 'k0', 0.62, 0.71),
+   sticker('b', 'drafted-10', 'k1', 0.62, 0.71)
+  ]);
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 4, to: SCHEMA_VERSION });
+  expect(await db.all('SELECT season_id, kind, season_key, x, y FROM stickers ORDER BY season_id, kind')).toEqual([
+   // A player-moved sticker keeps its spot.
+   { season_id: 'a', kind: 'hr-40', season_key: 'k1', x: 0.42, y: 0.15 },
+   { season_id: 'a', kind: 'perfect', season_key: 'k1', x: 0.9, y: 0.22 },
+   { season_id: 'b', kind: 'drafted-10', season_key: 'k1', x: 0.9, y: 0.67 },
+   { season_id: 'b', kind: 'drafted-5', season_key: 'k0', x: 0.9, y: 0.67 },
+   // Tiers earned in different seasons are both kept.
+   { season_id: 'b', kind: 'wins-100', season_key: 'k0', x: 0.9, y: 0.22 },
+   { season_id: 'b', kind: 'wins-120', season_key: 'k1', x: 0.9, y: 0.22 }
+  ]);
+ });
+
  it('leaves the database at the last good version when a migration fails', async () => {
   const failing: Migration[] = [...MIGRATIONS, {
    version: SCHEMA_VERSION + 1,
