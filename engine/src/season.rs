@@ -9,7 +9,7 @@ use crate::team::{accumulate_box, create_totals_box, TeamInput};
 use crate::types::{GameResult, Opponent, ParkRef, Profile, SeasonRequest, SeasonResult, SimulationData, StadiumConfig, WinPoint, POSITIONS};
 use crate::value::RunValueModel;
 use crate::win_expectancy::WinExpectancyModel;
-use crate::workload::ReliefUsage;
+use crate::relief::{default_roles, ReliefUsage, Roles};
 
 /// Simulation data plus every table derived from it once.
 pub struct Engine {
@@ -93,7 +93,7 @@ impl Engine {
         let home_park = self.park(&request.home_stadium)?;
         let ids: Vec<&str> = data.opponents.iter().map(|opponent| opponent.id.as_str()).collect();
         let schedule = build_schedule(request.seed, &ids)?;
-        let mut challenge_usage = ReliefUsage::new(&challenge)?;
+        let mut challenge_usage = ReliefUsage::new(&challenge);
         let challenge_defense = self.defense(&challenge)?;
         struct Prepared<'p> { team: TeamInput<'p>, park: usize, appearances: usize, usage: ReliefUsage, defense: PreparedDefense }
         let mut opponents = data.opponents.iter().map(|opponent| {
@@ -101,7 +101,7 @@ impl Engine {
             let park = data.stadiums.iter().position(|stadium| stadium.id == opponent.home_stadium.id && stadium.version == opponent.home_stadium.version)
                 .ok_or("Opponent home stadium is incompatible with this dataset")?;
             let defense = self.defense(&team)?;
-            Ok(Prepared { usage: ReliefUsage::new(&team)?, team, park, appearances: 0, defense })
+            Ok(Prepared { usage: ReliefUsage::new(&team), team, park, appearances: 0, defense })
         }).collect::<Result<Vec<_>, String>>()?;
         if matchups.len() != opponents.len() { return Err("Season matchups must cover every opponent".into()); }
         let mut totals = create_totals_box(&challenge);
@@ -176,7 +176,8 @@ impl Engine {
 }
 
 /// The drafted club: batting order hitters, SP1-SP3 in starter order, the closer, named relievers
-/// RP1 onward in slot order, then `remainder`, the league remainder arm every club shares.
+/// RP1 onward in slot order with their requested roles, then `remainder`, the league remainder arm
+/// every club shares.
 pub fn draft_team<'p>(request: &'p SeasonRequest, remainder: &'p Profile, id: &str, name: &str) -> Result<TeamInput<'p>, String> {
     if request.roster.iter().any(|pick| pick.slot == "BP") { return Err("Roster slot BP is not part of this model".into()); }
     let profile = |season_id: &str| request.roster.iter().find(|pick| pick.profile.season_id == season_id).map(|pick| &pick.profile).ok_or_else(|| format!("Missing roster profile {season_id}"));
@@ -192,15 +193,22 @@ pub fn draft_team<'p>(request: &'p SeasonRequest, remainder: &'p Profile, id: &s
     let named = request.roster.iter().filter(|pick| pick.slot.starts_with("RP")).count();
     for number in 1..=named { pitchers.push(slot(&format!("RP{number}"))?); }
     pitchers.push(remainder);
+    let slots: Vec<String> = std::iter::once("CL".to_string()).chain((1..=named).map(|number| format!("RP{number}"))).collect();
+    if request.relief_roles.len() != slots.len() || request.relief_roles.iter().map(|assignment| &assignment.slot).ne(slots.iter()) {
+        return Err("Relief roles must cover CL and each named reliever in bullpen order".into());
+    }
+    let assigned = request.relief_roles.iter().map(|assignment| assignment.roles().map(Some)).collect::<Result<Vec<_>, _>>()?;
     let available = vec![true; pitchers.len()];
+    let mut roles = vec![None; pitchers.len()];
+    roles[3..4 + named].copy_from_slice(&assigned);
     Ok(TeamInput {
         id: id.to_string(), name: name.to_string(), hitters, defense, pitchers,
-        starter_index: 0, closer_index: 3, relievers: (4..4 + named).collect(), bullpen_index: 4 + named, available,
+        starter_index: 0, closer_index: 3, relievers: (4..4 + named).collect(), bullpen_index: 4 + named, rested: available.clone(), available, roles,
     })
 }
 
 /// A fixed 2025 opponent: hitters assigned to their single listed position, five starters, closer,
-/// named relievers, then the pooled remainder of its bullpen.
+/// named relievers with default roles, then the pooled remainder of its bullpen.
 pub fn opponent_team(opponent: &Opponent) -> Result<TeamInput<'_>, String> {
     if opponent.starters.len() != 5 { return Err("Invalid opponent rotation".into()); }
     let mut defense = [0usize; 8];
@@ -214,9 +222,11 @@ pub fn opponent_team(opponent: &Opponent) -> Result<TeamInput<'_>, String> {
     pitchers.push(&opponent.bullpen);
     let named = opponent.relievers.len();
     let available = vec![true; pitchers.len()];
+    let mut roles: Vec<Option<Roles>> = vec![None; pitchers.len()];
+    for (offset, assigned) in default_roles(1 + named).into_iter().enumerate() { roles[5 + offset] = Some(assigned); }
     Ok(TeamInput {
         id: opponent.id.clone(), name: opponent.name.clone(), hitters: opponent.hitters.iter().collect(), defense, pitchers,
-        starter_index: 0, closer_index: 5, relievers: (6..6 + named).collect(), bullpen_index: 6 + named, available,
+        starter_index: 0, closer_index: 5, relievers: (6..6 + named).collect(), bullpen_index: 6 + named, rested: available.clone(), available, roles,
     })
 }
 

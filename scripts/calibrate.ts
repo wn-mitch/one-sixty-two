@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, MODEL_VERSION, POSITIONS, RULES_VERSION, type DefensiveSkillName, type Position, type Profile, type Rates, type SimulationData, type Slot } from '../src/lib/game/types.ts';
+import { BULLPEN_SLOTS, CURRENT_REPLAY_SCHEMA_VERSION, defaultReliefRoles, HITTER_SLOTS, RELIEF_SLOTS, MODEL_VERSION, POSITIONS, RULES_VERSION, type DefensiveSkillName, type Position, type Profile, type Rates, type SimulationData, type Slot } from '../src/lib/game/types.ts';
 import { createContactReference, simulateExhibition, simulateSeason, type ContactReference, type ExhibitionInput } from '../src/lib/engine/node.ts';
 import { neutralDefensivePosition } from '../src/lib/sim/defense.ts';
 import { syntheticProfile } from '../src/lib/sim/fixtures.ts';
@@ -100,7 +100,9 @@ function averageData(data: SimulationData): SimulationData {
 		const average = makeTeam(source.id, data);
 		return { id: source.id, name: source.id, homeStadium: source.homeStadium, hitters: average.hitters,
 			starters: Array.from({ length: 5 }, (_, index) => commonProfile(`${source.id}-sp${index}`, 'SP1', data.leagueRates, data)),
-			closer: average.pitchers[1], bullpen: average.pitchers[2] };
+			closer: average.pitchers[1],
+			relievers: RELIEF_SLOTS.map(slot => commonProfile(`${source.id}-${slot.toLowerCase()}`, slot, data.leagueRates, data)),
+			bullpen: average.pitchers[2] };
 	});
 	const leagueBullpen = commonProfile('league-support', 'BP', data.leagueRates, data);
 	leagueBullpen.displayName = 'League support bullpen';
@@ -113,9 +115,10 @@ function averageData(data: SimulationData): SimulationData {
 function averageSeason(seed: number, data: SimulationData, league: SimulationData, hitterRates = data.leagueRates, starterRates = data.leagueRates): SeasonResult {
 	const team = makeTeam('challenge', data, hitterRates);
 	const starters = ['SP1', 'SP2', 'SP3'].map((slot, index) => commonProfile(`challenge-sp${index}`, slot as Slot, index === 0 ? starterRates : data.leagueRates, data));
-	const roster = [...team.hitters.map((profile, index) => ({ profile, slot: HITTER_SLOTS[index] })), ...starters.map((profile, index) => ({ profile, slot: `SP${index + 1}` as Slot })), { profile: team.pitchers[1], slot: 'CL' as Slot }, { profile: team.pitchers[2], slot: 'BP' as Slot }];
+	const relievers = RELIEF_SLOTS.map(slot => ({ profile: commonProfile(`challenge-${slot.toLowerCase()}`, slot, data.leagueRates, data), slot }));
+	const roster = [...team.hitters.map((profile, index) => ({ profile, slot: HITTER_SLOTS[index] })), ...starters.map((profile, index) => ({ profile, slot: `SP${index + 1}` as Slot })), { profile: team.pitchers[1], slot: 'CL' as Slot }, ...relievers];
 	const input: SeasonInput = { schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed, homeStadium: stadiumRef(data.stadiums[0]), roster, battingOrder: team.hitters.map(profile => profile.seasonId), starterOrder: starters.map(profile => profile.seasonId),
-		data: league };
+		reliefRoles: defaultReliefRoles(BULLPEN_SLOTS), data: league };
 	return simulateSeason(input);
 }
 

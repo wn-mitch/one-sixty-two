@@ -4,7 +4,7 @@ use crate::random::{stream_seed, GameStreams};
 use crate::season::{draft_team, Engine, SeasonOptions};
 use crate::team::{accumulate_box, create_totals_box, TeamInput};
 use crate::types::{GameResult, ParkRef, PitcherRole, SeasonMoment, SeasonRequest, TeamBox, WinPoint};
-use crate::workload::ReliefUsage;
+use crate::relief::ReliefUsage;
 use serde::{Deserialize, Serialize};
 
 pub const SERIES_RULES_VERSION: &str = "h2h-bo5-v1";
@@ -246,7 +246,7 @@ impl Engine {
         let parks = request.teams.iter().map(|team| self.park(&team.season.home_stadium)).collect::<Result<Vec<_>, _>>()?;
         let defenses = clubs.iter().map(|club| team_defense(club, &self.data.environment.league_error_rates)).collect::<Result<Vec<_>, _>>()?;
         let batting = [self.matchups(&clubs[0].hitters, &clubs[1].pitchers)?, self.matchups(&clubs[1].hitters, &clubs[0].pitchers)?];
-        let mut usage = [ReliefUsage::new(&clubs[0])?, ReliefUsage::new(&clubs[1])?];
+        let mut usage = [ReliefUsage::new(&clubs[0]), ReliefUsage::new(&clubs[1])];
         let mut totals = [create_totals_box(&clubs[0]), create_totals_box(&clubs[1])];
         let keys = [first.key.as_str(), second.key.as_str()];
         let seed = series_seed(&first.key, &second.key);

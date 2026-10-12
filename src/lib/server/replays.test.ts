@@ -72,7 +72,7 @@ describe('replay R2 storage', () => {
 		expect(first.key).toBe(`${REPLAY_PREFIX}${first.id}`);
 		expect(bucket.puts).toBe(1);
 		expect(await loadReplay(bucket, first.id, dataVersion)).toEqual(input);
-		expect(input.schemaVersion).toBe(5);
+		expect(input.schemaVersion).toBe(6);
 		expect(input.homeStadium).toEqual(manifest.stadiums[0].ref);
 		expect(input.actions.at(-1)?.type).toBe('reassign');
 	});

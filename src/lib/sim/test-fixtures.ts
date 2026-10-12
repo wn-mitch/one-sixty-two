@@ -1,5 +1,5 @@
 import { loadContactModel } from '../../../scripts/data/contact-model.ts';
-import { DEFENSE_METHOD_VERSION, MODEL_VERSION, POSITIONS, RULES_VERSION, SLOTS, VALUATION_VERSION, CURRENT_REPLAY_SCHEMA_VERSION, type DefensiveEnvironment, type Position, type Profile, type SimulationData } from '../game/types.ts';
+import { BULLPEN_SLOTS, defaultReliefRoles, DEFENSE_METHOD_VERSION, MODEL_VERSION, POSITIONS, RULES_VERSION, SLOTS, VALUATION_VERSION, CURRENT_REPLAY_SCHEMA_VERSION, type DefensiveEnvironment, type Position, type Profile, type SimulationData } from '../game/types.ts';
 import { neutralDefensivePosition } from './defense.ts';
 import { AVERAGE_RATES, syntheticProfile, syntheticStadium } from './fixtures.ts';
 import { stadiumRef } from './park.ts';
@@ -66,7 +66,8 @@ function seasonFixture(seed: number): SeasonInput {
  const data: SimulationData = { schemaVersion: 1, dataVersion: 'synthetic', bullpen, opponents, stadiums,
   observedRuns: 4.45, ...defenseEnvironment, defenseMethodVersion: DEFENSE_METHOD_VERSION, valuationVersion: VALUATION_VERSION };
  return { schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed, homeStadium: stadiumRef(stadiums[0]),
-  roster, battingOrder: roster.slice(0, 9).map(pick => pick.profile.seasonId), starterOrder: roster.slice(9, 12).map(pick => pick.profile.seasonId), data };
+  roster, battingOrder: roster.slice(0, 9).map(pick => pick.profile.seasonId), starterOrder: roster.slice(9, 12).map(pick => pick.profile.seasonId),
+  reliefRoles: defaultReliefRoles(BULLPEN_SLOTS), data };
 }
 
 export function testSeason(seed = 162): SeasonInput {

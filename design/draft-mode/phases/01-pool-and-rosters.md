@@ -55,7 +55,7 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 **Prerequisites recorded for D03.**
 - `validateTeam`/`validateSeason` in `src/lib/sim/validation.ts` reject duplicate `playerId`s and duplicate franchises. Draft rules must relax both before drafted rosters can be simulated.
 - Two-way cards are priced at their best role only.
-- The engine plays any number of named relievers, but the Classic season request carries RP1–RP3; RP4 and RP5 reach the engine with D03. Named relievers are priced at their closer value.
+- The engine plays up to five named relievers, but the Classic season request carries RP1–RP3; RP4 and RP5 reach the engine with D03. `DEFAULT_DRAFT_RELIEF_ROLES` holds the six-arm slot defaults until then. Named relievers are priced at their closer value.
 
 ## Dependencies
 

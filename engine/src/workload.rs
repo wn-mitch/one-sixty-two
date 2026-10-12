@@ -1,5 +1,6 @@
-//! Pitcher workload and closer availability (`src/lib/sim/workload.ts`).
+//! Starter workload and in-game bullpen deployment by relief role.
 use crate::math;
+use crate::relief::ReliefRole;
 use crate::team::TeamInput;
 use crate::types::{PitcherLine, Profile};
 
@@ -10,102 +11,107 @@ pub fn starter_budget(profile: &Profile) -> Result<u32, String> {
     Ok(math::js_round(clamp(counts.ip_outs / counts.gs, 12.0, 24.0)) as u32)
 }
 
-pub fn closer_budget(profile: &Profile) -> Result<f64, String> {
-    let counts = profile.pitching.as_ref().filter(|_| profile.team_games > 0.0).ok_or("Closer requires pitching workload")?;
-    Ok((counts.ip_outs * 162.0 / profile.team_games).floor())
-}
+/// Setup and middle relief, and the stopper, work from this inning on.
+const LATE_INNING: u32 = 6;
+/// A middle reliever who has faced at most this many batters may stay for a second inning.
+const EXTEND_BATTERS: i32 = 4;
+/// A long reliever stays until this many outs.
+const LONG_OUTS: i32 = 9;
 
 /// One game's pitching decisions for one club.
 #[derive(Clone, Debug)]
-pub struct Workload { pub current: usize, starter_done: bool, used: Vec<bool>, budget: u32 }
+pub struct Workload {
+    pub current: usize,
+    starter_done: bool,
+    used: Vec<bool>,
+    budget: u32,
+    inning: u32,
+    /// The role the current reliever was called in for; None for the starter and the remainder arm.
+    entered: Option<ReliefRole>,
+}
 
 impl Workload {
     pub fn new(team: &TeamInput) -> Result<Self, String> {
-        if team.available.len() != team.pitchers.len() { return Err("Pitcher availability must cover the staff".into()); }
-        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])? })
+        if team.available.len() != team.pitchers.len() || team.rested.len() != team.pitchers.len() || team.roles.len() != team.pitchers.len() {
+            return Err("Pitcher availability and roles must cover the staff".into());
+        }
+        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])?, inning: 1, entered: None })
     }
 
-    /// A named pitcher may enter once per game, and only when rested and under its season cap.
+    /// A named pitcher may enter once per game, and only when rested enough for today.
     fn ready(&self, team: &TeamInput, index: usize) -> bool { team.available[index] && !self.used[index] }
 
-    fn take(&mut self, index: usize) -> usize { self.used[index] = true; index }
+    /// Calls the first ready primary holder of `role` in bullpen order, then the first ready
+    /// secondary holder who sat out the previous game. `seventh` skips the first primary holder,
+    /// kept for the 8th, takes the others from the back of the bullpen, and passes over the closer.
+    fn call(&mut self, team: &TeamInput, role: ReliefRole, seventh: bool) -> bool {
+        let mut order: Vec<usize> = team.named_relief().filter(|&index| team.roles[index].is_some_and(|roles| roles.primary == role)).collect();
+        if seventh { order = order.into_iter().skip(1).rev().collect(); }
+        let primary = order.iter().copied().find(|&index| self.ready(team, index));
+        // The 7th never borrows the closer, whose save chance may still come.
+        let backup = |index: usize| team.roles[index].is_some_and(|roles| roles.secondary == Some(role) && !(seventh && roles.primary == ReliefRole::Closer));
+        let pick = primary.or_else(|| team.named_relief().find(|&index| backup(index) && team.rested[index] && self.ready(team, index)));
+        let Some(index) = pick else { return false };
+        self.used[index] = true;
+        self.current = index;
+        self.entered = Some(role);
+        true
+    }
 
-    /// The first rested middle reliever (RP3 onward), else the remainder arm.
-    fn middle(&mut self, team: &TeamInput) -> usize {
-        match team.relievers.iter().skip(2).copied().find(|&index| self.ready(team, index)) {
-            Some(index) => self.take(index),
-            None => team.bullpen_index,
+    /// Long relief for an early exit or a deficit of 4 or more, else middle relief, else the remainder.
+    fn relieve(&mut self, team: &TeamInput, lead: i32) {
+        let long = self.inning < LATE_INNING || lead <= -4;
+        if long && self.call(team, ReliefRole::Long, false) { return; }
+        if self.call(team, ReliefRole::Middle, false) { return; }
+        self.current = team.bullpen_index;
+        self.entered = None;
+    }
+
+    /// Whether the current reliever stays for another inning: a long reliever until nine outs, any
+    /// other named reliever but the closer after an efficient first inning.
+    fn extends(&self, lines: &[PitcherLine]) -> bool {
+        let line = &lines[self.current];
+        match self.entered {
+            None | Some(ReliefRole::Closer) => false,
+            Some(ReliefRole::Long) => line.outs < LONG_OUTS,
+            Some(_) => line.outs <= 3 && line.bf <= EXTEND_BATTERS,
         }
     }
 
     /// Chooses the pitcher for a half inning. The closer takes the 9th or later with a 0-3 run
-    /// lead, even over a starter still going. Once the starter is done, RP1 takes the 8th and RP2
-    /// the 7th with that lead; other innings go to middle relief, one inning per reliever.
+    /// lead, even over a starter still going. Once the starter is done, setup men take the 8th and
+    /// 7th with that lead; otherwise the current reliever may stay, else fresh relief.
     pub fn begin_half(&mut self, team: &TeamInput, lines: &[PitcherLine], inning: u32, lead: i32) {
+        self.inning = inning;
         if lines[team.starter_index].r >= 6 || lines[team.starter_index].outs as u32 >= self.budget { self.starter_done = true; }
         let leverage = (0..=3).contains(&lead);
-        if inning >= 9 && leverage && self.ready(team, team.closer_index) {
-            self.current = self.take(team.closer_index);
-            self.starter_done = true;
-            return;
-        }
+        if inning >= 9 && leverage && self.call(team, ReliefRole::Closer, false) { self.starter_done = true; return; }
         if !self.starter_done { self.current = team.starter_index; return; }
-        let setup = match inning { 8 => team.relievers.first(), 7 => team.relievers.get(1), _ => None }.copied();
-        self.current = match setup {
-            Some(index) if leverage && self.ready(team, index) => self.take(index),
-            _ => self.middle(team),
-        };
+        if leverage && (inning == 7 || inning == 8) && self.call(team, ReliefRole::Setup, inning == 7) { return; }
+        if self.entered.is_some() && self.extends(lines) { return; }
+        self.relieve(team, lead);
     }
 
-    /// A starter who reaches the out budget mid-inning hands the rest of the inning to middle relief.
-    pub fn before_plate_appearance(&mut self, team: &TeamInput, lines: &[PitcherLine]) {
+    /// Before each plate appearance: a starter at the out budget hands over to relief, and from the
+    /// 6th a stopper takes over with a runner in scoring position and a 0-3 run lead.
+    pub fn before_plate_appearance(&mut self, team: &TeamInput, lines: &[PitcherLine], lead: i32, scoring_position: bool) {
         if self.current == team.starter_index && lines[self.current].outs as u32 >= self.budget {
             self.starter_done = true;
-            self.current = self.middle(team);
+            self.relieve(team, lead);
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct CloserUsage { pub outs: f64, last: i64, previous: i64 }
-
-impl Default for CloserUsage { fn default() -> Self { Self { outs: 0.0, last: -1, previous: -1 } } }
-
-impl CloserUsage {
-    pub fn ready(&self, game: i64, cap: f64) -> bool { cap - self.outs >= 3.0 && !(self.last == game - 1 && self.previous == game - 2) }
-    pub fn record(&mut self, game: i64, outs: i32, appeared: bool) {
-        self.outs += f64::from(outs);
-        if appeared { self.previous = self.last; self.last = game; }
-    }
-}
-
-/// Season availability for a club's closer and named relievers: no third consecutive day, and a
-/// season cap of each pitcher's own relief outs scaled to 162 games.
-#[derive(Clone, Debug)]
-pub struct ReliefUsage { pitchers: Vec<(usize, f64, CloserUsage)> }
-
-impl ReliefUsage {
-    pub fn new(team: &TeamInput) -> Result<Self, String> {
-        let indices = std::iter::once(team.closer_index).chain(team.relievers.iter().copied());
-        Ok(Self { pitchers: indices.map(|index| Ok((index, closer_budget(team.pitchers[index])?, CloserUsage::default()))).collect::<Result<_, String>>()? })
-    }
-
-    /// Marks who may enter `game`; the starters and the remainder arm are always available.
-    pub fn prepare(&self, team: &mut TeamInput, game: i64) {
-        team.available.iter_mut().for_each(|available| *available = true);
-        for (index, cap, usage) in &self.pitchers { team.available[*index] = usage.ready(game, *cap); }
-    }
-
-    /// Records each named pitcher's outs and appearance from the club's game box.
-    pub fn record(&mut self, game: i64, pitching: &[PitcherLine]) {
-        for (index, _, usage) in self.pitchers.iter_mut() { usage.record(game, pitching[*index].outs, pitching[*index].appearances > 0); }
+        let jam = self.inning >= LATE_INNING && scoring_position && (0..=3).contains(&lead);
+        if jam && !matches!(self.entered, Some(ReliefRole::Closer | ReliefRole::Stopper)) && self.call(team, ReliefRole::Stopper, false) {
+            self.starter_done = true;
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::relief::{default_roles, ReliefRole::*, Roles};
     use crate::team::create_box;
+    use crate::types::PitcherLine;
 
     fn pitcher(id: &str, gs: f64, ip_outs: f64) -> Profile {
         serde_json::from_value(serde_json::json!({
@@ -123,39 +129,94 @@ mod tests {
         staff
     }
 
+    /// Default roles: CL Closer/Setup, RP1 Setup/Stopper, RP2 Setup/Middle, RP3 Middle/Long.
     fn team(staff: &[Profile]) -> TeamInput<'_> {
+        let mut roles = vec![None; staff.len()];
+        for (offset, assigned) in default_roles(4).into_iter().enumerate() { roles[1 + offset] = Some(assigned); }
         TeamInput {
             id: "t".into(), name: "t".into(), hitters: Vec::new(), defense: [0; 8], pitchers: staff.iter().collect(),
-            starter_index: 0, closer_index: 1, relievers: vec![2, 3, 4], bullpen_index: 5, available: vec![true; staff.len()],
+            starter_index: 0, closer_index: 1, relievers: vec![2, 3, 4], bullpen_index: 5,
+            available: vec![true; staff.len()], rested: vec![true; staff.len()], roles,
         }
     }
 
-    /// Plays `innings` from the 6th with the given lead, the starter already at the out budget.
-    fn relief_innings(team: &TeamInput, innings: &[(u32, i32)]) -> Vec<usize> {
+    /// Starts each listed half inning with the given lead, the starter already at the out budget;
+    /// the pitcher of each half records `outs` after facing `bf` batters.
+    fn relief_innings(team: &TeamInput, innings: &[(u32, i32)], outs: i32, bf: i32) -> Vec<usize> {
         let mut workload = Workload::new(team).unwrap();
-        let mut lines = create_box(team).pitching;
+        let mut lines: Vec<PitcherLine> = create_box(team).pitching;
         lines[0].outs = 18;
-        innings.iter().map(|&(inning, lead)| { workload.begin_half(team, &lines, inning, lead); workload.current }).collect()
+        innings.iter().map(|&(inning, lead)| {
+            workload.begin_half(team, &lines, inning, lead);
+            lines[workload.current].outs += outs;
+            lines[workload.current].bf += bf;
+            workload.current
+        }).collect()
     }
 
     #[test]
-    fn close_games_go_rp2_rp1_closer_and_other_innings_to_middle_relief() {
-        let staff = staff();
-        let team = team(&staff);
-        assert_eq!(relief_innings(&team, &[(7, 2), (8, 2), (9, 2)]), [3, 2, 1]);
-        // Outside a 0-3 lead the setup men sit: RP3 takes one inning, then the remainder.
-        assert_eq!(relief_innings(&team, &[(7, 5), (8, -1), (9, 4)]), [4, 5, 5]);
-        // Each named pitcher enters once a game: extra innings use RP3, then the remainder.
-        assert_eq!(relief_innings(&team, &[(8, 1), (9, 0), (10, 0), (11, 3)]), [2, 1, 4, 5]);
-    }
-
-    #[test]
-    fn a_resting_reliever_is_skipped_for_middle_relief() {
+    fn close_games_go_setup_to_closer_and_other_innings_to_middle_relief() {
         let staff = staff();
         let mut team = team(&staff);
+        assert_eq!(relief_innings(&team, &[(7, 2), (8, 2), (9, 2)], 3, 3), [3, 2, 1]);
+        // Outside a 0-3 lead: RP3 (Middle) goes two efficient innings, then RP2 (secondary Middle), then the remainder.
+        assert_eq!(relief_innings(&team, &[(6, 5), (7, 5), (8, 5), (9, 5)], 3, 3), [4, 4, 3, 3]);
+        // A laborious first inning ends the outing; the closer never stays for a second inning.
+        assert_eq!(relief_innings(&team, &[(6, 5), (7, 5), (8, 5)], 3, 5), [4, 3, 5]);
+        assert_eq!(relief_innings(&team, &[(9, 0), (10, 0)], 3, 3), [1, 4]);
+        // With RP2 out the 7th goes to middle relief: RP1 is kept for the 8th and the closer for the 9th.
+        team.available[3] = false;
+        assert_eq!(relief_innings(&team, &[(7, 2), (8, 2), (9, 2)], 3, 3), [4, 2, 1]);
+    }
+
+    #[test]
+    fn secondary_roles_call_only_arms_who_sat_out_the_previous_game() {
+        let staff = staff();
+        let mut team = team(&staff);
+        team.rested[3] = false;
+        assert_eq!(relief_innings(&team, &[(6, 5), (7, 5), (8, 5)], 3, 5), [4, 5, 5]);
+        // The tired RP2 still takes its primary Setup inning.
+        assert_eq!(relief_innings(&team, &[(7, 1)], 3, 3), [3]);
         team.available[2] = false;
-        team.available[1] = false;
-        assert_eq!(relief_innings(&team, &[(8, 1), (9, 1), (10, 1)]), [4, 5, 5]);
+        assert_eq!(relief_innings(&team, &[(8, 1)], 3, 3), [3]);
+        // With both setup men out, the 8th falls to the closer's secondary Setup role.
+        team.available[3] = false;
+        assert_eq!(relief_innings(&team, &[(8, 1)], 3, 3), [1]);
+    }
+
+    #[test]
+    fn long_relief_covers_an_early_exit_for_up_to_three_innings() {
+        let staff = staff();
+        let mut team = team(&staff);
+        team.roles[4] = Some(Roles { primary: Long, secondary: None });
+        let mut workload = Workload::new(&team).unwrap();
+        let mut lines = create_box(&team).pitching;
+        lines[0].r = 6;
+        let mut pitched = Vec::new();
+        for inning in 4..=8 {
+            workload.begin_half(&team, &lines, inning, 6);
+            lines[workload.current].outs += 3;
+            pitched.push(workload.current);
+        }
+        // RP3 stays to nine outs; the 7th is middle relief, which falls to RP2's secondary role.
+        assert_eq!(pitched, [4, 4, 4, 3, 3]);
+    }
+
+    #[test]
+    fn the_stopper_takes_over_a_late_close_jam_even_from_the_starter() {
+        let staff = staff();
+        let team = team(&staff);
+        let check = |inning: u32, lead: i32, scoring: bool| {
+            let mut workload = Workload::new(&team).unwrap();
+            let lines = create_box(&team).pitching;
+            workload.begin_half(&team, &lines, inning, lead);
+            workload.before_plate_appearance(&team, &lines, lead, scoring);
+            workload.current
+        };
+        assert_eq!(check(6, 1, true), 2);
+        assert_eq!([check(5, 1, true), check(6, 4, true), check(6, -1, true), check(6, 1, false)], [0; 4]);
+        // The closer is never pulled for the stopper.
+        assert_eq!(check(9, 1, true), 1);
     }
 
     #[test]
@@ -168,25 +229,5 @@ mod tests {
         assert_eq!(workload.current, 0);
         workload.begin_half(&team, &lines, 9, 1);
         assert_eq!(workload.current, 1);
-    }
-
-    #[test]
-    fn named_relievers_rest_after_two_straight_days_and_stop_at_their_cap() {
-        let staff = staff();
-        let mut team = team(&staff);
-        let mut usage = ReliefUsage::new(&team).unwrap();
-        let mut lines = create_box(&team).pitching;
-        lines[2].outs = 3;
-        lines[2].appearances = 1;
-        for game in 1..=2 { usage.prepare(&mut team, game); assert!(team.available[2]); usage.record(game, &lines); }
-        usage.prepare(&mut team, 3);
-        assert!(!team.available[2] && team.available[3] && team.available[5]);
-        usage.prepare(&mut team, 4);
-        assert!(team.available[2]);
-        // RP1's cap is the pitcher's own 120 relief outs over 162 games; 118 used leaves less than an inning.
-        lines[2].outs = 112;
-        usage.record(10, &lines);
-        usage.prepare(&mut team, 20);
-        assert!(!team.available[2]);
     }
 }

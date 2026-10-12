@@ -321,7 +321,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         };
     }
     while outs < 3 && !context.bases.ended {
-        workload.before_plate_appearance(defense, &sides.pitching.pitching);
+        workload.before_plate_appearance(defense, &sides.pitching.pitching, sides.pitching.runs - sides.batting.runs, context.bases.runners[1] != -1 || context.bases.runners[2] != -1);
         let steal_pitcher_index = workload.current;
         sides.pitching.pitching[steal_pitcher_index].appearances = 1;
         if context.bases.runners[0] != -1 && context.bases.runners[1] == -1 {
@@ -338,7 +338,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
                 let pitcher = defense.pitchers[steal_pitcher_index];
                 observe!(outs_before, bases_before, runs_before, runner, pitcher, outcome);
                 if outs == 3 { break; }
-                workload.before_plate_appearance(defense, &sides.pitching.pitching);
+                workload.before_plate_appearance(defense, &sides.pitching.pitching, sides.pitching.runs - sides.batting.runs, context.bases.runners[1] != -1 || context.bases.runners[2] != -1);
             }
         }
         appearances += 1;

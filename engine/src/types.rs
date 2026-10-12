@@ -191,6 +191,8 @@ pub struct SeasonRequest {
     pub roster: Vec<RosterPick>,
     pub batting_order: Vec<String>,
     pub starter_order: Vec<String>,
+    /// Roles for CL, then RP1 onward.
+    pub relief_roles: Vec<crate::relief::RoleAssignment>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq)]
@@ -281,7 +283,7 @@ pub struct BatterLine {
 pub enum PitcherRole {
     Starter,
     Closer,
-    /// A named reliever: the 8th, the 7th or middle relief.
+    /// A named reliever (RP1 onward), whatever role it holds.
     Reliever,
     /// The remainder arm for relief innings no available named pitcher takes.
     Support,

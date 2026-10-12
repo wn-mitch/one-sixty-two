@@ -1,7 +1,9 @@
 //! One standalone game between two supplied clubs, for calibration outside the season schedule.
+//! Named relievers take their default roles.
 use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::flight::PreparedPark;
 use crate::random::GameStreams;
+use crate::relief::default_roles;
 use crate::season::Engine;
 use crate::team::TeamInput;
 use crate::types::{GameResult, Profile, StadiumConfig, POSITIONS};
@@ -49,10 +51,14 @@ impl ExhibitionTeam {
         for &index in [self.starter_index, self.closer_index, self.bullpen_index].iter().chain(&self.relievers) {
             if index >= self.pitchers.len() { return Err(format!("{}: pitcher index is outside the staff", self.id)); }
         }
+        if self.relievers.len() > 5 { return Err(format!("{}: at most five named relievers", self.id)); }
+        let mut roles = vec![None; self.pitchers.len()];
+        let named = std::iter::once(self.closer_index).chain(self.relievers.iter().copied());
+        for (index, assigned) in named.zip(default_roles(1 + self.relievers.len())) { roles[index] = Some(assigned); }
         Ok(TeamInput {
             id: self.id.clone(), name: self.name.clone(), hitters: self.hitters.iter().collect(), defense, pitchers: self.pitchers.iter().collect(),
             starter_index: self.starter_index, closer_index: self.closer_index, relievers: self.relievers.clone(), bullpen_index: self.bullpen_index,
-            available: self.available.clone(),
+            available: self.available.clone(), rested: self.available.clone(), roles,
         })
     }
 }

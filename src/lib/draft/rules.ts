@@ -1,5 +1,5 @@
 import type { Finish } from '../cards/finish.ts';
-import { HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, STARTER_SLOTS, type Slot } from '../game/types.ts';
+import { defaultReliefRoles, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, STARTER_SLOTS, type ReliefAssignment, type Slot } from '../game/types.ts';
 import type { DraftCard, DraftSlot, LegalityFailure, PayrollBudget } from './types.ts';
 import { DRAFT_RULES_VERSION } from './versions.ts';
 
@@ -11,6 +11,12 @@ export const atLeast = (finish: Finish, floor: Finish): boolean => FINISH_ORDER.
 
 /** Nine hitters, three starters, the closer and five named relievers. */
 export const DRAFT_SLOTS: readonly DraftSlot[] = Object.freeze([...HITTER_SLOTS, ...STARTER_SLOTS, 'CL', 'RP1', 'RP2', 'RP3', 'RP4', 'RP5']);
+
+/** The closer and five named relievers, in the order their relief roles are listed. */
+export const DRAFT_BULLPEN_SLOTS = Object.freeze(['CL', 'RP1', 'RP2', 'RP3', 'RP4', 'RP5'] as const);
+export type DraftBullpenSlot = typeof DRAFT_BULLPEN_SLOTS[number];
+/** Slot defaults for a Draft Mode bullpen; roles reach the engine with Draft-first play (D03). */
+export const DEFAULT_DRAFT_RELIEF_ROLES: readonly ReliefAssignment<DraftBullpenSlot>[] = Object.freeze(defaultReliefRoles(DRAFT_BULLPEN_SLOTS));
 
 /** A card fills a named relief slot when it could close; every other slot follows the card's historical eligibility. */
 export const canFill = (card: DraftCard, slot: DraftSlot): boolean => slot.startsWith('RP') ? card.eligibleSlots.includes('CL') : card.eligibleSlots.includes(slot as Slot);

@@ -142,7 +142,7 @@ describe('permanent deterministic drafting', () => {
  it.each(Array.from({ length: 32 }, (_, seed) => seed))('finishes seed %i with fourteen distinct identities and franchises', seed => {
   const initial = createDraft(manifest, seed);
   expect(initial.homeStadium).toBeNull();
-  expect(initial.schemaVersion).toBe(5);
+  expect(initial.schemaVersion).toBe(6);
   expect(legalSlots(initial, candidates[0], manifest)).toEqual(['C']);
   const draft = finish(seed);
   const selected = draft.picks.map(pick => manifest.candidates.find(item => item.seasonId === pick.seasonId)!);
@@ -152,6 +152,24 @@ describe('permanent deterministic drafting', () => {
   expect(draft.battingOrder).toHaveLength(9);
   expect(draft.starterOrder).toHaveLength(3);
   expect(validateDraft(draft, manifest, true)).toEqual(draft);
+ });
+
+ it('gives a complete roster default relief roles and rejects malformed ones', () => {
+  const draft = finish(3);
+  expect(draft.reliefRoles).toEqual([
+   { slot: 'CL', primary: 'closer', secondary: 'setup' }, { slot: 'RP1', primary: 'setup', secondary: 'stopper' },
+   { slot: 'RP2', primary: 'setup', secondary: 'middle' }, { slot: 'RP3', primary: 'middle', secondary: 'long' }
+  ]);
+  const changed = draft.reliefRoles.map(assignment => assignment.slot === 'RP3' ? { ...assignment, primary: 'stopper' as const, secondary: null } : assignment);
+  expect(validateDraft({ ...draft, reliefRoles: changed }, manifest, true).reliefRoles[3]).toEqual({ slot: 'RP3', primary: 'stopper', secondary: null });
+  const swap = (index: number, value: object) => draft.reliefRoles.map((assignment, at) => at === index ? { ...assignment, ...value } : assignment);
+  for (const reliefRoles of [
+   draft.reliefRoles.slice(1), [...draft.reliefRoles].reverse(), swap(1, { secondary: 'setup' }), swap(2, { primary: 'fireman' }), swap(0, { extra: true }), undefined
+  ]) {
+   expect(() => validateDraft({ ...draft, reliefRoles }, manifest, true)).toThrow('Invalid relief roles');
+  }
+  // Before the roster is complete there are no roles to set.
+  expect(createDraft(manifest, 3).reliefRoles).toEqual([]);
  });
 
  it('removes every decade of a used franchise and every incarnation of a used athlete', () => {
@@ -323,7 +341,7 @@ describe('permanent deterministic drafting', () => {
   const roll = pending!.currentRoll;
   const pickCount = pending!.picks.length;
   const moved = reassignPick(pending!, flexible, original.seasonId, 'DH');
-  if (moved.schemaVersion !== 5) throw new Error('Expected current draft');
+  if (moved.schemaVersion !== 6) throw new Error('Expected current draft');
   expect(moved.currentRoll).toEqual(roll);
   expect(moved.seed).toBe(pending!.seed);
   expect(moved.picks).toHaveLength(pickCount);
@@ -479,9 +497,9 @@ describe('permanent deterministic drafting', () => {
   const complete = finish(162, flexible);
   const catcher = complete.picks.find(pick => pick.slot === 'C')!;
   const moved = reassignPick(complete, flexible, catcher.seasonId, '1B');
-  if (moved.schemaVersion !== 5) throw new Error('Expected current replay');
+  if (moved.schemaVersion !== 6) throw new Error('Expected current replay');
   const input = replayInput(moved);
-  if (input.schemaVersion !== 5) throw new Error('Expected current replay');
+  if (input.schemaVersion !== 6) throw new Error('Expected current replay');
   const forgedPick = {
    ...input,
    picks: input.picks.map((pick, index) => index === 0 ? { ...pick, slot: 'DH' as const } : pick)

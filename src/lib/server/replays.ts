@@ -1,4 +1,4 @@
-import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, SLOTS, type DraftAction, type Pick, type Replay } from '../game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, SLOTS, type DraftAction, type Pick, type Replay, validateReliefRoles } from '../game/types.ts';
 
 export const REPLAY_MAX_BYTES = 16 * 1024;
 export const REPLAY_PREFIX = 'replays/v1/';
@@ -105,6 +105,14 @@ function action(value: unknown): DraftAction {
 	throw new ReplayInvalidError();
 }
 
+function reliefRoles(value: unknown): Replay['reliefRoles'] {
+	try {
+		return validateReliefRoles(value, true);
+	} catch {
+		throw new ReplayInvalidError();
+	}
+}
+
 /**
  * Checks that a value is a complete current-version replay and returns it in canonical key order.
  * The Worker checks shape and versions only; every browser that plays a replay validates its whole
@@ -137,6 +145,7 @@ function canonicalReplay(value: unknown, dataVersion: string): { input: Replay; 
 		}),
 		battingOrder: [...replay.battingOrder as string[]],
 		starterOrder: [...replay.starterOrder as string[]],
+		reliefRoles: reliefRoles(replay.reliefRoles),
 		actions: replay.actions.map(action)
 	};
 	const bytes = new TextEncoder().encode(JSON.stringify(input));

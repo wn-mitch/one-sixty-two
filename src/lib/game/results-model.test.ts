@@ -40,6 +40,7 @@ function fixture(): Fixture {
 		})),
 		battingOrder: [...input.battingOrder],
 		starterOrder: [...input.starterOrder],
+		reliefRoles: input.reliefRoles,
 		actions: [],
 		currentRoll: null
 	};

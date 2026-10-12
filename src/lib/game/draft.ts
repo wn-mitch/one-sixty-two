@@ -1,8 +1,11 @@
 import {
  compareId,
+ BULLPEN_SLOTS,
  CURRENT_REPLAY_SCHEMA_VERSION,
+ defaultReliefRoles,
  HITTER_SLOTS,
  STARTER_SLOTS,
+ validateReliefRoles,
  type Candidate,
  type Draft,
  type DraftAction,
@@ -37,6 +40,7 @@ function emptyDraft(manifest: Manifest, seed: number): Draft {
   currentRoll: null,
   battingOrder: [],
   starterOrder: [],
+  reliefRoles: [],
   actions: []
  };
 }
@@ -144,7 +148,8 @@ function commitPickWithPolicy(
   result = {
    ...result,
    battingOrder: HITTER_SLOTS.map(position => picks.find(pick => pick.slot === position)!.seasonId),
-   starterOrder: STARTER_SLOTS.map(position => picks.find(pick => pick.slot === position)!.seasonId)
+   starterOrder: STARTER_SLOTS.map(position => picks.find(pick => pick.slot === position)!.seasonId),
+   reliefRoles: defaultReliefRoles(BULLPEN_SLOTS)
   } as Draft;
  }
  if (record) return { ...result, actions: appendAction(draft, { type: 'pick', seasonId, slot }) } as Draft;
@@ -353,6 +358,7 @@ function validateWithRules(value: unknown, manifest: Manifest, requireCurrentRol
  if (complete && draft.currentRoll) throw new Error('Complete roster cannot have a pending roll');
  draft.battingOrder = validateOrder(input.battingOrder, draft.battingOrder);
  draft.starterOrder = validateOrder(input.starterOrder, draft.starterOrder);
+ draft.reliefRoles = validateReliefRoles(input.reliefRoles, draft.picks.length === policy.slots.length);
  return draft;
 }
 
@@ -367,6 +373,6 @@ export function validateReplay(value: unknown, manifest: Manifest): Draft {
 }
 
 export function replayInput(draft: Draft): Replay {
- const { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, actions } = draft;
- return { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, actions };
+ const { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions } = draft;
+ return { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions };
 }

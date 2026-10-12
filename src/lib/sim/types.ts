@@ -7,6 +7,7 @@ import {
  type HitterSlot,
  type Position,
  type Profile,
+ type ReliefAssignment,
  type ReplaySchemaVersion,
  type SimulationData,
  type Slot
@@ -69,7 +70,9 @@ export interface GameResult {
 }
 export interface SeasonInput {
  schemaVersion: ReplaySchemaVersion; modelVersion: typeof MODEL_VERSION; rulesVersion: typeof RULES_VERSION;
- seed: number; homeStadium: ParkRef; roster: { profile: Profile; slot: Slot }[]; battingOrder: string[]; starterOrder: string[]; data: SimulationData;
+ seed: number; homeStadium: ParkRef; roster: { profile: Profile; slot: Slot }[]; battingOrder: string[]; starterOrder: string[];
+ /** Roles for CL, then RP1 onward. */
+ reliefRoles: ReliefAssignment[]; data: SimulationData;
 }
 export interface SeasonResult {
  modelVersion: typeof MODEL_VERSION; rulesVersion: typeof RULES_VERSION; dataVersion: string; seed: number;

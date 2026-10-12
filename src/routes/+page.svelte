@@ -196,7 +196,7 @@
    {:else if currentSession.phase === 'lineup'}
     <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if Lineup}
-     <Lineup draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onReassign={(id, slot) => currentSession.reassign(id, slot)} onOrder={(kind, order) => currentSession.order(kind, order)} onsimulate={() => void currentSession.simulate()} />
+     <Lineup draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onReassign={(id, slot) => currentSession.reassign(id, slot)} onOrder={(kind, order) => currentSession.order(kind, order)} onRoles={reliefRoles => currentSession.roles(reliefRoles)} onsimulate={() => void currentSession.simulate()} />
     {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the lineup…</span></div>{/if}
    {:else if currentSession.phase === 'simulating'}
     <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>

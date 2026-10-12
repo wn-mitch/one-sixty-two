@@ -17,7 +17,7 @@ function fixture(): CreateShareRenderModelInput {
 		decade: Math.floor(profile.year / 10) * 10
 	}));
 	const draft: Draft = {
-		schemaVersion: 5,
+		schemaVersion: 6,
 		modelVersion: MODEL_VERSION,
 		rulesVersion: RULES_VERSION,
 		dataVersion: season.data.dataVersion,
@@ -26,6 +26,7 @@ function fixture(): CreateShareRenderModelInput {
 		picks,
 		battingOrder: [...season.battingOrder],
 		starterOrder: [...season.starterOrder],
+		reliefRoles: season.reliefRoles,
 		actions: [],
 		currentRoll: null
 	};

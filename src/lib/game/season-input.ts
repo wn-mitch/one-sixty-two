@@ -16,7 +16,8 @@ export function prepareSeasonInput(draft: Draft, profiles: Profile[], data: Simu
  const input: SeasonInput = {
   schemaVersion: draft.schemaVersion, modelVersion: draft.modelVersion, rulesVersion: draft.rulesVersion, seed: draft.seed,
   homeStadium: { id: stadium.id, version: stadium.version },
-  roster, battingOrder: [...draft.battingOrder], starterOrder: [...draft.starterOrder], data
+  roster, battingOrder: [...draft.battingOrder], starterOrder: [...draft.starterOrder],
+  reliefRoles: draft.reliefRoles.map(assignment => ({ ...assignment })), data
  };
  validateSeason(input);
  return input;

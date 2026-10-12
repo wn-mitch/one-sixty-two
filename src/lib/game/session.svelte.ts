@@ -21,7 +21,7 @@ import {
  supportsImageClipboard
 } from './share.ts';
 import { draftRules } from './rules.ts';
-import type { Draft, HitterSlot, Manifest, Profile, Slot } from './types.ts';
+import type { Draft, HitterSlot, Manifest, Profile, ReliefAssignment, Slot } from './types.ts';
 import { prepareSeasonInput } from './season-input.ts';
 import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts';
 import type { ShareAction, ShareFormat, SharePublication, ShareRenderModel } from '../share/types.ts';
@@ -370,6 +370,15 @@ export class Session {
    this.simulationInput = null;
    this.save('lineup');
   } catch (error) { this.error = error instanceof Error ? error.message : 'Invalid lineup'; }
+ }
+ /** Replaces the bullpen's relief roles; the draft validator rejects an incomplete or repeated assignment. */
+ roles(reliefRoles: ReliefAssignment[]): void {
+  if (this.phase !== 'lineup' || !this.draft || !this.manifest || this.loading) return;
+  try {
+   this.draft = validateDraft({ ...this.draft, reliefRoles }, this.manifest, true);
+   this.simulationInput = null;
+   this.save('lineup');
+  } catch (error) { this.error = error instanceof Error ? error.message : 'Invalid relief roles'; }
  }
  async simulate(): Promise<void> {
   if (!this.draft || !this.manifest || this.loading || this.worker) return;

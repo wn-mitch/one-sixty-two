@@ -16,7 +16,8 @@ import {
  type Profile,
  type Rates,
  type SimulationData,
- type Slot
+ type Slot,
+ validateReliefRoles
 } from '../game/types.ts';
 import { draftRules } from '../game/rules.ts';
 import {
@@ -301,6 +302,7 @@ export function validateSeason(input: SeasonInput): void {
    throw new Error('Invalid lineup order');
   }
  }
+ validateReliefRoles(input.reliefRoles, true);
  if (input.data.schemaVersion !== 1 || !input.data.dataVersion ||
   input.data.defenseMethodVersion !== DEFENSE_METHOD_VERSION || input.data.valuationVersion !== VALUATION_VERSION ||
   !Number.isFinite(input.data.observedRuns) || input.data.observedRuns <= 0 ||

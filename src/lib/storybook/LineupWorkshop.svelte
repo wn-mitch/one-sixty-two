@@ -2,7 +2,7 @@
 	import { onDestroy, tick, untrack } from 'svelte';
 	import Lineup from '#lib/components/Lineup.svelte';
 	import { reassignPick } from '#lib/game/draft.ts';
-	import type { Draft, HitterSlot } from '#lib/game/types.ts';
+	import { validateReliefRoles, type Draft, type HitterSlot, type ReliefAssignment } from '#lib/game/types.ts';
 	import { simulateSeason } from '#lib/engine/core.ts';
 	import { prepareSeasonInput } from '#lib/game/season-input.ts';
 	import type { SeasonResult } from '#lib/sim/types.ts';
@@ -50,6 +50,12 @@
 		draft = kind === 'batting'
 			? { ...draft, battingOrder: [...order] }
 			: { ...draft, starterOrder: [...order] };
+		error = '';
+	}
+
+	function updateRoles(reliefRoles: ReliefAssignment[]): void {
+		if (effectiveBusy) return;
+		draft = { ...draft, reliefRoles: validateReliefRoles(reliefRoles, true) };
 		error = '';
 	}
 
@@ -127,6 +133,7 @@
 				busy={effectiveBusy}
 				onReassign={reassign}
 				onOrder={updateOrder}
+				onRoles={updateRoles}
 				onsimulate={simulate}
 			/>
 		{/key}

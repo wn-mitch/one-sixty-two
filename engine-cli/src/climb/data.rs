@@ -3,7 +3,7 @@ use engine::contact_profile::{contact_targets, fit_contact, platoon_matchup, SID
 use engine::physical_expectation::contact_classes;
 use engine::rates::Rates;
 use engine::types::Profile;
-use engine::workload::{closer_budget, starter_budget};
+use engine::workload::starter_budget;
 use engine::Engine;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -13,14 +13,14 @@ pub const HITTERS: usize = 9;
 pub const STARTERS: std::ops::Range<usize> = 9..12;
 /// The app's current replay contract; the engine echoes these into results.
 pub const MODEL_VERSION: &str = "contact-v2";
-pub const RULES_VERSION: &str = "classic-v3";
+pub const RULES_VERSION: &str = "classic-v4";
 
-// Draft pricing constants (`SALARY_METHOD` in `src/lib/draft/salary.ts`).
+// Draft pricing constant (`SALARY_METHOD` in `src/lib/draft/salary.ts`).
 const STARTS: f64 = 54.0;
-const CLOSER_OUTS_CAP: f64 = 195.0;
-/// Mean season outs of RP1, RP2 and RP3 over sixteen sampled seasons; each is also capped by the
-/// pitcher's own relief workload. Linear values only rank and seed candidates; seasons decide.
-const RELIEVER_OUTS: [f64; 3] = [90.0, 65.0, 130.0];
+/// Mean season outs of CL, RP1, RP2 and RP3 over seven rosters (64 seasons each) with uncapped relief
+/// workloads. Every arm in a slot gets the same outs, so these only weigh slots against each other
+/// when seeding the search; seasons decide.
+const RELIEF_OUTS: [f64; 4] = [126.0, 153.0, 222.0, 330.0];
 
 pub struct Candidate {
     pub profile: Profile,
@@ -100,8 +100,7 @@ impl Dataset {
                         let saved_per_out = -per_pa / outs_per_pa;
                         for index in pitcher_slots {
                             let outs = match SLOTS[index] {
-                                "CL" => closer_budget(&profile)?.min(CLOSER_OUTS_CAP),
-                                "RP1" | "RP2" | "RP3" => closer_budget(&profile)?.min(RELIEVER_OUTS[index - 13]),
+                                "CL" | "RP1" | "RP2" | "RP3" => RELIEF_OUTS[index - 12],
                                 _ => match starter_budget(&profile) { Ok(budget) => STARTS * f64::from(budget), Err(_) => continue },
                             };
                             value[index] = Some(saved_per_out * outs);

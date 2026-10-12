@@ -3,10 +3,26 @@ import type { ParkRef, StadiumConfig, StadiumSummary } from '../sim/park-types.t
 
 export const HITTER_SLOTS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const;
 export const STARTER_SLOTS = ['SP1', 'SP2', 'SP3'] as const;
-/** Named relievers in leverage order: RP1 takes the 8th, RP2 the 7th, RP3 middle relief. */
+/** Named relievers in bullpen order; their relief roles, not the slot, decide when they pitch. */
 export const RELIEF_SLOTS = ['RP1', 'RP2', 'RP3'] as const;
 export const SLOTS = [...HITTER_SLOTS, ...STARTER_SLOTS, 'CL', ...RELIEF_SLOTS] as const;
 export type Slot = typeof SLOTS[number];
+/** The closer and named relievers, in the order a season request lists their roles. */
+export const BULLPEN_SLOTS = ['CL', ...RELIEF_SLOTS] as const;
+export type BullpenSlot = typeof BULLPEN_SLOTS[number];
+/**
+ * A named reliever's job (`ReliefRole` in the engine). The manager calls a role's primary holders
+ * first, then secondary holders who sat out the previous game.
+ */
+export const RELIEF_ROLES = ['closer', 'setup', 'middle', 'long', 'stopper'] as const;
+export type ReliefRole = typeof RELIEF_ROLES[number];
+export interface ReliefAssignment<S extends string = BullpenSlot> { slot: S; primary: ReliefRole; secondary: ReliefRole | null }
+/** Default roles by bullpen position, CL first (`default_roles` in the engine); Draft Mode's RP4 and RP5 use the last two. */
+export const DEFAULT_RELIEF_ROLES: readonly (readonly [ReliefRole, ReliefRole])[] = [
+ ['closer', 'setup'], ['setup', 'stopper'], ['setup', 'middle'], ['middle', 'long'], ['long', 'middle'], ['stopper', 'middle']
+];
+export const defaultReliefRoles = <S extends string>(slots: readonly S[]): ReliefAssignment<S>[] =>
+ slots.map((slot, index) => ({ slot, primary: DEFAULT_RELIEF_ROLES[index][0], secondary: DEFAULT_RELIEF_ROLES[index][1] }));
 /** A slot a card or saved season may carry. BP is the retired team-bullpen slot: collected bullpen cards and older saved seasons keep it, and no draft offers it. */
 export type RosterSlot = Slot | 'BP';
 export type Position = 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
@@ -91,10 +107,10 @@ export interface SimulationData extends DefensiveEnvironment {
 }
 export interface Roll { franchiseId: string; decade: number }
 export interface Pick extends Roll { seasonId: string; slot: Slot }
-export const CURRENT_REPLAY_SCHEMA_VERSION = 5 as const;
+export const CURRENT_REPLAY_SCHEMA_VERSION = 6 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
 export const MODEL_VERSION = 'contact-v2' as const;
-export const RULES_VERSION = 'classic-v3' as const;
+export const RULES_VERSION = 'classic-v4' as const;
 export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
 export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =
@@ -113,7 +129,24 @@ export interface Replay {
  picks: Pick[];
  battingOrder: string[];
  starterOrder: string[];
+ /** Roles for CL and RP1-RP3 in bullpen order; empty until the roster is complete. */
+ reliefRoles: ReliefAssignment[];
  actions: DraftAction[];
 }
 export interface Draft extends Replay { currentRoll: Roll | null }
+/** Roles for every bullpen slot in order once the roster is complete, none before; a secondary role may not repeat the primary. */
+export function validateReliefRoles(value: unknown, complete: boolean): ReliefAssignment[] {
+ const isRole = (role: unknown) => (RELIEF_ROLES as readonly unknown[]).includes(role);
+ const expected: readonly string[] = complete ? BULLPEN_SLOTS : [];
+ if (!Array.isArray(value) || value.length !== expected.length) throw new Error('Invalid relief roles');
+ return value.map((item, index) => {
+  const assignment = item as Record<string, unknown>;
+  if (!assignment || typeof assignment !== 'object' || Object.keys(assignment).length !== 3 || assignment.slot !== expected[index] ||
+   !isRole(assignment.primary) || (assignment.secondary !== null && (!isRole(assignment.secondary) || assignment.secondary === assignment.primary))) {
+   throw new Error('Invalid relief roles');
+  }
+  return { slot: expected[index], primary: assignment.primary, secondary: assignment.secondary } as ReliefAssignment;
+ });
+}
+
 export const compareId = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;

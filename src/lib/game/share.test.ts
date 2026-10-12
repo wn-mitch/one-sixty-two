@@ -48,7 +48,7 @@ function publication(): SharePublication {
 
 function draft(): Draft {
 	return {
-		schemaVersion: 5,
+		schemaVersion: 6,
 		dataVersion: 'data-version',
 		modelVersion: MODEL_VERSION,
 		rulesVersion: RULES_VERSION,
@@ -57,6 +57,7 @@ function draft(): Draft {
 		picks: [],
 		battingOrder: [],
 		starterOrder: [],
+		reliefRoles: [],
 		actions: [],
 		currentRoll: null
 	};

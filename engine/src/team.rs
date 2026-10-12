@@ -1,4 +1,5 @@
 //! Team inputs and box totals (`src/lib/sim/team.ts`, `createBox` in `game.ts`).
+use crate::relief::Roles;
 use crate::types::{BatterLine, DefensiveRunComponents, PitcherLine, PitcherRole, Profile, TeamBox, POSITIONS};
 
 #[derive(Clone, Debug)]
@@ -11,12 +12,21 @@ pub struct TeamInput<'p> {
     pub pitchers: Vec<&'p Profile>,
     pub starter_index: usize,
     pub closer_index: usize,
-    /// Named relievers in leverage order: RP1 takes the 8th, RP2 the 7th, the rest middle relief.
+    /// Named relievers RP1 onward, in bullpen order.
     pub relievers: Vec<usize>,
     /// The remainder arm for relief innings no available named pitcher takes.
     pub bullpen_index: usize,
     /// Whether each pitcher may enter today, by pitcher index; read for the closer and named relievers.
     pub available: Vec<bool>,
+    /// Whether each named pitcher sat out the previous game; secondary roles call only rested arms.
+    pub rested: Vec<bool>,
+    /// Relief roles by pitcher index; set for the closer and every named reliever.
+    pub roles: Vec<Option<Roles>>,
+}
+
+impl TeamInput<'_> {
+    /// The closer, then the named relievers, in bullpen order.
+    pub fn named_relief(&self) -> impl Iterator<Item = usize> + '_ { std::iter::once(self.closer_index).chain(self.relievers.iter().copied()) }
 }
 
 pub fn create_box(team: &TeamInput) -> TeamBox {

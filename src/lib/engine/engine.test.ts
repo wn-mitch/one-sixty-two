@@ -43,6 +43,18 @@ describe('wasm engine boundary', () => {
   expect(() => simulateSeason({ ...input, homeStadium: { id: 'missing', version: 'v0' } })).toThrow(/stadium/i);
   expect(() => simulateSeason({ ...input, battingOrder: input.battingOrder.slice(1) })).toThrow();
   expect(() => buildSchedule(1, ['A', 'A', ...Array.from({ length: 28 }, (_, index) => `T${index}`)])).toThrow(/thirty distinct/);
+  expect(() => simulateSeason({ ...input, reliefRoles: input.reliefRoles.slice(1) })).toThrow(/relief roles/i);
+  expect(() => simulateSeason({ ...input, reliefRoles: input.reliefRoles.map(role => ({ ...role, secondary: role.primary })) })).toThrow(/relief roles|repeats/i);
+ });
+
+ it('deploys the bullpen by the requested relief roles', () => {
+  const input = testSeason(162);
+  const outs = (result: ReturnType<typeof simulateSeason>) => result.pitching.filter(line => line.role === 'closer' || line.role === 'reliever').map(line => line.outs);
+  const defaults = outs(simulateSeason(input));
+  // Every arm a stopper: no closer or setup man, so the named relievers pitch only in late jams.
+  const stoppers = outs(simulateSeason({ ...input, reliefRoles: input.reliefRoles.map(role => ({ ...role, primary: 'stopper' as const, secondary: null })) }));
+  expect(stoppers).not.toEqual(defaults);
+  expect(stoppers.reduce((sum, value) => sum + value, 0)).toBeLessThan(defaults.reduce((sum, value) => sum + value, 0));
  });
 
  it('plays a decided best-of-five with seeding from both regular seasons', () => {

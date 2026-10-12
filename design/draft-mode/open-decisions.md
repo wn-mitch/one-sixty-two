@@ -38,7 +38,7 @@ Calibrate roster-strength expectations, attendance, packed-stadium hype, directi
 
 Owner: [Pitcher abstraction](draft-and-rosters.md). First relevant gate: [phase](phases/03-league-playable.md).
 
-Decided: named bullpens replace the composite BP in both modes, a closer plus three named relievers in Classic and five in Draft, with a fixed replacement-level remainder arm; Classic opponents get their top three real relievers by name (see the [model](../simulation/model.md#7-pitcher-calibration-workload-and-expectancy)). Open: the remainder arm's level, how opponents' named relievers are chosen, and the re-tuned cap for 18 active Draft roles. Revisit the three-starter/54-start schedule only when it materially affects strategic variety.
+Decided: named bullpens replace the composite BP in both modes, a closer plus three named relievers in Classic and five in Draft, with a fixed remainder arm; every named arm holds a primary and a backup relief role with no season workload cap, and Classic opponents get their top three real relievers by name with default roles (see the [model](../simulation/model.md#7-pitcher-calibration-workload-and-expectancy)). Open until playtesting: the remainder arm's level (it now mostly prices a short rotation), how opponents' named relievers are chosen, reliever pricing under uncapped workloads, and the re-tuned cap for 18 active Draft roles. Revisit the three-starter/54-start schedule only when it materially affects strategic variety.
 
 ## 7. Identity and satire
 

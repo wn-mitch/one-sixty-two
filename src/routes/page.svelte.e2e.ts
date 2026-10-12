@@ -225,6 +225,12 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await page.getByRole('button', { name: /down in starting rotation/ }).first().click();
 	const startersAfter = (await deviceDraft(page)).starterOrder;
 	expect(startersAfter).toEqual([startersBefore[1], startersBefore[0], startersBefore[2]]);
+	// RP3 starts as middle relief with long relief as backup; promoting the backup to its role clears it.
+	const roles = page.getByRole('combobox', { name: /^Role for / });
+	await expect(roles).toHaveCount(4);
+	await roles.nth(3).selectOption('long');
+	await expect(page.getByRole('combobox', { name: /^Backup role for / }).nth(3)).toHaveValue('');
+	expect((await deviceDraft<Draft>(page)).reliefRoles[3]).toEqual({ slot: 'RP3', primary: 'long', secondary: null });
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	const games = page.getByRole('region', { name: 'All 162 games', exact: true });
 	await expect(games.locator(SEASON_GAME)).toHaveCount(162);
@@ -352,7 +358,7 @@ test('rejects invalid replay uploads and unknown replay ids', async ({ request }
 	const notJson = await request.post('/api/replays', { headers: { 'content-type': 'application/json' }, data: 'not json' });
 	expect(notJson.status()).toBe(400);
 	const current = await (await request.get('/data/current.json')).json() as { dataVersion: string };
-	const envelope = { schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, homeStadium: null, seed: 1, actions: [], picks: [], battingOrder: [], starterOrder: [] };
+	const envelope = { schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION, modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, homeStadium: null, seed: 1, actions: [], picks: [], battingOrder: [], starterOrder: [], reliefRoles: [] };
 	const wrongDataset = await request.post('/api/replays', { data: { ...envelope, dataVersion: 'f'.repeat(64) } });
 	expect(wrongDataset.status()).toBe(409);
 	// A structurally incomplete but version-compatible snapshot is invalid, not incompatible.

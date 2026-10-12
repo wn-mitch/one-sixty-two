@@ -1,6 +1,6 @@
 <script lang="ts">
  import { onMount, tick } from 'svelte';
- import { RELIEF_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile } from '../game/types.ts';
+ import { RELIEF_ROLES, RELIEF_SLOTS, type BullpenSlot, type Draft, type HitterSlot, type Manifest, type Profile, type ReliefAssignment, type ReliefRole } from '../game/types.ts';
  import { draftRules } from '../game/rules.ts';
  import Card from '../cards/Card.svelte';
  import CardReview from '../cards/CardReview.svelte';
@@ -12,7 +12,7 @@
  import { createOrderMotion, type OrderMotion } from './order-motion.ts';
  import { arriveAtTop, clearStage, flyInto, riseIn, stash, take } from './phase-motion.ts';
  import { MOTION } from '../motion-timing.ts';
- let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onsimulate }: {
+ let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onRoles, onsimulate }: {
   draft: Draft;
   manifest: Manifest;
   profiles: Profile[];
@@ -22,6 +22,7 @@
   busy: boolean;
   onReassign: (seasonId: string, destination: HitterSlot) => void;
   onOrder: (kind: 'batting' | 'starter', order: string[]) => void;
+  onRoles: (reliefRoles: ReliefAssignment[]) => void;
   onsimulate: () => void;
  } = $props();
  let announcement = $state('');
@@ -53,8 +54,7 @@
  const bySeasonPick = $derived(new Map(draft.picks.map(pick => [pick.seasonId, pick])));
  const closerPick = $derived(draft.picks.find(pick => pick.slot === 'CL'));
  const closer = $derived(closerPick ? bySeason.get(closerPick.seasonId) : undefined);
- /** Named relievers in leverage order, with the job each one does. */
- const RELIEF_ROLES: Record<typeof RELIEF_SLOTS[number], string> = { RP1: 'Eighth inning', RP2: 'Seventh inning', RP3: 'Middle relief' };
+ const ROLE_NAMES: Record<ReliefRole, string> = { closer: 'Closer', setup: 'Setup', middle: 'Middle relief', long: 'Long relief', stopper: 'Stopper' };
  const relievers = $derived(RELIEF_SLOTS.flatMap(slot => {
   const pick = draft.picks.find(item => item.slot === slot);
   const profile = pick ? bySeason.get(pick.seasonId) : undefined;
@@ -66,6 +66,26 @@
   return profile ? [[pick.seasonId, createCardViewModel({ profile, slot: pick.slot, manifest, rankings, media, mediaStatus })] as const] : [];
  })));
  const inspectedCard = $derived(inspectedSeasonId ? cardViews.get(inspectedSeasonId) : undefined);
+
+ function rolesFor(slot: BullpenSlot): ReliefAssignment | undefined {
+  return draft.reliefRoles.find(assignment => assignment.slot === slot);
+ }
+
+ /** A primary role that matches the backup clears the backup, since one pitcher holds a role once. */
+ function changeRole(slot: BullpenSlot, profile: Profile, kind: 'primary' | 'secondary', value: string): void {
+  if (busy) return;
+  const reliefRoles = draft.reliefRoles.map(assignment => {
+   if (assignment.slot !== slot) return assignment;
+   if (kind === 'primary') {
+    const primary = value as ReliefRole;
+    return { ...assignment, primary, secondary: assignment.secondary === primary ? null : assignment.secondary };
+   }
+   return { ...assignment, secondary: value ? value as ReliefRole : null };
+  });
+  onRoles(reliefRoles);
+  const next = reliefRoles.find(assignment => assignment.slot === slot)!;
+  announcement = `${profile.displayName} ${profile.year}: ${ROLE_NAMES[next.primary]}${next.secondary ? `, backup ${ROLE_NAMES[next.secondary]}` : ', no backup role'}.`;
+ }
 
  function orderFor(kind: OrderKind): string[] {
   return kind === 'batting' ? draft.battingOrder : draft.starterOrder;
@@ -325,13 +345,13 @@
    <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3></div>
    <ul class="order fixed" aria-labelledby="relief-heading">
     {#if closer}
-     {@render fixedPlayer(closer, 'CL', 'Closer')}
+     {@render fixedPlayer(closer, 'CL')}
     {:else}
      <li><span class="order-number fixed-label">CL</span><span class="muted identity">Loading selected closer…</span></li>
     {/if}
-    {#each relievers as { slot, profile } (slot)}{@render fixedPlayer(profile, slot, RELIEF_ROLES[slot])}{/each}
+    {#each relievers as { slot, profile } (slot)}{@render fixedPlayer(profile, slot)}{/each}
    </ul>
-   <p class="workload muted">With a lead of 0–3 runs the closer takes the ninth, RP1 the eighth and RP2 the seventh; RP3 takes the first other relief inning. Each pitches one inning at most, within an innings cap and with rest after two straight days. A league-average relief pool covers every other inning.</p>
+   <p class="workload muted">Roles decide who pitches when, a backup role is used only after a day off, no one pitches three days running, and a league-average relief pool covers the rest; <a href="/about#simulation">Rules &amp; model</a> has the details.</p>
   </section>
  </div>
  {#if inspectedCard}
@@ -366,9 +386,11 @@
  </span>
 {/snippet}
 
-{#snippet fixedPlayer(profile: Profile, label: string, role: string)}
- <li class="fixed-player" data-season-id={profile.seasonId}>
-  <span class="order-number fixed-label" aria-label={role}>{label}</span>
+{#snippet fixedPlayer(profile: Profile, slot: BullpenSlot)}
+ {@const assigned = rolesFor(slot)}
+ {@const name = `${profile.displayName} ${profile.year}`}
+ <li class="fixed-player" data-season-id={profile.seasonId} data-bullpen-slot={slot}>
+  <span class="order-number fixed-label">{slot}</span>
   {@render artwork(profile)}
   <div class="identity">
    <strong class="name">{profile.displayName}</strong>
@@ -377,6 +399,21 @@
   <div class="meta">
    {@render stats(profile, 'closer')}
   </div>
+  {#if assigned}
+   <div class="roles">
+    <label><span>Role</span>
+     <select value={assigned.primary} disabled={busy} aria-label={`Role for ${name}`} onchange={event => changeRole(slot, profile, 'primary', event.currentTarget.value)}>
+      {#each RELIEF_ROLES as role (role)}<option value={role}>{ROLE_NAMES[role]}</option>{/each}
+     </select>
+    </label>
+    <label><span>Backup</span>
+     <select value={assigned.secondary ?? ''} disabled={busy} aria-label={`Backup role for ${name}`} onchange={event => changeRole(slot, profile, 'secondary', event.currentTarget.value)}>
+      <option value="">None</option>
+      {#each RELIEF_ROLES.filter(role => role !== assigned.primary) as role (role)}<option value={role}>{ROLE_NAMES[role]}</option>{/each}
+     </select>
+    </label>
+   </div>
+  {/if}
  </li>
 {/snippet}
 
@@ -463,7 +500,12 @@
  .stat .value { font-size: var(--text-sm); font-weight: 650; }
  .stat .label { color: var(--muted); font-size: var(--text-xs); }
 
- .fixed-player { grid-template-areas: 'num card identity identity' 'num card meta meta'; }
+ /* Relief rows: role selects take their own full-width row on phones. */
+ .order .fixed-player { grid-template-areas: 'num card identity identity' 'num card meta meta' 'roles roles roles roles'; }
+ .roles { grid-area: roles; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); min-width: 0; }
+ .roles label { display: grid; gap: var(--space-1); min-width: 0; }
+ .roles label > span { color: var(--muted); font-size: var(--text-xs); }
+ .roles select { width: 100%; min-width: 0; }
  .card-trigger { display: block; width: 56px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
  .card-trigger.placeholder { aspect-ratio: 5 / 7; border-radius: var(--radius); background: var(--surface-raised); cursor: default; }
  .card-trigger:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
@@ -478,7 +520,8 @@
  /* Wide rows: one line per player, arrows side by side. */
  @media (min-width: 40rem) {
   .order li { grid-template-columns: 2.75rem 56px minmax(0, 1fr) auto 5.5rem; grid-template-areas: 'num card identity meta move'; padding-block: var(--space-2); }
-  .fixed-player { grid-template-areas: 'num card identity meta .'; }
+  .order .fixed-player { grid-template-areas: 'num card identity meta .' 'num card roles roles roles'; }
+  .roles { max-width: 26rem; }
   .identity { flex-direction: column; flex-wrap: nowrap; align-items: start; gap: var(--space-1); align-self: center; }
   .meta { flex-wrap: nowrap; align-self: center; }
   .move-controls { flex-direction: row; }

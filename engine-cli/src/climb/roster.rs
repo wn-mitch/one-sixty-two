@@ -53,6 +53,8 @@ impl Roster {
             roster: self.picks.iter().enumerate().map(|(slot, &candidate)| RosterPick { profile: data.candidates[candidate].profile.clone(), slot: SLOTS[slot].into() }).collect(),
             batting_order: self.batting.iter().map(|&slot| data.season_id(self.picks[slot]).to_string()).collect(),
             starter_order: self.rotation.iter().map(|&slot| data.season_id(self.picks[slot]).to_string()).collect(),
+            // The search keeps the default roles by bullpen slot.
+            relief_roles: engine::relief::default_assignments(1 + SLOTS.len() - 13),
         }
     }
 
