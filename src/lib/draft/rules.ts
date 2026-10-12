@@ -26,8 +26,8 @@ export interface PackSlot { readonly floor: Finish; readonly count: number }
 
 /**
  * Draft rules for the current contract. The table shape (eight seats, two eight-card packs each,
- * the pack floors and the pass order) is settled; the cap and common salary are provisional
- * balancing inputs that the feasibility harness reports.
+ * the pack floors and the pass order) is settled; the cap share, price noise and common salary
+ * are provisional balancing inputs that the feasibility harness reports.
  */
 export interface DraftRules {
  readonly version: string;
@@ -41,7 +41,12 @@ export interface DraftRules {
  readonly reserves: number;
  readonly minYear: number;
  readonly maxYear: number;
- readonly nominalCap: number;
+ /** The cap is this share of the dealt table's average salary per club. */
+ readonly capShare: number;
+ /** Each run scales every card's salary by a seeded factor within ±this share. */
+ readonly priceNoise: number;
+ /** The lowest salary a card can carry (`SALARY_METHOD.minSalary`). */
+ readonly minSalary: number;
  readonly commonSalaryMax: number;
 }
 
@@ -66,7 +71,9 @@ export const DRAFT_RULES: DraftRules = Object.freeze({
  minYear: MIN_SEASON_YEAR,
  maxYear: MAX_SEASON_YEAR,
  /** Salary units are $0.1M. Provisional until playtested. */
- nominalCap: 1500,
+ capShare: 0.85,
+ priceNoise: 0.1,
+ minSalary: 5,
  /** Cleanup cards are commons: base finish and salary at most this, so any all-common roster fits the cap. */
  commonSalaryMax: 15
 }) satisfies DraftRules;
@@ -79,8 +86,9 @@ export const rosterSize = (rules: DraftRules): number => rules.activeSlots.lengt
 /** The cheapest roster every budget must admit: a full roster of cleanup commons. */
 export const guaranteePayroll = (rules: DraftRules): number => rosterSize(rules) * rules.commonSalaryMax;
 
-export function baselineBudget(rules: DraftRules = DRAFT_RULES): PayrollBudget {
- return { nominalCap: rules.nominalCap, franchiseAdjustment: 0, obligations: 0, ceiling: null };
+/** An unadjusted budget at a table's cap (`RunPool.tableCap`). */
+export function baselineBudget(tableCap: number): PayrollBudget {
+ return { nominalCap: tableCap, franchiseAdjustment: 0, obligations: 0, ceiling: null };
 }
 
 /** Obligations consume the adjusted cap; a ceiling bounds it directly. */

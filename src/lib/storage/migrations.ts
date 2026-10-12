@@ -117,6 +117,13 @@ export const MIGRATIONS: readonly Migration[] = [
    )`);
    exec(db, 'CREATE INDEX draft_runs_by_update ON draft_runs (updated_at)');
   }
+ },
+ {
+  version: 4,
+  up(db) {
+   // A run's league season: lineups and played chapters, kept as results rather than replayed.
+   exec(db, 'ALTER TABLE draft_runs ADD COLUMN season_json TEXT');
+  }
  }
 ];
 

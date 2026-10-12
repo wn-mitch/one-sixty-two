@@ -1,11 +1,14 @@
 import { chooseAiPick, judgeFor, personalityFor, scorePile, type Judgment, type Personality, type PickScore, type SeatView } from './ai.ts';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY, type Difficulty } from './scouting.ts';
 import { seatTable, type TableSeating } from './franchises.ts';
-import { heldBy, transfer } from './ledger.ts';
+import { heldBy, transfer, UNOWNED } from './ledger.ts';
+import { STACK_ROLES, type StackRole } from './cleanup.ts';
+import { checkSubmission } from './legality.ts';
+import { recoverSeat } from './recovery.ts';
 import { buildRunPool, pileHeldBy, type RunPool } from './pool.ts';
-import { baselineBudget, DRAFT_RULES, picksPerSeat } from './rules.ts';
+import { baselineBudget, DRAFT_RULES, picksPerSeat, rosterSize } from './rules.ts';
 import { randomStream } from '../game/random.ts';
-import type { DraftCard, PayrollBudget } from './types.ts';
+import type { DraftCard, DraftSlot, LegalityReport, PayrollBudget, Submission } from './types.ts';
 import { DRAFT_RULES_VERSION, RUN_VERSION, SALARY_VERSION } from './versions.ts';
 
 /** Everything a run is built from besides the player's actions. A seed alone cannot rebuild a run. */
@@ -28,10 +31,21 @@ export interface RunData {
  parkFit(franchiseId: string, seasonId: string): number;
 }
 
-/** One player decision. Runs are rebuilt by replaying these against the setup. */
-export type RunAction = { type: 'pick'; cardId: string };
+/**
+ * One player decision. Runs are rebuilt by replaying these against the setup. A pick drafts from
+ * the held pile; in the opening window a cut releases an owned card, a cleanup takes the top card of
+ * one of the player's stacks, auto-fix applies the AI clubs' recovery to the player's roster, and a
+ * submit fixes the opening roster.
+ */
+export type RunAction =
+ | { type: 'pick'; cardId: string }
+ | { type: 'cut'; cardId: string }
+ | { type: 'cleanup'; role: StackRole }
+ | { type: 'autofix' }
+ | { type: 'submit'; active: Record<DraftSlot, string>; reserves: string[] };
 
-export type RunPhase = 'drafting' | 'window';
+/** Drafting, then the opening window, then the league season once the player submits. */
+export type RunPhase = 'drafting' | 'window' | 'season';
 
 /** A pick as the ticker shows it; AI picks carry the score that explains them (see `explainPick`). */
 export interface TickerPick {
@@ -57,6 +71,8 @@ export interface DraftRun {
  readonly actions: RunAction[];
  /** Card ids each seat has held in a pile; an AI seat reasons only from these and the public picks. */
  readonly seen: Set<string>[];
+ /** Each seat's opening roster once fixed: AI seats when the draft ends, the player's on submit. */
+ readonly submissions: (Submission | null)[];
  pick: number;
  phase: RunPhase;
  readonly aiRandoms: (() => number)[];
@@ -93,9 +109,9 @@ export function startRun(setup: RunSetup, data: RunData): DraftRun {
   setup, data, pool, seating,
   personalities,
   judges: personalities.map((personality, seat) => personality && judgeFor(setup.seed, seat, personality, setup.difficulty)),
-  budgets: seating.seats.map(() => baselineBudget(rules)),
+  budgets: seating.seats.map(() => baselineBudget(pool.tableCap)),
   piles: pool.packs.map(packs => packs.flat()),
-  ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), pick: 0, phase: 'drafting',
+  ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), submissions: seating.seats.map(() => null), pick: 0, phase: 'drafting',
   aiRandoms: seating.seats.map((_, seat) => randomStream(setup.seed, `draft:ai:seat:${seat}`))
  };
 }
@@ -133,14 +149,21 @@ export function seatView(run: DraftRun, seat: number): SeatView {
 
 /**
  * Applies one player action. A pick takes the card from the player's held pile; every AI seat
- * then picks from the pile it holds, and the piles pass left. Invalid actions throw
+ * then picks from the pile it holds, and the piles pass left. When the last pick is made the AI
+ * clubs recover their opening rosters and the window opens. Invalid actions throw
  * `RunActionError` before anything changes.
  */
 export function applyAction(run: DraftRun, action: RunAction): void {
- if (action.type !== 'pick') throw new RunActionError(`Unknown action ${(action as { type: string }).type}`);
+ if (action.type === 'pick') applyPick(run, action.cardId);
+ else if (run.phase !== 'window') throw new RunActionError(run.phase === 'drafting' ? 'The draft is still on' : 'The opening window is closed');
+ else applyWindowAction(run, action);
+ run.actions.push(action);
+}
+
+function applyPick(run: DraftRun, cardId: string): void {
  if (run.phase !== 'drafting') throw new RunActionError('The draft is over');
  const human = run.seating.humanSeat;
- if (!heldPile(run, human).some(item => item.seasonId === action.cardId)) throw new RunActionError(`${action.cardId} is not in your pile`);
+ if (!heldPile(run, human).some(item => item.seasonId === cardId)) throw new RunActionError(`${cardId} is not in your pile`);
  for (let seat = 0; seat < run.seating.seats.length; seat++) for (const item of heldPile(run, seat)) run.seen[seat].add(item.seasonId);
  // Every seat holds a different pile, so the AI picks do not depend on the player's pick this round.
  const aiPicks = run.seating.seats.flatMap((_, seat) => {
@@ -148,14 +171,53 @@ export function applyAction(run: DraftRun, action: RunAction): void {
   const scores = scorePile(seatView(run, seat), run.personalities[seat]!, run.aiRandoms[seat], run.pool.rules);
   return [{ seat, choice: chooseAiPick(scores) }];
  });
- take(run, human, action.cardId, null);
+ take(run, human, cardId, null);
  for (const { seat, choice } of aiPicks) take(run, seat, choice.cardId, choice);
- run.actions.push(action);
  run.pick++;
  if (run.pick === picksPerSeat(run.pool.rules)) {
   if (run.piles.some(pile => pile.length)) throw new Error('The draft left undrafted cards');
   run.phase = 'window';
+  for (let seat = 0; seat < run.seating.seats.length; seat++) {
+   if (seat === human) continue;
+   const recovered = recoverSeat(run.pool, run.budgets[seat], seat);
+   if (recovered.failures.length) throw new Error(`Seat ${seat} cannot reach a legal opening roster`);
+   run.submissions[seat] = recovered.submission;
+  }
  }
+}
+
+function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pick' }>): void {
+ const human = run.seating.humanSeat;
+ const seat = { kind: 'roster', seat: human } as const;
+ const owned = ownedBy(run, human);
+ if (action.type === 'cut') {
+  if (!owned.some(item => item.seasonId === action.cardId)) throw new RunActionError(`${action.cardId} is not on your roster`);
+  transfer(run.pool.ledger, action.cardId, seat, UNOWNED, 'cut');
+ } else if (action.type === 'cleanup') {
+  if (!STACK_ROLES.includes(action.role)) throw new RunActionError(`Unknown cleanup stack ${String(action.role)}`);
+  if (owned.length >= rosterSize(run.pool.rules)) throw new RunActionError('Your roster is full; cut a card first');
+  const top = run.pool.cleanup.peek(human, action.role);
+  if (!top) throw new RunActionError(`The ${action.role} stack is empty`);
+  transfer(run.pool.ledger, top.seasonId, UNOWNED, seat, 'cleanup');
+ } else if (action.type === 'autofix') {
+  recoverSeat(run.pool, run.budgets[human], human);
+ } else if (action.type === 'submit') {
+  const submission: Submission = { seat: human, active: { ...action.active }, reserves: [...action.reserves] };
+  let report: LegalityReport;
+  try { report = checkSubmission(submission, run.pool.ledger, run.budgets[human], run.pool.rules); }
+  catch (error) { throw new RunActionError((error as Error).message); }
+  if (!report.legal) throw new RunActionError('That roster is not legal yet');
+  if (owned.length !== rosterSize(run.pool.rules)) throw new RunActionError('Place or cut every card you own');
+  run.submissions[human] = submission;
+  run.phase = 'season';
+ } else {
+  throw new RunActionError(`Unknown action ${(action as { type: string }).type}`);
+ }
+}
+
+/** The player's roster as it stands, checked against the cap and slots, for the window's checklist. */
+export function windowReport(run: DraftRun, submission: Submission): LegalityReport {
+ return checkSubmission(submission, run.pool.ledger, run.budgets[run.seating.humanSeat], run.pool.rules);
 }
 
 /** Rebuilds a run from its setup and action log; throws if any action no longer applies. */

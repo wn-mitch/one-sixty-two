@@ -70,7 +70,7 @@ export function runDraft(pool: RunPool, policies: readonly PickPolicy[], table: 
     const inPile = new Set(piles[pile]);
     const seenElsewhere = [...seen[seat]].filter(id => !inPile.has(id) && ledger.instances.get(id)?.owner.kind === 'pile').map(id => ledger.cards.get(id)!);
     const home = (id: string): number => parkFit(seat, id);
-    const view = { pile: options, owned, budget: baselineBudget(), seenElsewhere, parkFit: home, judge: judges[seat] };
+    const view = { pile: options, owned, budget: baselineBudget(pool.tableCap), seenElsewhere, parkFit: home, judge: judges[seat] };
     const id = chooseAiPick(scorePile(view, personalities[seat], randoms[seat])).cardId;
     if (policies[seat] !== 'ai') return options.find(card => card.seasonId === id)!;
     const picked = options.find(card => card.seasonId === id)!;

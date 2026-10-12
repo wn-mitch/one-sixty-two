@@ -36,6 +36,20 @@ describe('run pool', () => {
   expect(buildRunPool(8, cards).packs).not.toEqual(pool.packs);
  });
 
+ it('reprices each run within ten percent, keeps commons cleanup-priced, and scales the cap to the deal', () => {
+  const priced = (id: string) => pool.ledger.cards.get(id)!.salary;
+  const ratios = cards.map(card => priced(card.seasonId) / card.salary);
+  expect(ratios.every((ratio, index) => cards[index].salary < 20 || (ratio >= 0.9 - 0.03 && ratio <= 1.1 + 0.03))).toBe(true);
+  expect(ratios.some(ratio => ratio !== 1)).toBe(true);
+  expect(cards.filter(card => card.finish === 'base' && card.salary <= DRAFT_RULES.commonSalaryMax).every(card => priced(card.seasonId) <= DRAFT_RULES.commonSalaryMax)).toBe(true);
+  expect(cards.every(card => priced(card.seasonId) >= DRAFT_RULES.minSalary)).toBe(true);
+  // Another seed draws other prices.
+  const other = buildRunPool(8, cards);
+  expect(cards.some(card => other.ledger.cards.get(card.seasonId)!.salary !== priced(card.seasonId))).toBe(true);
+  const dealt = pool.packs.flat(2).reduce((sum, id) => sum + priced(id), 0);
+  expect(pool.tableCap).toBe(Math.round(DRAFT_RULES.capShare * dealt / DRAFT_RULES.seats));
+ });
+
  it('names a role whose cleanup stack would be empty', () => {
   const withoutCatchers = cards.filter(card => !(card.eligibleSlots.includes('C') && isCommon(card)));
   expect(buildRunPool(7, withoutCatchers).failures).toEqual([{ code: 'stock-role-shortfall', slot: 'C' }]);

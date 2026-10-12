@@ -1,0 +1,238 @@
+import { compareId, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, STARTER_SLOTS, validateReliefRoles, type Profile, type ReliefAssignment, type SimulationData } from '../game/types.ts';
+import { randomStream, shuffle } from '../game/random.ts';
+import { stadiumRef } from '../sim/park.ts';
+import { LEAGUE_CHAPTERS, type LeagueChapterInput, type LeagueChapterResult, type LeagueGame, type RestState } from '../sim/league-types.ts';
+import type { BatterLine, PitcherLine } from '../sim/types.ts';
+import { RIVALS } from './franchises.ts';
+import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
+import type { DraftRun } from './run.ts';
+import type { DraftCard, DraftSlot, Submission } from './types.ts';
+
+/** League season format: rival matching, AI lineups and the stored chapter record. */
+export const LEAGUE_VERSION = 'league-v1' as const;
+
+/**
+ * A club's lineup for the next chapter. The cards are the club's submitted roster; between
+ * chapters only their places change: who fields which slot, who sits in reserve, the batting and
+ * rotation orders and the relief roles.
+ */
+export interface ClubLineup {
+ active: Record<DraftSlot, string>;
+ reserves: string[];
+ battingOrder: string[];
+ starterOrder: string[];
+ reliefRoles: ReliefAssignment<DraftBullpenSlot>[];
+}
+
+/** One played chapter as the device keeps it: compact games, each club's lines and the rest carried forward. */
+export interface ChapterRecord {
+ games: LeagueGame[];
+ lines: { batting: BatterLine[]; pitching: PitcherLine[] }[];
+ carry: RestState[][];
+}
+
+export interface LeagueSeason {
+ version: typeof LEAGUE_VERSION;
+ /** Four seat pairs; the player's pair is the player and the guaranteed rival. */
+ rivals: [number, number][];
+ lineups: ClubLineup[];
+ chapters: ChapterRecord[];
+}
+
+export class LineupError extends Error {}
+
+const HITTER_ROWS = HITTER_SLOTS as readonly DraftSlot[];
+const STARTER_ROWS = STARTER_SLOTS as readonly DraftSlot[];
+
+/**
+ * Pairs the eight seats as rivals: the player with the guaranteed rival (or a seeded seat when the
+ * franchise has none), then known rivalries among the rest in seeded order, then seeded pairs.
+ */
+export function matchRivals(run: DraftRun): [number, number][] {
+ const { seats, humanSeat, rival } = run.seating;
+ const random = randomStream(run.setup.seed, 'draft:league:rivals');
+ const open = shuffle(seats.map((_, seat) => seat).filter(seat => seat !== humanSeat), random);
+ const take = (seat: number) => open.splice(open.indexOf(seat), 1)[0];
+ const pairs: [number, number][] = [[humanSeat, take(rival === null ? open[0] : seats.indexOf(rival))]];
+ for (const seat of [...open]) {
+  if (!open.includes(seat)) continue;
+  const partner = open.find(other => other !== seat && (RIVALS[seats[seat]] ?? []).includes(seats[other]));
+  if (partner !== undefined) pairs.push([take(seat), take(partner)]);
+ }
+ while (open.length) pairs.push([take(open[0]), take(open[0])]);
+ return pairs;
+}
+
+/** An AI club's lineup: hitters and starters by modeled value, relief roles at the slot defaults. */
+export function defaultLineup(submission: Submission, card: (id: string) => DraftCard): ClubLineup {
+ const active = submission.active as Record<DraftSlot, string>;
+ const byValue = (ids: string[]) => ids.sort((a, b) => card(b).valueRuns - card(a).valueRuns || compareId(a, b));
+ return {
+  active: { ...active }, reserves: [...submission.reserves],
+  battingOrder: byValue(HITTER_ROWS.map(slot => active[slot])),
+  starterOrder: byValue(STARTER_ROWS.map(slot => active[slot])),
+  reliefRoles: DEFAULT_DRAFT_RELIEF_ROLES.map(role => ({ ...role }))
+ };
+}
+
+/** Opens the season once every seat has submitted. */
+export function startLeague(run: DraftRun): LeagueSeason {
+ if (run.phase !== 'season' || run.submissions.some(submission => submission === null)) throw new Error('The league starts once every club has submitted');
+ const card = (id: string) => run.pool.ledger.cards.get(id)!;
+ return { version: LEAGUE_VERSION, rivals: matchRivals(run), lineups: run.submissions.map(submission => defaultLineup(submission!, card)), chapters: [] };
+}
+
+/** Checks a lineup against the seat's submitted cards; throws `LineupError` naming the first problem. */
+export function validateLineup(run: DraftRun, seat: number, lineup: ClubLineup): void {
+ const submission = run.submissions[seat];
+ if (!submission) throw new LineupError('This club has no roster yet');
+ const owned = [...Object.values(submission.active), ...submission.reserves].sort(compareId);
+ const listed = [...Object.values(lineup.active), ...lineup.reserves].sort(compareId);
+ const slots = run.pool.rules.activeSlots;
+ if (Object.keys(lineup.active).length !== slots.length || slots.some(slot => !lineup.active[slot]) || listed.join() !== owned.join()) {
+  throw new LineupError('A lineup uses exactly the club\'s cards, one per slot');
+ }
+ for (const slot of slots) {
+  const item = run.pool.ledger.cards.get(lineup.active[slot])!;
+  if (!canFill(item, slot)) throw new LineupError(`${item.seasonId} cannot play ${slot}`);
+ }
+ const same = (order: string[], rows: readonly DraftSlot[]) => order.length === rows.length && [...order].sort(compareId).join() === rows.map(slot => lineup.active[slot]).sort(compareId).join();
+ if (!same(lineup.battingOrder, HITTER_ROWS)) throw new LineupError('The batting order lists the nine active hitters once each');
+ if (!same(lineup.starterOrder, STARTER_ROWS)) throw new LineupError('The rotation lists the three starters once each');
+ try { validateReliefRoles(lineup.reliefRoles, true, DRAFT_BULLPEN_SLOTS); }
+ catch { throw new LineupError('Every bullpen arm needs a role, and a backup role may not repeat it'); }
+}
+
+/** A lineup place: an active slot, or a reserve by index. */
+export type Place = DraftSlot | number;
+
+const cardAt = (lineup: ClubLineup, place: Place): string => typeof place === 'number' ? lineup.reserves[place] : lineup.active[place];
+
+/**
+ * The lineup with the cards at two places exchanged. A card coming off the reserve list takes the
+ * batting or rotation spot of the card it replaces; active cards that trade slots keep theirs.
+ */
+export function swapPlaces(lineup: ClubLineup, a: Place, b: Place): ClubLineup {
+ const next = structuredClone(lineup);
+ const first = cardAt(lineup, a);
+ const second = cardAt(lineup, b);
+ const put = (place: Place, id: string) => { if (typeof place === 'number') next.reserves[place] = id; else next.active[place] = id; };
+ put(a, second);
+ put(b, first);
+ const before = new Set(Object.values(lineup.active));
+ const after = new Set(Object.values(next.active));
+ const entering = [...after].find(id => !before.has(id));
+ const leaving = [...before].find(id => !after.has(id));
+ if (entering && leaving) {
+  next.battingOrder = next.battingOrder.map(id => id === leaving ? entering : id);
+  next.starterOrder = next.starterOrder.map(id => id === leaving ? entering : id);
+ }
+ return next;
+}
+
+/** Whether the cards at `a` and `b` can trade places: each must be able to play the other's slot. */
+export function canSwap(run: DraftRun, lineup: ClubLineup, a: Place, b: Place): boolean {
+ if (a === b) return false;
+ const card = (place: Place) => run.pool.ledger.cards.get(cardAt(lineup, place))!;
+ const fitsPlace = (item: DraftCard, place: Place) => typeof place === 'number' || canFill(item, place);
+ return fitsPlace(card(a), b) && fitsPlace(card(b), a);
+}
+
+/** Sets the player's lineup for the next chapter. */
+export function setLineup(run: DraftRun, season: LeagueSeason, lineup: ClubLineup): void {
+ if (season.chapters.length >= LEAGUE_CHAPTERS) throw new LineupError('The season is over');
+ validateLineup(run, run.seating.humanSeat, lineup);
+ season.lineups[run.seating.humanSeat] = structuredClone(lineup);
+}
+
+/**
+ * The engine input for the next chapter. `profiles` must hold every active card; `names` labels
+ * each seat's club, and each club plays in its franchise's park.
+ */
+export function chapterInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueChapterInput {
+ const chapter = season.chapters.length;
+ if (chapter >= LEAGUE_CHAPTERS) throw new Error('The season is over');
+ return {
+  modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed: run.setup.seed, data, chapter,
+  rivals: season.rivals, carry: season.chapters.at(-1)?.carry ?? [], detailClub: run.seating.humanSeat,
+  clubs: season.lineups.map((lineup, seat) => {
+   const franchiseId = run.seating.seats[seat];
+   const stadium = data.stadiums.find(item => item.franchiseId === franchiseId);
+   if (!stadium) throw new Error(`No home park for ${franchiseId}`);
+   return {
+    id: franchiseId, name: names[seat], homeStadium: stadiumRef(stadium),
+    roster: run.pool.rules.activeSlots.map(slot => {
+     const profile = profiles.get(lineup.active[slot]);
+     if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
+     return { profile, slot };
+    }),
+    battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role }))
+   };
+  })
+ };
+}
+
+/** Keeps a played chapter; results must arrive in chapter order. */
+export function recordChapter(season: LeagueSeason, result: LeagueChapterResult): void {
+ if (result.chapter !== season.chapters.length) throw new Error(`Expected chapter ${season.chapters.length + 1}, got ${result.chapter + 1}`);
+ season.chapters.push({ games: result.games, lines: result.totals.map(box => ({ batting: box.batting, pitching: box.pitching })), carry: result.carry });
+}
+
+export interface Standing { seat: number; wins: number; losses: number; runsFor: number; runsAgainst: number; gamesBack: number }
+
+/**
+ * Standings by winning percentage, then run differential, then seat. Games back counts from the leader.
+ */
+export function standings(season: LeagueSeason): Standing[] {
+ const rows: Standing[] = season.lineups.map((_, seat) => ({ seat, wins: 0, losses: 0, runsFor: 0, runsAgainst: 0, gamesBack: 0 }));
+ for (const game of season.chapters.flatMap(chapter => chapter.games)) {
+  const home = rows[game.home];
+  const away = rows[game.away];
+  home.runsFor += game.homeRuns; home.runsAgainst += game.awayRuns;
+  away.runsFor += game.awayRuns; away.runsAgainst += game.homeRuns;
+  if (game.homeRuns > game.awayRuns) { home.wins++; away.losses++; } else { away.wins++; home.losses++; }
+ }
+ const pct = (row: Standing) => row.wins + row.losses ? row.wins / (row.wins + row.losses) : 0;
+ rows.sort((a, b) => pct(b) - pct(a) || (b.runsFor - b.runsAgainst) - (a.runsFor - a.runsAgainst) || a.seat - b.seat);
+ const leader = rows[0];
+ for (const row of rows) row.gamesBack = ((leader.wins - row.wins) + (row.losses - leader.losses)) / 2;
+ return rows;
+}
+
+/** Head-to-head record of `seat` against `opponent` so far. */
+export function headToHead(season: LeagueSeason, seat: number, opponent: number): { wins: number; losses: number } {
+ let wins = 0;
+ let losses = 0;
+ for (const game of season.chapters.flatMap(chapter => chapter.games)) {
+  if (!((game.home === seat && game.away === opponent) || (game.home === opponent && game.away === seat))) continue;
+  const won = game.home === seat ? game.homeRuns > game.awayRuns : game.awayRuns > game.homeRuns;
+  if (won) wins++; else losses++;
+ }
+ return { wins, losses };
+}
+
+const sumInto = <T extends object>(target: T, source: T): void => {
+ for (const [key, value] of Object.entries(source)) {
+  const record = target as Record<string, unknown>;
+  if (typeof value === 'number' && key !== 'year') record[key] = (record[key] as number) + value;
+  else if (value && typeof value === 'object') sumInto(record[key] as object, value as object);
+ }
+};
+
+/** A club's season lines so far, one per card, summed over chapters in first-appearance order. */
+export function seasonLines(season: LeagueSeason, seat: number): { batting: BatterLine[]; pitching: PitcherLine[] } {
+ const batting = new Map<string, BatterLine>();
+ const pitching = new Map<string, PitcherLine>();
+ for (const chapter of season.chapters) {
+  const lines = chapter.lines[seat];
+  for (const line of lines.batting) {
+   const total = batting.get(line.seasonId);
+   if (total) sumInto(total, line); else batting.set(line.seasonId, structuredClone(line));
+  }
+  for (const line of lines.pitching) {
+   const total = pitching.get(line.seasonId);
+   if (total) sumInto(total, line); else pitching.set(line.seasonId, structuredClone(line));
+  }
+ }
+ return { batting: [...batting.values()], pitching: [...pitching.values()] };
+}

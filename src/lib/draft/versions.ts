@@ -1,5 +1,5 @@
 /** Draft rules contract: seats, roster shape, cap predicate, pool construction and recovery order. */
-export const DRAFT_RULES_VERSION = 'draft-d01-v2' as const;
+export const DRAFT_RULES_VERSION = 'draft-d01-v3' as const;
 /** Salary valuation method stored in `draft-cards.json`. */
 export const SALARY_VERSION = 'salary-runs-v1' as const;
 /** Ownership buckets, legality failure codes and report shape shared with later draft phases. */

@@ -68,6 +68,14 @@ The schedule and ledger must remain coherent even when the player is eliminated 
 8. **North-star proof:** on a controlled seed, two defensible human pick paths reach distinct legal rosters and measurably different season reports without either being predetermined by a cosmetic finish.
 9. **Performance proof:** the complete shared league computation meets the agreed phone-class budget and does not multiply work by simulating disconnected schedules.
 
+## Implemented so far
+
+- `engine/src/league.rs` builds the season and plays it a chapter at a time. Rival pairs sit opposite each other on a seeded circle of eight. Each pairing plays 23 games in series of 3, 3, 3, 3, 3, 3, 3 and 2; a club hosts twelve against the three clubs clockwise from it and eleven against the other three, and rivals add one game hosted by the eleven-game side, so every club plays 81 at home and its rival 24 times. Series come from a seven-round round robin in seeded order, never two series of one round in a row, and the extra rival day sits between two rounds without a rival pairing, so no pairing repeats on consecutive series. That is 162 matchdays of four games, six chapters of 27. A Rust test checks the schedule identity over 200 seeds.
+- A chapter plays its 108 games with each club's current lineup in its franchise's 2025 park. Starters rotate by matchday; named relievers' rest carries into the next chapter by season id; the remainder arm is the league's. The player's games come back in full; the rest come back as scores and per-club batting and pitching totals. A chapter takes about 0.8 s in the browser.
+- `src/lib/draft/league.ts` pairs the rivals (the player and the guaranteed rival, then known rivalries, then seeded pairs), sets each AI club's lineup by modeled value with slot-default relief roles, validates and applies the player's lineup between chapters (batting order, fielding slots, rotation order, relief roles, and reserve swaps where both cards fit), and derives standings, head-to-head records and season lines from the stored chapters.
+- The season is stored with the run (`draft_runs.season_json`, migration 4) as lineups and played chapters, not replayed. `/draft` shows the standings, the player's last chapter, the lineup for the next chapter and Play chapter, then a final report with standings, the rival series and the player's batting and pitching lines.
+- No franchise packages or decrees are applied; the entry screen labels them later content.
+
 ## Required open decisions before D03 acceptance
 
 - Which initial package/decree slice is supported, which remains catalogued but inactive, and what evidence threshold closes the content-selection gate.

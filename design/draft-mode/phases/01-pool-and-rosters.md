@@ -47,7 +47,7 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 
 **Provisional evidence.**
 - The default sweep (64 seeds × five placeholder pick policies) leaves every seat legal.
-- Most placeholder drafts finish over the 1,500-unit cap or short of a role; recovery repairs all of them.
+- Most placeholder drafts finish over the table's cap or short of a role; recovery repairs all of them.
 - Named negative fixtures fail as designed.
 - Every run replays to the same fingerprint, at about 11 ms per run.
 - Phone runtime is not measured.

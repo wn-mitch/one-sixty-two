@@ -30,7 +30,7 @@ describe('matching primitives', () => {
 describe('roster legality', () => {
  it('accepts a full owned roster within the cap and counts reserves in payroll', () => {
   const { ledger, submission } = ownedRoster(rosterCards('a', 50));
-  const report = checkSubmission(submission, ledger, baselineBudget());
+  const report = checkSubmission(submission, ledger, baselineBudget(1500));
   expect(report).toMatchObject({ legal: true, payroll: 20 * 50, effectiveCap: 1500, capRoom: 500, failures: [] });
  });
 
@@ -42,9 +42,9 @@ describe('roster legality', () => {
   for (const card of cards) transfer(foreign, card.seasonId, UNOWNED, { kind: 'roster', seat: 0 }, 'draft');
   const broken = { ...submission, active: { ...submission.active, C: 'stranger:1999', SS: submission.active.CL, '1B': undefined }, reserves: [submission.reserves[0], 'ghost:1900', submission.reserves[0]] };
   delete broken.active['1B'];
-  const codes = checkSubmission(broken, foreign, baselineBudget()).failures.map(failure => failure.code);
+  const codes = checkSubmission(broken, foreign, baselineBudget(1500)).failures.map(failure => failure.code);
   expect(codes).toEqual(['duplicate-card', 'duplicate-card', 'ineligible-role', 'missing-role', 'not-owned', 'reserve-count', 'unknown-card']);
-  expect(checkSubmission(submission, ledger, baselineBudget()).legal).toBe(true);
+  expect(checkSubmission(submission, ledger, baselineBudget(1500)).legal).toBe(true);
  });
 
  it('applies franchise adjustments, obligations and ceilings to the cap, never cash', () => {
@@ -70,7 +70,7 @@ describe('roster legality', () => {
  it('fills named relief slots only with cards that could close', () => {
   const { ledger, submission } = ownedRoster(rosterCards('s', 5));
   const starter = submission.active.SP1!;
-  const report = checkSubmission({ ...submission, active: { ...submission.active, RP4: starter, SP1: submission.active.RP4 } }, ledger, baselineBudget());
+  const report = checkSubmission({ ...submission, active: { ...submission.active, RP4: starter, SP1: submission.active.RP4 } }, ledger, baselineBudget(1500));
   expect(report.failures).toEqual([{ code: 'ineligible-role', slot: 'RP4', cardId: starter }, { code: 'ineligible-role', slot: 'SP1', cardId: submission.active.RP4 }]);
  });
 });

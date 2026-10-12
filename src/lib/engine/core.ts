@@ -1,9 +1,10 @@
-import { buildSchedule as wasmSchedule, Engine } from './pkg/engine.js';
+import { buildLeagueSchedule as wasmLeagueSchedule, buildSchedule as wasmSchedule, Engine } from './pkg/engine.js';
 import type { SimulationData } from '../game/types.ts';
 import type { SeriesInput, SeriesProgress, SeriesResult } from '../sim/series-types.ts';
 import type { StadiumConfig } from '../sim/park-types.ts';
 import type { GameResult, ScheduleGame, SeasonInput, SeasonResult, TeamInput } from '../sim/types.ts';
-import { validateSeason } from '../sim/validation.ts';
+import type { Fixture, LeagueChapterInput, LeagueChapterResult } from '../sim/league-types.ts';
+import { validateLeagueChapter, validateSeason } from '../sim/validation.ts';
 
 /**
  * The Rust engine behind the TS data contract. Inputs are validated here, then cross the wasm
@@ -59,4 +60,16 @@ export function simulateExhibition(data: SimulationData, input: ExhibitionInput)
 export function buildSchedule(seed: number, opponentIds: readonly string[]): ScheduleGame[] {
  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Schedule requires a valid seed and thirty distinct opponents');
  return JSON.parse(wasmSchedule(seed, JSON.stringify(opponentIds))) as ScheduleGame[];
+}
+
+/** Plays one validated Draft Mode league chapter; `onGame` receives the count of games played. */
+export function simulateLeagueChapter(input: LeagueChapterInput, onGame?: (completed: number) => void): LeagueChapterResult {
+ validateLeagueChapter(input);
+ const { data, ...request } = input;
+ return JSON.parse(engineFor(data).simulateLeagueChapter(JSON.stringify(request), (completed: number) => onGame?.(completed))) as LeagueChapterResult;
+}
+
+/** The league's 162 matchdays of four fixtures for `seed` and four rival pairs of club indexes. */
+export function buildLeagueSchedule(seed: number, rivals: readonly (readonly [number, number])[]): Fixture[][] {
+ return JSON.parse(wasmLeagueSchedule(seed, JSON.stringify(rivals))) as Fixture[][];
 }

@@ -134,10 +134,13 @@ export interface Replay {
  actions: DraftAction[];
 }
 export interface Draft extends Replay { currentRoll: Roll | null }
-/** Roles for every bullpen slot in order once the roster is complete, none before; a secondary role may not repeat the primary. */
-export function validateReliefRoles(value: unknown, complete: boolean): ReliefAssignment[] {
+/**
+ * Roles for every slot of `slots` in order once the roster is complete, none before; a secondary
+ * role may not repeat the primary.
+ */
+export function validateReliefRoles(value: unknown, complete: boolean, slots: readonly string[] = BULLPEN_SLOTS): ReliefAssignment[] {
  const isRole = (role: unknown) => (RELIEF_ROLES as readonly unknown[]).includes(role);
- const expected: readonly string[] = complete ? BULLPEN_SLOTS : [];
+ const expected: readonly string[] = complete ? slots : [];
  if (!Array.isArray(value) || value.length !== expected.length) throw new Error('Invalid relief roles');
  return value.map((item, index) => {
   const assignment = item as Record<string, unknown>;

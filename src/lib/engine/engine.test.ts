@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MODEL_VERSION, POSITIONS } from '../game/types.ts';
 import { neutralDefensivePosition } from '../sim/defense.ts';
-import { testDefenseEnvironment, testSeason } from '../sim/test-fixtures.ts';
+import { testDefenseEnvironment, testLeagueChapter, testSeason } from '../sim/test-fixtures.ts';
+import type { LeagueChapterResult } from '../sim/league-types.ts';
 import type { SeriesProgress } from '../sim/series-types.ts';
 import type { GameResult } from '../sim/types.ts';
-import { buildSchedule, createContactReference, simulateSeason, simulateSeries } from './node.ts';
+import { buildLeagueSchedule, buildSchedule, createContactReference, simulateLeagueChapter, simulateSeason, simulateSeries } from './node.ts';
 import { neutralPark } from '../sim/park.ts';
 import type { Rates } from '../game/types.ts';
 
@@ -55,6 +56,39 @@ describe('wasm engine boundary', () => {
   const stoppers = outs(simulateSeason({ ...input, reliefRoles: input.reliefRoles.map(role => ({ ...role, primary: 'stopper' as const, secondary: null })) }));
   expect(stoppers).not.toEqual(defaults);
   expect(stoppers.reduce((sum, value) => sum + value, 0)).toBeLessThan(defaults.reduce((sum, value) => sum + value, 0));
+ });
+
+ it('plays a league season chapter by chapter with rest carried between chapters', () => {
+  const first = testLeagueChapter(162);
+  const chapters: LeagueChapterResult[] = [];
+  for (let chapter = 0; chapter < 6; chapter++) {
+   chapters.push(simulateLeagueChapter({ ...first, chapter, carry: chapters.at(-1)?.carry ?? [] }));
+  }
+  const games = chapters.flatMap(result => result.games);
+  expect(games).toHaveLength(648);
+  const schedule = buildLeagueSchedule(162, first.rivals);
+  expect(games.map(game => [game.matchday, game.home, game.away])).toEqual(schedule.flatMap((day, matchday) => day.map(fixture => [matchday, fixture.home, fixture.away])));
+  for (let club = 0; club < 8; club++) {
+   expect(games.filter(game => game.home === club || game.away === club)).toHaveLength(162);
+   expect(chapters.reduce((sum, result) => sum + result.totals[club].runs, 0)).toBe(games.reduce((sum, game) => sum + (game.home === club ? game.homeRuns : game.away === club ? game.awayRuns : 0), 0));
+  }
+  // The detail club's games come back whole, from its side.
+  const detail = chapters[2].detailGames;
+  expect(detail).toHaveLength(27);
+  expect(detail.every(game => (game.isHome ? game.home : game.away).id === 'club-0')).toBe(true);
+  expect(detail.map(game => game.challengeRuns)).toEqual(chapters[2].games.filter(game => game.home === 0 || game.away === 0).map(game => game.home === 0 ? game.homeRuns : game.awayRuns));
+  // Carried rest matters: the same chapter from fresh arms uses the bullpen differently, and repeats exactly.
+  const second = { ...first, chapter: 1, carry: chapters[0].carry };
+  expect(simulateLeagueChapter(second)).toEqual(chapters[1]);
+  const fresh = chapters[0].carry.map(club => club.map(state => ({ ...state, last: -1, previous: -1, restThrough: -1 })));
+  const outs = (result: LeagueChapterResult) => result.totals.map(box => box.pitching.map(line => line.outs));
+  expect(outs(simulateLeagueChapter({ ...second, carry: fresh }))).not.toEqual(outs(chapters[1]));
+  expect(() => simulateLeagueChapter({ ...first, chapter: 1 })).toThrow(/previous chapter/);
+  // Draft legality lets a club hold two seasons of one player.
+  const twice = structuredClone(first);
+  twice.clubs[0].roster[1].profile.playerId = twice.clubs[0].roster[0].profile.playerId;
+  expect(simulateLeagueChapter(twice).games).toHaveLength(108);
+  expect(() => simulateLeagueChapter({ ...first, rivals: [[0, 1], [1, 2], [3, 4], [5, 6]] })).toThrow(/rival/i);
  });
 
  it('plays a decided best-of-five with seeding from both regular seasons', () => {

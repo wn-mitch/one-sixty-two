@@ -13,20 +13,24 @@ import { PICK_POLICIES, runDraft, type AiPickStats, type PickPolicy } from './po
 export type PolicyMode = Exclude<PickPolicy, 'perfect'> | 'mixed';
 export const POLICY_MODES: readonly PolicyMode[] = [...PICK_POLICIES.filter(policy => policy !== 'perfect'), 'mixed'];
 
-/** Provisional franchise budget shapes; seats rotate through them by seed. Cash never reaches legality. */
-const BUDGET_SHAPES: readonly ClubAccount[] = [
- { budget: baselineBudget(), cash: 0 },
- { budget: { ...baselineBudget(), franchiseAdjustment: 150 }, cash: 0 },
- { budget: { ...baselineBudget(), franchiseAdjustment: -150 }, cash: 0 },
- { budget: { ...baselineBudget(), obligations: 200 }, cash: 0 },
- { budget: { ...baselineBudget(), ceiling: 1200 }, cash: 0 },
- { budget: { ...baselineBudget(), franchiseAdjustment: -300 }, cash: 0 },
- { budget: baselineBudget(), cash: 10_000 },
- { budget: { ...baselineBudget(), franchiseAdjustment: 50 }, cash: 0 }
-];
+/** Provisional franchise budget shapes around a table's cap; seats rotate through them by seed. Cash never reaches legality. */
+function budgetShapes(cap: number): ClubAccount[] {
+ const base = baselineBudget(cap);
+ return [
+  { budget: base, cash: 0 },
+  { budget: { ...base, franchiseAdjustment: 150 }, cash: 0 },
+  { budget: { ...base, franchiseAdjustment: -150 }, cash: 0 },
+  { budget: { ...base, obligations: 200 }, cash: 0 },
+  { budget: { ...base, ceiling: cap - 300 }, cash: 0 },
+  { budget: { ...base, franchiseAdjustment: -300 }, cash: 0 },
+  { budget: base, cash: 10_000 },
+  { budget: { ...base, franchiseAdjustment: 50 }, cash: 0 }
+ ];
+}
 
-export function seatAccounts(seed: number): ClubAccount[] {
- return Array.from({ length: DRAFT_RULES.seats }, (_, seat) => structuredClone(BUDGET_SHAPES[(seat + seed) % BUDGET_SHAPES.length]));
+export function seatAccounts(seed: number, cap: number): ClubAccount[] {
+ const shapes = budgetShapes(cap);
+ return Array.from({ length: DRAFT_RULES.seats }, (_, seat) => structuredClone(shapes[(seat + seed) % shapes.length]));
 }
 
 export function seatPolicies(mode: PolicyMode): PickPolicy[] {
@@ -63,6 +67,8 @@ export interface RunRecord {
  failures: { stage: string; failure: LegalityFailure }[];
  seats: SeatSummary[];
  cleanupUsed: Record<string, number>;
+ /** The table's nominal cap: `capShare` of the dealt salary per seat. */
+ tableCap: number;
  aiPicks: AiPickStats;
  /** True value per seat of the legal roster it submitted: active cards in full, reserves at a quarter, with home park fit. */
  submittedValues: number[];
@@ -93,7 +99,7 @@ export function executeRun(cards: readonly DraftCard[], seed: number, mode: Poli
  const parkFit = (seat: number, seasonId: string): number => parks?.fits.get(homes[seat])?.get(seasonId) ?? 0;
  const { values: _drafted, ...aiPicks } = runDraft(pool, policies, { difficulty, homes, parkFit });
  record('draft', auditLedger(pool.ledger));
- const accounts = seatAccounts(seed);
+ const accounts = seatAccounts(seed, pool.tableCap);
  const result = recoverOpeningRosters(pool, accounts.map(account => account.budget));
  record('recovery', result.failures);
  record('recovery', auditLedger(pool.ledger));
@@ -118,6 +124,7 @@ export function executeRun(cards: readonly DraftCard[], seed: number, mode: Poli
    cube: { size: cube.length, roles: count(cube.map(cubeRole)), finishes: count(cube.map(card => card.finish)) },
    warnings: pool.warnings, failures, seats,
    cleanupUsed: count(result.seats.flatMap(seat => seat.cleanup.map(pick => pick.row ?? 'reserve'))),
+   tableCap: pool.tableCap,
    aiPicks,
    submittedValues: result.submissions.map(submission => Math.round(10 * rosterValue([...Object.values(submission.active), ...submission.reserves].map(id => pool.ledger.cards.get(id!)!), trueJudgment, id => parkFit(submission.seat, id))) / 10)
   }
@@ -140,7 +147,7 @@ export function negativeProofs(cards: readonly DraftCard[], seed: number): Proof
 
  const pool = buildRunPool(seed, cards);
  runDraft(pool, seatPolicies('value'), { difficulty: DEFAULT_DIFFICULTY, homes: seatPolicies('value').map(() => 'none'), parkFit: () => 0 });
- const budgets = seatAccounts(seed).map(account => account.budget);
+ const budgets = seatAccounts(seed, pool.tableCap).map(account => account.budget);
  budgets[0] = { ...budgets[0], ceiling: 16 * DRAFT_RULES.commonSalaryMax - 1 };
  const starved = recoverOpeningRosters(pool, budgets);
  const observed = [...new Set(starved.failures.flatMap(failure => failure.code === 'unrecoverable-seat' ? [failure.code, ...failure.failures.map(inner => inner.code)] : [failure.code]))].sort();

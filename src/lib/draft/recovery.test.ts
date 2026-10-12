@@ -7,7 +7,7 @@ import { baselineBudget } from './rules.ts';
 import { testCard, testUniverse } from './test-fixtures.ts';
 import type { DraftCard, PayrollBudget } from './types.ts';
 
-const budgets = (count = 8, budget: PayrollBudget = baselineBudget()) => Array.from({ length: count }, () => ({ ...budget }));
+const budgets = (count = 8, budget: PayrollBudget = baselineBudget(1500)) => Array.from({ length: count }, () => ({ ...budget }));
 
 /** Hands every dealt card to a seat chosen by `seatFor`, as if drafted. */
 function draftPiles(pool: RunPool, seatFor: (card: DraftCard, index: number) => number): void {
@@ -80,7 +80,7 @@ describe('opening recovery', () => {
  it('rejects a budget below the cost of a common roster', () => {
   const pool = buildRunPool(11, testUniverse(120));
   draftPiles(pool, (_, index) => index % 8);
-  const result = recoverOpeningRosters(pool, [{ ...baselineBudget(), ceiling: 200 }, ...budgets(7)]);
+  const result = recoverOpeningRosters(pool, [{ ...baselineBudget(1500), ceiling: 200 }, ...budgets(7)]);
   const unrecoverable = result.failures.filter(failure => failure.code === 'unrecoverable-seat');
   expect(unrecoverable).toHaveLength(1);
   expect(unrecoverable[0]).toMatchObject({ seat: 0, failures: expect.arrayContaining([expect.objectContaining({ code: 'cap-below-guarantee' })]) });

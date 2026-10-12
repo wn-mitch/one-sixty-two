@@ -24,7 +24,7 @@ describe('draft run saves', () => {
    const run = startRun(setup, DATA);
    while (run.pick < suspendAt) {
     applyAction(run, { type: 'pick', cardId: best(heldPile(run)) });
-    expect(await saveRun(db, 'run-1', run, new Date(Date.UTC(2026, 0, 1, 0, suspendAt, run.pick)))).toBeNull();
+    expect(await saveRun(db, 'run-1', run, null, new Date(Date.UTC(2026, 0, 1, 0, suspendAt, run.pick)))).toBeNull();
    }
    if (suspendAt === 0) await saveRun(db, 'run-1', run);
    const saved = (await latestRun(db))!;
@@ -41,8 +41,8 @@ describe('draft run saves', () => {
 
  it('records the phase and returns the newest valid run', async () => {
   const { db } = await memoryDb();
-  await saveRun(db, 'done', straight, new Date('2026-01-01T00:00:00Z'));
-  await db.run([{ sql: "INSERT INTO draft_runs VALUES ('broken', 'x', '2026-02-01T00:00:00Z', '{\"seed\":-1}', '[]', 'drafting')" }]);
+  await saveRun(db, 'done', straight, null, new Date('2026-01-01T00:00:00Z'));
+  await db.run([{ sql: "INSERT INTO draft_runs VALUES ('broken', 'x', '2026-02-01T00:00:00Z', '{\"seed\":-1}', '[]', 'drafting', NULL)" }]);
   const saved = await latestRun(db);
   expect(saved?.id).toBe('done');
   expect(saved?.phase).toBe('window');

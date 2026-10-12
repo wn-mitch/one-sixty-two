@@ -35,6 +35,8 @@ import {
 import { validateStadium } from './park.ts';
 import type { ParkRef, StadiumConfig } from './park-types.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
+import { LEAGUE_CHAPTERS, LEAGUE_CLUBS, type LeagueChapterInput, type LeagueClubInput } from './league-types.ts';
+import { DRAFT_BULLPEN_SLOTS, DRAFT_SLOTS } from '../draft/rules.ts';
 
 const hitterSlotSet: ReadonlySet<string> = new Set(HITTER_SLOTS);
 
@@ -371,4 +373,50 @@ export function validateDraftVersion(draft: Draft, dataVersion: string): void {
   draft.currentRoll !== null) {
   throw new Error('Draft is incomplete or incompatible');
  }
+}
+
+/**
+ * A Draft Mode club: every active slot filled once by an eligible card, with matching orders and
+ * roles. Draft legality allows two seasons of one player on a club, so player ids may repeat.
+ */
+function validateLeagueClub(club: LeagueClubInput, data: SimulationData): void {
+ const slots = club.roster.map(pick => pick.slot);
+ if (!club.id || club.roster.length !== DRAFT_SLOTS.length || DRAFT_SLOTS.some(slot => !slots.includes(slot)) ||
+  new Set(club.roster.map(pick => pick.profile.seasonId)).size !== DRAFT_SLOTS.length) {
+  throw new Error(`${club.name}: club requires one distinct card in every active slot`);
+ }
+ for (const { profile, slot } of club.roster) {
+  const eligible = slot.startsWith('RP') ? profile.eligibleSlots.includes('CL') : profile.eligibleSlots.includes(slot as Slot);
+  if (!eligible) throw new Error(`${club.name}: ${profile.seasonId} cannot play ${slot}`);
+  if (hitterSlotSet.has(slot)) validateHitter(profile);
+  else validatePitcher(profile);
+  if (slot.startsWith('SP') && profile.pitching!.GS <= 0) throw new Error(`${club.name}: starter requires positive starts`);
+ }
+ for (const [order, expected] of [
+  [club.battingOrder, club.roster.filter(pick => hitterSlotSet.has(pick.slot)).map(pick => pick.profile.seasonId)],
+  [club.starterOrder, club.roster.filter(pick => pick.slot.startsWith('SP')).map(pick => pick.profile.seasonId)]
+ ]) {
+  if (order.length !== expected.length || new Set(order).size !== expected.length || order.some(id => !expected.includes(id))) {
+   throw new Error(`${club.name}: invalid lineup order`);
+  }
+ }
+ validateReliefRoles(club.reliefRoles, true, DRAFT_BULLPEN_SLOTS);
+ resolveStadium(data, club.homeStadium);
+}
+
+export function validateLeagueChapter(input: LeagueChapterInput): void {
+ if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid simulation seed');
+ if (input.modelVersion !== MODEL_VERSION || input.rulesVersion !== RULES_VERSION) throw new Error('League model is incompatible');
+ if (input.clubs.length !== LEAGUE_CLUBS || new Set(input.clubs.map(club => club.id)).size !== LEAGUE_CLUBS) throw new Error('A league needs eight distinct clubs');
+ const paired = input.rivals.flat();
+ if (input.rivals.length !== LEAGUE_CLUBS / 2 || new Set(paired).size !== LEAGUE_CLUBS || paired.some(club => !Number.isInteger(club) || club < 0 || club >= LEAGUE_CLUBS)) {
+  throw new Error('Rival pairs must cover each club exactly once');
+ }
+ if (!Number.isInteger(input.chapter) || input.chapter < 0 || input.chapter >= LEAGUE_CHAPTERS) throw new Error('Invalid league chapter');
+ if (input.carry.length !== (input.chapter === 0 ? 0 : LEAGUE_CLUBS)) throw new Error('Carried rest must come from the previous chapter');
+ if (!Number.isInteger(input.detailClub) || input.detailClub < 0 || input.detailClub >= LEAGUE_CLUBS) throw new Error('Invalid detail club');
+ validateDefensiveEnvironment(input.data);
+ validateStadiumDeck(input.data);
+ validatePitcher(input.data.bullpen);
+ for (const club of input.clubs) validateLeagueClub(club, input.data);
 }

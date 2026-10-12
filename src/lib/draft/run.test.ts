@@ -2,16 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { chooseAiPick, explainPick, scorePile, trueJudgment, type Personality } from './ai.ts';
 import { RIVALS, seatTable } from './franchises.ts';
 import { auditLedger } from './ledger.ts';
+import { arrangeRoster, checkSubmission, submissionFrom } from './legality.ts';
 import { applyAction, heldPile, newRunSetup, ownedBy, replayRun, RunActionError, seatView, startRun, type DraftRun, type RunData } from './run.ts';
-import { baselineBudget } from './rules.ts';
+import { baselineBudget, DRAFT_RULES, rosterSize } from './rules.ts';
 import { playDraft, testCard, testUniverse, TEST_ROLES } from './test-fixtures.ts';
-import type { DraftCard } from './types.ts';
+import type { DraftCard, DraftSlot } from './types.ts';
 
 const FRANCHISES = Object.keys(RIVALS);
 const CARDS = testUniverse(120);
 const DATA: RunData = { cards: CARDS, franchiseIds: FRANCHISES, parkFit: () => 0 };
 
-const view = (pile: DraftCard[], owned: DraftCard[] = [], seenElsewhere: DraftCard[] = [], parkFit: (id: string) => number = () => 0) => ({ pile, owned, budget: baselineBudget(), seenElsewhere, parkFit, judge: trueJudgment });
+const view = (pile: DraftCard[], owned: DraftCard[] = [], seenElsewhere: DraftCard[] = [], parkFit: (id: string) => number = () => 0) => ({ pile, owned, budget: baselineBudget(1500), seenElsewhere, parkFit, judge: trueJudgment });
 const BALANCED: Personality = { archetype: 'balanced', thrift: 1, bias: 'none', decade: null, franchiseId: 'TST' };
 const eventsOf = (run: DraftRun) => run.pool.ledger.events.map(event => [event.op, event.cardId, JSON.stringify(event.to)]);
 
@@ -106,7 +107,13 @@ describe('draft run', () => {
   expect(run.phase).toBe('window');
   expect(run.ticker).toHaveLength(128);
   expect(run.piles.every(pile => pile.length === 0)).toBe(true);
-  for (let seat = 0; seat < 8; seat++) expect(ownedBy(run, seat)).toHaveLength(16);
+  // AI clubs recover to a legal 20-card roster as the window opens; the player still holds the 16 drafted.
+  for (let seat = 0; seat < 8; seat++) expect(ownedBy(run, seat)).toHaveLength(seat === run.seating.humanSeat ? 16 : rosterSize(DRAFT_RULES));
+  for (let seat = 0; seat < 8; seat++) {
+   const submission = run.submissions[seat];
+   if (seat === run.seating.humanSeat) expect(submission).toBeNull();
+   else expect(checkSubmission(submission!, run.pool.ledger, run.budgets[seat]).legal).toBe(true);
+  }
   expect(auditLedger(run.pool.ledger)).toEqual([]);
   // AI picks explain themselves; the player's do not need to.
   expect(run.ticker.filter(pick => pick.seat !== run.seating.humanSeat).every(pick => pick.reason !== null)).toBe(true);
@@ -158,6 +165,39 @@ describe('draft run', () => {
   const human = first.seating.humanSeat;
   expect(ownedBy(other, human).map(card => card.seasonId)).not.toEqual(ownedBy(first, human).map(card => card.seasonId));
   expect(other.pool.packs).toEqual(first.pool.packs);
+ });
+
+ it('opens a window where the player cuts, takes cleanup commons and submits a legal roster', () => {
+  const run = startRun(setup, DATA);
+  playDraft(run);
+  const human = run.seating.humanSeat;
+  const submit = () => {
+   const { active, reserves } = submissionFrom(human, arrangeRoster(ownedBy(run, human)));
+   applyAction(run, { type: 'submit', active: active as Record<DraftSlot, string>, reserves });
+  };
+  // Four short of a full roster: submitting now fails and changes nothing.
+  expect(submit).toThrow(RunActionError);
+  expect(run.phase).toBe('window');
+  const dropped = ownedBy(run, human)[0].seasonId;
+  applyAction(run, { type: 'cut', cardId: dropped });
+  expect(run.pool.ledger.instances.get(dropped)!.owner).toEqual({ kind: 'unowned' });
+  expect(() => applyAction(run, { type: 'cut', cardId: dropped })).toThrow(RunActionError);
+  const top = run.pool.cleanup.peek(human, 'C')!;
+  applyAction(run, { type: 'cleanup', role: 'C' });
+  expect(ownedBy(run, human).map(card => card.seasonId)).toContain(top.seasonId);
+  expect(() => applyAction(run, { type: 'pick', cardId: top.seasonId })).toThrow('The draft is over');
+  // Auto-fix fills the rest the way the AI clubs recover.
+  applyAction(run, { type: 'autofix' });
+  expect(ownedBy(run, human)).toHaveLength(rosterSize(DRAFT_RULES));
+  expect(() => applyAction(run, { type: 'cleanup', role: 'SP' })).toThrow('roster is full');
+  submit();
+  expect(run.phase).toBe('season');
+  expect(() => applyAction(run, { type: 'autofix' })).toThrow('window is closed');
+  // The whole window replays from the log.
+  const again = replayRun(setup, run.actions, DATA);
+  expect(eventsOf(again)).toEqual(eventsOf(run));
+  expect(again.submissions).toEqual(run.submissions);
+  expect(auditLedger(run.pool.ledger)).toEqual([]);
  });
 
  it('refuses a setup from other rules', () => {

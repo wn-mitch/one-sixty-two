@@ -1,9 +1,12 @@
 import { loadContactModel } from '../../../scripts/data/contact-model.ts';
-import { BULLPEN_SLOTS, defaultReliefRoles, DEFENSE_METHOD_VERSION, MODEL_VERSION, POSITIONS, RULES_VERSION, SLOTS, VALUATION_VERSION, CURRENT_REPLAY_SCHEMA_VERSION, type DefensiveEnvironment, type Position, type Profile, type SimulationData } from '../game/types.ts';
+import { BULLPEN_SLOTS, defaultReliefRoles, DEFENSE_METHOD_VERSION, MODEL_VERSION, POSITIONS, RULES_VERSION, SLOTS, VALUATION_VERSION, CURRENT_REPLAY_SCHEMA_VERSION, type DefensiveEnvironment, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
 import { neutralDefensivePosition } from './defense.ts';
 import { AVERAGE_RATES, syntheticProfile, syntheticStadium } from './fixtures.ts';
 import { stadiumRef } from './park.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
+import type { LeagueChapterInput, LeagueClubInput } from './league-types.ts';
+import { DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_SLOTS } from '../draft/rules.ts';
+import type { DraftSlot } from '../draft/types.ts';
 
 export function testTeam(id: string): TeamInput {
  const hitters = Array.from({ length: 9 }, (_, index) => {
@@ -72,4 +75,42 @@ function seasonFixture(seed: number): SeasonInput {
 
 export function testSeason(seed = 162): SeasonInput {
  return seasonFixture(seed);
+}
+
+/** A synthetic card's profile for a Draft Mode slot: fielders field it, relief arms never start. */
+export function leagueProfile(seasonId: string, slot: DraftSlot, eligibleSlots: readonly Slot[] = [slot.startsWith('RP') ? 'CL' : slot as Slot]): Profile {
+ const profile = syntheticProfile(seasonId);
+ profile.seasonId = seasonId;
+ profile.eligibleSlots = [...eligibleSlots];
+ profile.primaryHitterSlot = POSITIONS.includes(slot as Position) ? slot as Position : 'DH';
+ for (const position of POSITIONS) if (eligibleSlots.includes(position)) profile.defense.positions[position] = neutralDefensivePosition(position);
+ if (slot === 'CL' || slot.startsWith('RP')) relieve(profile);
+ return profile;
+}
+
+/** The synthetic season data with its thirty opponents and parks relabelled as `franchiseIds`. */
+export function testLeagueData(franchiseIds: readonly string[]): SimulationData {
+ const { data } = seasonFixture(1);
+ const stadiums = franchiseIds.map(id => testStadium(id));
+ return { ...data, stadiums, opponents: data.opponents.map((opponent, index) => ({ ...opponent, id: franchiseIds[index], homeStadium: stadiumRef(stadiums[index]) })) };
+}
+
+/** A Draft Mode club of synthetic cards in every active slot; relief slots hold closer-eligible arms. */
+function leagueClub(id: string, data: SimulationData, park: number): LeagueClubInput {
+ const roster = DRAFT_SLOTS.map((slot, index) => {
+  const profile = leagueProfile(`${id}-${index}`, slot);
+  profile.franchiseId = `F${index}`;
+  return { profile, slot };
+ });
+ return { id, name: `Club ${id}`, homeStadium: stadiumRef(data.stadiums[park]), roster,
+  battingOrder: roster.slice(0, 9).map(pick => pick.profile.seasonId), starterOrder: roster.slice(9, 12).map(pick => pick.profile.seasonId),
+  reliefRoles: DEFAULT_DRAFT_RELIEF_ROLES.map(role => ({ ...role })) };
+}
+
+/** The first chapter of an eight-club league on the synthetic season data. */
+export function testLeagueChapter(seed = 162): LeagueChapterInput {
+ const { data } = seasonFixture(seed);
+ return { modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed, data,
+  clubs: Array.from({ length: 8 }, (_, index) => leagueClub(`club-${index}`, data, index)),
+  rivals: [[0, 4], [1, 5], [2, 6], [3, 7]], chapter: 0, carry: [], detailClub: 0 };
 }

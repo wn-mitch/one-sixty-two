@@ -60,6 +60,13 @@ describe('device database migrations', () => {
   expect(await db.all('SELECT * FROM draft_runs')).toEqual([]);
  });
 
+ it('adds a season to saved Draft Mode runs without touching them', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 3));
+  await db.run([{ sql: "INSERT INTO draft_runs VALUES ('run', 'a', 'b', '{}', '[]', 'window')" }]);
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 3, to: SCHEMA_VERSION });
+  expect(await db.all('SELECT * FROM draft_runs')).toEqual([{ id: 'run', created_at: 'a', updated_at: 'b', setup_json: '{}', actions_json: '[]', phase: 'window', season_json: null }]);
+ });
+
  it('leaves the database at the last good version when a migration fails', async () => {
   const failing: Migration[] = [...MIGRATIONS, {
    version: SCHEMA_VERSION + 1,

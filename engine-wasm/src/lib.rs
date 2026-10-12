@@ -1,5 +1,6 @@
 //! wasm-bindgen glue: JSON strings cross the boundary; all logic lives in the `engine` crate.
 use engine::exhibition::ExhibitionRequest;
+use engine::league::LeagueChapterRequest;
 use engine::prep::MatchupQuery;
 use engine::series::SeriesRequest;
 use engine::types::{ContactShape, DefensiveEnvironment, DefensiveSkills, SeasonRequest, StadiumConfig};
@@ -42,6 +43,15 @@ impl Engine {
         let result = self.inner.simulate_series(&request, &mut |progress| {
             if let Ok(json) = serde_json::to_string(&progress) { let _ = on_progress.call1(&JsValue::NULL, &JsValue::from(json)); }
         }).map_err(|error| JsError::new(&error))?;
+        to_json(&result)
+    }
+
+    /// Plays one Draft Mode league chapter; `on_game(count)` runs after every game.
+    #[wasm_bindgen(js_name = simulateLeagueChapter)]
+    pub fn simulate_league_chapter(&self, request_json: &str, on_game: &js_sys::Function) -> Result<String, JsError> {
+        let request: LeagueChapterRequest = parse(request_json, "league chapter request")?;
+        let result = self.inner.simulate_league_chapter(&request, &mut |count| { let _ = on_game.call1(&JsValue::NULL, &JsValue::from(count as u32)); })
+            .map_err(fail)?;
         to_json(&result)
     }
 
@@ -131,4 +141,11 @@ pub fn build_schedule(seed: u32, opponent_ids_json: &str) -> Result<String, JsEr
     let schedule = engine::season::build_schedule(seed, &refs).map_err(fail)?;
     let games: Vec<serde_json::Value> = schedule.iter().map(|game| serde_json::json!({ "opponentId": refs[game.opponent], "isHome": game.is_home })).collect();
     to_json(&games)
+}
+
+/// The Draft Mode league schedule for `seed` and four rival pairs, as JSON `[[{home, away}; 4]; 162]`.
+#[wasm_bindgen(js_name = buildLeagueSchedule)]
+pub fn build_league_schedule(seed: u32, rivals_json: &str) -> Result<String, JsError> {
+    let rivals: Vec<[usize; 2]> = parse(rivals_json, "rival pairs")?;
+    to_json(&engine::league::build_league_schedule(seed, &rivals).map_err(fail)?)
 }

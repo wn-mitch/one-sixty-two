@@ -49,8 +49,13 @@ pub fn default_assignments(named: usize) -> Vec<RoleAssignment> {
     }).collect()
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Rest { last: i64, previous: i64, rest_through: i64 }
+
+/// One named pitcher's rest, carried across simulation calls by season id (league chapters).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestState { pub season_id: String, pub last: i64, pub previous: i64, pub rest_through: i64 }
 
 impl Default for Rest { fn default() -> Self { Self { last: -1, previous: -1, rest_through: -1 } } }
 
@@ -69,8 +74,20 @@ impl Rest {
 pub struct ReliefUsage { pitchers: Vec<(usize, Rest)> }
 
 impl ReliefUsage {
-    pub fn new(team: &TeamInput) -> Self {
-        Self { pitchers: team.named_relief().map(|index| (index, Rest::default())).collect() }
+    pub fn new(team: &TeamInput) -> Self { Self::resume(team, &[]) }
+
+    /// Usage that continues from carried rest; a pitcher without a carried state starts fresh.
+    pub fn resume(team: &TeamInput, carried: &[RestState]) -> Self {
+        Self { pitchers: team.named_relief().map(|index| {
+            let rest = carried.iter().find(|state| state.season_id == team.pitchers[index].season_id)
+                .map_or_else(Rest::default, |state| Rest { last: state.last, previous: state.previous, rest_through: state.rest_through });
+            (index, rest)
+        }).collect() }
+    }
+
+    /// Each named pitcher's rest, to carry into the next call.
+    pub fn carry(&self, team: &TeamInput) -> Vec<RestState> {
+        self.pitchers.iter().map(|(index, rest)| RestState { season_id: team.pitchers[*index].season_id.clone(), last: rest.last, previous: rest.previous, rest_through: rest.rest_through }).collect()
     }
 
     /// Marks who may enter `game` and who sat out the previous game; starters and the remainder arm

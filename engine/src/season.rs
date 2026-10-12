@@ -6,10 +6,10 @@ use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::physical_expectation::{PhysicalReference, INFINITY_TARGET};
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::team::{accumulate_box, create_totals_box, TeamInput};
-use crate::types::{GameResult, Opponent, ParkRef, Profile, SeasonRequest, SeasonResult, SimulationData, StadiumConfig, WinPoint, POSITIONS};
+use crate::types::{GameResult, Opponent, ParkRef, Profile, RosterPick, SeasonRequest, SeasonResult, SimulationData, StadiumConfig, WinPoint, POSITIONS};
 use crate::value::RunValueModel;
 use crate::win_expectancy::WinExpectancyModel;
-use crate::relief::{default_roles, ReliefUsage, Roles};
+use crate::relief::{default_roles, ReliefUsage, RoleAssignment, Roles};
 
 /// Simulation data plus every table derived from it once.
 pub struct Engine {
@@ -179,25 +179,31 @@ impl Engine {
 /// RP1 onward in slot order with their requested roles, then `remainder`, the league remainder arm
 /// every club shares.
 pub fn draft_team<'p>(request: &'p SeasonRequest, remainder: &'p Profile, id: &str, name: &str) -> Result<TeamInput<'p>, String> {
-    if request.roster.iter().any(|pick| pick.slot == "BP") { return Err("Roster slot BP is not part of this model".into()); }
-    let profile = |season_id: &str| request.roster.iter().find(|pick| pick.profile.season_id == season_id).map(|pick| &pick.profile).ok_or_else(|| format!("Missing roster profile {season_id}"));
-    let slot = |slot: &str| request.roster.iter().find(|pick| pick.slot == slot).map(|pick| &pick.profile).ok_or_else(|| format!("Missing roster slot {slot}"));
-    let hitters = request.batting_order.iter().map(|id| profile(id)).collect::<Result<Vec<_>, _>>()?;
+    club_team(&request.roster, &request.batting_order, &request.starter_order, &request.relief_roles, remainder, id, name)
+}
+
+/// A club from its active roster, batting and rotation orders, and relief roles for CL then RP1
+/// onward; `remainder` covers the relief no named arm takes.
+pub fn club_team<'p>(roster: &'p [RosterPick], batting_order: &[String], starter_order: &[String], relief_roles: &[RoleAssignment], remainder: &'p Profile, id: &str, name: &str) -> Result<TeamInput<'p>, String> {
+    if roster.iter().any(|pick| pick.slot == "BP") { return Err("Roster slot BP is not part of this model".into()); }
+    let profile = |season_id: &str| roster.iter().find(|pick| pick.profile.season_id == season_id).map(|pick| &pick.profile).ok_or_else(|| format!("Missing roster profile {season_id}"));
+    let slot = |slot: &str| roster.iter().find(|pick| pick.slot == slot).map(|pick| &pick.profile).ok_or_else(|| format!("Missing roster slot {slot}"));
+    let hitters = batting_order.iter().map(|id| profile(id)).collect::<Result<Vec<_>, _>>()?;
     let mut defense = [0usize; 8];
     for (position, name) in POSITIONS.iter().enumerate() {
         let fielder = slot(name)?;
         defense[position] = hitters.iter().position(|hitter| std::ptr::eq(*hitter, fielder)).ok_or("Fielder is missing from the batting order")?;
     }
-    let mut pitchers = request.starter_order.iter().map(|id| profile(id)).collect::<Result<Vec<_>, _>>()?;
+    let mut pitchers = starter_order.iter().map(|id| profile(id)).collect::<Result<Vec<_>, _>>()?;
     pitchers.push(slot("CL")?);
-    let named = request.roster.iter().filter(|pick| pick.slot.starts_with("RP")).count();
+    let named = roster.iter().filter(|pick| pick.slot.starts_with("RP")).count();
     for number in 1..=named { pitchers.push(slot(&format!("RP{number}"))?); }
     pitchers.push(remainder);
     let slots: Vec<String> = std::iter::once("CL".to_string()).chain((1..=named).map(|number| format!("RP{number}"))).collect();
-    if request.relief_roles.len() != slots.len() || request.relief_roles.iter().map(|assignment| &assignment.slot).ne(slots.iter()) {
+    if relief_roles.len() != slots.len() || relief_roles.iter().map(|assignment| &assignment.slot).ne(slots.iter()) {
         return Err("Relief roles must cover CL and each named reliever in bullpen order".into());
     }
-    let assigned = request.relief_roles.iter().map(|assignment| assignment.roles().map(Some)).collect::<Result<Vec<_>, _>>()?;
+    let assigned = relief_roles.iter().map(|assignment| assignment.roles().map(Some)).collect::<Result<Vec<_>, _>>()?;
     let available = vec![true; pitchers.len()];
     let mut roles = vec![None; pitchers.len()];
     roles[3..4 + named].copy_from_slice(&assigned);
