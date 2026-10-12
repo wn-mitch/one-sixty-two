@@ -4,6 +4,7 @@
  import CompactPlate from './CompactPlate.svelte';
  import { fit } from './fit.ts';
  import { tilt } from './motion.ts';
+ import { appSettings } from '../game/settings.svelte.ts';
  import Front1950s from './fronts/Front1950s.svelte';
  import Front1960s from './fronts/Front1960s.svelte';
  import Front1970s from './fronts/Front1970s.svelte';
@@ -83,7 +84,8 @@
  </div>
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
  {#if face === 'front'}<Material {s} layer="over" {capture} />{/if}
- {#if face === 'front' && !compact && !thumbnail && !capture}<StickerLayer stickers={stickers ?? cardStickers(s.seasonId)} />{/if}
+ <!-- Explicit stickers (the collection editor) always show; elsewhere the player's setting decides. -->
+ {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer stickers={stickers ?? cardStickers(s.seasonId)} />{/if}
 </div>
 
 <style>

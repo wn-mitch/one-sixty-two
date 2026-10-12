@@ -294,11 +294,13 @@ export function createResultsModel(input: CreateResultsModelInput): ResultsModel
 		}
 	}
 
+	const pickNumbers = new Map(draft.picks.map((pick, index) => [pick.seasonId, index + 1]));
 	const cards = internals.map((card, index): ResultsCard => {
 		const awardsForCard = chipsById.get(card.seasonId) ?? [];
 		return {
 			seasonId: card.seasonId,
 			slot: card.slot,
+			pickNumber: pickNumbers.get(card.seasonId)!,
 			profile: card.profile,
 			estimatedWar: card.estimatedWar,
 			awards: awardsForCard,
@@ -315,5 +317,6 @@ export function createResultsModel(input: CreateResultsModelInput): ResultsModel
 		card: cardById.get(seasonId)!,
 		metrics: metricsById.get(seasonId)!
 	}));
-	return { cards, featured, rest: cards.filter(card => !featuredIds.has(card.seasonId)) };
+	const rest = cards.filter(card => !featuredIds.has(card.seasonId)).sort((a, b) => a.pickNumber - b.pickNumber);
+	return { cards, featured, rest };
 }

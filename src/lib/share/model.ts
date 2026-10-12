@@ -176,12 +176,14 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		throw new Error('Share rankings do not match the drafted dataset');
 	}
 
+	const pickNumbers = new Map(draft.picks.map((pick, index) => [pick.seasonId, index + 1]));
 	const cards = SLOTS.map(slot => {
 		const pick = picks.bySlot.get(slot)!;
 		const profile = profiles.get(pick.seasonId)!;
 		return {
 			seasonId: profile.seasonId,
 			slot,
+			pickNumber: pickNumbers.get(pick.seasonId)!,
 			card: createCardViewModel({ profile, slot, manifest, media, rankings, mediaStatus: media ? 'ready' : 'unavailable' })
 		};
 	});

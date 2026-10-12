@@ -47,6 +47,8 @@ describe('collection', () => {
 
  it('moves and hides a whole sticker family on its own card only', async () => {
   const { db } = await memoryDb();
+  // Two runs leave both power tiers on the card; every tier of the family moves together.
+  await db.run(save(entry('k0', 90, day(0), 45)));
   await db.run(save(entry('k1', 90, day(0), 65)));
   await moveSticker(db, SLUGGER, 'power', 0.3, 1.5);
   await setStickerHidden(db, SLUGGER, 'power', true);

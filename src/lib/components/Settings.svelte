@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { appSettings } from '#lib/game/settings.svelte.ts';
+	import { appSettings, INTERFACE_ERAS, PLAYBACK_SPEEDS } from '#lib/game/settings.svelte.ts';
 
 	let dialog = $state<HTMLDialogElement>();
 	let trigger = $state<HTMLButtonElement>();
@@ -13,6 +13,10 @@
 	const cardAnimationId = `${uid}-card-animation`;
 	const cardSpeedId = `${uid}-card-speed`;
 	const rosterLabelId = `${uid}-roster-first-click`;
+	const stickersId = `${uid}-stickers`;
+	const playbackLabelId = `${uid}-playback`;
+	const eraLabelId = `${uid}-era`;
+	const playbackLabels = { slow: 'Slow', normal: 'Normal', fast: 'Fast' } as const;
 
 	const systemNotice = $derived(appSettings.reducedMotion
 		? 'Your system preference reduces motion. Motion stays off until that preference changes.'
@@ -128,6 +132,41 @@
 				</div>
 
 				<div class="setting-group">
+					<p id={playbackLabelId} class="setting-label">Season playback</p>
+					<div class="choice-buttons" role="group" aria-labelledby={playbackLabelId}>
+						{#each PLAYBACK_SPEEDS as speed (speed)}
+							<button type="button" aria-pressed={appSettings.playbackSpeed === speed} disabled={!ready} onclick={() => appSettings.setPlaybackSpeed(speed)}>{playbackLabels[speed]}</button>
+						{/each}
+					</div>
+				</div>
+
+				<div class="setting-row">
+					<div class="setting-copy">
+						<label for={stickersId}>Stickers on cards</label>
+						<p>Show earned stickers on card fronts. Your collection always shows them.</p>
+					</div>
+					<button
+						id={stickersId}
+						type="button"
+						class="settings-switch"
+						role="switch"
+						aria-checked={appSettings.showStickers}
+						aria-label="Stickers on cards"
+						disabled={!ready}
+						onclick={() => appSettings.setShowStickers(!appSettings.showStickers)}
+					><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
+				</div>
+
+				<div class="setting-group">
+					<p id={eraLabelId} class="setting-label">Interface era</p>
+					<div class="choice-buttons era-choices" role="group" aria-labelledby={eraLabelId}>
+						{#each INTERFACE_ERAS as era (era.id)}
+							<button type="button" data-era-swatch={era.id} aria-pressed={appSettings.interfaceEra === era.id} disabled={!ready} onclick={() => appSettings.setInterfaceEra(era.id)}>{era.label}<small>{era.years}</small></button>
+						{/each}
+					</div>
+				</div>
+
+				<div class="setting-group">
 					<p id={rosterLabelId} class="setting-label">Roster first click</p>
 					<div class="choice-buttons" role="group" aria-labelledby={rosterLabelId}>
 						<button type="button" aria-pressed={appSettings.rosterFirstClick === 'move'} disabled={!ready} onclick={() => appSettings.setRosterFirstClick('move')}>Move first</button>
@@ -191,6 +230,9 @@
 	.choice-buttons { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
 	.choice-buttons button { flex: 1; min-width: 0; min-height: 44px; padding: var(--space-2); border: 0; border-radius: calc(var(--radius) - 2px); background: transparent; color: var(--muted); font-size: var(--text-sm); }
 	.choice-buttons button[aria-pressed='true'] { background: var(--accent); color: var(--background); }
+	.era-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); }
+	.era-choices button { display: grid; gap: 1px; line-height: 1.1; }
+	.era-choices small { font-family: inherit; font-size: var(--text-xs); font-weight: 500; letter-spacing: 0; text-transform: none; opacity: .8; }
 	.choice-buttons button:hover:not([aria-pressed='true']) { background: var(--surface-raised); color: var(--text); }
 	.settings-notice { margin: var(--space-5) 0 0; color: var(--muted); font-size: var(--text-sm); }
 

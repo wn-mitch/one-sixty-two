@@ -46,6 +46,8 @@ export interface ShareStadium {
 export interface ShareRenderCard {
 	seasonId: string;
 	slot: Slot;
+	/** 1-based position in the order the card was drafted. */
+	pickNumber: number;
 	card: CardViewModel;
 }
 

@@ -196,22 +196,28 @@
 	</header>
 
 	{#if earnedByCard.length}
-		<section class="new-stickers" aria-labelledby="new-stickers-heading">
-			<div class="new-stickers-head">
-				<h3 id="new-stickers-heading">New stickers</h3>
-				<a href="/collection">Open your collection</a>
-			</div>
-			<ul>
+		<details class="new-stickers">
+			<summary>
+				<span class="new-stickers-head">
+					<h3 id="new-stickers-heading">New stickers</h3>
+					<span class="muted">{newStickers.length} on {earnedByCard.length} {earnedByCard.length === 1 ? 'card' : 'cards'}</span>
+				</span>
+				<span class="summary-badges" aria-hidden="true">
+					{#each [...new Set(newStickers.map(item => item.kind))].slice(0, 6) as kind (kind)}<StickerBadge definition={STICKER_BY_KIND.get(kind)!} />{/each}
+				</span>
+			</summary>
+			<ul aria-labelledby="new-stickers-heading">
 				{#each earnedByCard as earned (earned[0].seasonId)}
 					<li>
 						<span class="badges" aria-hidden="true">
 							{#each earned as item (item.kind)}<StickerBadge definition={STICKER_BY_KIND.get(item.kind)!} />{/each}
 						</span>
-						<span><strong>{earned[0].label}</strong> {earned.map(item => item.title).join(' · ')}</span>
+						<span class="sticker-copy"><strong>{earned[0].label}</strong> {earned.map(item => item.title).join(' · ')}</span>
 					</li>
 				{/each}
 			</ul>
-		</section>
+			<a href="/collection">Open your collection</a>
+		</details>
 	{/if}
 
 	<div class="awards-share">
@@ -398,14 +404,22 @@
 		padding-top: var(--space-4);
 		border-top: 1px solid var(--border);
 	}
-	.new-stickers { display: grid; gap: var(--space-3); }
-	.new-stickers-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+	.new-stickers { display: grid; gap: var(--space-3); border-block: 1px solid var(--border); }
+	.new-stickers summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); min-height: 3rem; padding-block: var(--space-2); cursor: pointer; list-style: none; }
+	.new-stickers summary::-webkit-details-marker { display: none; }
+	.new-stickers summary::after { content: '›'; color: var(--muted); font-size: var(--text-lg); transition: rotate .15s; }
+	.new-stickers[open] summary::after { rotate: 90deg; }
+	.new-stickers-head { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin-right: auto; }
+	.new-stickers-head .muted { font-size: var(--text-xs); }
 	.new-stickers h3 { margin: 0; font-size: var(--text-lg); }
+	.summary-badges { display: inline-flex; gap: var(--space-1); font-size: .1rem; padding: .2rem; }
 	.new-stickers a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--accent); font-size: var(--text-sm); }
 	.new-stickers ul { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-	.new-stickers li { display: flex; align-items: center; gap: var(--space-4); color: var(--muted); font-size: var(--text-sm); }
+	.new-stickers li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); color: var(--muted); font-size: var(--text-sm); }
 	.new-stickers li strong { color: var(--text); }
-	.new-stickers .badges { flex: none; display: inline-flex; gap: var(--space-2); font-size: .17rem; padding: .2rem; }
+	.new-stickers .badges { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); font-size: .11rem; padding: .2rem; }
+	.new-stickers[open] .summary-badges { display: none; }
+	.sticker-copy { flex: 1 1 14rem; min-width: 0; }
 	dt { color: var(--muted); font-size: var(--text-xs); }
 	dd { margin: var(--space-1) 0 0; font-size: var(--text-lg); font-weight: 750; }
 	.season-ledger dd.perfect { color: var(--success); }
@@ -463,6 +477,7 @@
 		.score-actions { justify-self: end; }
 	}
 	@media (max-width: 40rem) {
+		/* The fixed share bar never covers the last game; the site footer keeps its own clearance. */
 		.results { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
 		.scoreboard { padding: var(--space-4); }
 		.scoreboard h2 { font-size: var(--text-3xl); }

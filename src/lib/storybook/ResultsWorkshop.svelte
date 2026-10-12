@@ -11,6 +11,8 @@
 	import { createExamplePublication, getExampleSeason, type ExampleSeason } from './season-fixtures.ts';
 	import DraftWorkshop from './DraftWorkshop.svelte';
 	import StoryFrame from './StoryFrame.svelte';
+	import { STICKER_BY_KIND } from '#lib/collection/stickers.ts';
+	import type { NewSticker } from '#lib/collection/collection.ts';
 
 	let { initial = 'complete' }: ResultsWorkshopProps = $props();
 
@@ -32,6 +34,11 @@
 	let instance = $state(0);
 	let request = 0;
 	let observedInitial = untrack(() => initial);
+	/** Example first-time stickers for the first three cards, so the list and its phone layout can be reviewed. */
+	const exampleStickers = $derived<NewSticker[]>(season ? season.profiles.slice(0, 3).flatMap((profile, index) =>
+		[['perfect', 'hr-60', 'rbi-130', 'obp-400', 'mvp', 'hits-200'], ['perfect', 'k-600', 'ace'], ['perfect']][index].map(kind => ({
+			seasonId: profile.seasonId, label: `${profile.displayName} ${profile.year}`, kind, title: STICKER_BY_KIND.get(kind)!.title
+		}))) : []);
 
 	function applyInitial(value: ExampleSeason): void {
 		if (initial === 'shareLink') {
@@ -122,6 +129,7 @@
 				{publication}
 				sharing={false}
 				shareStatus={shareStatus}
+				newStickers={exampleStickers}
 			/>
 		{:else if season}
 			<DraftWorkshop initial="ready" embedded />

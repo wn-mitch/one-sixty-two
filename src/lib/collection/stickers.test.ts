@@ -25,7 +25,7 @@ describe('sticker rules', () => {
   ], []);
   expect(kinds(entry, 'at')).toEqual(['hits-200', 'hr-40', 'rbi-130', 'sb-30']);
   expect(kinds(entry, 'below')).toEqual([]);
-  expect(kinds(entry, 'sixty')).toEqual(['hr-40', 'hr-60']);
+  expect(kinds(entry, 'sixty')).toEqual(['hr-60']);
  });
 
  it('requires a qualifying season for rate stickers', () => {
@@ -49,8 +49,8 @@ describe('sticker rules', () => {
   expect(kinds(season(100, [batter('a', {})], [pitcher('b', {})], 'b'), 'a')).toEqual(['wins-100']);
   expect(kinds(season(100, [batter('a', {})], [pitcher('b', {})], 'b'), 'b')).toEqual(['mvp', 'wins-100']);
   expect(kinds(season(119, [batter('a', {})], []), 'a')).toEqual(['wins-100']);
-  expect(kinds(season(120, [batter('a', {})], []), 'a')).toEqual(['wins-100', 'wins-120']);
-  expect(kinds(season(162, [batter('a', {})], []), 'a')).toEqual(['perfect', 'wins-100', 'wins-120']);
+  expect(kinds(season(120, [batter('a', {})], []), 'a')).toEqual(['wins-120']);
+  expect(kinds(season(162, [batter('a', {})], []), 'a')).toEqual(['perfect']);
  });
 
  it('shows the highest visible tier of each family', () => {

@@ -23,18 +23,18 @@ export interface StickerDefinition {
 
 /** Default spot (card-normalized centre) for each family; spots are shared by families a card cannot both hold. */
 export const STICKER_SPOTS: Readonly<Record<StickerFamily, { x: number; y: number; tilt: number }>> = {
- // Defaults keep the name band and the stat row clear and frame the photograph's edges.
- mvp: { x: 0.17, y: 0.3, tilt: -9 },
- team: { x: 0.83, y: 0.3, tilt: 8 },
- contact: { x: 0.17, y: 0.49, tilt: -6 },
- ace: { x: 0.17, y: 0.49, tilt: -6 },
- power: { x: 0.83, y: 0.49, tilt: 7 },
- strikeouts: { x: 0.83, y: 0.49, tilt: 7 },
- eye: { x: 0.17, y: 0.68, tilt: 5 },
- production: { x: 0.83, y: 0.68, tilt: -5 },
- closer: { x: 0.83, y: 0.68, tilt: -5 },
- speed: { x: 0.38, y: 0.71, tilt: 3 },
- loyalty: { x: 0.62, y: 0.71, tilt: -3 }
+ // Defaults hug the left and right frame edges, clear of the name band, the face and the stat row.
+ mvp: { x: 0.1, y: 0.22, tilt: -9 },
+ team: { x: 0.9, y: 0.22, tilt: 8 },
+ contact: { x: 0.1, y: 0.37, tilt: -6 },
+ ace: { x: 0.1, y: 0.37, tilt: -6 },
+ power: { x: 0.9, y: 0.37, tilt: 7 },
+ strikeouts: { x: 0.9, y: 0.37, tilt: 7 },
+ eye: { x: 0.1, y: 0.52, tilt: 5 },
+ production: { x: 0.9, y: 0.52, tilt: -5 },
+ closer: { x: 0.9, y: 0.52, tilt: -5 },
+ speed: { x: 0.1, y: 0.67, tilt: 3 },
+ loyalty: { x: 0.9, y: 0.67, tilt: -3 }
 };
 
 const define = (kind: string, family: StickerFamily, tier: number, label: [string, string], title: string): StickerDefinition => ({ kind, family, tier, label, title });
@@ -86,7 +86,18 @@ function pitchingStickers(line: SavedPitcher): string[] {
  return kinds;
 }
 
-/** Every performance sticker one saved season earns, by card; loyalty stickers come from the rostering history. */
+/** Keeps only the highest tier of each family, so one season never awards 100, 120 and 162–0 side by side. */
+function topTiers(kinds: readonly string[]): string[] {
+ const best = new Map<StickerFamily, StickerDefinition>();
+ for (const kind of kinds) {
+  const definition = STICKER_BY_KIND.get(kind)!;
+  const current = best.get(definition.family);
+  if (!current || definition.tier > current.tier) best.set(definition.family, definition);
+ }
+ return kinds.filter(kind => best.get(STICKER_BY_KIND.get(kind)!.family)!.kind === kind);
+}
+
+/** The performance stickers one saved season earns, by card, at the highest tier per family; loyalty stickers come from the rostering history. */
 export function seasonStickers(entry: Pick<LibraryEntry, 'record' | 'roster' | 'batting' | 'pitching' | 'mvp'>): { seasonId: string; kind: string }[] {
  const team = entry.record.losses === 0 && entry.record.wins === 162 ? ['perfect', 'wins-120', 'wins-100']
   : entry.record.wins >= 120 ? ['wins-120', 'wins-100'] : entry.record.wins >= 100 ? ['wins-100'] : [];
@@ -96,7 +107,7 @@ export function seasonStickers(entry: Pick<LibraryEntry, 'record' | 'roster' | '
   if (entry.mvp?.seasonId === card.seasonId) kinds.push('mvp');
   for (const line of entry.batting) if (line.seasonId === card.seasonId) kinds.push(...battingStickers(line));
   for (const line of entry.pitching) if (line.seasonId === card.seasonId) kinds.push(...pitchingStickers(line));
-  for (const kind of kinds) earned.push({ seasonId: card.seasonId, kind });
+  for (const kind of topTiers(kinds)) earned.push({ seasonId: card.seasonId, kind });
  }
  return earned;
 }

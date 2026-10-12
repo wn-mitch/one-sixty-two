@@ -9,7 +9,7 @@
 	/**
 	 * The roster as large cards in four columns: the lineup in batting order, then the rotation in
 	 * order, the closer and named relievers, the home park, and the grade ladder across the last
-	 * row. Captions are sized for a phone screen.
+	 * row. Each card carries its draft pick number. Captions are sized for a phone screen.
 	 */
 	let { model }: { model: ShareRenderModel } = $props();
 	const bySeason = $derived(new Map(model.cards.map(entry => [entry.seasonId, entry])));
@@ -31,7 +31,7 @@
 <div class="fan">
 	{#each cells as { entry, label } (entry.seasonId)}
 		<figure class="cell">
-			<span class="card"><Card s={entry.card} face="front" compact capture interactive={false} onDetails={ignoreCardDetails} /></span>
+			<span class="card"><Card s={entry.card} face="front" compact capture interactive={false} onDetails={ignoreCardDetails} /><b class="pick" aria-label={`Pick ${entry.pickNumber}`}>#{entry.pickNumber}</b></span>
 			<figcaption><strong>{caption(entry)}</strong><span>{label} · {entry.card.year}</span></figcaption>
 		</figure>
 	{/each}
@@ -56,7 +56,9 @@
 	/* Four columns and five rows that fill the body; the grade ladder spans the last row. */
 	.fan { width:100cqw; height:100cqh; display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); grid-template-rows:repeat(5, minmax(0, 1fr)); gap:1.6cqh 2.4cqw; }
 	.cell { margin:0; min-width:0; min-height:0; display:grid; grid-template-rows:minmax(0, 1fr) auto; justify-items:center; gap:.8cqh; }
-	.card { display:block; height:100%; aspect-ratio:5 / 7; max-width:100%; }
+	.card { position:relative; display:block; height:100%; aspect-ratio:5 / 7; max-width:100%; }
+	/* Draft order, stamped on the card's top-left corner. */
+	.pick { position:absolute; z-index:5; top:-.8cqw; left:-.8cqw; min-width:4.6cqw; padding:.5cqw .8cqw; border-radius:.8cqw; background:oklch(97% .006 255); color:oklch(16% .009 255); font:800 2.6cqw / 1 'Barlow Condensed', sans-serif; text-align:center; box-shadow:0 .3cqw .8cqw oklch(0% 0 0 / .45); }
 	.card :global([data-card]) { width:100%; }
 	figcaption { display:grid; justify-items:center; gap:.4cqh; width:100%; text-align:center; }
 	figcaption strong, figcaption span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

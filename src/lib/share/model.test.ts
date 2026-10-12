@@ -85,7 +85,11 @@ describe('share render model', () => {
 		const second = createShareRenderModel(input);
 		expect(first.cards.map(card => card.slot)).toEqual(SLOTS);
 		expect(first.cards.map(card => card.seasonId)).toEqual(SLOTS.map(slot => input.draft.picks.find(pick => pick.slot === slot)!.seasonId));
-		expect(first).toEqual(second);
+		// Pick numbers follow draft order; everything else is independent of it.
+		expect(first.cards.map(card => card.pickNumber)).toEqual(SLOTS.map((_, index) => SLOTS.length - index));
+		expect(second.cards.map(card => card.pickNumber)).toEqual(SLOTS.map((_, index) => index + 1));
+		const withoutPicks = (model: typeof first) => ({ ...model, cards: model.cards.map(({ pickNumber: _, ...card }) => card) });
+		expect(withoutPicks(first)).toEqual(withoutPicks(second));
 	});
 
 	it('records the media and ranking versions it was drawn with', () => {

@@ -167,6 +167,10 @@
 	@media (min-width: 1100px), (min-width: 1024px) and (orientation: landscape) {
 		.site:not(:has(:global(main.home-start))) { padding-inline: max(var(--space-8), env(safe-area-inset-left)) max(var(--space-8), env(safe-area-inset-right)); }
 	}
+	/* Results pins its share bar to the bottom of phones; the footer clears it so its links stay reachable. */
+	@media (max-width: 40rem) {
+		.site:has(:global(.results .share-shortcuts)) footer { padding-bottom: calc(5.5rem + max(var(--space-6), env(safe-area-inset-bottom))); }
+	}
 	@media (max-width: 23rem) {
 		.site-header { gap: var(--space-2); }
 		.site-actions { gap: var(--space-2); }

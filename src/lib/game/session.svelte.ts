@@ -21,6 +21,7 @@ import {
  supportsImageClipboard
 } from './share.ts';
 import { draftRules } from './rules.ts';
+import { appSettings, PLAYBACK_INTERVAL_MS } from './settings.svelte.ts';
 import type { Draft, HitterSlot, Manifest, Profile, ReliefAssignment, Slot } from './types.ts';
 import { prepareSeasonInput } from './season-input.ts';
 import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts';
@@ -417,7 +418,7 @@ export class Session {
      else this.revealTimer = window.setInterval(() => {
       this.revealed = Math.min(162, this.revealed + 1);
       if (this.revealed === 162) this.showResults();
-     }, 35);
+     }, PLAYBACK_INTERVAL_MS[appSettings.playbackSpeed]);
     }
    };
    worker.onerror = () => {

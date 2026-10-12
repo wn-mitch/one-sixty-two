@@ -48,6 +48,8 @@ export interface ResultsInspection {
 export interface ResultsCard {
 	seasonId: string;
 	slot: Slot;
+	/** 1-based position in the order the card was drafted. */
+	pickNumber: number;
 	profile: Profile;
 	estimatedWar: number | null;
 	awards: readonly AwardChip[];

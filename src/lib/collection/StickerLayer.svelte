@@ -19,6 +19,6 @@
 {/if}
 
 <style>
- .stickers { position: absolute; inset: 0; z-index: 4; pointer-events: none; transform: translateZ(1px); font-size: .82cqw; }
+ .stickers { position: absolute; inset: 0; z-index: 4; pointer-events: none; transform: translateZ(1px); font-size: .5cqw; }
  .spot { position: absolute; translate: -50% -50%; line-height: 0; }
 </style>

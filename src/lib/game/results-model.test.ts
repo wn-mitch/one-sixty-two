@@ -196,7 +196,10 @@ describe('createResultsModel awards', () => {
 		expect(cardFor(model, '1B').awards.map(award => award.key)).not.toContain('home-runs');
 		expect(model.rest).toHaveLength(13);
 		expect(cardFor(model, '1B').inspection.simulated.awardChips.map(award => award.key)).toContain('mvp');
-		expect(model.rest.map(card => card.slot)).toEqual(SLOTS.filter(slot => !['C', 'SP1', 'SP3'].includes(slot)));
+		// The hand follows draft order; this draft picked the slots in reverse.
+		expect(model.rest.map(card => card.slot)).toEqual(SLOTS.filter(slot => !['C', 'SP1', 'SP3'].includes(slot)).reverse());
+		expect(model.rest.map(card => card.pickNumber)).toEqual([...model.rest.map(card => card.pickNumber)].sort((a, b) => a - b));
+		expect(model.cards.find(card => card.slot === 'RP3')!.pickNumber).toBe(1);
 
 		catcher.HR = 11;
 		const withFeaturedHomeRunLeader = createResultsModel(source);
