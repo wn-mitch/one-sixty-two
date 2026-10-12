@@ -16,7 +16,7 @@ The extra-game schedule pairing is distinct from the cultural rivalry network. T
 
 Simulate all four games on each of 162 matchdays (648 games league-wide), not eight disconnected personal schedules. Randomize round ordering and game sequence using an auditable seed while keeping both sides' calendars and results consistent. This is inspired by baseball's seasonal rhythm rather than a literal MLB schedule.
 
-For presentation and decisions, divide the season into **six chapters of 27 games**. Standings, records, player statistics, injuries only if later implemented, fan mood, and active decrees persist between chapters. The default run plays all 162 games even after elimination from a perfect-season goal.
+For presentation and decisions, divide the season into **six chapters of 27 games**. Standings, records, player statistics, injuries, fan mood, and active decrees persist between chapters. The default run plays all 162 games even after elimination from a perfect-season goal.
 
 ## Checkpoints and transactions
 
@@ -43,6 +43,41 @@ Open transaction details include transaction ordering within the window and chap
 | After game 162 | Season completion and reporting | Whether a final shop has any purpose; none is assumed |
 
 Nine-game and chapter boundaries coincide at games 27, 54, 81, 108 and 135. Combining their presentation is a candidate; it does not introduce another checkpoint rule.
+
+**Budget across stops (decided):** each nine-game payday credits cash, and unspent cash carries through the run. Extra stops do not add separate budgets; development at any stop draws on banked cash. A light stop after games 9 and 18 and a full chapter transition after game 27 is the candidate presentation. The smallest useful light stop is the payday result, one development purchase per player, at most one event or risk offer, and lineup, rotation and reserve changes. An empty event slot is skipped rather than filled with a choice that does not matter.
+
+## Prices and market conditions
+
+Salary is currently `5 + 4 × modeled runs`, so the price shows the engine's valuation exactly and every card costs the same per run. With the cap binding for most clubs, any roster spent to the cap holds about the same modeled value, and drafting skill barely survives submission (see the [D02 evidence](phases/02-draft-table.md)).
+
+**Proposed direction, not decided:** price from public reputation and keep modeled value off every player-facing surface, including AI pick explanations. Measured on data `1541f124a6ca`, fitting one market scale across all cards gives runs = 3.12 + 10.35 × WAR/162 (Pearson 0.824 over 42,802 cards with WAR). Among cards worth at least 10 modeled runs, a WAR price would misjudge them by:
+
+| Role | Cards | Rank correlation | Role bias (runs) | Spread within role (sd, runs) | Off by more than 10 runs |
+|---|---|---|---|---|---|
+| Hitter | 15,055 | 0.696 | +4.2 | 13.4 | 43.5% |
+| Starter | 6,586 | 0.702 | +9.4 | 15.3 | 48.4% |
+| Closer | 1,572 | 0.581 | −10.2 | 7.0 | 11.8% |
+
+At 4 salary units per run, a 10-run gap is 40 units. Starters would be systematically cheap and closers expensive under a single WAR scale. Team-season bullpen cards have no WAR, but they leave the Draft pool with [named bullpens](../simulation/model.md#7-pitcher-calibration-workload-and-expectancy). Whether the gaps can be read from visible stats, rather than being engine quirks no player could anticipate, is not yet measured; a usable scouting game needs that.
+
+Further proposals: freeze the price sheet during the opening draft; reprice only new acquisitions at defined season boundaries, driven by legible market conditions (for example a premium on power hitting) rather than unexplained noise; never reprice a signed salary. Development creates surplus value from fixed salaries even when the starting price is accurate; reputation pricing adds a separate scouting opportunity. A hard cap remains the first-playable recommendation, with a table-scaled cap (a candidate of 85% of the table's average salary per club) to be tested after roster size and prices change.
+
+## Injuries and risk choices
+
+**Injuries are a formal system (decided)**, owned by season evolution. The direction is push-your-luck: the player knowingly takes an optional benefit and accepts a disclosed risk. A disruption should never remove an interesting moment without offering an interesting decision.
+
+- **Offers explain the cost in roster terms:** what the player gains and when; the total probability of the downside, including any increase from earlier pushes; the possible consequence and its duration; how recovery works; and which actual backup and upcoming opponents it affects. Rules such as an absence length can be exact; lost wins are estimates. None of this requires showing modeled value.
+- **Candidate pushes:** intensive training for faster growth with a chance of a short absence; riding a starter deeper into games; skipping rest for a closer or setup reliever through a key series. Rosters carry three starters on a fixed rotation, so "short rest" has no meaning without a longer rotation.
+- **Consequences are bounded.** The larger downside resolves after the series or training it was taken for. Two severities are to be compared: degraded performance (available, temporarily weaker, cleared by rest) and temporary absence (misses a bounded stretch; nine games is the candidate unit). Whole-chapter absences are rare and tied to signposted, high-stakes choices. Purchased development is not destroyed by default. Season-ending storylines stay out of the ordinary event pool.
+- **Who can be hurt:** every card, including the closer and each named reliever. The remainder arm is not a card and is never injured; an absent reliever's innings pass to the next available reliever or the remainder.
+- **Emergency call-ups:** when no rostered card can legally fill an absent player's slot, the club calls up the top common from its own cleanup stack for that role. The call-up counts at common salary while the absent card's salary is suspended, is visible at its current ability, and returns to the pool when the original player is back unless kept under normal roster and cap rules. It must never outperform planned depth or become an acquisition route.
+- **Engine representation:** at segment granularity once the league runner plays to a stop and resumes. A degraded player is a modified profile for the segment; an absence or replacement closer is a different card in the slot for the segment. No team-wide penalty is needed.
+
+Mandatory roster turnover is not a requirement unless decided: a cautious player may decline every push if declining costs real growth or wins. If forced turnover is wanted, predictable fatigue is the tool, not random injuries.
+
+## Season moments
+
+**Proposed:** situations at nine-game stops where randomness sets up the situation and the player's response chooses the tradeoff, such as a controversial post (spend preparation to repair fan support, or keep preparing and absorb the pressure), a sponsor appearance (cash for a lost development opportunity), a tired veteran asking for rest, or a successful call-up (pay to keep them, or return to plan). Consequences follow the action taken, never an arbitrary permanent stat change. Some moments follow from run history, such as heavy workload or an earlier commercial decision. Fan effects use the existing sentiment, attendance, ticket revenue and crowd effect rather than a new meter.
 
 ## Purchased development
 

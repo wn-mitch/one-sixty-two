@@ -55,7 +55,7 @@ This phase is a contract-and-headless-proof phase, not a playable Draft Mode mil
 **Prerequisites recorded for D03.**
 - `validateTeam`/`validateSeason` in `src/lib/sim/validation.ts` reject duplicate `playerId`s and duplicate franchises. Draft rules must relax both before drafted rosters can be simulated, including two bullpens from one franchise, which share `bullpen:<franchise>`.
 - Two-way cards are priced at their best role only.
-- The engine has no setup relievers yet. Draft seasons need SU1 and SU2 usage as specified in [draft and rosters](../draft-and-rosters.md#shared-cube-and-pack-passing), with each setup reliever's availability tracked like the closer's. Setup relievers are currently priced at their closer value.
+- The engine has no setup relievers yet. The implemented D01 roster (16 active roles with SU1, SU2 and BP) is superseded by [named bullpens](../../simulation/model.md#7-pitcher-calibration-workload-and-expectancy): 18 active roles with RP1–RP5 and no bullpen card. Setup relievers are currently priced at their closer value.
 
 ## Dependencies
 

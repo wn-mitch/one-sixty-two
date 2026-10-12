@@ -14,7 +14,7 @@ Decided: two eight-card packs per seat, cracked into one pile and passed left fo
 
 Owner: [Salary and revenue](season-and-economy.md). First relevant gate: [phase](phases/01-pool-and-rosters.md).
 
-Calibrate all-card salaries, franchise constraints, cap ramp, minimum income, attendance revenue, segment-win bonuses and family prices. The D01 harness uses provisional values: `salary-runs-v1`, a minimum of 5 units, 4 units per run above the 20th-percentile replacement level, and a 1,500-unit nominal cap. These are not decisions. Cash banks independently of payroll. Starting salaries persist through upgrades; repricing exceptions remain open. Define final-segment payout presentation without assuming a post-season shop.
+Calibrate all-card salaries, franchise constraints, cap ramp, minimum income, attendance revenue, segment-win bonuses and family prices. The D01 harness uses provisional values: `salary-runs-v1`, a minimum of 5 units, 4 units per run above the 20th-percentile replacement level, and a 1,500-unit nominal cap. These are not decisions. Price from public reputation is the proposed direction; its measured gap from modeled value by role is recorded in [prices and market conditions](season-and-economy.md#prices-and-market-conditions). Open: the reputation signal (WAR alone or with tier and awards), a signal for team-season bullpens, whether the gaps are readable from visible stats, table-scaled cap level, hard cap versus luxury tax, and when market conditions reprice new acquisitions. Cash banks independently of payroll; each nine-game payday credits it and it carries through the run, so extra stops add no separate budget. Starting salaries persist through upgrades; repricing exceptions remain open. Define final-segment payout presentation without assuming a post-season shop.
 
 ## 3. Cleanup delivery
 
@@ -38,7 +38,7 @@ Calibrate roster-strength expectations, attendance, packed-stadium hype, directi
 
 Owner: [Pitcher abstraction](draft-and-rosters.md). First relevant gate: [phase](phases/03-league-playable.md).
 
-Retain one composite BP and one closer rather than drafting ten relievers. Revisit the three-starter/54-start schedule only when it materially affects strategic variety.
+Decided: named bullpens replace the composite BP in both modes, a closer plus three named relievers in Classic and five in Draft, with a fixed replacement-level remainder arm; Classic opponents get their top three real relievers by name (see the [model](../simulation/model.md#7-pitcher-calibration-workload-and-expectancy)). Open: the remainder arm's level, how opponents' named relievers are chosen, and the re-tuned cap for 18 active Draft roles. Revisit the three-starter/54-start schedule only when it materially affects strategic variety.
 
 ## 7. Identity and satire
 
@@ -105,6 +105,18 @@ Curate genuine rivalry shortlists and calibrate their shared hype response. The 
 Owner: [Delivery scope](README.md). First relevant gate: [phase](phases/03-league-playable.md).
 
 Shared contact/flight/fielding simulation is a prerequisite, first proven in Classic. Draft-first is the first playable Draft milestone; season adaptation follows. Define smaller implementation phases without making every decree or franchise package a prerequisite. Preserve accepted requirements when staging their implementation.
+
+## 18. Injuries and depth
+
+Owner: [Injuries and risk choices](season-and-economy.md#injuries-and-risk-choices). First relevant gate: [phase](phases/04-season-evolution.md).
+
+Decided: injuries are a formal system built on disclosed push-your-luck offers, bounded consequences and emergency call-ups from the club's own cleanup stack. Open: degraded performance versus absence (or both), absence lengths, probabilities and escalation, which pushes exist, call-up salary and retention rules, reserve count (two today; three to four covering a fourth starter, a utility infielder and a backup catcher is the candidate), and whether roster turnover is required.
+
+## 19. Season moments
+
+Owner: [Season moments](season-and-economy.md#season-moments). First relevant gate: [phase](phases/04-season-evolution.md).
+
+Proposed: one optional situation per light stop with a conservative response available. Open: frequency, the event pool, history-triggered versus independent events, and whether players pick a category before seeing the dilemma.
 
 ## Decision boundary
 

@@ -52,7 +52,12 @@ The result includes six chapters of 27 games and eighteen nine-game segments. Ch
 - Enforce the two-chapter per-player trade cooldown. A deadline survives release and waiver claims with its original deadline; ownership changes do not clear/restart it.
 - Preserve unique ownership, cap/role legality, atomic mutations, and upgrade/provenance transfer through trades, releases, claims, and acquisitions.
 - Implement a bounded, explainable market policy for the human club and deterministic public-information responses for AI clubs. AI-to-AI negotiation may remain a candidate if not needed for the first D04 market slice; do not silently claim it is complete.
-- Keep the composite team-season bullpen, the two setup slots and the two-reserve structure; do not turn chapter acquisition into a lengthy reliever microdraft.
+- Keep the named bullpen (closer plus RP1–RP5 and the remainder arm); the reserve count is open with injury depth (see [open decision 18](../open-decisions.md#18-injuries-and-depth)). Do not turn chapter acquisition into a lengthy reliever microdraft.
+
+### Injuries and season moments
+
+- Implement disclosed push-your-luck offers, bounded injury consequences and emergency call-ups as specified in [injuries and risk choices](../season-and-economy.md#injuries-and-risk-choices), with season moments at light stops where selected. The league runner applies them per segment through roster input, never as team-wide penalties.
+- Save/resume covers pending offers, active injuries, call-ups and their return timing.
 
 ### Save/resume and reporting
 
