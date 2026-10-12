@@ -50,6 +50,7 @@
     <p class="moment-label">{label}</p>
     <h4>{copy.matchup}</h4>
     <p class="situation">{copy.situation}</p>
+    <blockquote class="call"><p>“{copy.call}”</p></blockquote>
     <p class="story">{copy.action} {copy.score}</p>
     {#if moment && trace?.length}
      <MomentWinChart {trace} {moment} {tone} summary={`${copy.winChance} (${copy.swing})`} />
@@ -98,7 +99,9 @@
  h4 { margin: 0; font-size: var(--text-lg); overflow-wrap: anywhere; }
  .situation, .story, .final, .empty { margin: 0; }
  .situation, .final { color: var(--muted); font-size: var(--text-sm); }
- .story { max-width: 64ch; line-height: 1.55; }
+ .call { margin: 0; padding-left: var(--space-3); border-left: 3px solid var(--border); }
+ .call p { margin: 0; max-width: 56ch; font: italic 700 1.375rem/1.2 'Barlow Condensed', sans-serif; letter-spacing: .005em; }
+ .story { max-width: 64ch; color: var(--muted); font-size: var(--text-sm); line-height: 1.55; }
  .expectancy { margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); font-weight: 750; font-variant-numeric: tabular-nums; }
  .expectancy small { margin-left: var(--space-2); font-size: var(--text-sm); }
  @media (min-width: 48rem) {

@@ -135,3 +135,30 @@ describe('season moment copy', () => {
   expect(JSON.stringify(copy)).not.toMatch(/your club|Opponent hitter/);
  });
 });
+
+describe('radio calls', () => {
+ it('calls each play from its own facts and ends a walk-off on the game', () => {
+  const slam = formatSeasonMoment(moment());
+  expect(slam.call).toMatch(/Batter/);
+  expect(slam.call).toMatch(/GRAND SLAM!/);
+  expect(slam.call).toMatch(/ballgame is OVER!$/);
+  const strikeout = formatSeasonMoment(moment({ outcome: 'strikeout', runsScored: 0, challengeRunsAfter: 1, inning: 5, half: 'top' }));
+  expect(strikeout.call).toMatch(/Pitcher/);
+  expect(strikeout.call).not.toMatch(/OVER/);
+  const walk = formatSeasonMoment(moment({ outcome: 'walk', runsScored: 1, inning: 4, half: 'top', challengeRunsAfter: 2 }));
+  expect(walk.call).toMatch(/run/);
+ });
+
+ it('draws the same call for the same moment and covers every outcome', () => {
+  expect(formatSeasonMoment(moment()).call).toBe(formatSeasonMoment(moment()).call);
+  const outcomes = ['walk', 'hitByPitch', 'strikeout', 'single', 'double', 'triple', 'homeRun', 'groundedIntoDoublePlay', 'sacrificeFly', 'out', 'reachedOnError', 'stolenBase', 'caughtStealing'] as const;
+  for (const outcome of outcomes) expect(formatSeasonMoment(moment({ outcome, inning: 3, half: 'top' })).call.length).toBeGreaterThan(10);
+ });
+
+ it('interrupts the booth for a Nick Castellanos home run only', () => {
+  const nick = formatSeasonMoment(moment({ batterName: 'Nick Castellanos', inning: 6, half: 'top' })).call;
+  expect(nick).toMatch(/^…and I just want to take a moment.*drive into deep left field by Castellanos, that'll be a home run\.$/);
+  expect(formatSeasonMoment(moment({ batterName: 'Humberto Castellanos', inning: 6, half: 'top' })).call).not.toMatch(/take a moment/);
+  expect(formatSeasonMoment(moment({ batterName: 'Nick Castellanos', outcome: 'double', inning: 6, half: 'top' })).call).not.toMatch(/take a moment/);
+ });
+});

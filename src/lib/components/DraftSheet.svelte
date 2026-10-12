@@ -89,12 +89,36 @@
 			}
 		} else {
 			closeRequested = false;
-			if (target.open) {
-				controlledClose = true;
-				target.close();
-			}
+			if (target.open) closeWithExit(target);
 		}
 	});
+
+	/**
+	 * Closes at once, so focus and inertness behave exactly as a plain close, while a detached copy of the
+	 * sheet slides back down over the page that reappears beneath it.
+	 */
+	function closeWithExit(target: HTMLDialogElement): void {
+		const still = matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.motion === 'off';
+		const rect = target.getBoundingClientRect();
+		const ghost = still || !rect.height || typeof target.animate !== 'function' ? null : target.cloneNode(true) as HTMLElement;
+		controlledClose = true;
+		target.close();
+		if (!ghost) return;
+		const shell = document.createElement('div');
+		shell.className = target.className;
+		shell.setAttribute('aria-hidden', 'true');
+		shell.inert = true;
+		shell.append(...ghost.childNodes);
+		Object.assign(shell.style, { position: 'fixed', zIndex: '60', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, margin: '0', animation: 'none', pointerEvents: 'none' });
+		const backdrop = document.createElement('div');
+		Object.assign(backdrop.style, { position: 'fixed', inset: '0', zIndex: '59', background: 'oklch(8% .01 255 / .72)', pointerEvents: 'none' });
+		document.body.append(backdrop, shell);
+		const timing = { duration: 240, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' as const };
+		backdrop.animate([{ opacity: 1 }, { opacity: 0 }], timing);
+		shell.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], timing).finished
+			.catch(() => {})
+			.finally(() => { shell.remove(); backdrop.remove(); });
+	}
 
 	$effect(() => {
 		if (!open) return;

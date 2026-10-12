@@ -486,11 +486,12 @@
   if (arrival) void tick().then(() => {
    if (disposed || !draftBoard) return;
    arriveAtTop();
-   // The chosen park's card shrinks onto the field's stadium card while the board rises around it.
+   // The chosen park's card shrinks onto the field's stadium card while the board rises around it;
+   // phones keep the field in a sheet, so the card settles into the sealed pack instead.
    const from = arrival.rects.get('card');
    const clone = arrival.clones.get('card');
-   const mini = draftBoard.querySelector<HTMLElement>('.field-panel .stadium-mini .mini-card');
-   if (from && clone && mini) morphInto(clone, from, mini);
+   const target = draftBoard.querySelector<HTMLElement>('.field-panel .stadium-mini .mini-card') ?? draftBoard.querySelector<HTMLElement>('.foil-pack .pack');
+   if (from && clone && target) morphInto(clone, from, target);
    riseIn(draftBoard.querySelectorAll<HTMLElement>(':scope > .draft-header, :scope > .draft-toolbar, .field-panel'));
   });
   return () => {

@@ -1,8 +1,11 @@
 import type { GameResult, SeasonMoment } from '../sim/types.ts';
+import { radioCall } from './season-call.ts';
 
 export interface SeasonMomentCopy {
  matchup: string;
  situation: string;
+ /** Radio play-by-play for the play itself; `action` and `score` keep the plain record. */
+ call: string;
  action: string;
  score: string;
  winChance: string;
@@ -101,6 +104,7 @@ export function formatSeasonMoment(moment: SeasonMoment, game?: GameResult, labe
   ? `${moment.challengeBatting ? labels.challenge : labels.opponent} hitter ${moment.batterName}`
   : moment.challengeBatting ? moment.batterName : `Opponent hitter ${moment.batterName}`;
  const walkOff = isWalkOff(moment) ? ' It was a walk-off.' : '';
+ const call = radioCall(moment, walkOff !== '');
  const final = !game ? null : labels
   ? `Final: ${labels.challenge} ${game.challengeRuns}–${game.opponentRuns} ${labels.opponent}`
   : `Final: ${game.win ? 'W' : 'L'}, ${game.challengeRuns}–${game.opponentRuns}`;
@@ -109,6 +113,7 @@ export function formatSeasonMoment(moment: SeasonMoment, game?: GameResult, labe
    ? `Game ${moment.gameNumber} · ${labels.challenge} ${moment.isHome ? 'vs.' : 'at'} ${labels.opponent}`
    : `Game ${moment.gameNumber} · ${moment.isHome ? 'vs.' : 'at'} ${moment.opponentName}`,
   situation: `${moment.half === 'top' ? 'Top' : 'Bottom'} of the ${ordinal(moment.inning)} · ${outs(moment.outsBefore)} · ${bases(moment.basesBefore)}`,
+  call,
   action: `${actor} ${outcome(moment)} against ${moment.pitcherName}.${walkOff}`,
   score: `Before the play, ${scoreState(moment.challengeRunsBefore, moment.opponentRunsBefore, labels)}; after it, ${scoreState(moment.challengeRunsAfter, moment.opponentRunsAfter, labels)}.`,
   winChance: `${percentage(moment.winBefore)} → ${percentage(moment.winAfter)}`,
