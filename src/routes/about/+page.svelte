@@ -83,6 +83,9 @@
 			<h3>Is 162–0 possible?</h3>
 			<p>Not really, and that is by design: the season is played straight, with no hidden boost for a strong roster. The best roster our search has found averages about 156 wins and goes 162–0 roughly once in 400 seasons. A very good real draft averages 142 to 144 wins, where a perfect season is about a one-in-several-million event. The name is the dream; the grades measure how close you got, and an S or S+ season is already a great result.</p>
 
+			<h3>The newspaper clipping</h3>
+			<p>Every finished season gets a headline from a real sports page. Each phrase was copied as printed from a newspaper or magazine between 1906 and today, describing some other club's season, and the clipping links to the page it came from. Your grade picks how glowing or grim the phrase is, and a season that beat or missed its draft by six or more wins draws from writing about overachievers and letdowns.</p>
+
 			<h3>Your home stadium</h3>
 			<p>Before the first roll you choose a home stadium from a deck of the thirty current MLB parks. Your 81 home games are played there; road games use each opponent’s own 2025 park. Each stadium card shows the field outline, line and center distances, wall heights, roof, and elevation; estimated measurements are labelled. A stadium has no rating or bonus. It changes play only through the ball-flight model described below.</p>
 
