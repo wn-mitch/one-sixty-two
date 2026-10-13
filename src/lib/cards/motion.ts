@@ -1,9 +1,10 @@
 import { animate, type JSAnimation } from 'animejs';
 import { appSettings } from '../game/settings.svelte.ts';
 import { MOTION } from '../motion-timing.ts';
+import { deviceTilt, type DeviceTiltValue } from './device-tilt.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
 import type { CardLight } from './surface/card-light.ts';
-import { easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
+import { TILT, easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
 
 export { TILT } from './tilt-math.ts';
 
@@ -174,6 +175,9 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 	let focused = false;
 	let pointerX = 0;
 	let pointerY = 0;
+	// Phone tilt, which leans every interactive card like a pointer would when nothing hovers it.
+	let device: DeviceTiltValue = { x: 0, y: 0 };
+	let unsubscribeDevice: (() => void) | null = null;
 	const rest = (): Eased => ({ value: 0, velocity: 0 });
 	let pose: TiltState = restingTilt();
 	let currentLift = rest();
@@ -218,6 +222,33 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			visible: () => registration.visible
 		};
 		unregisterWall = wallSpotlights.register(wallRecord);
+	};
+
+	const syncDevice = () => {
+		const wanted = (options.enabled ?? true) && !destroyed;
+		if (wanted && !unsubscribeDevice) {
+			unsubscribeDevice = deviceTilt.subscribe(value => {
+				device = value;
+				dirty = true;
+				registration.wake();
+			});
+		} else if (!wanted && unsubscribeDevice) {
+			unsubscribeDevice();
+			unsubscribeDevice = null;
+			device = { x: 0, y: 0 };
+		}
+	};
+
+	/** Where pointer, focus or phone tilt want the card, for the scheduler's activity check and the frame. */
+	const targets = (settings: { effectiveEnabled: boolean }) => {
+		const pointerActive = hovering && (options.enabled ?? true) && settings.effectiveEnabled;
+		const directInteraction = pointerActive || focused;
+		const deviceAmount = Math.min(1, Math.hypot(device.x, device.y));
+		const deviceActive = !directInteraction && (options.enabled ?? true) && settings.effectiveEnabled && deviceAmount > 0.01;
+		// Phone tilt maps linearly, so a nearly level phone leaves the card nearly at rest; a pointer's minimum arm would not.
+		const target = pointerActive ? pointerTilt(pointerX, pointerY) : deviceActive ? { rx: -device.y * TILT.maxTilt, ry: device.x * TILT.maxTilt } : { rx: 0, ry: 0 };
+		const targetLift = directInteraction ? 1 : deviceActive ? deviceAmount : 0;
+		return { pointerActive, directInteraction, deviceActive, target, targetLift };
 	};
 
 	// Touch tilts the card while a finger is down; the gesture ends on lift or when the page takes over to scroll.
@@ -296,16 +327,13 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			// A raised card dims the page; cards behind it hold their ambient pose until it lands again.
 			if (autonomousMotion.ambientHeld && !hovering && !focused && !dirty && !node.closest('[data-card-reader]:popover-open')) return false;
 			const desiredBlend = interrupted() ? 1 : 0;
-			const pointerActive = hovering && (options.enabled ?? true) && settings.effectiveEnabled;
-			const directInteraction = pointerActive || focused;
-			const target = pointerActive ? pointerTilt(pointerX, pointerY) : { rx: 0, ry: 0 };
-			const targetLift = directInteraction ? 1 : 0;
+			const { pointerActive, deviceActive, target, targetLift } = targets(settings);
 			const canRender = (options.enabled ?? true) || autonomousEnabled() || focused;
 			return (dirty && canRender) ||
 				(autonomousEnabled() && (!interrupted() || Math.abs(hoverBlend - desiredBlend) > 0.001)) ||
 				!settled(pose.x, target.rx, 0.01) || !settled(pose.y, target.ry, 0.01) ||
 				!settled(currentLift, targetLift, 0.001) ||
-				(pointerActive ? !settled(pose.envelope, pointerEnvelope(), 0.01) : pose.envelope.value > 0.01);
+				(pointerActive ? !settled(pose.envelope, pointerEnvelope(), 0.01) : !deviceActive && pose.envelope.value > 0.01);
 		},
 		frame({ time, delta, settings }) {
 			const desiredBlend = interrupted() ? 1 : 0;
@@ -313,13 +341,10 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			hoverBlend = desiredBlend > hoverBlend
 				? Math.min(desiredBlend, hoverBlend + blendStep)
 				: Math.max(desiredBlend, hoverBlend - blendStep);
-			const pointerActive = hovering && (options.enabled ?? true) && settings.effectiveEnabled;
-			const directInteraction = pointerActive || focused;
-			const target = pointerActive ? pointerTilt(pointerX, pointerY) : { rx: 0, ry: 0 };
-			const targetLift = directInteraction ? 1 : 0;
-			const holding = interrupted();
+			const { pointerActive, directInteraction, deviceActive, target, targetLift } = targets(settings);
+			const holding = interrupted() || deviceActive;
 			currentLift = easeToward(currentLift, targetLift, delta, holding);
-			if (!directInteraction && settled(currentLift, 0, 0.001)) currentLift = rest();
+			if (!directInteraction && !deviceActive && settled(currentLift, 0, 0.001)) currentLift = rest();
 			let lift = currentLift.value;
 			let offsetX = 0;
 			let offsetY = 0;
@@ -344,11 +369,11 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			pose = step.state;
 			const { rx, ry, envelope } = step;
 			// Settle before the scheduler's activity threshold stops requesting frames.
-			if (!directInteraction) {
+			if (!directInteraction && !deviceActive) {
 				if (settled(pose.x, 0, 0.01)) pose.x = rest();
 				if (settled(pose.y, 0, 0.01)) pose.y = rest();
 			}
-			applyTilt(node, { rx, ry, envelope, lift, hotspotX, hotspotY }, halfWidth, halfHeight, options.light, directInteraction || hoverBlend > 0.001);
+			applyTilt(node, { rx, ry, envelope, lift, hotspotX, hotspotY }, halfWidth, halfHeight, options.light, directInteraction || deviceActive || hoverBlend > 0.001);
 			dirty = false;
 		},
 		state(settings, visible) {
@@ -368,6 +393,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 	});
 	attachEvents();
 	configureWall();
+	syncDevice();
 
 	return {
 		update(next: TiltOptions = {}) {
@@ -385,11 +411,13 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			options = next;
 			if (nextIdentity !== identity) configureIdentity(nextIdentity);
 			configureWall();
+			syncDevice();
 			dirty = true;
 			registration.wake();
 		},
 		destroy() {
 			destroyed = true;
+			syncDevice();
 			resized.disconnect();
 			detachEvents();
 			unregisterWall?.();

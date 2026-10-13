@@ -16,6 +16,8 @@ export interface AppPreferences {
 	playbackSpeed: PlaybackSpeed;
 	/** Desktop drafting also lists players with no open position on the field. */
 	showBlockedCards: boolean;
+	/** Tilt cards with the phone's motion sensor; null keeps the platform default (off where a permission prompt is needed). */
+	phoneTilt: boolean | null;
 }
 
 export interface AppSettingsSnapshot extends AppPreferences {
@@ -56,7 +58,8 @@ function validStored(value: unknown): AppPreferences | null {
 			// Preferences added later fall back to their defaults when an older save lacks them.
 			showStickers: typeof candidate.showStickers === 'boolean' ? candidate.showStickers : true,
 			playbackSpeed: PLAYBACK_SPEEDS.includes(candidate.playbackSpeed as PlaybackSpeed) ? candidate.playbackSpeed as PlaybackSpeed : 'normal',
-			showBlockedCards: typeof candidate.showBlockedCards === 'boolean' ? candidate.showBlockedCards : false
+			showBlockedCards: typeof candidate.showBlockedCards === 'boolean' ? candidate.showBlockedCards : false,
+			phoneTilt: typeof candidate.phoneTilt === 'boolean' ? candidate.phoneTilt : null
 		}
 		: null;
 }
@@ -84,6 +87,7 @@ export class AppSettingsState {
 	showStickers = $state(true);
 	playbackSpeed = $state<PlaybackSpeed>('normal');
 	showBlockedCards = $state(false);
+	phoneTilt = $state<boolean | null>(null);
 	reducedMotion = $state(false);
 	storageAvailable = $state(true);
 
@@ -116,6 +120,7 @@ export class AppSettingsState {
 			showStickers: this.showStickers,
 			playbackSpeed: this.playbackSpeed,
 			showBlockedCards: this.showBlockedCards,
+			phoneTilt: this.phoneTilt,
 			reducedMotion: this.reducedMotion,
 			effectiveEnabled: this.effectiveEnabled,
 			animateCards: this.animateCards,
@@ -166,6 +171,7 @@ export class AppSettingsState {
 				this.showStickers = stored.showStickers;
 				this.playbackSpeed = stored.playbackSpeed;
 				this.showBlockedCards = stored.showBlockedCards;
+				this.phoneTilt = stored.phoneTilt;
 			}
 		} catch {
 			this.storageAvailable = false;
@@ -223,7 +229,8 @@ export class AppSettingsState {
 				rosterFirstClick: this.rosterFirstClick,
 				showStickers: this.showStickers,
 				playbackSpeed: this.playbackSpeed,
-				showBlockedCards: this.showBlockedCards
+				showBlockedCards: this.showBlockedCards,
+				phoneTilt: this.phoneTilt
 			} satisfies AppPreferences));
 		} catch {
 			this.storageAvailable = false;
@@ -274,6 +281,13 @@ export class AppSettingsState {
 	setShowBlockedCards(showBlockedCards: boolean): void {
 		if (showBlockedCards === this.showBlockedCards) return;
 		this.showBlockedCards = showBlockedCards;
+		this.#persist();
+		this.#notify();
+	}
+
+	setPhoneTilt(phoneTilt: boolean): void {
+		if (phoneTilt === this.phoneTilt) return;
+		this.phoneTilt = phoneTilt;
 		this.#persist();
 		this.#notify();
 	}

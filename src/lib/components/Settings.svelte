@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { appSettings, PLAYBACK_SPEEDS } from '#lib/game/settings.svelte.ts';
+	import { deviceTilt, type DeviceTiltState } from '#lib/cards/device-tilt.ts';
 
 	let dialog = $state<HTMLDialogElement>();
 	let trigger = $state<HTMLButtonElement>();
@@ -15,6 +16,8 @@
 	const rosterLabelId = `${uid}-roster-first-click`;
 	const stickersId = `${uid}-stickers`;
 	const blockedId = `${uid}-blocked`;
+	const phoneTiltId = `${uid}-phone-tilt`;
+	const phoneTiltNoticeId = `${uid}-phone-tilt-notice`;
 	const playbackLabelId = `${uid}-playback`;
 	const playbackLabels = { slow: 'Slow', normal: 'Normal', fast: 'Fast' } as const;
 
@@ -25,11 +28,23 @@
 		? 'Changes apply for this session because this browser blocked local storage.'
 		: '');
 
+	/** Phone tilt only appears where the browser reports a motion sensor and a touch screen. */
+	let tiltState = $state<DeviceTiltState>('unsupported');
+	const phoneTiltOn = $derived(tiltState !== 'denied' && (appSettings.phoneTilt ?? tiltState === 'active'));
+
 	onMount(() => {
 		const release = appSettings.retain();
+		const stopTilt = deviceTilt.subscribeState(state => { tiltState = state; });
 		ready = true;
-		return release;
+		return () => { stopTilt(); release(); };
 	});
+
+	/** Turning tilt on where iOS needs permission asks inside this tap, and only saves "on" once it is granted. */
+	function togglePhoneTilt(): void {
+		if (phoneTiltOn) return appSettings.setPhoneTilt(false);
+		if (tiltState !== 'needs-permission') return appSettings.setPhoneTilt(true);
+		void deviceTilt.request().then(state => { if (state === 'active') appSettings.setPhoneTilt(true); });
+	}
 
 	function openSettings(): void {
 		if (!ready || !dialog) return;
@@ -139,6 +154,28 @@
 						{/each}
 					</div>
 				</div>
+
+				{#if tiltState !== 'unsupported'}
+					<div class="setting-row">
+						<div class="setting-copy">
+							<label for={phoneTiltId}>Tilt cards with your phone</label>
+							<p id={phoneTiltNoticeId}>{tiltState === 'denied'
+								? 'This browser blocked motion access. Allow it for this site in your browser settings, then reload.'
+								: 'Cards lean as you tilt your phone. Holding it still at any angle reads as rest.'}</p>
+						</div>
+						<button
+							id={phoneTiltId}
+							type="button"
+							class="settings-switch"
+							role="switch"
+							aria-checked={phoneTiltOn}
+							aria-label="Tilt cards with your phone"
+							aria-describedby={phoneTiltNoticeId}
+							disabled={!ready || tiltState === 'denied' || !appSettings.effectiveEnabled}
+							onclick={togglePhoneTilt}
+						><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
+					</div>
+				{/if}
 
 				<div class="setting-row">
 					<div class="setting-copy">

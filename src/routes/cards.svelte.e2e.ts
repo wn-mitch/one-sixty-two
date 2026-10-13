@@ -410,4 +410,36 @@ test.describe('normal card motion', () => {
 		expect(await page.locator('body > [aria-hidden="true"][inert]').count()).toBe(0);
 		expect(await visibleGroupIds(page)).toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'metrics', rankings));
 	});
+	test.describe('on a phone', () => {
+		test.use({ hasTouch: true, isMobile: true });
+
+		test('leans cards with the motion sensor and settles them when the phone returns to neutral', async ({ page, request }) => {
+			const manifest = await currentManifest(request);
+			const scenario = await cardScenario(request, manifest, () => true);
+			// With sensor permission Chromium grants motion access without a prompt, and the override feeds real orientation events.
+			const sensor = await page.context().newCDPSession(page);
+			// A phone reports continuously; the override fires only when the reading changes by its 0.1° resolution, so stream alternating readings.
+			const hold = async (beta: number, gamma: number) => {
+				for (let index = 0; index < 12; index += 1) {
+					await sensor.send('DeviceOrientation.setDeviceOrientationOverride', { alpha: 0, beta, gamma: gamma + (index % 2) * 0.1 });
+					await page.waitForTimeout(30);
+				}
+			};
+			await page.context().grantPermissions(['accelerometer', 'gyroscope', 'magnetometer']);
+			await hold(40, 0);
+			await openSavedDraft(page, scenario.draft);
+			const art = page.locator('.art-trigger').first();
+			await art.scrollIntoViewIfNeeded();
+			const surface = art.locator('[data-card][data-face="front"]');
+			const tiltAngle = () => surface.evaluate(node => Number((node as HTMLElement).style.transform.match(/rotate3d\([^)]*,\s*(-?[\d.]+)deg\)/)?.[1] ?? 0));
+			await hold(40, 0);
+			await expect.poll(tiltAngle).toBeLessThan(.5);
+			// Dipping the right edge a full range away leans the card like a pointer at its right edge.
+			await hold(40, 18);
+			await expect.poll(tiltAngle).toBeGreaterThan(4);
+			// Back at the starting pose the card nearly rests; the neutral has followed the lean a little.
+			await hold(40, 0);
+			await expect.poll(tiltAngle).toBeLessThan(1.5);
+		});
+	});
 });
