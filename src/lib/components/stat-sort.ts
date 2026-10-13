@@ -17,6 +17,7 @@ export interface StatColumn<T> {
 }
 
 const ratio = (numerator: number, denominator: number): number | null => denominator > 0 ? numerator / denominator : null;
+const battingAverage = (line: BatterLine) => ratio(line.H, line.AB);
 const onBase = (line: BatterLine) => ratio(line.H + line.BB + line.HBP, line.AB + line.BB + line.HBP + line.SF);
 const slugging = (line: BatterLine) => ratio(line.H + line.doubles + 2 * line.triples + 3 * line.HR, line.AB);
 const ops = (line: BatterLine) => {
@@ -31,6 +32,9 @@ const count = <T>(key: string, label: string, title: string, read: (line: T) => 
 
 export const BATTING_COLUMNS: readonly StatColumn<BatterLine>[] = [
 	{ key: 'war', label: 'WAR', title: 'Estimated WAR', value: estimatedHitterWar, format: line => estimatedHitterWar(line).toFixed(1), better: 'descending', className: 'stat-key' },
+	{ key: 'avg', label: 'AVG', title: 'Batting average', value: battingAverage, format: line => rate(battingAverage(line), average), better: 'descending', className: 'stat-key' },
+	{ key: 'obp', label: 'OBP', title: 'On-base percentage', value: onBase, format: line => rate(onBase(line), average), better: 'descending' },
+	{ key: 'slg', label: 'SLG', title: 'Slugging percentage', value: slugging, format: line => rate(slugging(line), average), better: 'descending' },
 	{ key: 'ops', label: 'OPS', title: 'On-base plus slugging', value: ops, format: line => rate(ops(line), average), better: 'descending', className: 'stat-key' },
 	count('pa', 'PA', 'Plate appearances', line => line.PA, 'stat-group'),
 	count('ab', 'AB', 'At bats', line => line.AB),

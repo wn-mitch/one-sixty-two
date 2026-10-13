@@ -203,5 +203,7 @@ describe('turning-point attribution', () => {
  it('shows the runner thrown out, while keeping strikeouts attributed to the pitcher', () => {
   expect(momentParticipant(moment({ outcome: 'single', play: { outsAfter: 3, contact: null, runners: [{ name: 'Test Runner', seasonId: 'runner-2000', from: 2, to: 0 }] } }))).toBe('runner-2000');
   expect(momentParticipant(moment({ outcome: 'strikeout', challengeBatting: false }))).toBe('pitcher-2000');
+  // An opponent's steal belongs to their runner, not to the pitcher who allowed it.
+  expect(momentParticipant(moment({ outcome: 'stolenBase', challengeBatting: false }))).toBe('batter-2000');
  });
 });

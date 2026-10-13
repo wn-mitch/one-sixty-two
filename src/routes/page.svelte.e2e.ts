@@ -7,7 +7,7 @@ import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, SLOTS, typ
 import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
 import type { SharePublication } from '../lib/share/types.ts';
 import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, deviceDraft, deviceDraftText } from './draft-test-fixtures.ts';
-import { verifyResultsInspection } from './results-test-assertions.ts';
+import { horizontalOverflow, verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
 
 /** Every game in the results calendar, one control per game, including both halves of a doubleheader. */
@@ -333,7 +333,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await expect(replayGames.locator(SEASON_GAME)).toHaveCount(162);
 	expect(await gameLabels(replayGames)).toEqual(scores);
 	expect(errors).toEqual([]);
-	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+	expect(await horizontalOverflow(page)).toEqual([]);
 	await replay.close();
 });
 

@@ -131,8 +131,12 @@
 	.site-header > a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: var(--text-sm); }
 	.wordmark { flex: none; color: var(--text); text-decoration: none; font-size: var(--text-xl) !important; font-weight: 850; letter-spacing: -.04em; gap: var(--space-3); }
 	.mark { width: .75rem; height: .75rem; border: 2px solid var(--text); transform: rotate(45deg); }
-	.site-actions { position: relative; display: flex; align-items: center; gap: var(--space-4); margin-left: auto; }
-	.rules-link { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--muted); font-size: var(--text-sm); text-decoration: none; white-space: nowrap; }
+	.site-actions { position: relative; display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
+	.rules-link { min-height: 2.75rem; display: inline-flex; align-items: center; padding-inline: var(--space-3); border-radius: var(--radius); color: var(--muted); font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+	.rules-link:hover { color: var(--text); background: var(--surface); }
+	/* Home deals cards behind the header: no rule cutting across them, and a fade keeps the links legible. */
+	.site:has(:global(main.home-start)) .site-header { border-bottom-color: transparent; }
+	.site:has(:global(main.home-start)) .site-header::before { content: ''; position: absolute; z-index: -1; inset: 0 calc(-1 * max(var(--space-4), env(safe-area-inset-left))) -2.5rem; background: linear-gradient(var(--background) 55%, transparent); pointer-events: none; }
 	footer {
 		position: relative;
 		z-index: 2;
@@ -192,7 +196,7 @@
 	}
 	@media (max-width: 23rem) {
 		.site-header { gap: var(--space-2); }
-		.site-actions { gap: var(--space-2); }
+		.site-actions { gap: var(--space-1); }
 		.rules-link { font-size: var(--text-xs); }
 	}
 </style>

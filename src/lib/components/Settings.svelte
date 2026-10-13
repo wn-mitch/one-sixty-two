@@ -207,8 +207,11 @@
 		border: 0;
 		background: transparent;
 		color: var(--muted);
+		/* Reads as a sibling of the header's text links, not as a control button. */
+		font-family: inherit;
 		font-size: var(--text-sm);
-		font-weight: 700;
+		font-weight: 600;
+		letter-spacing: 0;
 	}
 	.settings-trigger:hover { color: var(--text); background: var(--surface); }
 	.settings-dialog {

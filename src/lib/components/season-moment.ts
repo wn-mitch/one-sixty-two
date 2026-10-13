@@ -110,7 +110,8 @@ export function momentParticipant(moment: SeasonMoment | null): string | null {
   return moment.batterSeasonId;
  }
  if (moment.outcome === 'reachedOnError') return moment.play?.contact?.fielderSeasonId ?? null;
- if (moment.outcome === 'stolenBase' || moment.outcome === 'caughtStealing') return null;
+ // The opponent's runner owns their steal; the card shows in black and white as an opponent's.
+ if (moment.outcome === 'stolenBase' || moment.outcome === 'caughtStealing') return moment.batterSeasonId;
  if (moment.runsScored === 0 && moment.play && moment.play.outsAfter > moment.outsBefore && moment.play.contact?.fielderSeasonId)
   return moment.play.contact.fielderSeasonId;
  return moment.pitcherSeasonId;

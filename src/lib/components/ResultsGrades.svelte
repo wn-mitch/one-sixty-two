@@ -1,0 +1,84 @@
+<script lang="ts">
+	import { backOut } from 'svelte/easing';
+	import { gradeRange, type SeasonGrade } from '../game/grade.ts';
+	import { appSettings } from '../game/settings.svelte.ts';
+	import GradeBadge from './GradeBadge.svelte';
+
+	/**
+	 * The season's two grades beside the record: what the season earned and what the roster was
+	 * built for, with the gap between them as the season's luck. Each grade stamps down like a
+	 * sticker pressed onto the scoreboard.
+	 */
+	let { wins, grade, rosterGrade, expected }: {
+		wins: number; grade: SeasonGrade | null; rosterGrade: SeasonGrade | null; expected: number | null;
+	} = $props();
+	const luck = $derived(expected === null ? null : Math.round(wins - expected));
+
+	function stamp(_: Element, { order }: { order: number }) {
+		const motion = appSettings.effectiveEnabled;
+		const tilt = order ? 7 : -7;
+		return {
+			delay: motion ? 220 + order * 140 : 0,
+			duration: motion ? 420 : 0,
+			easing: backOut,
+			css: (t: number, u: number) => `transform: scale(${1 + .9 * u}) rotate(${tilt * u}deg); opacity: ${Math.min(1, t * 3)};`
+		};
+	}
+</script>
+
+{#if grade || (rosterGrade && expected !== null)}
+	<div class="grades">
+		{#if grade}
+			<p class="grade season-grade">
+				<span class="badge" aria-hidden="true" in:stamp|global={{ order: 0 }}><GradeBadge {grade} /></span>
+				<span class="label" aria-hidden="true">Season</span>
+				<span class="detail" aria-hidden="true">{gradeRange(grade)}</span>
+				<span class="sr-only">Season {grade} · {gradeRange(grade)}</span>
+			</p>
+		{/if}
+		{#if rosterGrade && expected !== null}
+			<p class="grade draft-grade" title="The roster's average over many seasons, before this season's luck">
+				<span class="badge" aria-hidden="true" in:stamp|global={{ order: 1 }}><GradeBadge grade={rosterGrade} /></span>
+				<span class="label" aria-hidden="true">Draft</span>
+				<span class="detail" aria-hidden="true">Built for {Math.round(expected)}{#if luck}<span class="sep">{' · '}</span><span class="luck" class:up={luck > 0}>{luck > 0 ? '+' : '−'}{Math.abs(luck)} luck</span>{/if}</span>
+				<span class="sr-only">Draft {rosterGrade} · built for about {Math.round(expected)} wins</span>
+			</p>
+		{/if}
+	</div>
+{/if}
+
+<style>
+	.grades { display: flex; gap: var(--space-3); min-width: 0; }
+	.grade {
+		position: relative;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-areas: 'badge label' 'badge detail';
+		align-items: center;
+		column-gap: var(--space-3);
+		min-width: 0;
+		margin: 0;
+		padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--background);
+	}
+	.badge { grid-area: badge; display: block; font-size: var(--text-3xl); transform-origin: 50% 60%; }
+	.label { grid-area: label; align-self: end; color: var(--muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+	.detail { grid-area: detail; align-self: start; font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	/* The draft grade is the expectation, so it sits a step quieter than the season it set up. */
+	.draft-grade .badge { font-size: var(--text-2xl); }
+	.draft-grade { border-style: dashed; }
+	.luck { color: var(--error); }
+	.luck.up { color: var(--success); }
+	@media (max-width: 40rem) {
+		.grades { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		/* Phones put the badge beside its label and the detail across the tile. */
+		.grade { grid-template-areas: 'badge label' 'detail detail'; row-gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+		.badge, .draft-grade .badge { font-size: var(--text-xl); }
+		.label { align-self: center; }
+		.detail { white-space: normal; font-size: var(--text-xs); }
+		.sep { display: none; }
+		.luck { display: block; }
+	}
+</style>

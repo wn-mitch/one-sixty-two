@@ -38,6 +38,8 @@
 	const exampleStickers = $derived<NewSticker[]>(season ? season.profiles.slice(0, 3).flatMap((profile, index) =>
 		[['perfect', 'hr-60', 'rbi-130', 'obp-400', 'mvp', 'hits-200'], ['perfect', 'k-600', 'ace'], ['perfect']][index].map(kind => ({
 			seasonId: profile.seasonId, label: `${profile.displayName} ${profile.year}`, kind, title: STICKER_BY_KIND.get(kind)!.title
+		}))).concat(season.profiles.map(profile => ({
+			seasonId: profile.seasonId, label: `${profile.displayName} ${profile.year}`, kind: 'grade-aa', title: STICKER_BY_KIND.get('grade-aa')!.title
 		}))) : []);
 
 	function applyInitial(value: ExampleSeason): void {

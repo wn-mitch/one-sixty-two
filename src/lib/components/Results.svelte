@@ -14,7 +14,7 @@
 	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
 	import type { NewCard, NewSticker } from '../collection/collection.ts';
 	import ResultsCollection from './ResultsCollection.svelte';
-	import GradeBadge from './GradeBadge.svelte';
+	import ResultsGrades from './ResultsGrades.svelte';
 	import { draftGrade, expectedWins, gradeRange, seasonGrade } from '../game/grade.ts';
 	import SeasonCalendar from './SeasonCalendar.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
@@ -63,6 +63,7 @@
 		newCards = []
 	}: Props = $props();
 	const grade = $derived(seasonGrade(result.wins, result.losses));
+	const runDifference = $derived(result.runsFor - result.runsAgainst);
 	const expected = $derived(expectedWins(draft.picks.map(pick => profiles.find(profile => profile.seasonId === pick.seasonId) ?? {})));
 	const rosterGrade = $derived(expected === null ? null : draftGrade(expected));
 	const challengeVerdict = $derived(challenge
@@ -198,8 +199,15 @@
 				<i aria-hidden="true">–</i>
 				<span>{result.losses}<small>L</small></span>
 			</h2>
-			{#if grade}<p class="season-grade"><span class="badge"><GradeBadge {grade} /></span><span>Season {grade} · {gradeRange(grade)}</span></p>{/if}
-			{#if rosterGrade && expected !== null}<p class="season-grade draft-grade" title="The roster's average over many seasons, before this season's luck"><span class="badge"><GradeBadge grade={rosterGrade} /></span><span>Draft {rosterGrade} · built for about {Math.round(expected)} wins</span></p>{/if}
+			<ResultsGrades wins={result.wins} {grade} {rosterGrade} {expected} />
+			<dl class="season-ledger">
+				<div><dt>{result.firstLoss === null ? 'Season' : 'First loss'}</dt><dd class:perfect={result.firstLoss === null}>{result.firstLoss === null ? 'No losses' : `Game ${result.firstLoss}`}</dd></div>
+				<div><dt>Best streak</dt><dd>{result.longestWinningStreak} W</dd></div>
+				<div>
+					<dt>Runs</dt>
+					<dd aria-label={`${result.runsFor} scored, ${result.runsAgainst} allowed, difference ${runDifference > 0 ? '+' : ''}${runDifference}`}>{result.runsFor}–{result.runsAgainst} <span class="run-difference" class:up={runDifference > 0} class:down={runDifference < 0}>{runDifference > 0 ? '+' : runDifference < 0 ? '−' : '±'}{Math.abs(runDifference)}</span></dd>
+				</div>
+			</dl>
 		</div>
 
 		<div class="score-actions" aria-busy={sharing}>
@@ -213,19 +221,6 @@
 			</div>
 		</div>
 
-		<dl class="season-ledger">
-			<div>
-				<dt>{result.firstLoss === null ? 'Season' : 'First loss'}</dt>
-				<dd class:perfect={result.firstLoss === null}>{result.firstLoss === null ? 'No losses' : `Game ${result.firstLoss}`}</dd>
-			</div>
-			<div><dt>Longest winning streak</dt><dd>{result.longestWinningStreak} W</dd></div>
-			<div><dt>Runs for</dt><dd>{result.runsFor}</dd></div>
-			<div><dt>Runs against</dt><dd>{result.runsAgainst}</dd></div>
-			<div>
-				<dt>Run difference</dt>
-				<dd>{result.runsFor - result.runsAgainst > 0 ? '+' : ''}{result.runsFor - result.runsAgainst}</dd>
-			</div>
-		</dl>
 	</header>
 
 	<div class="awards-share">
@@ -251,7 +246,7 @@
 	</div>
 
 
-	<SeasonMoments {result} cards={resultsModel.cards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
+	<SeasonMoments {result} cards={resultsModel.cards} {cardViews} {manifest} {media} {rankings} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 
 	{#snippet handNav()}
 		{@const previous = handOrder[(handIndex - 1 + handOrder.length) % handOrder.length]}
@@ -382,9 +377,8 @@
 		background: var(--surface);
 		border-block: 1px solid var(--border);
 	}
-	.season-grade { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-sm); font-weight: 650; }
-	.season-grade .badge { font-size: var(--text-2xl); }
-	.draft-grade { margin-top: var(--space-2); }
+	/* The record and its grades read as one line: the score, then what it earned. */
+	.record-block { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); min-width: 0; }
 	.scoreboard h2 {
 		display: flex;
 		align-items: baseline;
@@ -408,18 +402,16 @@
 		font-style: normal;
 		font-weight: 500;
 	}
-	.season-ledger {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--space-4) var(--space-6);
-		grid-column: 1 / -1;
-		margin: 0;
-		padding-top: var(--space-4);
-		border-top: 1px solid var(--border);
-	}
-	dt { color: var(--muted); font-size: var(--text-xs); }
-	dd { margin: var(--space-1) 0 0; font-size: var(--text-lg); font-weight: 750; }
+	/* One compact line under the record: label and value pairs, separated by thin rules. */
+	.season-ledger { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: var(--space-1) 0; margin: 0; }
+	.season-ledger > div { display: flex; align-items: baseline; gap: var(--space-2); padding-inline: var(--space-4); border-left: 1px solid var(--border); }
+	.season-ledger > div:first-child { padding-left: 0; border-left: 0; }
+	.season-ledger dt { color: var(--muted); font-size: var(--text-xs); }
+	.season-ledger dd { margin: 0; font-size: var(--text-base); font-weight: 750; font-variant-numeric: tabular-nums; }
 	.season-ledger dd.perfect { color: var(--success); }
+	.run-difference { color: var(--muted); font-size: var(--text-sm); }
+	.run-difference.up { color: var(--success); }
+	.run-difference.down { color: var(--error); }
 	/* Two equal columns: the share pair at full size, then the smaller head-to-head / new-draft pair. */
 	.score-actions { display: grid; align-content: center; gap: var(--space-2); width: min(100%, 24rem); }
 	.share-shortcuts, .more-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
@@ -480,7 +472,6 @@
 			align-items: center;
 			gap: var(--space-6) var(--space-8);
 		}
-		.season-ledger { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 		.score-actions { justify-self: end; }
 	}
 	@media (max-width: 40rem) {
@@ -488,6 +479,10 @@
 		.results { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
 		.scoreboard { padding: var(--space-4); }
 		.scoreboard h2 { font-size: var(--text-3xl); }
+		/* Phones stack each label over its value so the three facts share one row. */
+		.season-ledger { display: grid; grid-template-columns: repeat(3, minmax(0, max-content)); justify-content: start; }
+		.season-ledger dd { overflow-wrap: anywhere; }
+		.season-ledger > div { display: grid; gap: 0; padding-inline: var(--space-3); }
 		/* Three equal jump links on one row instead of a ragged wrap. */
 		.result-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
 		.result-nav button { justify-content: center; padding-inline: var(--space-1); font-size: var(--text-xs); text-align: center; line-height: 1.2; }

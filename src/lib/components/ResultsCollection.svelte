@@ -3,7 +3,7 @@
 	import Card from '../cards/Card.svelte';
 	import type { CardViewModel } from '../cards/view-model.ts';
 	import StickerBadge from '../collection/StickerBadge.svelte';
-	import { STICKER_BY_KIND, STICKER_SPOTS, type PlacedSticker } from '../collection/stickers.ts';
+	import { STICKER_BY_KIND, STICKER_SPOTS, type PlacedSticker, type StickerFamily } from '../collection/stickers.ts';
 	import { cardStickers } from '../collection/store.svelte.ts';
 	import type { NewCard, NewSticker } from '../collection/collection.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
@@ -20,15 +20,23 @@
 	} = $props();
 
 	const freshCards = $derived(new Set(newCards.map(card => card.seasonId)));
-	const earned = $derived(Map.groupBy(newStickers, item => item.seasonId));
-	/** Cards with new stickers first, then cards that are only new to the collection. */
+	/** Grade and team-record stickers go on every card the team rostered, so they read once for the whole team. */
+	const teamWide = (item: NewSticker) => { const family = STICKER_BY_KIND.get(item.kind)?.family; return !!family && TEAM_FAMILIES.has(family); };
+	const teamStickers = $derived([...Map.groupBy(newStickers.filter(teamWide), item => item.kind)]
+		.map(([kind, items]) => ({ kind, count: items.length }))
+		.sort((a, b) => (STICKER_BY_KIND.get(a.kind)?.family === 'grade' ? -1 : 0) - (STICKER_BY_KIND.get(b.kind)?.family === 'grade' ? -1 : 0)));
+	const fresh = $derived(Map.groupBy(newStickers, item => item.seasonId));
+	const earned = $derived(Map.groupBy(newStickers.filter(item => !teamWide(item)), item => item.seasonId));
+	/** Cards with stickers of their own first, then cards that are only new to the collection. */
 	const entries = $derived([
 		...[...earned.keys()].map(seasonId => ({ seasonId, label: earned.get(seasonId)![0].label })),
 		...newCards.filter(card => !earned.has(card.seasonId))
 	].filter(entry => cardViews.has(entry.seasonId)));
+	const personal = $derived(newStickers.length - newStickers.filter(teamWide).length);
 	const summary = $derived([
 		newCards.length ? `${newCards.length} new ${newCards.length === 1 ? 'card' : 'cards'}` : '',
-		newStickers.length ? `${newStickers.length} new ${newStickers.length === 1 ? 'sticker' : 'stickers'}` : ''
+		personal ? `${personal} new ${personal === 1 ? 'sticker' : 'stickers'}` : '',
+		...teamStickers.map(({ kind }) => short(kind))
 	].filter(Boolean).join(' · '));
 
 	let open = $state(false);
@@ -38,6 +46,9 @@
 		return () => clearTimeout(timer);
 	});
 	const noCardDetails = () => {};
+	/** A sticker's short face text: "60 HR", "162–0". */
+	const short = (kind: string) => { const [top, bottom] = STICKER_BY_KIND.get(kind)!.label; return bottom.startsWith('–') ? `${top}${bottom}` : `${top} ${bottom}`; };
+	const TEAM_FAMILIES: ReadonlySet<StickerFamily> = new Set(['grade', 'team']);
 	/** The card's saved stickers, plus any just earned that the sticker store has not loaded yet, at their default spots. */
 	function shownStickers(seasonId: string, kinds: readonly string[]): PlacedSticker[] {
 		const saved = cardStickers(seasonId);
@@ -57,9 +68,18 @@
 		</button>
 		<div class="drawer-body" id="collection-drawer-body" inert={!open}>
 			<div class="drawer-inner">
+				{#if teamStickers.length}
+					<ul class="team-stickers" aria-label="Stickers for the whole team">
+						{#each teamStickers as { kind, count } (kind)}
+							{@const definition = STICKER_BY_KIND.get(kind)!}
+							<li><span class="badge" aria-hidden="true"><StickerBadge {definition} /></span>{definition.family === 'grade' ? `${definition.label[0]} grade` : definition.title}<span class="muted">{` · on ${count} ${count === 1 ? 'card' : 'cards'}`}</span></li>
+						{/each}
+					</ul>
+				{/if}
 				<ul class="drawer-cards">
 					{#each entries as entry, index (entry.seasonId)}
 						{@const stickers = earned.get(entry.seasonId) ?? []}
+						{@const freshKinds = (fresh.get(entry.seasonId) ?? []).map(item => item.kind)}
 						<li style:--sparkle-delay="{MOTION.screenRise * 2 + MOTION.deal + index * 140}ms">
 							<button
 								type="button"
@@ -70,7 +90,7 @@
 								onclick={event => onInspect(entry.seasonId, event.currentTarget)}
 							>
 								<span aria-hidden="true">
-									<Card s={cardViews.get(entry.seasonId)!} face="front" stickers={shownStickers(entry.seasonId, stickers.map(item => item.kind))} freshStickers={new Set(stickers.map(item => item.kind))} onDetails={noCardDetails} />
+									<Card s={cardViews.get(entry.seasonId)!} face="front" stickers={shownStickers(entry.seasonId, freshKinds)} freshStickers={new Set(freshKinds)} onDetails={noCardDetails} />
 								</span>
 								{#if freshCards.has(entry.seasonId)}<span class="new-tag">New card</span>{/if}
 							</button>
@@ -78,7 +98,7 @@
 							{#if stickers.length}
 								<ul class="earned" aria-label={`New stickers for ${entry.label}`}>
 									{#each stickers as item (item.kind)}
-										<li><span class="badge" aria-hidden="true"><StickerBadge definition={STICKER_BY_KIND.get(item.kind)!} /></span>{item.title}</li>
+										<li title={item.title}><span class="badge" aria-hidden="true"><StickerBadge definition={STICKER_BY_KIND.get(item.kind)!} /></span><span aria-hidden="true">{short(item.kind)}</span><span class="sr-only">{item.title}</span></li>
 									{/each}
 								</ul>
 							{:else}
@@ -112,8 +132,13 @@
 	.drawer-card:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
 	.new-tag { position: absolute; z-index: 5; top: -.5rem; left: 50%; translate: -50% 0; padding: .15rem .5rem; border-radius: 999px; background: var(--accent); color: var(--background); font-size: var(--text-xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 	.caption { margin: 0; font-size: var(--text-sm); line-height: 1.25; }
-	.earned { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: var(--text-xs); }
-	.earned li { display: flex; align-items: center; gap: var(--space-2); }
+	.earned { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); font-weight: 650; }
+	.earned .badge { font-size: .055rem; padding: 0; }
+	/* Contains its screen-reader text, which would otherwise escape the drawer scroller and widen the page. */
+	.earned li { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); padding: .15rem .45rem .15rem .15rem; border: 1px solid var(--border); border-radius: 999px; line-height: 1; white-space: nowrap; }
+	.team-stickers { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5, 1.25rem); margin: var(--space-2) 0 var(--space-3); padding: 0; list-style: none; font-size: var(--text-sm); font-weight: 650; }
+	.team-stickers li { display: flex; align-items: center; gap: var(--space-2); }
+	.team-stickers .muted { font-weight: 500; }
 	.badge { flex: none; font-size: .08rem; padding: .15rem; line-height: 0; }
 	.first { margin: 0; font-size: var(--text-xs); }
 	.drawer-inner > a { display: inline-flex; align-items: center; min-height: 2.75rem; margin-bottom: var(--space-2); color: var(--accent); font-size: var(--text-sm); }

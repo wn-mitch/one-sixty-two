@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 export async function verifyResultsInspection(page: Page): Promise<void> {
 	const originalViewport = page.viewportSize();
 	await page.setViewportSize({ width: 320, height: 568 });
-	await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+	await expect.poll(() => horizontalOverflow(page)).toEqual([]);
 	const shortcuts = page.locator('.share-shortcuts');
 	for (const button of await shortcuts.getByRole('button').all()) {
 		const bounds = await button.boundingBox();
@@ -100,4 +100,20 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await review.getByRole('button', { name: 'Hide card', exact: true }).click();
 	await expect(nextTrigger).toBeFocused();
 	if (originalViewport) await page.setViewportSize(originalViewport);
+}
+
+/** Elements that push the page sideways (none inside a clipping scroller), so a failure names its cause. */
+export function horizontalOverflow(page: Page): Promise<string[]> {
+	return page.evaluate(() => {
+		if (document.documentElement.scrollWidth <= innerWidth) return [];
+		const clipped = (element: Element) => { for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) if (getComputedStyle(node).overflowX !== 'visible') return true; return false; };
+		const offenders = [...document.querySelectorAll('body *')]
+			.filter(element => element.getBoundingClientRect().right > innerWidth + 1 && !clipped(element))
+			.slice(0, 6).map(element => `${element.tagName.toLowerCase()}.${[...element.classList].join('.')} ${Math.round(element.getBoundingClientRect().right)}/${innerWidth}`);
+		const width = document.documentElement.scrollWidth;
+		// Positioned elements escape a clipping ancestor that is not their containing block; name the ones at the page edge.
+		const edge = [...document.querySelectorAll('body *')].filter(element => Math.abs(element.getBoundingClientRect().right + scrollX - width) < 2)
+			.slice(0, 6).map(element => `${element.tagName.toLowerCase()}.${[...element.classList].join('.')} (${getComputedStyle(element).position}) in ${element.parentElement?.className}`);
+		return offenders.length ? offenders : [`page ${width}/${innerWidth}`, ...edge];
+	});
 }

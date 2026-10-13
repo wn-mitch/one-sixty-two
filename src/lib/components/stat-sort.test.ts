@@ -23,4 +23,13 @@ describe('season totals sorting', () => {
 		expect(sortLines(lines, column('ops'), 'ascending').map(item => item.seasonId).at(-1)).toBe('bench');
 		expect(sortLines(lines, column('ops'), 'descending').map(item => item.seasonId).at(-1)).toBe('bench');
 	});
+
+	it('shows the slash line from hits and at bats, not plate appearances', () => {
+		// 150 H / 540 AB = .278; walks and sacrifice flies stay out of the average.
+		const regular = line('regular', {});
+		expect(column('avg').format(regular)).toBe('.278');
+		expect(column('obp').format(regular)).toBe('.342');
+		expect(column('slg').format(regular)).toBe('.452');
+		expect(column('avg').format(line('bench', { AB: 0, H: 0 }))).toBe('–');
+	});
 });
