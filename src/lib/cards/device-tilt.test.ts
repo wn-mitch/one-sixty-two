@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { APP_SETTINGS_STORAGE_KEY, AppSettingsState } from '../game/settings.svelte.ts';
-import { DEVICE_TILT_RANGE, DeviceTiltSource, screenAxes, type DeviceTiltEnvironment, type DeviceTiltValue, type OrientationSample } from './device-tilt.ts';
+import { DEVICE_TILT_RANGE, DEVICE_TILT_SENSOR_GRACE_MS, DeviceTiltSource, screenAxes, type DeviceTiltEnvironment, type DeviceTiltValue, type OrientationSample } from './device-tilt.ts';
 
 class FakeMedia {
 	matches = false;
@@ -28,6 +28,7 @@ class FakePhone {
 	visibility = new Set<() => void>();
 	gestures = new Set<() => void>();
 	requests = 0;
+	timers = new Set<{ due: number; run: () => void }>();
 
 	environment(): DeviceTiltEnvironment {
 		return {
@@ -37,6 +38,7 @@ class FakePhone {
 			screenAngle: () => this.angle,
 			hidden: () => this.isHidden,
 			now: () => this.time,
+			later: (ms, run) => { const timer = { due: this.time + ms, run }; this.timers.add(timer); return () => this.timers.delete(timer); },
 			listenOrientation: listener => { this.orientation.add(listener); return () => this.orientation.delete(listener); },
 			listenVisibility: listener => { this.visibility.add(listener); return () => this.visibility.delete(listener); },
 			onNextGesture: listener => { this.gestures.add(listener); return () => this.gestures.delete(listener); }
@@ -44,11 +46,22 @@ class FakePhone {
 	}
 
 	/** Holds one pose for `ms`, reporting at 60Hz. */
-	hold(beta: number, gamma: number, ms: number) {
+	hold(beta: number | null, gamma: number | null, ms: number) {
 		for (let elapsed = 0; elapsed < ms; elapsed += 16) {
-			this.time += 16;
+			this.wait(16);
 			for (const listener of [...this.orientation]) listener({ beta, gamma });
 		}
+	}
+
+	/** Lets time pass with no readings, firing due timers. */
+	wait(ms: number) {
+		this.time += ms;
+		for (const timer of [...this.timers]) if (timer.due <= this.time) { this.timers.delete(timer); timer.run(); }
+	}
+
+	/** One reading, as a browser fires on listen. */
+	read(beta: number | null, gamma: number | null) {
+		for (const listener of [...this.orientation]) listener({ beta, gamma });
 	}
 
 	setHidden(hidden: boolean) { this.isHidden = hidden; for (const listener of this.visibility) listener(); }
@@ -183,12 +196,52 @@ describe('deviceTilt', () => {
 		expect(phone.visibility.size).toBe(0);
 	});
 
-	it('becomes unsupported when the browser fires only empty readings', () => {
-		const { phone, source, listen, values } = fixture();
+	it('ignores one empty reading at start when real readings follow', () => {
+		const { phone, source, listen, last } = fixture();
 		listen();
-		phone.hold(null as unknown as number, null as unknown as number, 32);
+		phone.read(null, null);
+		phone.hold(40, 0, 100);
+		phone.hold(40, 9, 300);
+		phone.wait(DEVICE_TILT_SENSOR_GRACE_MS);
+		expect(source.state).toBe('active');
+		expect(last()!.x).toBeGreaterThan(0.3);
+	});
+
+	it('counts only empty readings over the grace period as no sensor, and revives on a real reading', () => {
+		const { phone, source, listen, values, last } = fixture();
+		const states: string[] = [];
+		source.subscribeState(state => states.push(state));
+		listen();
+		phone.read(null, null);
+		phone.wait(DEVICE_TILT_SENSOR_GRACE_MS - 20);
+		expect(source.state).toBe('active');
+		phone.wait(20);
 		expect(source.state).toBe('unsupported');
 		expect(values).toHaveLength(0);
+		// Still listening, so a late sensor brings tilt back.
+		expect(phone.orientation.size).toBe(1);
+		phone.hold(40, 0, 100);
+		phone.hold(40, 9, 300);
+		expect(source.state).toBe('active');
+		expect(states).toEqual(['active', 'unsupported', 'active']);
+		expect(last()!.x).toBeGreaterThan(0.3);
+	});
+
+	it('does not judge a sensor that has not reported at all', () => {
+		const { phone, source, listen } = fixture();
+		listen();
+		phone.wait(DEVICE_TILT_SENSOR_GRACE_MS * 3);
+		expect(source.state).toBe('active');
+	});
+
+	it('treats a pause in readings as one frame, not as time for the neutral to follow', () => {
+		const { phone, listen, last } = fixture();
+		listen();
+		phone.hold(40, 0, 200);
+		phone.wait(5000);
+		// The phone moved while the sensor was paused; the lean still reads against the old rest pose.
+		phone.hold(40, 9, 300);
+		expect(last()!.x).toBeGreaterThan(0.4);
 	});
 
 	it('defaults on without a permission prompt and honours the saved choice', () => {

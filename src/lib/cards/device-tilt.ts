@@ -29,6 +29,8 @@ export interface DeviceTiltEnvironment {
 	screenAngle(): number;
 	hidden(): boolean;
 	now(): number;
+	/** Runs `listener` once after `ms`; the returned function cancels it. */
+	later(ms: number, listener: () => void): () => void;
 	listenOrientation(listener: (sample: OrientationSample) => void): () => void;
 	listenVisibility(listener: () => void): () => void;
 	/** Calls `listener` once on the next tap or click anywhere, inside that gesture. */
@@ -49,6 +51,14 @@ export const DEVICE_TILT_RANGE = 18;
 export const DEVICE_TILT_SMOOTHING_MS = 90;
 /** Time constant for the neutral pose following the grip, in milliseconds. */
 export const DEVICE_TILT_RECENTER_MS = 3500;
+/**
+ * How long readings may stay empty before the browser counts as having no sensor. Some browsers fire one
+ * empty reading as listening starts and real ones after, so a single empty reading proves nothing.
+ */
+export const DEVICE_TILT_SENSOR_GRACE_MS = 1000;
+/** A gap between readings longer than this is a paused sensor, not follow time; it counts as one frame. */
+export const DEVICE_TILT_GAP_MS = 250;
+const FRAME_MS = 16;
 /** A single-event jump larger than this is a sensor flip (gimbal or wrap), not motion. */
 const JUMP_DEGREES = 50;
 /** After this many consecutive jumps the new pose is real; the neutral restarts there. */
@@ -79,6 +89,8 @@ export class DeviceTiltSource {
 	#resolved = false;
 	#permission: 'unknown' | 'granted' | 'denied' = 'unknown';
 	#noSensor = false;
+	#sawEmpty = false;
+	#stopGrace: (() => void) | null = null;
 	#listeners = new Set<(tilt: DeviceTiltValue) => void>();
 	#stateListeners = new Set<(state: DeviceTiltState) => void>();
 	#releaseSettings: (() => void) | null = null;
@@ -110,8 +122,13 @@ export class DeviceTiltSource {
 	}
 
 	get state(): DeviceTiltState {
+		return this.#noSensor ? 'unsupported' : this.#availability();
+	}
+
+	/** The state without the empty-sensor verdict, which stays revisable while readings may still arrive. */
+	#availability(): DeviceTiltState {
 		const env = this.#env();
-		if (!env || !env.supported || this.#noSensor || env.finePointerOnly()) return 'unsupported';
+		if (!env || !env.supported || env.finePointerOnly()) return 'unsupported';
 		if (!env.requestPermission) return 'active';
 		return this.#permission === 'granted' ? 'active' : this.#permission === 'denied' ? 'denied' : 'needs-permission';
 	}
@@ -204,7 +221,10 @@ export class DeviceTiltSource {
 	/** Whether readings may reach listeners right now. */
 	#open(): boolean {
 		const env = this.#env();
-		return !!env && this.#listeners.size > 0 && this.enabled && this.state === 'active' && this.#settings.effectiveEnabled && !env.hidden();
+		// A browser judged sensorless keeps listening, so its first real reading can revive tilt.
+		const available = this.#availability() === 'active';
+		const enabled = this.#settings.phoneTilt ?? available;
+		return !!env && this.#listeners.size > 0 && enabled && available && this.#settings.effectiveEnabled && !env.hidden();
 	}
 
 	#update(): void {
@@ -215,7 +235,15 @@ export class DeviceTiltSource {
 		if (waiting && !this.#stopGesture) this.#stopGesture = env.onNextGesture(() => { this.#stopGesture = null; void this.request(); });
 		if (!waiting && this.#stopGesture) { this.#stopGesture(); this.#stopGesture = null; }
 		if (this.#open()) {
-			if (!this.#stopOrientation) this.#stopOrientation = env.listenOrientation(sample => this.#sample(sample));
+			if (!this.#stopOrientation) {
+				this.#stopOrientation = env.listenOrientation(sample => this.#sample(sample));
+				this.#sawEmpty = false;
+				this.#stopGrace = env.later(DEVICE_TILT_SENSOR_GRACE_MS, () => {
+					this.#stopGrace = null;
+					// Only empty readings since listening began: there is no sensor behind them.
+					if (this.#sawEmpty && !this.#last && !this.#noSensor) { this.#noSensor = true; this.#changed(); }
+				});
+			}
 		} else {
 			this.#detach();
 		}
@@ -224,6 +252,8 @@ export class DeviceTiltSource {
 	#detach(): void {
 		this.#stopOrientation?.();
 		this.#stopOrientation = null;
+		this.#stopGrace?.();
+		this.#stopGrace = null;
 		// Gating returns cards to rest once, then stays silent until readings resume.
 		if (this.#emitting) {
 			this.#emitting = false;
@@ -239,10 +269,11 @@ export class DeviceTiltSource {
 		const env = this.#env();
 		if (!env || !this.#open()) return;
 		if (beta === null || gamma === null || !Number.isFinite(beta) || !Number.isFinite(gamma)) {
-			// Desktop browsers fire one empty event and nothing else; there is no sensor to follow.
-			if (!this.#last) { this.#noSensor = true; this.#changed(); }
+			// Desktop browsers fire one empty event and nothing else; the grace timer decides.
+			this.#sawEmpty = true;
 			return;
 		}
+		if (this.#noSensor) { this.#noSensor = false; this.#changed(); }
 		const pose = screenAxes(beta, gamma, env.screenAngle());
 		const at = env.now();
 		if (!this.#neutral || !this.#last) {
@@ -261,7 +292,8 @@ export class DeviceTiltSource {
 			return;
 		}
 		this.#jumps = 0;
-		const dt = at - this.#last.at;
+		const gap = at - this.#last.at;
+		const dt = gap > DEVICE_TILT_GAP_MS ? FRAME_MS : gap;
 		this.#last = { ...pose, at };
 		const drift = follow(dt, DEVICE_TILT_RECENTER_MS);
 		this.#neutral = {
@@ -294,6 +326,10 @@ export function browserTiltEnvironment(): DeviceTiltEnvironment | null {
 		screenAngle: () => screen.orientation?.angle ?? (typeof window.orientation === 'number' ? window.orientation : 0),
 		hidden: () => document.visibilityState === 'hidden',
 		now: () => performance.now(),
+		later(ms, listener) {
+			const timer = setTimeout(listener, ms);
+			return () => clearTimeout(timer);
+		},
 		listenOrientation(listener) {
 			const handle = (event: DeviceOrientationEvent) => listener({ beta: event.beta, gamma: event.gamma });
 			window.addEventListener('deviceorientation', handle);
