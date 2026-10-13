@@ -398,6 +398,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         appearances += 1;
         if appearances > shared.max_pa { return Err(format!("Simulation exceeded {} plate appearances in a half inning", shared.max_pa)); }
         let active_index = workload.current;
+        workload.note_batter(sides.pitching.runs - sides.batting.runs, bases_mask(&context.bases.runners).count_ones());
         let active_profile = defense.pitchers[active_index];
         sides.pitching.pitching[active_index].appearances = 1;
         sides.pitching.pitching[active_index].bf += 1;
@@ -455,6 +456,11 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
                 hitter.h += 1;
                 sides.pitching.pitching[active_index].h += 1;
                 match credited { 2 => hitter.doubles += 1, 3 => hitter.triples += 1, 4 => hitter.hr += 1, _ => {} }
+                if credited == 4 {
+                    if bases_before == 0b111 { hitter.grand_slams += 1; }
+                    // Only the home half chases a target, so a home run that ends the half there ends the game.
+                    if context.bases.ended { hitter.walk_off_home_runs += 1; }
+                }
                 outcome = match credited { 1 => MomentOutcome::Single, 2 => MomentOutcome::Double, 3 => MomentOutcome::Triple, _ => MomentOutcome::HomeRun };
                 hitter.rbi += sides.batting.runs - runs_before;
             } else if error {
@@ -476,6 +482,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         sides.batting.batting[hitter_index].batting_runs += offensive_runs;
         sides.batting.batting_runs += offensive_runs;
         record_pitching_value(sides, active_index, offensive_runs, defensive_runs)?;
+        workload.note_score(sides.pitching.runs - sides.batting.runs);
         observe!(outs_before, bases_before, runs_before, profile, active_profile, outcome, runners_before, runner_runs, event > 2);
     }
     Ok(())

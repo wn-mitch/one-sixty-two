@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HITTER_SLOTS, type HitterSlot, type Profile, type Slot } from '../game/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
-import { compareEntries, rankGroups, warValue, type CandidateEntry } from './candidate-ranking.ts';
+import { collapseFullRoles, compareEntries, fullRoles, rankGroups, warValue, type CandidateEntry } from './candidate-ranking.ts';
 
 function entry(id: string, slots: Slot[] = ['DH'], playerId = id): CandidateEntry {
  const primaryHitterSlot = slots.find(slot => HITTER_SLOTS.includes(slot as HitterSlot)) as HitterSlot | undefined;
@@ -78,5 +78,25 @@ describe('candidate role ranking', () => {
   expect(warValue(a, 'Hitters', data)).toBeNull();
   expect(compareEntries(a, b, 'Hitters', 'war', data)).toBe(-compareEntries(b, a, 'Hitters', 'war', data));
   expect(compareEntries(a, a, 'Hitters', 'war', data)).toBe(0);
+ });
+ it('ranks hitters and pitchers in one list by WAR/162 rather than hitters first', () => {
+  const data = rankings({ h3: { battingWAR162: 3, pitchingWAR162: null }, p5: { battingWAR162: null, pitchingWAR162: 5 }, h1: { battingWAR162: 1, pitchingWAR162: null }, p2: { battingWAR162: null, pitchingWAR162: 2 } });
+  const groups = rankGroups([entry('h1'), entry('p2', ['SP1']), entry('h3'), entry('p5', ['CL'])], 'war', data);
+  expect(groups.map(group => group.playerId)).toEqual(['p5', 'h3', 'p2', 'h1']);
+ });
+ it('interleaves OPS and ERA by place within each role, since they share no scale', () => {
+  const hitters = [400, 300, 200, 100].map((hits, index) => { const item = entry(`h${index + 1}`); item.profile.batting!.H = hits; item.profile.batting!.AB = 500; return item; });
+  const pitchers = [10, 40].map((earned, index) => { const item = entry(`p${index + 1}`, ['SP1']); item.profile.pitching!.ER = earned; return item; });
+  // Places within role: hitters 1/5…4/5, pitchers 1/3 and 2/3.
+  expect(rankGroups([...pitchers, ...hitters].reverse(), 'metrics', null).map(group => group.playerId)).toEqual(['h1', 'p1', 'h2', 'h3', 'p2', 'h4']);
+ });
+ it('collapses a full role but keeps two-way players who can still be placed in the other role', () => {
+  expect([...fullRoles(['SP2', 'CL'])]).toEqual(['Hitters']);
+  expect([...fullRoles(['DH'])]).toEqual(['Pitchers']);
+  expect(fullRoles(['DH', 'RP1']).size).toBe(0);
+  const groups = rankGroups([entry('bat'), entry('both', ['DH', 'SP1']), entry('arm', ['SP1'])], 'metrics', null);
+  const { shown, collapsed } = collapseFullRoles(groups, fullRoles(['SP1']), group => group.playerId !== 'bat');
+  expect(collapsed.map(group => group.playerId)).toEqual(['bat']);
+  expect(shown.map(group => group.playerId).sort()).toEqual(['arm', 'both']);
  });
 });

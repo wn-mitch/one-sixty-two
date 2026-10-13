@@ -1,4 +1,4 @@
-//! Native engine commands: seasons, series, benches, season spreads, and the roster hill climb.
+//! Native engine commands: seasons, series, benches, season spreads, sticker samples, and the roster hill climb.
 mod climb;
 mod draft;
 mod spread;
@@ -73,6 +73,7 @@ fn main() -> ExitCode {
         Some("series") => series(&arguments[1..]),
         Some("season-spread") => spread::season_spread(&arguments[1..]),
         Some("draft-spread") => draft::draft_spread(&arguments[1..]),
+        Some("sticker-sample") => draft::sample::sticker_sample(&arguments[1..]),
         Some("hill-climb") => climb::hill_climb(&arguments[1..]),
         Some("hill-climb-replay") => climb::replay(&arguments[1..]),
         _ => Err("Usage: engine season <simulation.json> <request.json>".into()),

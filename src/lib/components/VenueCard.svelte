@@ -1,4 +1,5 @@
 <script lang="ts">
+ import FlipIcon from '../cards/FlipIcon.svelte';
  import { onMount } from 'svelte';
  import { STOCK, roles } from '../cards/tokens.ts';
  import { loadMedia } from '../media/client.ts';
@@ -29,7 +30,7 @@
  });
 </script>
 
-{#snippet flipIcon()}<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>{/snippet}
+{#snippet flipIcon()}<FlipIcon />{/snippet}
 
 <div class="venue-card" class:turned style={cardStyle}>
  <div class="flipper">

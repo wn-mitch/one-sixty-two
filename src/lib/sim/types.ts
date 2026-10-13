@@ -27,11 +27,15 @@ export interface BatterLine {
  PA: number; AB: number; H: number; doubles: number; triples: number; HR: number; BB: number; HBP: number; SO: number; R: number; RBI: number; SB: number; CS: number; SF: number;
  battingRuns: number; stealRuns: number; defensiveRuns: number;
  defensiveComponents: DefensiveRunComponents; fieldingOuts: number; caughtAdvancing: number;
+ /** Home runs with the bases loaded, and game-ending home runs in the bottom of the 9th or later. */
+ grandSlams: number; walkOffHomeRuns: number;
 }
 export interface PitcherLine {
  seasonId: string; playerId: string; displayName: string; year: number; role: 'starter' | 'closer' | 'reliever' | 'support';
  outs: number; H: number; BB: number; HBP: number; SO: number; R: number; starts: number; appearances: number;
  BF: number; pitchingRunsAboveNeutral: number;
+ /** MLB saves and blown saves; an opportunity is either. */
+ saves: number; blownSaves: number; saveOpportunities: number;
 }
 export interface TeamInput {
  id: string; name: string; hitters: Profile[]; defense: Record<Position, number>;

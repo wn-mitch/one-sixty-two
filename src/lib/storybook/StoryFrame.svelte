@@ -29,7 +29,7 @@
 	.story-frame.wide { max-width: 90rem; }
 	.workshop-controls { margin-bottom: var(--space-5); border-bottom: 1px solid var(--border); padding-bottom: var(--space-4); }
 	.controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-	.story-frame:has(:global(.draft-board.wide)) .controls :global([data-app-settings]) { display: none; }
+	.story-frame:has(:global(:is(.draft-board, .draft-skeleton).wide)) .controls :global([data-app-settings]) { display: none; }
 	.fixture-notice { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 	.story-content { min-width: 0; }
 </style>

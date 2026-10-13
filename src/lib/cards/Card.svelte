@@ -88,7 +88,7 @@
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
  {#if face === 'front'}<Material {s} layer="over" {capture} />{/if}
  <!-- Explicit stickers (the collection editor) always show; elsewhere the player's setting decides. -->
- {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer stickers={stickers ?? cardStickers(s.seasonId)} fresh={freshStickers} />{/if}
+ {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer era={s.era} stickers={stickers ?? cardStickers(s.seasonId)} fresh={freshStickers} />{/if}
 </div>
 
 <style>

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { fade, slide } from 'svelte/transition';
 	import { candidateGridMotion, createCandidateGridMotion } from '../../cards/grid-motion.ts';
 	import CardBrowser from '../CardBrowser.svelte';
 	import Card from '../../cards/Card.svelte';
@@ -9,6 +11,8 @@
 	import { completionPercent, shelveCollection, type Grouping } from '../../collection/shelves.ts';
 	import { BULLPEN_SLOTS, HITTER_SLOTS, STARTER_SLOTS, type Candidate, type Franchise, type RosterSlot } from '../../game/types.ts';
 	import { toasts } from '../../toast.svelte.ts';
+	import { appSettings } from '../../game/settings.svelte.ts';
+	import { MOTION } from '../../motion-timing.ts';
 	import CollectionDetail from './CollectionDetail.svelte';
 
 	interface Props {
@@ -99,6 +103,8 @@
 	const stickerTotal = $derived(cards.reduce((sum, card) => sum + faceStickers(card.stickers).length, 0));
 	const selected = $derived(cards.find(card => card.seasonId === chosen) ?? null);
 	const noDetails = () => {};
+	/** The detail panel unfolds above the grid and folds away on close; a different card fades in within the open panel. */
+	const motion = $derived(appSettings.effectiveEnabled);
 
 	async function open(seasonId: string): Promise<void> {
 		chosen = seasonId;
@@ -132,8 +138,12 @@
 		{/snippet}
 		<div class="results" use:candidateGridMotion={gridMotion}>
 		{#if selected}
-			<div bind:this={detail}>
-				<CollectionDetail card={selected} view={views.get(selected.seasonId) ?? null} {onMove} {onHide} onClose={() => { chosen = null; }} />
+			<div class="detail-slot" bind:this={detail} transition:slide={{ duration: motion ? MOTION.screenRise : 0, easing: cubicOut }}>
+				{#key selected.seasonId}
+					<div in:fade={{ duration: motion ? MOTION.gridEnter : 0 }}>
+						<CollectionDetail card={selected} view={views.get(selected.seasonId) ?? null} {onMove} {onHide} onClose={() => { chosen = null; }} />
+					</div>
+				{/key}
 			</div>
 		{/if}
 
@@ -182,6 +192,8 @@
 	label { display: grid; gap: var(--space-1); color: var(--muted); font-size: var(--text-xs); }
 	label.check { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; font-size: var(--text-sm); color: var(--text); }
 	select { min-height: 2.75rem; padding-inline: var(--space-3); border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); color: var(--text); font: inherit; font-size: var(--text-sm); }
+	/* The panel's breathing room above the grid lives inside it, so it folds away with the panel. */
+	.detail-slot { padding-bottom: var(--space-6); }
 	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(10.5rem, 42vw), 1fr)); gap: var(--space-5) var(--space-4); margin: 0; padding: 0; list-style: none; }
 	.tile { display: grid; gap: var(--space-2); width: 100%; padding: var(--space-2); border: 1px solid transparent; border-radius: .75rem; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
 	.tile:hover { background: var(--surface); }

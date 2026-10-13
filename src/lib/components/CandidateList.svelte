@@ -5,11 +5,13 @@
  import { BULLPEN_SLOTS, STARTER_SLOTS, type Draft, type Manifest, type Profile, type RosterSlot, type Slot } from '../game/types.ts';
  import { rankingForSeason } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
- import { compareEntries, isHitter, rankGroups, warValue } from './candidate-ranking.ts';
+ import { collapseFullRoles, fullRoles, isHitter, mixGroups, rankGroups, warValue } from './candidate-ranking.ts';
  import type { CandidateEntry, CandidateGroup, RankingKind, RankingSort } from './candidate-ranking.ts';
  import { candidateGridMotion, createCandidateGridMotion } from '../cards/grid-motion.ts';
  import PlayerCard from './PlayerCard.svelte';
  import CardBrowser from './CardBrowser.svelte';
+ import PoolSkeleton from './skeletons/PoolSkeleton.svelte';
+ import Skeleton from './skeletons/Skeleton.svelte';
  import { appSettings } from '../game/settings.svelte.ts';
 
  /** A hitter position, the whole rotation (SP), the whole bullpen (RP), or every player. */
@@ -130,11 +132,19 @@
     .map(entry => ({ profile: entry.profile, slots: filterSlots(activeFilter as Exclude<FilterSlot, 'All'>) })));
    filtered = rankGroups(entries, sort, rankings);
   }
+  // Hitters and pitchers share one ranking, led by each player's shown season.
+  const mixed = mixGroups(filtered, sort, rankings, selectedEntry);
   // Phones keep blocked players in the grid but after every player who can still be placed.
-  return [...filtered].sort((a, b) => sectionKinds.indexOf(a.kind) - sectionKinds.indexOf(b.kind)
-   || (wide ? 0 : Number(isBlocked(a)) - Number(isBlocked(b)))
-   || compareEntries(selectedEntry(a), selectedEntry(b), a.kind, sort, rankings));
+  return wide ? mixed : [...mixed].sort((a, b) => Number(isBlocked(a)) - Number(isBlocked(b)));
  });
+ const openSlots = $derived.by(() => {
+  const filled = new Set(draft.picks.map(pick => pick.slot));
+  return draftRules(draft.schemaVersion).slots.filter(slot => !filled.has(slot));
+ });
+ // A role with no open slot folds its unplaceable players away below the ranking.
+ const roleSplit = $derived(collapseFullRoles(groups, fullRoles(openSlots), group =>
+  !isBlocked(group) || group.entries.some(entry => entry.profile.seasonId === selectedSeasonId)
+ ));
  const filterCounts = $derived.by(() => new Map(filterOptions
   .filter((option): option is Exclude<FilterSlot, 'All'> => option !== 'All')
   .map(option => [option, visibleGroups.filter(group => group.entries.some(entry => profileMatchesFilter(entry.profile, option))).length])));
@@ -142,11 +152,16 @@
   group.entries.every(entry => !viableSeasonIds.has(entry.profile.seasonId)) &&
   (activeFilter === 'All' || group.entries.some(entry => profileMatchesFilter(entry.profile, activeFilter)))
  ).length);
- const pageCount = $derived(Math.max(1, Math.ceil(groups.length / 20)));
+ const rankedGroups = $derived(roleSplit.shown);
+ const collapsedGroups = $derived(roleSplit.collapsed);
+ const pageCount = $derived(Math.max(1, Math.ceil(rankedGroups.length / 20)));
  const currentPage = $derived(Math.min(page, pageCount - 1));
- const pagedGroups = $derived(groups.slice(currentPage * 20, (currentPage + 1) * 20));
- const sectionKinds: RankingKind[] = ['Hitters', 'Pitchers'];
- const sections = $derived(sectionKinds.map(kind => ({ kind, groups: pagedGroups.filter(group => group.kind === kind) })));
+ const pagedGroups = $derived(rankedGroups.slice(currentPage * 20, (currentPage + 1) * 20));
+ const collapsedLabel = $derived.by(() => {
+  const kinds = new Set(collapsedGroups.map(group => group.kind));
+  const role = kinds.size === 2 ? 'Roster full' : kinds.has('Pitchers') ? 'Pitching staff full' : 'Lineup full';
+  return `${role} · ${collapsedGroups.length} ${collapsedGroups.length === 1 ? 'player' : 'players'}`;
+ });
  const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll ? rollKey(draft.currentRoll) : ''}`);
 
  function selectedEntry(group: CandidateGroup): CandidateEntry {
@@ -256,6 +271,41 @@
  });
 </script>
 
+{#snippet candidateCard(group: CandidateGroup)}
+    {@const entry = selectedEntry(group)}
+    {@const profile = entry.profile}
+    {@const directSlots = legalSlotsFor(profile.seasonId)}
+    {@const cardKind = cardRankingKind(profile)}
+    <div
+     class="candidate-card"
+     data-candidate-group={group.playerId}
+     data-candidate-card={group.playerId}
+     data-selected={selectedSeasonId === profile.seasonId}
+     data-previewing={previewing && selectedSeasonId === profile.seasonId}
+     data-flipped={flippedPlayerId === group.playerId}
+     data-blocked={!wide && isBlocked(group)}
+    >
+     <PlayerCard
+      {profile}
+      seasons={group.entries.map(item => item.profile)}
+      onSeasonChange={seasonId => changeSeason(group, seasonId)}
+      legalSlots={directSlots}
+      onPlace={(slot, trigger) => placeSeason(profile.seasonId, group, slot, trigger)}
+      war={warValue({ profile, slots: profile.eligibleSlots }, cardKind, rankings)}
+      ranking={rankingForSeason(rankings, profile.seasonId)}
+      {rankings}
+      {manifest}
+      {rankingLoading}
+      {rankingError}
+      selected={selectedSeasonId === profile.seasonId}
+      draftMode
+      {wide}
+      bind:turned={() => flippedPlayerId === group.playerId, value => flippedPlayerId = value ? group.playerId : null}
+      onSelect={trigger => selectSeason(profile.seasonId, group, trigger)}
+     />
+    </div>
+{/snippet}
+
 <svelte:window onpointerdown={handlePointerDown} onfocusin={handleFocusIn} />
 <div use:candidateGridMotion={gridMotion} class:candidates-wide={wide} class="candidates">
 <CardBrowser label="Choose a historical player season" {wide} {busy} bind:query searchLabel="Find your pick" onSearch={resetBrowse}
@@ -265,7 +315,9 @@
  resultsId="{uid}-results">
  {#snippet rail()}
   {#if rankingLoading}
-   <p class="ranking-status muted" role="status">Loading composite WAR/162.{sort === 'war' ? ' Cards are in stable ID order until it arrives. Sort by OPS / ERA to rank by those stats now.' : ''} Drafting is available.</p>
+   <!-- A small spinner says rankings are on the way; the full explanation is for screen readers and the tooltip. -->
+   {@const rankingNote = `Loading composite WAR/162.${sort === 'war' ? ' Cards are in stable ID order until it arrives. Sort by OPS / ERA to rank by those stats now.' : ''} Drafting is available.`}
+   <p class="ranking-status ranking-loading muted" role="status" title={rankingNote}><span class="ranking-spinner" aria-hidden="true"></span><span aria-hidden="true">Ranking WAR</span><span class="sr-only">{rankingNote}</span></p>
   {:else if rankingError}
    <div class="ranking-status">
     <p role="status">Composite WAR/162 is unavailable.{sort === 'war' ? ' Cards are in stable ID order, not ranked by WAR. Sort by OPS / ERA or retry.' : ''} You can still draft.</p>
@@ -285,64 +337,43 @@
      <p class="muted">Try another name or browse all historical qualifications.</p>
      <button type="button" class="secondary" disabled={busy} onclick={() => { query = ''; filter = 'All'; resetBrowse(); }}>Clear search and filters</button>
     </div>
+   {:else if busy}
+    <Skeleton label="Loading the player pool…"><PoolSkeleton {wide} rail={false} /></Skeleton>
    {:else}
-    <p class="notice">{busy ? 'Loading the player pool…' : 'No eligible seasons are available in this pool. Your current roll is preserved.'}</p>
+    <p class="notice">No eligible seasons are available in this pool. Your current roll is preserved.</p>
    {/if}
   {:else}
-   {#each sections as section}
-    {#if section.groups.length}
-     <section class="player-section" aria-label={section.kind}>
-      <div class="section-heading">
-       <h3>{section.kind}</h3>
-      </div>
-      <div class="card-grid">
-       {#each section.groups as group (`${browseRevision}:${group.key}`)}
-        {@const entry = selectedEntry(group)}
-        {@const profile = entry.profile}
-        {@const directSlots = legalSlotsFor(profile.seasonId)}
-        {@const cardKind = cardRankingKind(profile)}
-        <div
-         class="candidate-card"
-         data-candidate-group={group.playerId}
-         data-candidate-card={group.playerId}
-         data-selected={selectedSeasonId === profile.seasonId}
-         data-previewing={previewing && selectedSeasonId === profile.seasonId}
-         data-flipped={flippedPlayerId === group.playerId}
-         data-blocked={!wide && isBlocked(group)}
-        >
-         <PlayerCard
-          {profile}
-          seasons={group.entries.map(item => item.profile)}
-          onSeasonChange={seasonId => changeSeason(group, seasonId)}
-          legalSlots={directSlots}
-          onPlace={(slot, trigger) => placeSeason(profile.seasonId, group, slot, trigger)}
-          war={warValue({ profile, slots: profile.eligibleSlots }, cardKind, rankings)}
-          ranking={rankingForSeason(rankings, profile.seasonId)}
-          {rankings}
-          {manifest}
-          {rankingLoading}
-          {rankingError}
-          selected={selectedSeasonId === profile.seasonId}
-          draftMode
-          {wide}
-          bind:turned={() => flippedPlayerId === group.playerId, value => flippedPlayerId = value ? group.playerId : null}
-          onSelect={trigger => selectSeason(profile.seasonId, group, trigger)}
-         />
-        </div>
-       {/each}
-      </div>
-     </section>
-    {/if}
-   {/each}
+   {#if pagedGroups.length}
+   <section class="player-section" aria-label="Players">
+    <div class="section-heading">
+     <h3>Players</h3>
+    </div>
+    <div class="card-grid">
+     {#each pagedGroups as group (`${browseRevision}:${group.key}`)}
+      {@render candidateCard(group)}
+     {/each}
+    </div>
+   </section>
+   {/if}
    {#if pageCount > 1}
     <nav class="pagination" aria-label="Player card pages">
      <button type="button" class="page-button" disabled={busy || currentPage === 0} onclick={() => changePage(currentPage - 1)}><span class="page-arrow" aria-hidden="true">←</span> Previous</button>
-     <span class="page-counter" role="status" aria-label={`${groups.length} players, page ${currentPage + 1} of ${pageCount}`}>
+     <span class="page-counter" role="status" aria-label={`${rankedGroups.length} players, page ${currentPage + 1} of ${pageCount}`}>
       <span><strong>{currentPage + 1}</strong> / {pageCount}</span>
-      <small>{groups.length} {groups.length === 1 ? 'player' : 'players'}</small>
+      <small>{rankedGroups.length} {rankedGroups.length === 1 ? 'player' : 'players'}</small>
      </span>
      <button type="button" class="page-button" disabled={busy || currentPage === pageCount - 1} onclick={() => changePage(currentPage + 1)}>Next <span class="page-arrow" aria-hidden="true">→</span></button>
     </nav>
+   {/if}
+   {#if collapsedGroups.length && currentPage === pageCount - 1}
+    <details class="collapsed-role">
+     <summary>{collapsedLabel}</summary>
+     <div class="card-grid">
+      {#each collapsedGroups as group (`${browseRevision}:${group.key}`)}
+       {@render candidateCard(group)}
+      {/each}
+     </div>
+    </details>
    {/if}
   {/if}
 </CardBrowser>
@@ -361,8 +392,18 @@
  .candidates:has(.candidate-card[data-selected='true']) .candidate-card:not([data-selected='true']) :global(.art-frame) { opacity: .56; }
  /* The previewed card already sits on the field, so its source steps back slightly. */
  .candidate-card[data-previewing='true'] :global(.art-frame) { opacity: .7; transition: opacity .18s ease-out; }
+ /* A role with no open slot folds into one quiet line under the ranking; opening it shows the cards dimmed. */
+ .collapsed-role { margin-top: var(--space-6); border-top: 1px solid var(--border); }
+ .collapsed-role > summary { display: flex; align-items: center; min-height: 44px; color: var(--muted); font-size: var(--text-sm); font-weight: 650; cursor: pointer; }
+ .collapsed-role[open] > summary { margin-bottom: var(--space-3); }
+ .collapsed-role .candidate-card:not([data-selected='true']) { opacity: .5; filter: grayscale(.85); }
  .empty { padding-block: var(--space-4) var(--space-8); }
  .ranking-status { font-size: var(--text-sm); }
+ .ranking-loading { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+ .ranking-spinner { width: .85rem; height: .85rem; border: 2px solid color-mix(in oklch, currentColor 25%, transparent); border-top-color: currentColor; border-radius: 50%; animation: ranking-spin 800ms linear infinite; }
+ @keyframes ranking-spin { to { rotate: 1turn; } }
+ :global([data-motion='off']) .ranking-spinner { animation: none; border-top-color: color-mix(in oklch, currentColor 25%, transparent); border-right-color: currentColor; }
+ @media (prefers-reduced-motion: reduce) { .ranking-spinner { animation: none; border-right-color: currentColor; } }
  .pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: min(100%, 17.25rem); box-sizing: border-box; margin: var(--space-6) auto 0; padding: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
  .page-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-3); border: 0; background: transparent; font-size: var(--text-sm); font-weight: 650; }
  .page-button:not(:disabled):hover { background: var(--surface-hover); }

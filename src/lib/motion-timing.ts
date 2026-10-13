@@ -36,6 +36,20 @@ export const MOTION = {
 	gridDropStagger: 30,
 	/** A confirmed phone pick pressing into its field slot before the sheet closes. */
 	pickStamp: 320,
+	/** A pack added from the pool's toolbar: the pool fading out while the table fades back in, before the ghost opens. */
+	returnFade: 180,
+	/** A pack added from the table's extra-pack ghost: the ghost brightening as its seal tears, the card rising out, then settling. */
+	ghostOpen: 220,
+	addRise: 240,
+	addSettle: 380,
+	/** The card turning face up as it comes forward. */
+	addFlip: 480,
+	/** Point in the ghost's opening, as a fraction of it, where the card starts to rise. */
+	addRiseAt: .65,
+	/** The card's size inside the ghost, as a fraction of the pack, before it grows onto the table. */
+	addInside: .8,
+	/** Point in the spent pack's drop, as a fraction of it, where it has cleared the risen card and the card comes forward. */
+	addClear: .5,
 	/** The next pack rising into place once the candidates have left. */
 	packEnter: 460,
 	/** How long the pack or dealt card waits untouched before its caption says what to tap. */
@@ -77,5 +91,6 @@ export const MOTION = {
 export const CSS_MOTION = {
 	'--ease-out': EASE_OUT,
 	'--motion-deal': `${MOTION.deal}ms`,
-	'--motion-field-flip': `${MOTION.fieldFlip}ms`
+	'--motion-field-flip': `${MOTION.fieldFlip}ms`,
+	'--motion-card-flight': `${MOTION.cardFlight}ms`
 } as const;

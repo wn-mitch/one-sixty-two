@@ -68,7 +68,7 @@
 
 			<h3>How a roll stays legal</h3>
 			<p>The game draws uniformly from franchises that still have an unused candidate for an open slot, then uniformly from that franchise’s viable decades. Used franchises and used athletes leave the pool, so a roll never repeats a team or a player. The legal-candidate index prevents the roll from stranding the roster. You still choose the exact season and any eligible open slot; the game never auto-picks. Twice per draft you may add another franchise pack to a pending roll before picking, both to one roll or one each to two rolls. The new draw comes from the same seeded stream and avoids franchises already on the table when anything else is legal. You keep one open pack and the others are discarded. Both the added packs and the choice are recorded in the replay.</p>
-			<p>Some packs are jackpots: five elite seasons from any franchise and decade, drawn from the eight most valuable seasons at each roster slot. Two of every draft’s sixteen rolls are jackpots, at positions set by the draft seed, and any other roll or added pack becomes one one time in five. A jackpot deals only seasons that fit your open slots, one per athlete, and the season you take still uses up its franchise.</p>
+			<p>Some packs are jackpots: six elite seasons from any franchise and decade, drawn from the eight most valuable seasons at each roster slot. Two of every draft’s sixteen rolls are jackpots, at positions set by the draft seed, and any other roll or added pack becomes one one time in five. A jackpot deals only seasons that fit your open slots, one per athlete, and the season you take still uses up its franchise.</p>
 		</div>
 	</section>
 
@@ -83,8 +83,8 @@
 			<h3>Is 162–0 possible?</h3>
 			<p>Not really, and that is by design: the season is played straight, with no hidden boost for a strong roster. The best roster our search has found averages about 156 wins and goes 162–0 roughly once in 400 seasons. A very good real draft averages 142 to 144 wins, where a perfect season is about a one-in-several-million event. The name is the dream; the grades measure how close you got, and an S or S+ season is already a great result.</p>
 
-			<h3>The newspaper clipping</h3>
-			<p>Every finished season gets a headline from a real sports page. Each phrase was copied as printed from a newspaper or magazine between 1906 and today, describing some other club's season, and the clipping links to the page it came from. Your grade picks how glowing or grim the phrase is, and a season that beat or missed its draft by six or more wins draws from writing about overachievers and letdowns.</p>
+			<h3>The season headline</h3>
+			<p>Every finished season gets a headline from a real sports page. Each phrase was copied as printed from a newspaper or magazine between 1906 and today, describing some other club's season, and the quote links to the page it came from. Your grade picks how glowing or grim the phrase is, and a season that beat or missed its draft by six or more wins draws from writing about overachievers and letdowns.</p>
 
 			<h3>Your home stadium</h3>
 			<p>Before the first roll you choose a home stadium from a deck of the thirty current MLB parks. Your 81 home games are played there; road games use each opponent’s own 2025 park. Each stadium card shows the field outline, line and center distances, wall heights, roof, and elevation; estimated measurements are labelled. A stadium has no rating or bonus. It changes play only through the ball-flight model described below.</p>
@@ -213,7 +213,7 @@
 
 			<div class="attribution-panel" aria-busy={loading}>
 				{#if loading}
-					<div class="source-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+					<div class="source-skeleton" aria-hidden="true"><span class="sk-line"></span><span class="sk-line" style:--sk-width="82%"></span><span class="sk-line" style:--sk-width="57%"></span></div>
 					<p class="muted" role="status">Loading the versioned source notice…</p>
 				{:else if error}
 					<p class="error" role="alert">{error}</p>
@@ -369,23 +369,7 @@
 		background: var(--surface);
 	}
 
-	.source-skeleton {
-		display: grid;
-		gap: 0.65rem;
-		padding: 0.5rem 0;
-	}
-
-	.source-skeleton span {
-		display: block;
-		width: 100%;
-		height: 0.85rem;
-		border-radius: 999px;
-		background: var(--surface-raised);
-		animation: pulse 1.2s ease-in-out infinite alternate;
-	}
-
-	.source-skeleton span:nth-child(2) { width: 82%; }
-	.source-skeleton span:nth-child(3) { width: 57%; }
+	.source-skeleton { padding: 0.5rem 0; line-height: 1.4; }
 
 	.attribution-panel dl {
 		display: grid;
@@ -458,14 +442,6 @@
 
 	.ssr-note { font-size: 0.82rem; }
 
-	@keyframes pulse {
-		from { opacity: 0.45; }
-		to { opacity: 0.9; }
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.source-skeleton span { animation: none; }
-	}
 
 	@media (max-width: 38rem) {
 		.about { width: min(100% - 1.25rem, 70rem); }

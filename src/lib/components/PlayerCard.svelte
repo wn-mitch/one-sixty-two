@@ -1,4 +1,5 @@
 <script lang="ts">
+	import FlipIcon from '../cards/FlipIcon.svelte';
 	import { onMount, tick } from 'svelte';
 	import Card from '../cards/Card.svelte';
 	import CardReview from '../cards/CardReview.svelte';
@@ -52,8 +53,6 @@
 	} = $props();
 
 	const uid = $props.id();
-	/** Phones have no hover, so finished cards glint on their own in the draft gallery. */
-	const coarsePointer = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaStatus = $state<CardMediaStatus>('loading');
 	let artTrigger = $state<HTMLButtonElement>();
@@ -197,8 +196,8 @@
 					{/each}
 				</span>
 				{#if legalSlots !== undefined && !available.length}<span class="no-open-position">No open position</span>{/if}
-				<button type="button" class="draft-turn" aria-label="Turn over" aria-pressed={turned} onclick={() => turned = !turned}>
-					<span aria-hidden="true">↻</span><span class="sr-only">Turn over</span>
+				<button type="button" class="draft-turn" aria-label="Turn over" title="Flip card over" aria-pressed={turned} onclick={() => turned = !turned}>
+					<FlipIcon />
 				</button>
 			</div>
 		{:else}
@@ -249,6 +248,7 @@
 					s={card}
 					showControl={false}
 					onFrontSelect={select}
+					wall
 				/>
 			{:else}
 				<button
@@ -258,7 +258,7 @@
 					aria-label={`Select ${profile.year} ${profile.displayName}`}
 					onclick={event => select(event.currentTarget)}
 				>
-					<Card s={card} {compact} interactive={!compact} wall={coarsePointer} onDetails={() => undefined} />
+					<Card s={card} {compact} interactive={!compact} wall onDetails={() => undefined} />
 				</button>
 			{/if}
 		{:else}
@@ -347,7 +347,13 @@
 	.wide-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: .35rem; width: calc(100% + 1rem); box-sizing: border-box; margin: -.5rem; padding: .5rem; overflow-x: auto; }
 	/* Always wide enough for a four-digit year; a player with many positions scrolls the row instead of squeezing it. */
 	.wide-season-picker { flex: 1 0 5.75rem; min-width: 5.75rem; }
-	.wide-season-picker select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; min-height: 2.75rem; padding-block: .25rem; padding-inline: .55rem 1.75rem; font-variant-numeric: tabular-nums; }
+	/* The year reads in the card's condensed face, with a drawn chevron instead of the native control chrome. */
+	.wide-season-picker select {
+		width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; min-height: 2.75rem; padding-block: .25rem; padding-inline: .6rem 1.5rem;
+		appearance: none; color: var(--card-ink); border: 1px solid var(--border); border-radius: .25rem;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23aeb6c2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right .55rem center / .6rem auto, var(--surface-raised, var(--surface));
+		font: italic 800 1.35rem/1 'Barlow Condensed', sans-serif; letter-spacing: .02em; font-variant-numeric: tabular-nums;
+	}
 	.wide-controls .placement-list { display: contents; }
 	.wide-controls .placement { flex: 0 0 2.75rem; }
 	.placement:disabled { color: var(--card-muted); border-color: var(--border); background: var(--surface); cursor: not-allowed; opacity: .7; text-decoration: line-through; }

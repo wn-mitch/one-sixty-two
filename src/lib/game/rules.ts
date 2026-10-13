@@ -32,7 +32,7 @@ const CURRENT_RULE_POLICY: DraftRulePolicy = {
  maxYear: MAX_SEASON_YEAR,
  modelVersion: MODEL_VERSION,
  extraPacks: 2,
- jackpots: { guaranteed: 2, chance: 0.2, size: 5 }
+ jackpots: { guaranteed: 2, chance: 0.2, size: 6 }
 };
 
 export function draftRules(schemaVersion: ReplaySchemaVersion): DraftRulePolicy {

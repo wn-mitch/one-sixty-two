@@ -9,17 +9,55 @@ import type { SeasonResult } from '../sim/types.ts';
 
 export const STORAGE_NOTICE = 'Your season library is unavailable: browser storage is blocked or full.';
 
-/** A hitter's simulated season line as the library keeps it; `war` is the estimated hitter WAR. */
+/**
+ * A hitter's simulated season line as the library keeps it; `war` is the estimated hitter WAR.
+ * Seasons saved before single-game feats were counted lack the optional feat fields.
+ */
 export interface SavedBatter {
  seasonId: string; label: string; slot: RosterSlot;
  PA: number; AB: number; H: number; doubles: number; triples: number; HR: number; BB: number; HBP: number; SF: number; RBI: number; SB: number;
+ cycles?: number; mostHomeRunsInGame?: number; grandSlams?: number; walkOffHomeRuns?: number;
  war: number;
 }
-/** A drafted pitcher's simulated season line; the pooled support bullpen is not kept. */
+/** A drafted pitcher's simulated season line; the pooled support bullpen is not kept. Seasons saved before feats were counted lack the optional fields. */
 export interface SavedPitcher {
  seasonId: string; label: string; slot: RosterSlot;
  outs: number; H: number; BB: number; SO: number; R: number; starts: number;
+ noHitters?: number; perfectGames?: number; shutouts?: number; twentyStrikeoutGames?: number;
+ saves?: number; blownSaves?: number; saveOpportunities?: number;
  war: number;
+}
+
+export interface BattingFeats { cycles: number; mostHomeRunsInGame: number }
+export interface PitchingFeats { noHitters: number; perfectGames: number; shutouts: number; twentyStrikeoutGames: number }
+
+/**
+ * Single-game feats by the club's players. A hitter hits for the cycle with a single, double, triple
+ * and home run in one game. A complete game is one pitcher working every out the club recorded, at
+ * least nine innings: with no runs it is a shutout, with no hits a no-hitter, and a no-hitter where
+ * every batter faced was out is a perfect game. A 20-strikeout game need not be complete.
+ */
+export function gameFeats(result: Pick<SeasonResult, 'games'>): { batting: Map<string, BattingFeats>; pitching: Map<string, PitchingFeats> } {
+ const batting = new Map<string, BattingFeats>(), pitching = new Map<string, PitchingFeats>();
+ const hitter = (seasonId: string) => batting.get(seasonId) ?? batting.set(seasonId, { cycles: 0, mostHomeRunsInGame: 0 }).get(seasonId)!;
+ const arm = (seasonId: string) => pitching.get(seasonId) ?? pitching.set(seasonId, { noHitters: 0, perfectGames: 0, shutouts: 0, twentyStrikeoutGames: 0 }).get(seasonId)!;
+ for (const game of result.games) {
+  const club = game.isHome ? game.home : game.away;
+  for (const line of club.batting) {
+   const singles = line.H - line.doubles - line.triples - line.HR;
+   if (singles > 0 && line.doubles > 0 && line.triples > 0 && line.HR > 0) hitter(line.seasonId).cycles++;
+   if (line.HR > (batting.get(line.seasonId)?.mostHomeRunsInGame ?? 0)) hitter(line.seasonId).mostHomeRunsInGame = line.HR;
+  }
+  const pitched = club.pitching.filter(line => line.outs > 0 || line.BF > 0);
+  for (const line of pitched) if (line.SO >= 20) arm(line.seasonId).twentyStrikeoutGames++;
+  if (pitched.length !== 1 || pitched[0].outs < 27) continue;
+  const [line] = pitched;
+  if (line.R === 0) arm(line.seasonId).shutouts++;
+  if (line.H > 0) continue;
+  arm(line.seasonId).noHitters++;
+  if (line.BB === 0 && line.HBP === 0 && line.BF === line.outs) arm(line.seasonId).perfectGames++;
+ }
+ return { batting, pitching };
 }
 
 /**
@@ -58,15 +96,37 @@ export async function replayKeyDigest(canonical: string): Promise<string> {
  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-const label = (profile: Profile) => `${profile.displayName} ${profile.year}`;
+const label = (profile: Pick<Profile, 'displayName' | 'year'>) => `${profile.displayName} ${profile.year}`;
 
-function seasonMvp(result: SeasonResult, profiles: Map<string, Profile>): LibraryEntry['mvp'] {
+/** The roster's season MVP by estimated WAR, ties to the lower season id. */
+export function seasonMvp(result: Pick<SeasonResult, 'batting' | 'pitching'>, profiles: ReadonlyMap<string, Pick<Profile, 'seasonId' | 'displayName' | 'year'>>): LibraryEntry['mvp'] {
  const values = [
   ...result.batting.filter(line => line.PA > 0).map(line => ({ seasonId: line.seasonId, war: estimatedHitterWar(line) })),
   ...result.pitching.filter(line => line.role !== 'support' && line.outs > 0).map(line => ({ seasonId: line.seasonId, war: estimatedPitcherWar(line) }))
  ].sort((a, b) => b.war - a.war || compareId(a.seasonId, b.seasonId));
  const profile = values[0] && profiles.get(values[0].seasonId);
  return profile ? { seasonId: profile.seasonId, label: label(profile) } : undefined;
+}
+
+/** The drafted players' saved season lines, with their single-game feats. */
+export function savedLines(result: Pick<SeasonResult, 'games' | 'batting' | 'pitching'>, slots: ReadonlyMap<string, RosterSlot>, name: (seasonId: string) => string): Pick<LibraryEntry, 'batting' | 'pitching'> {
+ const feats = gameFeats(result);
+ return {
+  batting: result.batting.filter(line => slots.has(line.seasonId)).map(line => ({
+   seasonId: line.seasonId, label: name(line.seasonId), slot: slots.get(line.seasonId)!,
+   PA: line.PA, AB: line.AB, H: line.H, doubles: line.doubles, triples: line.triples, HR: line.HR, BB: line.BB, HBP: line.HBP, SF: line.SF, RBI: line.RBI, SB: line.SB,
+   cycles: feats.batting.get(line.seasonId)?.cycles ?? 0, mostHomeRunsInGame: feats.batting.get(line.seasonId)?.mostHomeRunsInGame ?? 0,
+   grandSlams: line.grandSlams, walkOffHomeRuns: line.walkOffHomeRuns,
+   war: estimatedHitterWar(line)
+  })),
+  pitching: result.pitching.filter(line => line.role !== 'support' && slots.has(line.seasonId)).map(line => ({
+   seasonId: line.seasonId, label: name(line.seasonId), slot: slots.get(line.seasonId)!,
+   outs: line.outs, H: line.H, BB: line.BB, SO: line.SO, R: line.R, starts: line.starts,
+   ...(feats.pitching.get(line.seasonId) ?? { noHitters: 0, perfectGames: 0, shutouts: 0, twentyStrikeoutGames: 0 }),
+   saves: line.saves, blownSaves: line.blownSaves, saveOpportunities: line.saveOpportunities,
+   war: estimatedPitcherWar(line)
+  }))
+ };
 }
 
 /** The library snapshot of one completed season, before nickname and save date are carried over. */
@@ -80,16 +140,7 @@ export function libraryEntry(key: string, savedAt: string, draft: Draft, result:
   schemaVersion: draft.schemaVersion, modelVersion: draft.modelVersion, dataVersion: draft.dataVersion,
   record: { wins: result.wins, losses: result.losses },
   runs: { scored: result.runsFor, allowed: result.runsAgainst },
-  batting: result.batting.filter(line => slots.has(line.seasonId)).map(line => ({
-   seasonId: line.seasonId, label: name(line.seasonId), slot: slots.get(line.seasonId)!,
-   PA: line.PA, AB: line.AB, H: line.H, doubles: line.doubles, triples: line.triples, HR: line.HR, BB: line.BB, HBP: line.HBP, SF: line.SF, RBI: line.RBI, SB: line.SB,
-   war: estimatedHitterWar(line)
-  })),
-  pitching: result.pitching.filter(line => line.role !== 'support' && slots.has(line.seasonId)).map(line => ({
-   seasonId: line.seasonId, label: name(line.seasonId), slot: slots.get(line.seasonId)!,
-   outs: line.outs, H: line.H, BB: line.BB, SO: line.SO, R: line.R, starts: line.starts,
-   war: estimatedPitcherWar(line)
-  })),
+  ...savedLines(result, slots, name),
   stadium: stadium ? { id: stadium.ref.id, name: stadium.name } : null,
   roster: draft.picks.map(pick => ({ seasonId: pick.seasonId, slot: pick.slot, label: name(pick.seasonId) })),
   mvp: seasonMvp(result, byId)

@@ -44,7 +44,7 @@
 		const moved = family ? drafts[family] : undefined;
 		return moved ? { ...sticker, ...moved } : sticker;
 	}));
-	const handles = $derived(faceStickers(placed));
+	const handles = $derived(faceStickers(placed, { era: view?.era }));
 	const line = $derived(card.best.line);
 	const bestGrade = $derived(seasonGrade(card.best.wins, card.best.losses));
 	const isBatter = (value: SavedBatter | SavedPitcher): value is SavedBatter => 'PA' in value;

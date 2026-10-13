@@ -2,6 +2,8 @@
  import type { Manifest } from '#lib/game/types.ts';
  import type { CardMediaStatus, CardViewModel } from '#lib/cards/view-model.ts';
  import Card from '#lib/cards/Card.svelte';
+ import CardReview from '#lib/cards/CardReview.svelte';
+ import { tick } from 'svelte';
  import HomeWall from './HomeWall.svelte';
 
  interface ShowcaseCardView {
@@ -25,12 +27,44 @@
   return card ? [{ decade, card }] : [];
  }));
  const noDetails = () => {};
+
+ let raisedDecade = $state<number | null>(null);
+ let raisedOpened = $state(false);
+ let raisedTurned = $state(false);
+ let raisedSource = $state<HTMLElement | null>(null);
+ let raisedTrigger: HTMLButtonElement | null = null;
+ const raisedCard = $derived(eraCards.find(era => era.decade === raisedDecade)?.card.model);
+
+ /** Raises an era card from the strip into the same reader the draft and lineup use. */
+ async function raise(decade: number, trigger: HTMLButtonElement): Promise<void> {
+  raisedOpened = false;
+  raisedTurned = false;
+  raisedTrigger = trigger;
+  raisedSource = trigger.querySelector<HTMLElement>('.card');
+  raisedDecade = decade;
+  await tick();
+  if (raisedDecade === decade) raisedOpened = true;
+ }
+
+ function lower(): void {
+  const trigger = raisedTrigger;
+  raisedDecade = null;
+  raisedTrigger = null;
+  raisedSource = null;
+  raisedOpened = false;
+  raisedTurned = false;
+  void tick().then(() => trigger?.focus({ preventScroll: true }));
+ }
 </script>
 
 <section class="welcome" aria-labelledby="home-heading">
  <div class="welcome-copy">
   <h1 id="home-heading">Can you go <strong>162-0?</strong></h1>
-  <p class="intro">Pick your home stadium, then roll a franchise and decade. Draft nine hitters, three starters, a closer, and three relievers; add up to two extra packs to choose from, and watch for jackpot packs of elite seasons. One pick per franchise; each athlete only once. Take your team through all 162 games. Going 162–0 is close to impossible, even for the best roster; your grade shows how close you came.</p>
+  <ol class="intro">
+   <li>Pick where you’ll play.</li>
+   <li>Every pack is one franchise from one decade. Take one player, then open the next.</li>
+   <li>Play 162 games. Even the best roster struggles to hit&nbsp;162–0.</li>
+  </ol>
   <div class="actions">
    <button class="primary start" disabled={loading || !manifest} onclick={onStart}>Start draft <span aria-hidden="true">↗</span></button>
    {#if hasSavedDraft}<button class="secondary resume" disabled={loading} onclick={onResume}>Resume draft</button>{/if}
@@ -51,11 +85,16 @@
   <div class="era-strip" role="region" aria-label="Card designs from eight eras">
    {#each eraCards as era (era.decade)}
     <figure>
-     <div class="era-card" aria-hidden="true"><Card s={era.card.model} onDetails={noDetails} /></div>
+     <button type="button" class="era-card" aria-label="Look at the {era.decade}s card, {era.card.model.year} {era.card.model.full}" aria-expanded={raisedDecade === era.decade && raisedOpened} aria-controls="era-card-review" onclick={event => void raise(era.decade, event.currentTarget)}><Card s={era.card.model} onDetails={noDetails} /></button>
      <figcaption>{era.decade}s</figcaption>
     </figure>
    {/each}
   </div>
+ {/if}
+ {#if raisedCard}
+  {#key raisedDecade}
+   <CardReview id="era-card-review" s={raisedCard} bind:opened={raisedOpened} bind:turned={raisedTurned} showControl={false} sourceElement={raisedSource} raisedOnly onClose={lower} />
+  {/key}
  {/if}
  <HomeWall {cards} franchises={manifest?.franchises ?? []} />
 </section>
@@ -85,11 +124,24 @@
   letter-spacing: -.065em;
  }
  .intro {
+  display: grid;
+  gap: var(--space-2);
   max-width: 44ch;
   margin: var(--space-6) 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
   color: var(--muted);
   font-size: var(--text-lg);
   text-wrap: pretty;
+ }
+ /* Each step leads with its number in the display face. */
+ /* Each step number sits in a fixed tile flush with the heading's edge, centred on the step's first line. */
+ .intro li { --line: 1.45em; display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); column-gap: .75rem; align-items: start; line-height: var(--line); counter-increment: step; }
+ .intro li::before {
+  content: counter(step); display: grid; place-items: center; width: 1.6rem; height: 1.6rem; margin-top: calc((var(--line) - 1.6rem) / 2 + .12em); box-sizing: border-box;
+  color: var(--text); border: 1px solid var(--border); border-radius: .3rem;
+  font: 800 1rem/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;
  }
  .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
  .start {
@@ -125,7 +177,9 @@
   min-width: 0;
   margin: 0;
  }
- .era-card { width: 100%; min-width: 0; pointer-events: none; }
+ .era-card { display: block; width: 100%; min-width: 0; padding: 0; border: 0; border-radius: .3rem; background: none; color: inherit; cursor: zoom-in; }
+ .era-card > :global(*) { pointer-events: none; }
+ .era-card:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
  .era-strip figcaption {
   color: var(--muted);
   font-family: 'Barlow Condensed', sans-serif;

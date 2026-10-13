@@ -1,10 +1,11 @@
 <script lang="ts">
  import StickerBadge from './StickerBadge.svelte';
+ import type { CardEra } from '../cards/view-model.ts';
  import { faceStickers, STICKER_SPOTS, type PlacedSticker } from './stickers.ts';
 
  /** Die-cut stickers on a card front. Positions are card-normalized centres; the layer never takes pointer input. */
- let { stickers, fresh }: { stickers: readonly PlacedSticker[]; fresh?: ReadonlySet<string> } = $props();
- const shown = $derived(faceStickers(stickers));
+ let { stickers, era, fresh }: { stickers: readonly PlacedSticker[]; era: CardEra; fresh?: ReadonlySet<string> } = $props();
+ const shown = $derived(faceStickers(stickers, { era }));
  const label = $derived(shown.map(item => item.definition.title).join(', '));
 </script>
 

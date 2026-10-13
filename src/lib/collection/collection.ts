@@ -21,7 +21,7 @@ export function collectionStatements(entry: LibraryEntry, earnedAt: string): Sta
   const spot = award(kind);
   statements.push({ sql: 'INSERT OR IGNORE INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)', bind: [seasonId, kind, earnedAt, entry.key, spot.x, spot.y] });
  }
- for (const { kind, times } of LOYALTY_STICKERS) {
+ for (const { kind, at: times } of LOYALTY_STICKERS) {
   const spot = award(kind);
   statements.push({
    sql: `INSERT OR IGNORE INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden)

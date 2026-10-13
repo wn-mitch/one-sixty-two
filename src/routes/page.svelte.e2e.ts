@@ -316,10 +316,10 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await expect(replay.locator('#results-heading')).toBeVisible({ timeout: 30_000 });
 	// Real profile chunks carry every drafted card's value, so the roster is graded too.
 	await expect(replay.locator('.draft-grade')).toContainText(/^.*Draft (S\+|S|AA|A|B|C|D|F) · built for about \d+ wins$/);
-	// The season prints as a clipping: a cited phrase over this record, linked to its printed page.
-	const clipping = replay.getByRole('figure', { name: /\S/ }).filter({ has: replay.locator('.headline') });
-	await expect(clipping).toContainText(`Your club finishes ${publication.record.wins}–${publication.record.losses}`);
-	await expect(clipping.getByRole('link', { name: /See the page/ })).toHaveAttribute('href', /^https:\/\//);
+	// The season gets a cited period phrase, linked to its printed page.
+	const clipping = replay.getByRole('figure', { name: 'Season headline' });
+	await expect(clipping.locator('blockquote')).toContainText(/\S/);
+	await expect(clipping.getByRole('link', { name: /\d{4}/ })).toHaveAttribute('href', /^https:\/\//);
 	const replayGames = replay.getByRole('region', { name: 'All 162 games', exact: true });
 	await expect(replayGames.locator(SEASON_GAME)).toHaveCount(162);
 	const replayMoments = replay.getByRole('region', { name: 'Season turning points', exact: true });

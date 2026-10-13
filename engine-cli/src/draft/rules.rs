@@ -6,11 +6,14 @@ use std::collections::{HashMap, HashSet};
 
 pub const SLOTS: [&str; 16] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "SP1", "SP2", "SP3", "CL", "RP1", "RP2", "RP3"];
 pub const ALL_OPEN: u16 = u16::MAX;
+const DH: usize = 8;
+/// Draw weight of a jackpot season whose only open slot is the DH, unless it is a headliner; mirrors `draft.ts`.
+const DH_ONLY_WEIGHT: f64 = 0.25;
 
 /// Jackpot and extra-pack allowances; the defaults mirror `src/lib/game/rules.ts`.
 #[derive(Clone, Copy, Debug)]
 pub struct Rules { pub extra_packs: u32, pub guaranteed: usize, pub chance: f64, pub size: usize }
-impl Default for Rules { fn default() -> Self { Self { extra_packs: 2, guaranteed: 2, chance: 0.2, size: 5 } } }
+impl Default for Rules { fn default() -> Self { Self { extra_packs: 2, guaranteed: 2, chance: 0.2, size: 6 } } }
 
 /// One draftable season. Index order is season-id order, so sorting indexes sorts by identity.
 pub struct Card {
@@ -23,6 +26,8 @@ pub struct Card {
     pub value: f64,
     pub priced: usize,
     pub elite: bool,
+    /// In the jackpot's DH tier: dealt at full weight when the DH is its only open slot.
+    pub headliner: bool,
 }
 
 pub struct Pool { pub cards: Vec<Card> }
@@ -50,6 +55,8 @@ pub struct Draft {
     pub current: Option<Roll>,
     extras_used: u32,
     used_players: HashSet<u32>,
+    /// Players any jackpot in this draft has dealt; later jackpots skip them.
+    shown: HashSet<u32>,
     used_franchises: u64,
     guaranteed: Vec<usize>,
     random: Mulberry32,
@@ -120,7 +127,7 @@ impl Draft {
         shuffle(&mut order, &mut random_stream(seed, "jackpot"));
         Self {
             picks: Vec::new(), open: ALL_OPEN, packs: Vec::new(), current: None, extras_used: 0,
-            used_players: HashSet::new(), used_franchises: 0,
+            used_players: HashSet::new(), shown: HashSet::new(), used_franchises: 0,
             guaranteed: order[..rules.guaranteed.min(SLOTS.len())].to_vec(),
             random: random_stream(seed, "draft"), analysis: None,
         }
@@ -166,12 +173,25 @@ impl Draft {
         let legal = self.available(pool, None);
         let lucky = self.random.next() < rules.chance;
         if forced || lucky {
-            let dealt: HashSet<usize> = self.packs.iter().flat_map(|roll| match roll { Roll::Jackpot(cards) => cards.clone(), _ => Vec::new() }).collect();
-            let mut elite: Vec<usize> = legal.iter().copied().filter(|card| pool.cards[*card].elite && !dealt.contains(card)).collect();
-            shuffle(&mut elite, &mut self.random);
-            let mut players = HashSet::new();
-            let mut cards: Vec<usize> = elite.into_iter().filter(|card| players.insert(pool.cards[*card].player)).take(rules.size).collect();
-            if !cards.is_empty() { cards.sort_unstable(); return Roll::Jackpot(cards); }
+            let elite: Vec<usize> = legal.iter().copied().filter(|card| pool.cards[*card].elite && !self.shown.contains(&pool.cards[*card].player)).collect();
+            let mut options: Vec<(usize, f64)> = elite.into_iter().map(|card| {
+                let full = pool.cards[card].headliner || self.legal_slots(pool, card).iter().any(|&slot| slot != DH);
+                (card, if full { 1.0 } else { DH_ONLY_WEIGHT })
+            }).collect();
+            let mut cards = Vec::new();
+            while !options.is_empty() && cards.len() < rules.size {
+                let mut target = self.random.next() * options.iter().map(|(_, weight)| weight).sum::<f64>();
+                let mut index = 0;
+                while index < options.len() - 1 && target >= options[index].1 { target -= options[index].1; index += 1; }
+                let player = pool.cards[options[index].0].player;
+                cards.push(options[index].0);
+                options.retain(|(card, _)| pool.cards[*card].player != player);
+            }
+            if !cards.is_empty() {
+                cards.sort_unstable();
+                self.shown.extend(cards.iter().map(|card| pool.cards[*card].player));
+                return Roll::Jackpot(cards);
+            }
         }
         let teams: Vec<(u32, i32)> = self.packs.iter().filter_map(|roll| match roll { Roll::Team { franchise, decade } => Some((*franchise, *decade)), _ => None }).collect();
         let new_franchises: Vec<usize> = legal.iter().copied().filter(|card| !teams.iter().any(|(f, _)| *f == pool.cards[*card].franchise)).collect();

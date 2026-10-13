@@ -116,9 +116,9 @@
 		margin-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right));
 	}
 	.site:has(:global(main.home-start)) footer { margin-top: 0; }
-	.site:has(:global(.draft-board)) { max-width: 90rem; }
-	.site:has(:global(.draft-board.wide)) { padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
-	.site:has(:global(.draft-board.wide)) .site-header { display: none; }
+	.site:has(:global(:is(.draft-board, .draft-skeleton))) { max-width: 90rem; }
+	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) { padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
+	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) .site-header { display: none; }
 	.site-header {
 		position: relative;
 		z-index: 5;

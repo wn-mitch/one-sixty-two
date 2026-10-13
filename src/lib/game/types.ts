@@ -90,6 +90,8 @@ export interface Manifest {
  stadiums: StadiumSummary[];
  /** Elite draftable seasons jackpot packs deal from, sorted by season identity. */
  jackpot: string[];
+ /** The jackpot's DH tier, sorted by season identity: hitters dealt at full weight when the DH is their only open slot. */
+ jackpotHeadliners: string[];
 }
 /** A 2025 club: the closer, its next three relievers by relief outs as named relievers, and the rest of its relief pooled as the remainder arm. */
 export interface Opponent { id: string; name: string; homeStadium: ParkRef; hitters: Profile[]; starters: Profile[]; closer: Profile; relievers: Profile[]; bullpen: Profile }
@@ -120,7 +122,7 @@ export interface Pick extends TeamRoll { seasonId: string; slot: Slot; jackpot?:
 export const CURRENT_REPLAY_SCHEMA_VERSION = 8 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
 export const MODEL_VERSION = 'contact-v2' as const;
-export const RULES_VERSION = 'classic-v6' as const;
+export const RULES_VERSION = 'classic-v7' as const;
 export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
 export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =

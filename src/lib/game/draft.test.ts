@@ -28,6 +28,7 @@ function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Ma
  const franchiseIds = [...new Set(candidates.map(candidate => candidate.franchiseId))].sort();
  return {
   jackpot: [],
+  jackpotHeadliners: [],
   schemaVersion: 1,
   dataVersion,
   sourceCommit: 'synthetic',
@@ -663,6 +664,8 @@ describe('jackpot packs', () => {
     expect(jackpot.every(seasonId => elite.jackpot.includes(seasonId))).toBe(true);
     expect(new Set(jackpot.map(seasonId => seasonId.split(':')[0])).size).toBe(jackpot.length);
    }
+   const players = dealt.flat().map(seasonId => seasonId.split(':')[0]);
+   expect(new Set(players).size, 'a player returned in a later jackpot').toBe(players.length);
    const taken = draft.picks.filter(pick => pick.jackpot);
    expect(taken).toHaveLength(dealt.length);
    for (const pick of taken) {
@@ -701,4 +704,22 @@ describe('jackpot packs', () => {
   }
   throw new Error('No seed added a jackpot beside a franchise pack');
  });
+
+ it('leans first-roll jackpots away from DH-only seasons unless they headline the DH tier', () => {
+  const tiered = makeManifest(pool);
+  const designated = pool.filter(candidate => candidate.eligibleSlots[0] === 'DH').map(candidate => candidate.seasonId);
+  const catchers = pool.filter(candidate => candidate.eligibleSlots[0] === 'C').map(candidate => candidate.seasonId);
+  tiered.jackpot = [...designated, ...catchers].sort(compareId);
+  /** The DH-only share of every season the first roll's jackpot dealt across seeds. */
+  const designatedShare = () => {
+   const dealt = Array.from({ length: 300 }, (_, seed) => rollDraft(startDraft(tiered, seed + 1), tiered).currentRoll!)
+    .flatMap(roll => isJackpot(roll) ? roll.jackpot : []);
+   expect(dealt.length).toBeGreaterThan(200);
+   return dealt.filter(seasonId => designated.includes(seasonId)).length / dealt.length;
+  };
+  // Equal pools: a quarter weight leaves DH-only seasons about a fifth of the deal, full weight about half.
+  expect(designatedShare()).toBeLessThan(.3);
+  tiered.jackpotHeadliners = [...designated];
+  expect(designatedShare()).toBeGreaterThan(.4);
+ }, 60_000);
 });

@@ -55,7 +55,7 @@ export async function loadManifest(): Promise<Manifest> {
  return fetchJson<Manifest>(current.manifestUrl, manifest => {
   if (!manifest || manifest.schemaVersion !== 1 || manifest.dataVersion !== current.dataVersion || !Array.isArray(manifest.franchises) || manifest.franchises.length !== 30 || !Array.isArray(manifest.candidates) ||
    !Array.isArray(manifest.stadiums) || manifest.stadiums.length !== 30 || new Set(manifest.stadiums.map(stadium => stadium?.ref?.id)).size !== 30 ||
-   !Array.isArray(manifest.jackpot)) throw new Error('Dataset manifest is incompatible');
+   !Array.isArray(manifest.jackpot) || !Array.isArray(manifest.jackpotHeadliners)) throw new Error('Dataset manifest is incompatible');
   validateShowcaseUrl(manifest);
  });
 }

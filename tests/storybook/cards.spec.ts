@@ -7,7 +7,7 @@ async function inlineTransform(page: Parameters<typeof openStory>[0]): Promise<s
 }
 
 test.describe('Cards workshop', () => {
-	test('responds to pointer and idle motion, then returns to the fixed pose when disabled', async ({ page }) => {
+	test('responds to pointer and idle motion; Motion stops pointer tilt, and only reduced motion stops idle drift', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openStory(page, 'cards-states--interactive');
 
@@ -31,6 +31,11 @@ test.describe('Cards workshop', () => {
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('switch', { name: 'Motion', exact: true }).click();
 		await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'Close settings', exact: true }).click();
+		// Passive drift keeps running with the Motion setting off.
+		const offFrame = await inlineTransform(page);
+		await page.waitForTimeout(180);
+		await expect.poll(() => inlineTransform(page)).not.toBe(offFrame);
+		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await expect.poll(() => inlineTransform(page)).toBe('');
 	});
 
@@ -119,7 +124,9 @@ test.describe('Cards workshop', () => {
 		await expect(flip).toHaveAttribute('data-face', 'back');
 		await expect(front).toHaveAttribute('inert', '');
 		await expect(back).not.toHaveAttribute('inert', '');
-		await expect(flip.getByRole('button', { name: 'Show front', exact: true })).toBeFocused();
+		// Side by side both faces show, so the reader takes focus and offers no turn button.
+		await expect(flip.locator('[data-card-reader]')).toBeFocused();
+		await expect(flip.getByRole('button', { name: 'Show front', exact: true })).toHaveCount(0);
 
 		await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).toMatch(/rotateY\(180(?:\.00)?deg\)/);
 		const readerRect = await flip.locator('[data-flip]').evaluate(node => {
@@ -131,9 +138,6 @@ test.describe('Cards workshop', () => {
 		await expect(flip.locator('[data-card-companion]')).toHaveCount(1);
 		expect(Math.abs((readerRect.left + readerRect.x + readerRect.width) / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
 		expect(Math.abs(readerRect.y + readerRect.height / 2 - readerRect.viewportHeight / 2)).toBeLessThan(3);
-		const returnRect = await flip.getByRole('button', { name: 'Show front', exact: true }).boundingBox();
-		expect(Math.abs(returnRect!.x + returnRect!.width / 2 - (readerRect.x + readerRect.width / 2))).toBeLessThan(3);
-		expect(returnRect!.y).toBeGreaterThan(readerRect.y + readerRect.height);
 		const settledPose = await flip.locator('[data-flip]').evaluate(node => node.style.transform);
 		for (let replay = 0; replay < 2; replay += 1) {
 			await page.getByRole('button', { name: 'Replay animation', exact: true }).click();
@@ -141,7 +145,7 @@ test.describe('Cards workshop', () => {
 			await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).not.toBe(settledPose);
 			await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).toBe(settledPose);
 		}
-		await page.getByRole('button', { name: 'Show front', exact: true }).click();
+		await flip.locator('[data-card-reader] .back').click({ position: { x: 20, y: 8 } });
 		await expect(flip).toHaveAttribute('data-face', 'front');
 		await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).toMatch(/rotateY\(0(?:\.00)?deg\)/);
 		const returnedRect = await flip.locator('.front .card').evaluate(node => {
@@ -196,7 +200,7 @@ test.describe('Cards workshop', () => {
 			await expect(review.getByRole('button', { name: /^Show text version for / })).toBeFocused();
 			await expect(flip.locator('.back .inspection-back')).toHaveCount(0);
 			await expect(flip.locator('.back .card[data-face="back"]')).toBeVisible();
-			await review.getByRole('button', { name: 'Show front', exact: true }).click();
+			await page.keyboard.press('Escape');
 			await expect(flip.locator('.back')).toHaveAttribute('inert', '');
 			await expect(flip.locator('.front')).not.toHaveAttribute('inert', '');
 			await expect(page.getByRole('dialog')).toHaveCount(0);

@@ -31,6 +31,7 @@ function manifest(version: string, profiles: Profile[] = []): Manifest {
  const chunks = Object.fromEntries([...chunkKeys].map(key => [key, `/data/${version}/${key}.json`]));
  return {
   jackpot: [],
+  jackpotHeadliners: [],
   schemaVersion: 1,
   dataVersion: version,
   sourceCommit: 'fixture',

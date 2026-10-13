@@ -2,10 +2,11 @@ import { animate, type JSAnimation } from 'animejs';
 import { appSettings } from '../game/settings.svelte.ts';
 import { MOTION } from '../motion-timing.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
+import { easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
+
+export { TILT } from './tilt-math.ts';
 
 const LIGHT = { x: -0.45, y: -0.75 } as const;
-const IDLE_AMOUNT = 2.5;
-const MAX_TILT = 9;
 const SPOTLIGHT_INTERVAL = 1800;
 const SPOTLIGHT_DURATION = 2200;
 const MOTION_PROPERTIES = ['--mx', '--my', '--lx', '--ly', '--ang', '--lift', '--glare', '--g1', '--g2', '--g3'] as const;
@@ -17,6 +18,8 @@ type StyleSnapshot = { transform: string; properties: Record<MotionProperty, str
 type VisualState = {
 	rx: number;
 	ry: number;
+	/** Press envelope in degrees; sets how far the card sits back. */
+	envelope: number;
 	lift: number;
 	hotspotX?: number;
 	hotspotY?: number;
@@ -90,7 +93,7 @@ function applyFixedPose(node: HTMLElement): void {
 	node.style.transform = '';
 }
 
-function applyTilt(node: HTMLElement, state: VisualState): void {
+function applyTilt(node: HTMLElement, state: VisualState, halfWidth: number, halfHeight: number): void {
 	const hotspotX = clamp(state.hotspotX ?? 0.5 + LIGHT.x * 0.6 - state.ry / 26, -0.2, 1.2);
 	const hotspotY = clamp(state.hotspotY ?? 0.5 + LIGHT.y * 0.6 + state.rx / 26, -0.2, 1.2);
 	const lightX = clamp((hotspotX - 0.5) * 2, -1, 1);
@@ -112,9 +115,7 @@ function applyTilt(node: HTMLElement, state: VisualState): void {
 	node.style.setProperty('--g1', spark(0.04, 0.03, 0.8));
 	node.style.setProperty('--g2', spark(0.96, 0.97, -0.45));
 	node.style.setProperty('--g3', spark(0.96, 0.4, 0.6));
-	node.style.transform = state.flat || (!state.rx && !state.ry && !state.lift)
-		? ''
-		: `perspective(900px) rotateX(${state.rx.toFixed(2)}deg) rotateY(${state.ry.toFixed(2)}deg) scale(${(1 + state.lift * 0.025).toFixed(4)})`;
+	node.style.transform = state.flat ? '' : tiltPose(state.rx, state.ry, state.envelope, halfWidth, halfHeight).transform;
 }
 
 interface WallRecord {
@@ -168,10 +169,31 @@ class WallSpotlights {
 
 const wallSpotlights = new WallSpotlights();
 
+
+/** A display: contents wrapper has no box, so it reports pointerleave between its children; use the nearest boxed ancestor. */
+function hitArea(element: HTMLElement): HTMLElement {
+	let area = element;
+	while (area.parentElement && getComputedStyle(area).display === 'contents') area = area.parentElement;
+	return area;
+}
+
+function driftRhythm(identity: string): DriftRhythm {
+	return {
+		phaseX1: stableUnit(identity, 11) * Math.PI * 2,
+		phaseX2: stableUnit(identity, 12) * Math.PI * 2,
+		phaseY1: stableUnit(identity, 13) * Math.PI * 2,
+		phaseY2: stableUnit(identity, 14) * Math.PI * 2,
+		frequencyX1: 0.05 + stableUnit(identity, 21) * 0.12,
+		frequencyX2: 0.05 + stableUnit(identity, 22) * 0.12,
+		frequencyY1: 0.05 + stableUnit(identity, 23) * 0.12,
+		frequencyY2: 0.05 + stableUnit(identity, 24) * 0.12
+	};
+}
+
 export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 	const snapshot = snapshotStyle(node);
 	let options = initialOptions;
-	let eventTarget = options.eventTarget ?? node;
+	let eventTarget = hitArea(options.eventTarget ?? node);
 	let registration: MotionRegistration;
 	let unregisterWall: (() => void) | null = null;
 	let wallRecord: WallRecord | null = null;
@@ -179,41 +201,36 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 	let focused = false;
 	let pointerX = 0;
 	let pointerY = 0;
-	let currentX = 0;
-	let currentY = 0;
-	let currentLift = 0;
+	const rest = (): Eased => ({ value: 0, velocity: 0 });
+	let pose: TiltState = restingTilt();
+	let currentLift = rest();
 	let hoverBlend = 0;
 	let dirty = true;
 	let destroyed = false;
 	let identity = options.identity ?? node.dataset.motionIdentity ?? node.getAttribute('data-card') ?? '';
-	let phaseX1 = stableUnit(identity, 11) * Math.PI * 2;
-	let phaseX2 = stableUnit(identity, 12) * Math.PI * 2;
-	let phaseY1 = stableUnit(identity, 13) * Math.PI * 2;
-	let phaseY2 = stableUnit(identity, 14) * Math.PI * 2;
-	let frequencyX1 = 0.05 + stableUnit(identity, 21) * 0.12;
-	let frequencyX2 = 0.05 + stableUnit(identity, 22) * 0.12;
-	let frequencyY1 = 0.05 + stableUnit(identity, 23) * 0.12;
-	let frequencyY2 = 0.05 + stableUnit(identity, 24) * 0.12;
+	let rhythm = driftRhythm(identity);
 	let wallOffset = stableUnit(identity, 31) * 7000;
+	// Layout size, not the transformed box, so the footprint check measures the resting card.
+	let halfWidth = node.offsetWidth / 2;
+	let halfHeight = node.offsetHeight / 2;
+	const resized = new ResizeObserver(() => {
+		halfWidth = node.offsetWidth / 2;
+		halfHeight = node.offsetHeight / 2;
+		dirty = true;
+	});
+	resized.observe(node);
 
 	const autonomousEnabled = () => Boolean(options.idle || (options.wall && (options.finish ?? 'base') !== 'base'));
 	let spotlightAngle = stableUnit(identity, 32) * Math.PI * 2;
 	const interrupted = () => hovering || focused;
 	const moving = () => Boolean(
 		options.idle || interrupted() || hoverBlend > 0.001 ||
-		Math.abs(currentX) > 0.01 || Math.abs(currentY) > 0.01 || currentLift > 0.001
+		!settled(pose.x, 0, 0.01) || !settled(pose.y, 0, 0.01) || !settled(currentLift, 0, 0.001) || pose.envelope.value > 0.01
 	);
 
 	const configureIdentity = (nextIdentity: string) => {
 		identity = nextIdentity;
-		phaseX1 = stableUnit(identity, 11) * Math.PI * 2;
-		phaseX2 = stableUnit(identity, 12) * Math.PI * 2;
-		phaseY1 = stableUnit(identity, 13) * Math.PI * 2;
-		phaseY2 = stableUnit(identity, 14) * Math.PI * 2;
-		frequencyX1 = 0.05 + stableUnit(identity, 21) * 0.12;
-		frequencyX2 = 0.05 + stableUnit(identity, 22) * 0.12;
-		frequencyY1 = 0.05 + stableUnit(identity, 23) * 0.12;
-		frequencyY2 = 0.05 + stableUnit(identity, 24) * 0.12;
+		rhythm = driftRhythm(identity);
 		wallOffset = stableUnit(identity, 31) * 7000;
 		spotlightAngle = stableUnit(identity, 32) * Math.PI * 2;
 	};
@@ -301,57 +318,44 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 
 	registration = autonomousMotion.register(node, {
 		active(settings) {
-			if (!settings.effectiveEnabled) return false;
+			// Passive drift and finish lighting stop only for reduced motion; the Motion setting governs pointer tilt.
+			if (settings.reducedMotion) return false;
+			// A raised card dims the page; cards behind it hold their ambient pose until it lands again.
+			if (autonomousMotion.ambientHeld && !hovering && !focused && !dirty && !node.closest('[data-card-reader]:popover-open')) return false;
 			const desiredBlend = interrupted() ? 1 : 0;
-			const pointerActive = hovering && (options.enabled ?? true);
+			const pointerActive = hovering && (options.enabled ?? true) && settings.effectiveEnabled;
 			const directInteraction = pointerActive || focused;
-			const targetX = pointerActive ? -pointerY * MAX_TILT : 0;
-			const targetY = pointerActive ? pointerX * MAX_TILT : 0;
+			const target = pointerActive ? pointerTilt(pointerX, pointerY) : { rx: 0, ry: 0 };
 			const targetLift = directInteraction ? 1 : 0;
 			const canRender = (options.enabled ?? true) || autonomousEnabled() || focused;
 			return (dirty && canRender) ||
 				(autonomousEnabled() && (!interrupted() || Math.abs(hoverBlend - desiredBlend) > 0.001)) ||
-				Math.abs(currentX - targetX) > 0.01 || Math.abs(currentY - targetY) > 0.01 ||
-				Math.abs(currentLift - targetLift) > 0.001;
+				!settled(pose.x, target.rx, 0.01) || !settled(pose.y, target.ry, 0.01) ||
+				!settled(currentLift, targetLift, 0.001) ||
+				(pointerActive ? !settled(pose.envelope, pointerEnvelope(), 0.01) : pose.envelope.value > 0.01);
 		},
-		frame({ time, delta }) {
+		frame({ time, delta, settings }) {
 			const desiredBlend = interrupted() ? 1 : 0;
 			const blendStep = delta / 1000;
 			hoverBlend = desiredBlend > hoverBlend
 				? Math.min(desiredBlend, hoverBlend + blendStep)
 				: Math.max(desiredBlend, hoverBlend - blendStep);
-			const pointerActive = hovering && (options.enabled ?? true);
+			const pointerActive = hovering && (options.enabled ?? true) && settings.effectiveEnabled;
 			const directInteraction = pointerActive || focused;
-			const targetX = pointerActive ? -pointerY * MAX_TILT : 0;
-			const targetY = pointerActive ? pointerX * MAX_TILT : 0;
+			const target = pointerActive ? pointerTilt(pointerX, pointerY) : { rx: 0, ry: 0 };
 			const targetLift = directInteraction ? 1 : 0;
-			const response = 1 - Math.exp(-Math.max(delta, 1) / (interrupted() ? 72 : 220));
-			currentX += (targetX - currentX) * response;
-			currentY += (targetY - currentY) * response;
-			currentLift += (targetLift - currentLift) * response;
-			// Settle before the scheduler's activity threshold stops requesting frames.
-			if (!directInteraction) {
-				if (Math.abs(currentX) <= 0.01) currentX = 0;
-				if (Math.abs(currentY) <= 0.01) currentY = 0;
-				if (Math.abs(currentLift) <= 0.001) currentLift = 0;
-			}
-			let rx = currentX;
-			let ry = currentY;
-			let lift = currentLift;
+			const holding = interrupted();
+			currentLift = easeToward(currentLift, targetLift, delta, holding);
+			if (!directInteraction && settled(currentLift, 0, 0.001)) currentLift = rest();
+			let lift = currentLift.value;
+			let offsetX = 0;
+			let offsetY = 0;
 			let hotspotX: number | undefined;
 			let hotspotY: number | undefined;
 			let twinkle = 0;
 			const autonomousWeight = 1 - hoverBlend;
 			if (options.idle && autonomousWeight > 0) {
-				const seconds = time / 1000;
-				rx += 2.4 * IDLE_AMOUNT * autonomousWeight * (
-					0.62 * Math.sin(seconds * frequencyX1 * Math.PI * 2 + phaseX1) +
-					0.38 * Math.sin(seconds * frequencyX2 * Math.PI * 2 + phaseX2)
-				);
-				ry += 3.4 * IDLE_AMOUNT * autonomousWeight * (
-					0.62 * Math.sin(seconds * frequencyY1 * Math.PI * 2 + phaseY1) +
-					0.38 * Math.sin(seconds * frequencyY2 * Math.PI * 2 + phaseY2)
-				);
+				({ rx: offsetX, ry: offsetY } = idleDrift(time / 1000, rhythm, autonomousWeight));
 				lift = Math.max(lift, 0.12 * autonomousWeight);
 			} else if (options.wall && (options.finish ?? 'base') !== 'base' && autonomousWeight > 0) {
 				const phase = ((time + wallOffset) % 7000) / 7000;
@@ -360,15 +364,23 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				const spotlightWeight = spotlight * autonomousWeight;
 				hotspotX = 0.08 + sweep * 0.84;
 				hotspotY = 0.18 + Math.sin(phase * Math.PI * 2) * 0.08;
-				rx += Math.sin(spotlightAngle) * 0.7 * spotlightWeight;
-				ry += Math.cos(spotlightAngle) * 1.05 * spotlightWeight;
+				offsetX = Math.sin(spotlightAngle) * 0.7 * spotlightWeight;
+				offsetY = Math.cos(spotlightAngle) * 1.05 * spotlightWeight;
 				lift = Math.max(lift, spotlightWeight * 0.55);
 				if (options.finish === 'gem') {
 					const seconds = time / 1000;
-					twinkle = 0.22 * Math.sin(seconds * 2.7 + phaseX1) + 0.13 * Math.sin(seconds * 4.1 + phaseY2);
+					twinkle = 0.22 * Math.sin(seconds * 2.7 + rhythm.phaseX1) + 0.13 * Math.sin(seconds * 4.1 + rhythm.phaseY2);
 				}
 			}
-			applyTilt(node, { rx, ry, lift, hotspotX, hotspotY, twinkle });
+			const step = stepTilt(pose, { targetX: target.rx, targetY: target.ry, holding, pressing: pointerActive, offsetX, offsetY }, delta);
+			pose = step.state;
+			const { rx, ry, envelope } = step;
+			// Settle before the scheduler's activity threshold stops requesting frames.
+			if (!directInteraction) {
+				if (settled(pose.x, 0, 0.01)) pose.x = rest();
+				if (settled(pose.y, 0, 0.01)) pose.y = rest();
+			}
+			applyTilt(node, { rx, ry, envelope, lift, hotspotX, hotspotY, twinkle }, halfWidth, halfHeight);
 			dirty = false;
 		},
 		state(settings, visible) {
@@ -376,10 +388,9 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				restoreStyle(node, snapshot);
 				return;
 			}
-			if (!settings.effectiveEnabled) {
-				currentX = 0;
-				currentY = 0;
-				currentLift = 0;
+			if (settings.reducedMotion) {
+				pose = restingTilt();
+				currentLift = rest();
 				hoverBlend = 0;
 				applyFixedPose(node);
 				return;
@@ -392,7 +403,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 
 	return {
 		update(next: TiltOptions = {}) {
-			const nextTarget = next.eventTarget ?? node;
+			const nextTarget = hitArea(next.eventTarget ?? node);
 			if (nextTarget !== eventTarget) {
 				detachEvents();
 				eventTarget = nextTarget;
@@ -411,6 +422,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 		},
 		destroy() {
 			destroyed = true;
+			resized.disconnect();
 			detachEvents();
 			unregisterWall?.();
 			registration.unregister();
@@ -471,9 +483,11 @@ export function flip(node: HTMLElement, options: FlipOptions = {}) {
 	};
 	const showReader = () => {
 		if (dialog && !dialog.open) return;
+		reader.removeAttribute('data-returning');
 		if (!reader.matches(':popover-open')) reader.showPopover();
 	};
 	const hideReader = () => {
+		reader.removeAttribute('data-returning');
 		if (reader.matches(':popover-open')) reader.hidePopover();
 	};
 	const syncModalLayer = () => {
@@ -558,6 +572,8 @@ export function flip(node: HTMLElement, options: FlipOptions = {}) {
 			captureSource();
 			showReader();
 		}
+		// A returning card lets its backdrop and paired face fade while it flies home.
+		reader.toggleAttribute('data-returning', !opened && alreadyRaised);
 		const pose = readerPose();
 		if (opened && !alreadyRaised) state = { angle: state.angle, ...offsetFrom(sourceRect, pose) };
 		const flying = !opened || !wasOpened;
@@ -583,7 +599,8 @@ export function flip(node: HTMLElement, options: FlipOptions = {}) {
 		const opening = opened;
 		animation = animate(state, {
 			...destination,
-			duration: MOTION.cardFlight / settings.cardSpeed,
+			// Putting a card down is quicker than raising it.
+			duration: MOTION.cardFlight * (opening ? 1 : .6) / settings.cardSpeed,
 			ease: 'outQuint',
 			onUpdate: self => {
 				apply();

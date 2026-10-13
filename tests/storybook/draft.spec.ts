@@ -69,14 +69,32 @@ test.describe('Draft board browsing', () => {
 		await expect(caption).toHaveCSS('opacity', '0');
 		const first = await cards.first().getAttribute('aria-label');
 		const dealtAt = await cards.first().boundingBox();
-		const ghost = page.locator('.foil-pack .ghost-pack');
+		// By role, so the spent pack falling away (inert, hidden) is not counted.
+		const ghost = page.locator('.foil-pack').getByRole('button', { name: /^Add a franchise pack to choose from/ });
 		await expect(ghost).toHaveAccessibleName('Add a franchise pack to choose from, 2 of 2 left');
+		// A lone dealt card is set off from the extra-pack ghost.
+		await expect(page.locator('.foil-pack .divider')).toHaveCount(1);
+		// It sits midway between the lifted card's visible edge and the ghost.
+		await expect.poll(() => page.evaluate(() => {
+			const card = document.querySelector('.foil-pack .dealt-card')!.getBoundingClientRect();
+			const line = document.querySelector('.foil-pack .divider')!.getBoundingClientRect();
+			const next = document.querySelector('.foil-pack .ghost-pack')!.getBoundingClientRect();
+			return Math.abs((line.left - card.right) - (next.left - line.right));
+		})).toBeLessThan(1);
 		await ghost.click();
 		await expect(cards).toHaveCount(2);
 		await expect(ghost).toHaveAccessibleName('Add a franchise pack to choose from, 1 of 2 left');
+		await expect(page.locator('.foil-pack .divider')).toHaveCount(0);
 		// The new card opens right of the dealt one and takes focus; the pair slides over to share the center.
 		await expect(cards.first()).toHaveAttribute('aria-label', first!);
 		await expect(cards.nth(1)).toBeFocused();
+		// The new card lands at the same visible gap as the cards beside it and the ghost after it.
+		const visibleGaps = () => page.evaluate(() => {
+			const boxes = [...document.querySelectorAll('.foil-pack .dealt-card'), document.querySelector('.foil-pack .ghost-pack:not([inert])')]
+				.filter(node => node).map(node => node!.getBoundingClientRect());
+			return boxes.slice(1).map((box, index) => Math.round(box.left - boxes[index].right));
+		});
+		await expect.poll(visibleGaps).toEqual([12, 12]);
 		await ghost.click();
 		await expect(cards).toHaveCount(3);
 		await expect(ghost).toHaveCount(0);
@@ -88,6 +106,10 @@ test.describe('Draft board browsing', () => {
 		const [left, middle, right] = await cards.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
 		expect(left).toBeLessThan(middle);
 		expect(middle).toBeLessThan(right);
+		// Once a second pack is out the packs are equal choices: no divider, evenly spaced.
+		await expect(page.locator('.foil-pack .divider')).toHaveCount(0);
+		expect(Math.abs((middle - left) - (right - middle))).toBeLessThan(1);
+		await expect.poll(visibleGaps).toEqual([12, 12]);
 		await expect(caption).toHaveText('Take one pack');
 		await expect(caption).toHaveCSS('opacity', '1', { timeout: 8000 });
 		// Three cards share the column without spilling past it.
@@ -109,7 +131,19 @@ test.describe('Draft board browsing', () => {
 		const current = await page.locator('.reveal h2').textContent();
 		await page.locator('.draft-header').getByRole('button', { name: /Add a franchise pack/ }).click();
 		const cards = page.locator('.foil-pack .dealt-card');
+		// The table returns with the taken pack alone beside a ghost that shows but takes no clicks, then the added pack opens out of it.
+		const ghost = page.locator('.foil-pack').getByRole('button', { name: /^Add a franchise pack to choose from/ });
+		await expect(cards).toHaveCount(1);
+		await expect(ghost).toBeDisabled();
 		await expect(cards).toHaveCount(2);
+		await expect(cards.nth(1)).toBeFocused();
+		await expect(ghost).toBeEnabled();
+		// It lands as a ghost-opened pack does, at the row's one visible gap.
+		await expect.poll(() => page.evaluate(() => {
+			const boxes = [...document.querySelectorAll('.foil-pack .dealt-card'), document.querySelector('.foil-pack .ghost-pack:not([inert])')]
+				.filter(node => node).map(node => node!.getBoundingClientRect());
+			return boxes.slice(1).map((box, index) => Math.round(box.left - boxes[index].right));
+		})).toEqual([12, 12]);
 		await expect(cards.first().locator('.front strong')).toHaveText(current!);
 		const added = await cards.nth(1).locator('.front strong').textContent();
 		expect(added).not.toBe(current);
@@ -202,7 +236,8 @@ test.describe('Draft board browsing', () => {
 				const bounds = source.getBoundingClientRect();
 				return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
 			};
-			reader.querySelector<HTMLButtonElement>('.reader-return')!.click();
+			// Side by side there is no turn button; Escape puts the card down.
+			reader.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 			const finished = Promise.withResolvers<void>();
 			let last = rect();
 			const sample = () => {
@@ -229,15 +264,15 @@ test.describe('Draft board browsing', () => {
 		const first = page.locator('.candidate-card').first();
 		const next = page.locator('.candidate-card').nth(5);
 		await first.getByRole('button', { name: 'Turn over', exact: true }).click();
-		await expect(first.getByRole('button', { name: 'Show front', exact: true })).toBeFocused();
+		await expect(first.locator('[data-card-reader]')).toBeFocused();
 		const turnNext = next.getByRole('button', { name: 'Turn over', exact: true });
 		await turnNext.evaluate(button => scrollTo(0, scrollY + button.getBoundingClientRect().top - (innerHeight - 48)));
 		await turnNext.click();
 		await expect(first.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
 		await expect(next.locator('[data-cardbox]')).toHaveAttribute('data-face', 'back');
 		await expect(page.locator('[data-card-reader]:popover-open')).toHaveCount(1);
-		await expect(next.getByRole('button', { name: 'Show front', exact: true })).toBeFocused();
-		await next.getByRole('button', { name: 'Show front', exact: true }).click();
+		await expect(next.locator('[data-card-reader]')).toBeFocused();
+		await page.keyboard.press('Escape');
 		await expect(page.locator('[data-card-reader]:popover-open')).toHaveCount(0);
 		await expect(turnNext).toBeFocused();
 	});
@@ -287,7 +322,9 @@ test.describe('Draft board browsing', () => {
 		const season = await confirmation.getAttribute('data-selected-season');
 		await pick.getByRole('button', { name: 'Turn over', exact: true }).click();
 		await expect(confirmation).toHaveAttribute('data-selected-season', season!);
-		await pick.getByRole('button', { name: 'Show front', exact: true }).click();
+		// Side by side, clicking the raised card puts it down without touching the selection.
+		await pick.locator('[data-card-reader] .back').click({ position: { x: 20, y: 8 } });
+		await expect(page.locator('[data-card-reader]:popover-open')).toHaveCount(0);
 		await expect(confirmation).toHaveAttribute('data-selected-season', season!);
 		await page.locator('.field-panel [data-slot="2B"]').click();
 		await expect(confirmation).toHaveAttribute('data-pending-slot', '2B');
@@ -346,7 +383,7 @@ test.describe('Draft board browsing', () => {
 		await selectedGroup.getByRole('button', { name: 'Turn over', exact: true }).click();
 		await selectedGroup.getByRole('button', { name: /^Show text version for / }).click();
 		await expect(selectedGroup.getByRole('region', { name: 'Historical season text version', exact: true })).toBeVisible();
-		await selectedGroup.getByRole('button', { name: 'Show front', exact: true }).click();
+		await page.keyboard.press('Escape');
 		await expect(selectedGroup.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	});
 
@@ -370,7 +407,8 @@ test.describe('Draft board browsing', () => {
 		await expect(page.locator('.candidate-card[data-candidate-group]').first()).toBeInViewport();
 		await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
 		const pagination = page.getByRole('navigation', { name: 'Player card pages' });
-		await expect(pagination.getByRole('status')).toContainText('25 players');
+		// Desktop hides blocked groups: the pool's four pitchers have no legal slot on the first roll.
+		await expect(pagination.getByRole('status')).toContainText('21 players');
 		for (const width of [320, 402, 1212]) {
 			await page.setViewportSize({ width, height: 788 });
 			const bounds = await pagination.evaluate(nav => {

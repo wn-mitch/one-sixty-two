@@ -2,6 +2,7 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import CardWorkshop from './CardWorkshop.svelte';
 	import type { CardWorkshopProps } from './CardWorkshop.svelte';
+	import TiltWorkshop from './TiltWorkshop.svelte';
 
 	const { Story } = defineMeta({
 		title: 'Cards/Motion',
@@ -14,5 +15,10 @@
 	<CardWorkshop {...args} />
 {/snippet}
 
+{#snippet tiltTemplate(args: CardWorkshopProps)}
+	<TiltWorkshop {...args} />
+{/snippet}
+
 <Story exportName="IdleDrift" name="Idle drift" {template} />
+<Story exportName="TiltTuning" name="Tilt tuning" args={{ finish: 'gem', width: 320 }} template={tiltTemplate} />
 <Story exportName="WallFinishes" name="Wall finishes" args={{ mode: 'wall', width: 230, finish: 'base' }} {template} />

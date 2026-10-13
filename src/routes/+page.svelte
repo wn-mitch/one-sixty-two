@@ -3,6 +3,12 @@
  import Welcome from '#lib/components/Welcome.svelte';
  import ConfirmNewDraft from '#lib/components/ConfirmNewDraft.svelte';
  import ErrorDialog from '#lib/components/ErrorDialog.svelte';
+ import DraftSkeleton from '#lib/components/skeletons/DraftSkeleton.svelte';
+ import LineupSkeleton from '#lib/components/skeletons/LineupSkeleton.svelte';
+ import ProgressSkeleton from '#lib/components/skeletons/ProgressSkeleton.svelte';
+ import ResultsSkeleton from '#lib/components/skeletons/ResultsSkeleton.svelte';
+ import StadiumSkeleton from '#lib/components/skeletons/StadiumSkeleton.svelte';
+ import { skeletonSettled } from '#lib/components/skeletons/hold.ts';
  import { freeze, morphInto, riseIn, stash, take } from '#lib/components/phase-motion.ts';
  import { createCardViewModel, type CardMediaStatus } from '#lib/cards/view-model.ts';
  import { loadShowcase } from '#lib/game/data.ts';
@@ -65,18 +71,36 @@
    currentSession?.dispose();
   };
  });
+ /** Runs `run` once the browser is idle, or shortly after where it has no idle callback; returns a cancel. */
+ function whenIdle(run: () => void): () => void {
+  if ('requestIdleCallback' in window) {
+   const id = requestIdleCallback(run, { timeout: 2000 });
+   return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(run, 300);
+  return () => clearTimeout(id);
+ }
+ /** Resolves a stage's component once any skeleton standing in for it has shown long enough not to flash. */
+ const settled = <T>(module: Promise<{ default: T }>) => module.then(async ({ default: component }) => { await skeletonSettled(); return component; });
  const stages = {
-  stadium: () => { if (!StadiumDeck) return import('#lib/components/StadiumDeck.svelte').then(({ default: component }) => { StadiumDeck = component; }); },
-  draft: () => { if (!DraftBoard) return import('#lib/components/DraftBoard.svelte').then(({ default: component }) => { DraftBoard = component; }); },
-  lineup: () => { if (!Lineup) return import('#lib/components/Lineup.svelte').then(({ default: component }) => { Lineup = component; }); },
-  progress: () => { if (!Progress) return import('#lib/components/Progress.svelte').then(({ default: component }) => { Progress = component; }); },
-  results: () => { if (!Results) return import('#lib/components/Results.svelte').then(({ default: component }) => { Results = component; }); }
+  stadium: () => { if (!StadiumDeck) return settled(import('#lib/components/StadiumDeck.svelte')).then(component => { StadiumDeck = component; }); },
+  draft: () => { if (!DraftBoard) return settled(import('#lib/components/DraftBoard.svelte')).then(component => { DraftBoard = component; }); },
+  lineup: () => { if (!Lineup) return settled(import('#lib/components/Lineup.svelte')).then(component => { Lineup = component; }); },
+  progress: () => { if (!Progress) return settled(import('#lib/components/Progress.svelte')).then(component => { Progress = component; }); },
+  results: () => { if (!Results) return settled(import('#lib/components/Results.svelte')).then(component => { Results = component; }); }
  };
  $effect(() => {
   const phase = session?.phase;
   const failed = () => { phaseLoadError = 'This stage could not load. Reload the page to try again.'; };
   const current = phase === 'stadium' ? 'stadium' : phase === 'ready' || phase === 'revealing' || phase === 'choosing' ? 'draft' : phase === 'lineup' ? 'lineup' : phase === 'simulating' ? 'progress' : phase === 'results' ? 'results' : null;
-  if (!current) return;
+  if (!current) {
+   // The welcome screen loads the first stages while idle, so Start draft and Resume usually open with no skeleton.
+   if (phase !== 'start') return;
+   const resumesPastDraft = !!session?.savedDraft?.homeStadium;
+   return whenIdle(() => {
+    for (const stage of resumesPastDraft ? ['stadium', 'draft', 'lineup'] as const : ['stadium', 'draft'] as const) void stages[stage]()?.catch(() => {});
+   });
+  }
   void stages[current]()?.catch(failed);
   // The next stage loads ahead so its hand-off plays the moment the phase changes, with no loading frame between.
   const next = { stadium: 'draft', draft: 'lineup', lineup: 'progress', progress: 'results', results: null } as const;
@@ -187,26 +211,26 @@
     <div class="draft-top"><p class="eyebrow">Home stadium</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if StadiumDeck}
      <StadiumDeck manifest={currentSession.manifest} busy={currentSession.busy} onSelect={id => void currentSession.selectStadium(id)} />
-    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the stadiums…</span></div>{/if}
+    {:else if !phaseLoadError}<StadiumSkeleton />{/if}
    {:else if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
     <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if DraftBoard}
      <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onAddPack={() => currentSession.addPack()} onChoosePack={pack => void currentSession.choosePack(pack)} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
-    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the draft…</span></div>{/if}
+    {:else if !phaseLoadError}<DraftSkeleton pool={currentSession.phase === 'choosing' && currentSession.draft.packs.length <= 1} />{/if}
    {:else if currentSession.phase === 'lineup'}
     <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if Lineup}
      <Lineup draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onReassign={(id, slot) => currentSession.reassign(id, slot)} onOrder={(kind, order) => currentSession.order(kind, order)} onRoles={reliefRoles => currentSession.roles(reliefRoles)} onsimulate={() => void currentSession.simulate()} />
-    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the lineup…</span></div>{/if}
+    {:else if !phaseLoadError}<LineupSkeleton />{/if}
    {:else if currentSession.phase === 'simulating'}
     <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if Progress}
      <Progress completed={currentSession.completed} revealed={currentSession.revealed} result={currentSession.result} onskip={() => currentSession.skip()} />
-    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the season…</span></div>{/if}
+    {:else if !phaseLoadError}<ProgressSkeleton />{/if}
    {:else if currentSession.phase === 'results' && currentSession.result}
     {#if Results}
      <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} />
-    {:else if !phaseLoadError}<div class="stack" role="status"><div class="skeleton"></div><span class="muted">Loading the results…</span></div>{/if}
+    {:else if !phaseLoadError}<ResultsSkeleton />{/if}
    {/if}
   {/if}
  {:else if !gameLoadError}
@@ -216,8 +240,8 @@
 
 <style>
  main { min-height: 65vh; padding-block: var(--space-6); }
- main:has(:global(.draft-board.wide)) { padding-top: 0; }
- main:has(:global(.draft-board.wide)) .narrow-draft-top { display: none; }
+ main:has(:global(:is(.draft-board, .draft-skeleton).wide)) { padding-top: 0; }
+ main:has(:global(:is(.draft-board, .draft-skeleton).wide)) .narrow-draft-top { display: none; }
  .home-start { position: relative; padding-block: 0; }
  .session-feedback:empty { display: none; }
  .home-start .session-feedback {

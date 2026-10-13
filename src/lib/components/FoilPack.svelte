@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-	import { GEMHOLO, SILVER } from '../cards/finish.ts';
+		import { GEMHOLO, SILVER } from '../cards/finish.ts';
 	import { STOCK, roles } from '../cards/tokens.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
 	import { EASE_IN_OUT, EASE_OUT, MOTION } from '../motion-timing.ts';
@@ -17,7 +17,7 @@
 		color?: string;
 	}
 
-	let { packs, pickNumber, pickCount, marks = [], disabled = false, extraPacks, addDisabled = false, returning = null, flyTarget, onOpen, onAddPack, onChoose, onArrive, onDealt }: {
+	let { packs, pickNumber, pickCount, marks = [], disabled = false, extraPacks, addDisabled = false, returning = false, flyTarget, onOpen, onAddPack, onChoose, onArrive, onDealt }: {
 		/** The open packs, in dealt order; the first arrives after `onOpen` commits the roll. */
 		packs: readonly DealtPack[];
 		pickNumber: number;
@@ -36,10 +36,10 @@
 		/** Deals another pack beside the open ones; it arrives through `packs`. */
 		onAddPack?: () => void;
 		/**
-		 * Where the taken roll and the Add pack control sat when a pack was added from the pool's toolbar:
-		 * the taken card flows back down out of the roll identity and the new card deals out of the control.
+		 * A pack was just added from the pool's toolbar: the table fades back in as it was, the taken card beside
+		 * the ghost, and the added pack opens out of the ghost as if it had been tapped.
 		 */
-		returning?: { card: DOMRect | null; control: DOMRect | null } | null;
+		returning?: boolean;
 		/** Keeps one of several open packs, by its dealt position; called as its card starts for the rail. */
 		onChoose?: (pack: number) => void;
 		/** The card is reaching the rail; the rail may show the roll. Fires before `onDealt`. */
@@ -53,38 +53,46 @@
 	// Packs added before a reload, or from the pool's toolbar, are already face up.
 	let stage = $state<Stage>(untrack(() => packs.length > 1 ? 'dealt' : 'sealed'));
 	let packGone = $state(untrack(() => packs.length > 1));
-	let adding = $state(false);
+	/** A pack is opening out of the ghost; a returning table starts in this state with the pack already added. */
+	let adding = $state(untrack(() => returning && packs.length > 1 && appSettings.effectiveEnabled));
+	/** Set once a spent ghost has been handed to a falling copy, so the next ghost can take the table while the card settles. */
+	let spentOut = $state(false);
 	/** Remounts the ghost pack after one is spent, so the next fades in fresh. */
 	let ghostKey = $state(0);
 	let ghost = $state<HTMLButtonElement>();
 	let ghostSeal = $state<HTMLElement>();
 	let width = $state(0);
 	let stageWidth = $state(0);
-	/** The cards on the table, held while one is taken so the others can leave after the session keeps only it. */
-	let held = $state<readonly DealtPack[] | null>(null);
+	/** The cards on the table: held while one is taken so the others can leave after the session keeps only it, or while a returning table shows the taken card alone before the added pack opens. */
+	let held = $state<readonly DealtPack[] | null>(untrack(() => adding ? [packs[0]] : null));
 	const shown = $derived(held ?? packs);
 	const packKey = (pack: DealtPack) => rollKey(pack.roll);
-	/** A faded pack right of the dealt cards offers another while the draft has extras left and the roll has room. */
-	const ghostShown = $derived(!!extraPacks && !!onAddPack && (stage === 'dealt' || stage === 'taking' || adding) &&
-		(adding || (extraPacks.left > 0 && shown.length < extraPacks.max)));
+	/**
+	 * A faded pack right of the dealt cards offers another while the draft has extras left and the roll has room.
+	 * It shows as soon as the pack opens so it never pops in late, and takes clicks only once the dealt card has landed.
+	 */
+	const ghostShown = $derived(!!extraPacks && !!onAddPack && stage !== 'sealed' &&
+		((adding && !spentOut) || (extraPacks.left > 0 && shown.length < extraPacks.max)));
+	const ghostReady = $derived(stage === 'dealt' && packGone && !adding && !addDisabled);
 	const GAP = 12;
-	/** The divider's line and trailing margin plus the flex gaps on both its sides. */
+	/** The divider between a lone dealt card and the extra-pack ghost: its line, its equal margins and the flex gaps on both its sides. */
 	const DIVIDER = 1 + GAP + 2 * GAP;
 	/** Dealt cards sit lifted at 1.06 scale. */
 	const LIFT = 1.06;
 	/** The narrowest the extra-pack ghost gets before the dealt cards shrink to make room for it. */
 	const MIN_GHOST = 64;
 	/**
-	 * The dealt cards center as a group (one card alone sits where the pack was) with the ghost to their right.
+	 * The dealt cards center as an evenly spaced group (one card alone sits where the pack was) with the ghost to their right.
 	 * When the row misses fitting, the cards and ghost shrink together up to a fifth; past that the ghost narrows
 	 * to peek in, down to `MIN_GHOST`, and only then do the cards shrink further.
 	 */
 	const layout = $derived.by(() => {
 		const full = stageWidth * .86;
 		const count = shown.length;
-		// Half the row right of center is `perCard * size + fixed`, before the ghost and its lead-in.
-		const perCard = (count + LIFT - 1) / 2;
-		const fixed = count > 1 ? (DIVIDER + (count - 2) * GAP) / 2 : 0;
+		// Half the row right of center is `perCard * size + fixed`, before the ghost and its lead-in. Lifted cards
+		// sit their overhang further apart, so every visible gap, card to card and card to ghost, is `GAP`.
+		const perCard = count * LIFT / 2 + (ghostShown && count > 1 ? (LIFT - 1) / 2 : 0);
+		const fixed = count > 1 ? (count - 1) * GAP / 2 : 0;
 		const lead = ghostShown ? (count > 1 ? GAP : DIVIDER) : 0;
 		const room = width / 2 - 4 - fixed - lead;
 		if (!width) return { size: full, ghost: full };
@@ -94,8 +102,8 @@
 		const size = Math.min(full, (room - MIN_GHOST) / perCard);
 		return { size, ghost: Math.max(MIN_GHOST, Math.min(size, room - perCard * size)) };
 	});
-	/** Half the dealt cards' laid-out width (the divider follows the first card), so the row centers on them. */
-	const anchor = $derived((shown.length * layout.size + (shown.length > 1 ? DIVIDER + (shown.length - 2) * GAP : 0)) / 2);
+	/** Half the dealt cards' laid-out width, so the row centers on them. */
+	const anchor = $derived((shown.length * layout.size * LIFT - (LIFT - 1) * layout.size + Math.max(0, shown.length - 1) * GAP) / 2);
 	/** The caption names what to tap only after the player hesitates, so the pack and card teach themselves. */
 	let hinting = $state(false);
 	$effect(() => {
@@ -106,6 +114,7 @@
 		return () => clearTimeout(timer);
 	});
 	let pack = $state<HTMLElement>();
+	let hand = $state<HTMLElement>();
 	let seal = $state<HTMLElement>();
 	const cards: Record<string, HTMLButtonElement | undefined> = $state({});
 	const flippers: Record<string, HTMLElement | undefined> = $state({});
@@ -175,20 +184,25 @@
 		card?.focus({ preventScroll: true });
 	}
 
-	/** Fills in the ghost pack and opens it: the seal tears, the new card rises out and turns face up in its place, and the spent pack drops away. */
+	/**
+	 * Fills in the ghost pack and opens it: the session deals the pack at once, the ghost brightens as its seal
+	 * tears over the new card's slot, then the card rises out and turns face up while the spent pack drops away.
+	 */
 	async function addPack(): Promise<void> {
-		if (stage !== 'dealt' || adding || addDisabled || !onAddPack || !ghostShown) return;
+		if (!ghostReady || !onAddPack || !ghostShown) return;
 		adding = true;
+		await openGhost(onAddPack);
+	}
+
+	/** Opens the ghost onto the pack `add` puts on the table, and hands focus to the new card. */
+	async function openGhost(add: () => void): Promise<void> {
 		const motion = appSettings.effectiveEnabled;
+		const speed = appSettings.snapshot.cardSpeed || 1;
 		const before = new Map(shown.map(pack => [packKey(pack), cards[packKey(pack)]?.getBoundingClientRect()]));
-		if (motion) {
-			await play(ghost, [{ opacity: .4, filter: 'saturate(.3)' }, { opacity: 1, filter: 'none' }], { duration: MOTION.packTear });
-			await play(ghostSeal, [{ transform: 'none', opacity: 1 }, { transform: 'translate(18%, -140%) rotate(9deg)', opacity: 0 }], { duration: MOTION.packTear });
-		}
 		const ghostFrom = ghost?.getBoundingClientRect();
-		onAddPack();
+		add();
 		await tick();
-		const added = packs.length > before.size ? packs.at(-1) : undefined;
+		const added = shown.length > before.size ? packs.at(-1) : undefined;
 		if (added && motion) {
 			const key = packKey(added);
 			const card = cards[key];
@@ -200,22 +214,58 @@
 			for (const [other, from] of before) {
 				const element = cards[other];
 				const now = element?.getBoundingClientRect();
-				if (element && from && now && Math.abs(from.left - now.left) > .5) void play(element, [{ transform: `translateX(${from.left - now.left}px) scale(1.06)` }, { transform: 'scale(1.06)' }], { duration: MOTION.dealSettle });
+				if (!element || !from || !now) continue;
+				// Cards that shrink to make room on a narrow row ease down to their new size as they slide.
+				const dx = from.left + from.width / 2 - (now.left + now.width / 2);
+				const ratio = from.width / now.width;
+				if (Math.abs(dx) > .5 || Math.abs(ratio - 1) > .005) void play(element, [{ transform: `translateX(${dx}px) scale(${1.06 * ratio})` }, { transform: 'scale(1.06)' }], { duration: MOTION.addSettle / speed });
 			}
 			if (ghost) ghost.style.translate = `${spent || -offset}px 0`;
-			await play(card, [{ transform: 'translateY(0)' }, { transform: 'translateY(-45%)' }], { duration: MOTION.cardRise });
+			// The card waits face down inside the pack, smaller than it and behind it, until the seal is off, then pulls
+			// up out of its top. It comes forward only once the spent pack has dropped clear, growing to full size as it lands.
+			const inside = `scale(${(ghostTo && to ? Math.min(1, ghostTo.width / to.width) : 1) * MOTION.addInside})`;
+			const riseDelay = MOTION.ghostOpen * MOTION.addRiseAt / speed;
+			const clear = MOTION.packDrop * MOTION.addClear / speed;
+			if (card) card.style.zIndex = '0';
+			const rise = play(card, [{ transform: `translateY(0) ${inside}` }, { transform: `translateY(-45%) ${inside}` }], { duration: MOTION.addRise / speed, delay: riseDelay, fill: 'both' });
+			// Face down from the first frame; it turns over as it comes forward.
+			const flip = play(flippers[key], [{ transform: 'rotateY(180deg)' }, { transform: 'rotateY(0deg)' }], { duration: MOTION.addFlip / speed, delay: riseDelay + MOTION.addRise / speed + clear, fill: 'both' });
 			await Promise.all([
-				play(ghost, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(115%) rotate(-4deg)', opacity: 0 }], { duration: MOTION.packDrop, easing: EASE_IN_OUT }),
-				play(card, [{ transform: 'translateY(-45%)' }, { transform: 'translateY(0) scale(1.06)' }], { duration: MOTION.dealSettle }),
-				play(flippers[key], [{ transform: 'rotateY(180deg)' }, { transform: 'rotateY(0deg)' }], { duration: MOTION.deal, delay: 60 })
+				play(ghost, [{ opacity: .4, filter: 'saturate(.3)' }, { opacity: 1, filter: 'none' }], { duration: MOTION.ghostOpen / speed }),
+				play(ghostSeal, [{ transform: 'none', opacity: 1 }, { transform: 'translate(18%, -140%) rotate(9deg)', opacity: 0 }], { duration: MOTION.ghostOpen / speed }),
+				rise
+			]);
+			const falling = dropCopy(ghost);
+			spentOut = true;
+			ghostKey += 1;
+			// The spent pack falls on its own; the new card is ready once it has turned face up.
+			void play(falling, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(115%) rotate(-4deg)', opacity: 0 }], { duration: MOTION.packDrop / speed, easing: EASE_IN_OUT }).then(() => falling?.remove());
+			await wait(clear);
+			if (card) card.style.zIndex = '';
+			await Promise.all([
+				play(card, [{ transform: `translateY(-45%) ${inside}` }, { transform: 'translateY(0) scale(1.06)' }], { duration: MOTION.addSettle / speed }),
+				flip
 			]);
 		}
-		ghostKey += 1;
+		if (!spentOut) ghostKey += 1;
+		spentOut = false;
 		adding = false;
 		if (added) {
 			await tick();
 			cards[packKey(added)]?.focus({ preventScroll: true });
 		}
+	}
+
+	/** An inert copy of the opened ghost, pinned where it sits in the row with its seal off, to fall away in its place. */
+	function dropCopy(source: HTMLElement | undefined): HTMLElement | undefined {
+		if (!source?.parentElement) return undefined;
+		const copy = source.cloneNode(true) as HTMLElement;
+		copy.setAttribute('aria-hidden', 'true');
+		copy.inert = true;
+		Object.assign(copy.style, { position: 'absolute', left: `${source.offsetLeft}px`, top: `${source.offsetTop}px`, opacity: '1', filter: 'none', animation: 'none', pointerEvents: 'none' });
+		copy.querySelector<HTMLElement>('.seal')?.style.setProperty('opacity', '0');
+		source.parentElement.append(copy);
+		return copy;
 	}
 
 	/** Slides the taken card into the rail while any other packs fall away; the rail then grows the franchise name and era. */
@@ -258,26 +308,17 @@
 		clearTimeout(arrive);
 	}
 
-	/** The transform that puts `element` over `rect`, from its laid-out place. */
-	function over(element: HTMLElement, rect: DOMRect): string {
-		const now = element.getBoundingClientRect();
-		const dx = rect.left + rect.width / 2 - (now.left + now.width / 2);
-		const dy = rect.top + rect.height / 2 - (now.top + now.height / 2);
-		return `translate(${dx}px, ${dy}px) scale(${Math.max(.08, rect.height / now.height)})`;
-	}
-
-	/** The taken roll stretches back out of the header into the first card while the new card deals out of the Add pack control. */
-	async function unfold({ card, control }: { card: DOMRect | null; control: DOMRect | null }): Promise<void> {
-		await tick();
-		const taken = cards[packKey(packs[0])];
-		const added = packs.at(-1)!;
-		const fresh = cards[packKey(added)];
-		const settled = 'translateY(0) scale(1.06)';
-		await Promise.all([
-			card && taken ? play(taken, [{ transform: over(taken, card), opacity: .2, borderRadius: '50%' }, { opacity: 1, offset: .35 }, { transform: settled, opacity: 1 }], { duration: MOTION.deal }) : Promise.resolve(),
-			control && fresh ? play(fresh, [{ transform: over(fresh, control), opacity: 0 }, { opacity: 1, offset: .25 }, { transform: settled, opacity: 1 }], { duration: MOTION.deal, delay: MOTION.deal * .25 }) : Promise.resolve(),
-			play(flippers[packKey(added)], [{ transform: 'rotateY(180deg)' }, { transform: 'rotateY(0deg)' }], { duration: MOTION.deal, delay: MOTION.deal * .4 })
-		]);
+	/** Fades a table returning from the pool back in as it was, then opens the pack already added out of the ghost. */
+	async function returnToTable(): Promise<void> {
+		// Hidden and still until the row has measured its width, so the table appears already laid out.
+		if (hand) Object.assign(hand.style, { opacity: '0', transition: 'none' });
+		await new Promise(requestAnimationFrame);
+		await new Promise(requestAnimationFrame);
+		if (hand) Object.assign(hand.style, { opacity: '', transition: '' });
+		// The taken card sits lifted, as every dealt card does once it lands.
+		void play(cards[packKey(packs[0])], [{ transform: 'scale(1.06)' }, { transform: 'scale(1.06)' }], { duration: 1 });
+		await play(hand, [{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.returnFade / (appSettings.snapshot.cardSpeed || 1), fill: 'backwards' });
+		await openGhost(() => held = null);
 	}
 
 	onMount(() => {
@@ -289,7 +330,7 @@
 				if (url) new Image().src = url;
 			}
 		}).catch(() => {});
-		if (returning && appSettings.effectiveEnabled && packs.length > 1) void unfold(returning);
+		if (adding) void returnToTable();
 		// Each pack rises into place, so the screen it replaces hands off rather than cutting.
 		else if (appSettings.effectiveEnabled) {
 			const speed = appSettings.snapshot.cardSpeed || 1;
@@ -304,9 +345,8 @@
 
 <div class="foil-pack" class:opening={stage !== 'sealed'} class:dealt={stage === 'dealt' || stage === 'taking'} class:pack-gone={packGone} bind:clientWidth={width}>
 	<div class="stage" bind:clientWidth={stageWidth}>
-		<div class="hand" style:--card-w="{layout.size}px" style:--ghost-w="{layout.ghost}px" style:--anchor="{anchor}px">
-			{#each shown as pack, index (packKey(pack))}
-				{#if index === 1}<span class="divider" aria-hidden="true"></span>{/if}
+		<div class="hand" bind:this={hand} style:--card-w="{layout.size}px" style:--lift={LIFT} style:--ghost-w="{layout.ghost}px" style:--anchor="{anchor}px">
+			{#each shown as pack (packKey(pack))}
 				<button
 					type="button"
 					class="dealt-card"
@@ -339,7 +379,7 @@
 			{#if ghostShown}
 				{#if shown.length === 1}<span class="divider" aria-hidden="true"></span>{/if}
 				{#key ghostKey}
-					<button type="button" class="ghost-pack" bind:this={ghost} aria-label={`Add a franchise pack to choose from, ${extraPacks!.left} of ${extraPacks!.total} left`} disabled={stage !== 'dealt' || adding || addDisabled} onclick={() => void addPack()} style:--foil={SILVER}>
+					<button type="button" class="ghost-pack" bind:this={ghost} aria-label={`Add a franchise pack to choose from, ${extraPacks!.left} of ${extraPacks!.total} left`} disabled={!ghostReady} onclick={() => void addPack()} style:--foil={SILVER}>
 						<span class="seal" bind:this={ghostSeal} aria-hidden="true"></span>
 						<span class="ghost-face" aria-hidden="true">
 							<span class="ghost-plus">+</span>
@@ -382,12 +422,14 @@
 	.hand { position: absolute; z-index: 1; inset: 0 auto; left: 50%; translate: calc(-1 * var(--anchor)) 0; display: flex; align-items: center; gap: 12px; width: max-content; transition: translate var(--motion-deal) var(--ease-out); }
 	:global([data-motion='off']) .hand { transition: none; }
 	@media (prefers-reduced-motion: reduce) { .hand { transition: none; } }
-	.divider { flex: none; align-self: center; width: 1px; height: 70%; margin-inline: 12px; margin-inline-start: 0; background: var(--border); animation: ghost-in var(--motion-deal) var(--ease-out) var(--motion-deal) both; }
-	.ghost-pack { --mx: 30%; position: relative; flex: none; display: grid; grid-template-rows: 9% 1fr 9%; width: var(--ghost-w); aspect-ratio: 5 / 7; padding: 0; border: 0; border-radius: .3rem; color: var(--background); background: var(--foil); overflow: hidden; opacity: .4; filter: saturate(.3); container-type: inline-size; cursor: pointer; transition: opacity .15s, filter .15s; animation: ghost-in var(--motion-deal) var(--ease-out) var(--motion-deal) backwards; }
+	/* The line sits midway between the lifted card's visible edge (1.06 scale overhangs it by 3% of the card) and the ghost. */
+	.divider { flex: none; align-self: center; width: 1px; height: 70%; margin-inline: 6px; translate: calc(var(--card-w) * .015) 0; background: var(--border); animation: ghost-in var(--motion-deal) var(--ease-out) both; }
+	.ghost-pack { --mx: 30%; --my: 50%; position: relative; flex: none; display: grid; grid-template-rows: 9% 1fr 9%; width: var(--ghost-w); aspect-ratio: 5 / 7; padding: 0; border: 0; border-radius: .3rem; color: var(--background); background: var(--foil); box-shadow: inset 0 0 0 1px oklch(100% 0 0 / .35); overflow: hidden; opacity: .4; filter: saturate(.3); container-type: inline-size; cursor: pointer; transition: opacity .15s, filter .15s; animation: ghost-in var(--motion-deal) var(--ease-out) backwards; }
 	.ghost-pack:hover:not(:disabled), .ghost-pack:focus-visible { background: var(--foil); opacity: .65; filter: none; }
-	.ghost-pack:disabled { cursor: default; }
+	/* Until the dealt card lands the ghost shows, dimmer, but takes no clicks. */
+	.ghost-pack:disabled { cursor: default; opacity: .22; filter: saturate(0); }
 	.ghost-pack:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
-	.ghost-face { display: grid; align-content: center; justify-items: center; gap: 4cqi; margin-inline: 5cqi; color: var(--text); background: oklch(16% .012 255 / .92); border-block: 2px solid oklch(100% 0 0 / .6); }
+	.ghost-face { display: grid; align-content: center; justify-items: center; gap: 4cqi; margin-inline: 5cqi; color: var(--text); background: oklch(16% .012 255 / .92); border-block: 3px solid oklch(100% 0 0 / .6); }
 	.ghost-plus { font: 300 32cqi / .8 system-ui, sans-serif; }
 	.ghost-title { font: italic 900 12cqi / 1 'Barlow Condensed', sans-serif; letter-spacing: .02em; text-transform: uppercase; color: var(--accent); }
 	.ghost-count { color: var(--muted); font-size: max(.625rem, 7.5cqi); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
@@ -473,6 +515,9 @@
 		visibility: hidden;
 	}
 	.opening .dealt-card { visibility: visible; }
+	/* Lifted cards overhang their boxes by 3% a side; these margins keep the visible gaps at the flex gap. */
+	.dealt-card + .dealt-card { margin-left: calc(var(--card-w) * (var(--lift) - 1)); }
+	.dealt-card + .ghost-pack { margin-left: calc(var(--card-w) * (var(--lift) - 1) / 2); }
 	button.dealt-card { padding: 0; border: 0; border-radius: .3rem; color: inherit; background: none; font: inherit; }
 	button.dealt-card:not(:disabled) { cursor: pointer; }
 	button.dealt-card:hover:not(:disabled) { background: none; }

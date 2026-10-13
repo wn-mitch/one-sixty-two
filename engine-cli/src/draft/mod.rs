@@ -2,6 +2,7 @@
 //! seasons, all in parallel. Prints one `{label, valueRuns, jackpots, wins}` line per roster.
 mod policy;
 mod rules;
+pub mod sample;
 
 use crate::spread::{play, simulation_path};
 use engine::types::{ParkRef, Profile, RosterPick, SeasonRequest};
@@ -33,6 +34,7 @@ fn load(root: &Path) -> Result<(Pool, Vec<Profile>, ParkRef), String> {
         .filter_map(|((id, value), slot)| Some((id.as_str()?.to_string(), (value.as_f64()?, SLOTS.iter().position(|name| Some(*name) == slot.as_str())?))))
         .collect();
     let elite: HashSet<&str> = manifest["jackpot"].as_array().ok_or("manifest has no jackpot pool")?.iter().filter_map(Value::as_str).collect();
+    let headliners: HashSet<&str> = manifest["jackpotHeadliners"].as_array().ok_or("manifest has no jackpot headliners")?.iter().filter_map(Value::as_str).collect();
     let mut rows: Vec<&Value> = manifest["candidates"].as_array().ok_or("manifest has no candidates")?.iter().filter(|row| {
         let year: i32 = row["seasonId"].as_str().and_then(|id| id.split(':').nth(1)).and_then(|year| year.parse().ok()).unwrap_or(0);
         (1950..=2025).contains(&year) && values.contains_key(row["seasonId"].as_str().unwrap_or(""))
@@ -47,7 +49,7 @@ fn load(root: &Path) -> Result<(Pool, Vec<Profile>, ParkRef), String> {
         let slots = row["eligibleSlots"].as_array().unwrap().iter().filter_map(|slot| SLOTS.iter().position(|name| Some(*name) == slot.as_str())).fold(0u16, |mask, slot| mask | 1 << slot);
         Card {
             player: index(&players, row["playerId"].as_str().unwrap()), franchise: index(&franchises, row["franchiseId"].as_str().unwrap()),
-            decade: row["decade"].as_i64().unwrap() as i32, slots, value, priced, elite: elite.contains(season_id.as_str()), season_id,
+            decade: row["decade"].as_i64().unwrap() as i32, slots, value, priced, elite: elite.contains(season_id.as_str()), headliner: headliners.contains(season_id.as_str()), season_id,
         }
     }).collect::<Vec<Card>>();
     let mut profiles: HashMap<String, Profile> = HashMap::new();

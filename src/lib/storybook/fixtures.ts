@@ -135,7 +135,8 @@ function candidateFor(profile: Profile, decade = Math.floor(profile.year / 10) *
  };
 }
 
-function f2Candidates(canonical: Profile): Profile[] {
+/** The F2 pool: 20 hitters and, from candidate 21, four pitchers, so the pool ranks both roles together. */
+function f2Candidates(canonical: Profile, starter: Profile, closer: Profile): Profile[] {
  const alternate = {
   ...cloneProfile(canonical),
   seasonId: `${canonical.playerId}:2024:AL:T2`,
@@ -145,6 +146,23 @@ function f2Candidates(canonical: Profile): Profile[] {
  const candidates = Array.from({ length: 24 }, (_, index): Profile => {
   const number = String(index + 1).padStart(2, '0');
   const year = index % 2 === 0 ? 2024 : 2025;
+  if (index >= 20) {
+   const template = index === 23 ? closer : starter;
+   return {
+    ...cloneProfile(template),
+    franchiseId: canonical.franchiseId,
+    teamId: canonical.teamId,
+    league: canonical.league,
+    seasonId: `candidate-${number}:${year}:AL:T2`,
+    playerId: `candidate-${number}`,
+    displayName: `Example Candidate ${number}`,
+    year,
+    historicalTeam: 'Example Club F2',
+    primaryHitterSlot: null,
+    batting: undefined,
+    battingRates: undefined
+   };
+  }
   const eligibleSlots: HitterSlot[] = index % 2 === 0 ? ['2B'] : ['2B', 'CF'];
   const defense = Object.fromEntries(
    eligibleSlots.filter((slot): slot is Position => slot !== 'DH').map(slot => [slot, neutralDefensivePosition(slot)])
@@ -196,6 +214,7 @@ function buildManifest(profiles: Profile[], candidates: Candidate[], simulationD
   diagnostics: { excludedBatting: 0, excludedPitching: 0, excludedProfiles: 0, estimatedProfiles: 0, reportUrl: '' },
   // No elite seasons, so the scripted workshop drafts deal only franchise packs.
   jackpot: [],
+  jackpotHeadliners: [],
   attribution: {
    title: 'Synthetic Storybook examples',
    credit: 'Illustrative fixture data',
@@ -282,7 +301,10 @@ export function createExampleFixtures(): ExampleFixtures {
  const canonical = roster.map(item => item.profile);
  const f2Canonical = roster.find(item => item.profile.franchiseId === F2)?.profile;
  if (!f2Canonical) throw new Error('Example fixture is missing canonical F2 profile');
- const extraProfiles = f2Candidates(f2Canonical);
+ const pitcher = (slot: Slot) => roster.find(item => item.slot === slot)?.profile;
+ const starter = pitcher('SP1'), closer = pitcher('CL');
+ if (!starter || !closer) throw new Error('Example fixture is missing canonical SP1 or CL profile');
+ const extraProfiles = f2Candidates(f2Canonical, starter, closer);
  const profiles = [...canonical, ...extraProfiles];
  const candidates = profiles.map(profile => candidateFor(profile));
  const manifest = buildManifest(profiles, candidates, simulationData);

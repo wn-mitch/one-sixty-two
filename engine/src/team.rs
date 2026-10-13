@@ -38,6 +38,7 @@ pub fn create_box(team: &TeamInput) -> TeamBox {
             year: profile.year,
             pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, hr: 0, bb: 0, hbp: 0, so: 0, r: 0, rbi: 0, sb: 0, cs: 0, sf: 0,
             batting_runs: 0.0, steal_runs: 0.0, defensive_runs: 0.0, defensive_components: DefensiveRunComponents::default(), fielding_outs: 0, caught_advancing: 0,
+            grand_slams: 0, walk_off_home_runs: 0,
         }).collect(),
         pitching: team.pitchers.iter().enumerate().map(|(index, profile)| PitcherLine {
             season_id: profile.season_id.clone(), player_id: profile.player_id.clone(), display_name: profile.display_name.clone(), year: profile.year,
@@ -45,7 +46,7 @@ pub fn create_box(team: &TeamInput) -> TeamBox {
                 else if team.relievers.contains(&index) { PitcherRole::Reliever } else { PitcherRole::Starter },
             outs: 0, h: 0, bb: 0, hbp: 0, so: 0, r: 0,
             starts: (index == team.starter_index) as i32, appearances: (index == team.starter_index) as i32,
-            bf: 0, pitching_runs_above_neutral: 0.0,
+            bf: 0, pitching_runs_above_neutral: 0.0, saves: 0, blown_saves: 0, save_opportunities: 0,
         }).collect(),
         batting_runs: 0.0, steal_runs: 0.0, defensive_runs: 0.0, defensive_components: DefensiveRunComponents::default(), pitching_runs_above_neutral: 0.0,
     }
@@ -71,11 +72,13 @@ pub fn accumulate_box(totals: &mut TeamBox, game: &TeamBox) -> Result<(), String
         total.sb += line.sb; total.cs += line.cs; total.sf += line.sf;
         total.batting_runs += line.batting_runs; total.steal_runs += line.steal_runs; total.defensive_runs += line.defensive_runs;
         total.fielding_outs += line.fielding_outs; total.caught_advancing += line.caught_advancing;
+        total.grand_slams += line.grand_slams; total.walk_off_home_runs += line.walk_off_home_runs;
         total.defensive_components.add(&line.defensive_components);
     }
     for (total, line) in totals.pitching.iter_mut().zip(&game.pitching) {
         total.outs += line.outs; total.h += line.h; total.bb += line.bb; total.hbp += line.hbp; total.so += line.so; total.r += line.r;
         total.starts += line.starts; total.appearances += line.appearances; total.bf += line.bf;
+        total.saves += line.saves; total.blown_saves += line.blown_saves; total.save_opportunities += line.save_opportunities;
         total.pitching_runs_above_neutral += line.pitching_runs_above_neutral;
     }
     totals.runs += game.runs;

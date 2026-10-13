@@ -117,15 +117,16 @@
 		});
 	}));
 	const galleryCards = $derived(eras.map((galleryEra, index) => {
-		const galleryProfile = profileFor('hitter', galleryEra, false);
+		// The gallery follows the role control, so pitcher fronts can be compared era by era.
+		const galleryProfile = profileFor(previewRole, galleryEra, false);
 		const sourcePlayerId = galleryProfile.playerId;
 		galleryProfile.playerId = `storybook-gallery-${index + 1}`;
 		galleryProfile.seasonId = `storybook-gallery-${index + 1}:${eraYear[galleryEra]}:AL:T`;
 		galleryProfile.displayName = `Example Era ${galleryEra}`;
 		return createCardViewModel({
 			profile: galleryProfile,
-			slot: '2B',
-			ranking: getExampleFinishRanking('hitter', previewFinish),
+			slot: slotFor(previewRole),
+			ranking: getExampleFinishRanking(rankingRole(previewRole), previewFinish),
 			media: mediaFor(galleryProfile, sourcePlayerId),
 			mediaStatus: 'ready',
 			manifest

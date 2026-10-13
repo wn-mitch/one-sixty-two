@@ -13,8 +13,8 @@ function entry(key: string, wins: number, savedAt: string, hr = 10): LibraryEntr
  return {
   key, savedAt, token: `token-${key}`, schemaVersion: 5, modelVersion: 'contact-v1', dataVersion: 'data',
   record: { wins, losses: 162 - wins }, runs: { scored: 800, allowed: 600 },
-  batting: [{ seasonId: SLUGGER, label: 'Slugger 2001', slot: 'LF', PA: 650, AB: 560, H: 160, doubles: 30, triples: 2, HR: hr, BB: 70, HBP: 5, SF: 5, RBI: 80, SB: 5, war: 3 }],
-  pitching: [{ seasonId: ARM, label: 'Arm 1999', slot: 'SP1', outs: 900, H: 200, BB: 60, SO: 250, R: 150, starts: 54, war: 4 }],
+  batting: [{ seasonId: SLUGGER, label: 'Slugger 2001', slot: 'LF', PA: 650, AB: 560, H: 140, doubles: 30, triples: 2, HR: hr, BB: 40, HBP: 5, SF: 5, RBI: 80, SB: 5, war: 3 }],
+  pitching: [{ seasonId: ARM, label: 'Arm 1999', slot: 'SP1', outs: 900, H: 200, BB: 60, SO: 150, R: 150, starts: 54, war: 4 }],
   stadium: null,
   roster: [{ seasonId: SLUGGER, label: 'Slugger 2001', slot: 'LF' }, { seasonId: ARM, label: 'Arm 1999', slot: 'SP1' }]
  };
@@ -27,14 +27,14 @@ describe('collection', () => {
   const { db } = await memoryDb();
   await db.run(save(entry('k1', 100, day(0), 45)));
   await db.run(save({ ...entry('k1', 100, day(5), 45) }));
-  await db.run(save(entry('k2', 80, day(1))));
+  await db.run(save(entry('k2', 19, day(1))));
   await db.run([{ sql: "DELETE FROM seasons WHERE key = 'k1'" }]);
   const cards = await loadCollection(db);
   const slugger = cards.find(card => card.seasonId === SLUGGER)!;
   expect(slugger).toMatchObject({ times: 2, firstAt: day(0), lastAt: day(1), best: { wins: 100, losses: 62 } });
   expect(slugger.best.line).toMatchObject({ HR: 45 });
   expect(slugger.stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['hr-40', day(0)], ['wins-100', day(0)]]);
-  // Every card on a complete season earns its grade once; a later season with the same grade adds nothing.
+  // Every card on a complete season earns its grade once; a later season with the same grade, below every team tier, adds nothing.
   expect((await stickersFromSeason(db, 'k2'))).toEqual([]);
  });
 
@@ -55,7 +55,7 @@ describe('collection', () => {
   const { db } = await memoryDb();
   for (let index = 0; index < 10; index++) await db.run(save(entry(`k${index}`, 70, day(index))));
   const stickers = (await loadStickers(db)).get(ARM)!;
-  expect(stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['drafted-5', day(4)], ['drafted-10', day(9)]]);
+  expect(stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['wins-60', day(0)], ['drafted-3', day(2)], ['drafted-5', day(4)], ['drafted-10', day(9)]]);
   expect((await stickersFromSeason(db, 'k4')).map(item => item.sticker.kind)).toEqual(['drafted-5', 'drafted-5']);
  });
 
@@ -82,6 +82,6 @@ describe('collection', () => {
   migrate(raw, NO_LEGACY);
   const cards = await loadCollection(db);
   expect(cards.map(card => [card.seasonId, card.times])).toEqual([[ARM, 5], [SLUGGER, 5]]);
-  expect((await loadStickers(db)).get(ARM)!.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['wins-100', day(0)], ['drafted-5', day(4)]]);
+  expect((await loadStickers(db)).get(ARM)!.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['wins-100', day(0)], ['drafted-3', day(2)], ['drafted-5', day(4)]]);
  });
 });

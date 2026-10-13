@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from './draft.ts';
-import { deleteSeason, loadLibrary, renameSeason, saveSeason } from './library.ts';
+import { deleteSeason, gameFeats, loadLibrary, renameSeason, saveSeason } from './library.ts';
 import { persistDraft } from './persistence.ts';
 import { brokenDb, memoryDb } from '../storage/test-db.ts';
 import { SLOTS, type Candidate, type Draft, type Manifest } from './types.ts';
@@ -13,6 +13,7 @@ const candidates: Candidate[] = SLOTS.map((slot, index) => ({
 const franchiseIds = candidates.map(candidate => candidate.franchiseId);
 const manifest = {
  jackpot: [],
+ jackpotHeadliners: [],
  schemaVersion: 1, dataVersion: 'library-v1', sourceCommit: 'synthetic', candidates,
  franchises: franchiseIds.map(id => ({ id, name: `Club ${id}`, decades: [1980] })),
  chunks: {}, stadiums: syntheticStadiumSummaries(franchiseIds), simulationUrl: '', attributionUrl: '', showcaseUrl: '', archiveUrl: '',
@@ -29,7 +30,7 @@ function complete(seed: number): Draft {
  }
  return draft;
 }
-const result = (wins: number) => ({ wins, losses: 162 - wins, runsFor: 700, runsAgainst: 600, batting: [], pitching: [] }) as unknown as SeasonResult;
+const result = (wins: number) => ({ wins, losses: 162 - wins, runsFor: 700, runsAgainst: 600, batting: [], pitching: [], games: [] }) as unknown as SeasonResult;
 
 describe('season library', () => {
  it('keeps one entry per completed draft, its first save date, and leaves the active save untouched', async () => {
@@ -80,5 +81,41 @@ describe('season library', () => {
  it('returns a notice instead of throwing when storage fails', async () => {
   await expect(saveSeason(brokenDb, complete(9), result(70), [], manifest)).resolves.toMatch('unavailable');
   await expect(loadLibrary(brokenDb, manifest)).resolves.toMatchObject({ entries: [], notice: expect.stringMatching('unavailable') });
+ });
+});
+
+describe('game feats', () => {
+ const arm = (seasonId: string, stats: { outs: number; H: number; R?: number; BB?: number; HBP?: number; BF?: number; SO?: number }) =>
+  ({ seasonId, R: 0, BB: 0, HBP: 0, SO: 5, BF: stats.outs, ...stats });
+ const bat = (seasonId: string, H: number, doubles: number, triples: number, HR: number) => ({ seasonId, H, doubles, triples, HR });
+ const game = (isHome: boolean, pitching: ReturnType<typeof arm>[], batting: ReturnType<typeof bat>[] = []) => {
+  const club = { pitching, batting }, other = { pitching: [arm('them', { outs: 27, H: 0, SO: 25 })], batting: [bat('them', 4, 1, 1, 1)] };
+  return { isHome, home: isHome ? club : other, away: isHome ? other : club };
+ };
+ const feats = (games: ReturnType<typeof game>[]) => {
+  const { batting, pitching } = gameFeats({ games } as unknown as Pick<SeasonResult, 'games'>);
+  return { batting: Object.fromEntries(batting), pitching: Object.fromEntries(pitching) };
+ };
+
+ it('counts complete-game shutouts, no-hitters and perfect games, and 20-strikeout games, for the club only', () => {
+  expect(feats([
+   game(true, [arm('ace', { outs: 27, H: 0 })]), // perfect
+   game(false, [arm('ace', { outs: 30, H: 0, BB: 2, BF: 32 })]), // extra-inning no-hitter with walks
+   game(true, [arm('ace', { outs: 27, H: 0, R: 1, BF: 28 })]), // reached on error and scored: no-hitter, not perfect, not a shutout
+   game(true, [arm('ace', { outs: 27, H: 4, BF: 31, SO: 20 })]), // four-hit shutout with 20 strikeouts
+   game(true, [arm('ace', { outs: 24, H: 0 })]), // eight innings: nothing
+   game(true, [arm('ace', { outs: 21, H: 0, SO: 21 }), arm('pen', { outs: 6, H: 0 })]), // combined: only the starter's 20-strikeout game
+   game(false, [arm('ace', { outs: 27, H: 1, R: 1, BF: 28 })])
+  ]).pitching).toEqual({
+   ace: { noHitters: 3, perfectGames: 1, shutouts: 3, twentyStrikeoutGames: 2 }
+  });
+ });
+
+ it('counts cycles and the most home runs in one game for the club\'s hitters', () => {
+  expect(feats([
+   game(true, [], [bat('lead', 4, 1, 1, 1), bat('slug', 4, 0, 0, 4)]), // natural cycle; four homers
+   game(false, [], [bat('lead', 5, 2, 1, 1), bat('slug', 3, 0, 0, 3)]), // cycle with an extra double
+   game(true, [], [bat('lead', 3, 1, 1, 1), bat('slug', 0, 0, 0, 0)]) // no single: no cycle
+  ]).batting).toEqual({ lead: { cycles: 2, mostHomeRunsInGame: 1 }, slug: { cycles: 0, mostHomeRunsInGame: 4 } });
  });
 });

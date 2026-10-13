@@ -151,8 +151,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			for (const [key, snapshot] of snapshots) {
 				const node = nodes.get(key);
 				if (!node) {
-					// Only cards that were on screen are seen leaving.
-					if (snapshot.rect.bottom > 0 && snapshot.rect.top < innerHeight) leaving.push(snapshot);
+					leaving.push(snapshot);
 					continue;
 				}
 				const rect = measured(node);
@@ -173,7 +172,12 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 				node.style.opacity = '0';
 				entrants.push(node);
 			}
-			const copies = leaving.map(({ node, rect }) => ({ clone: ghostOf(node, rect), rect }));
+			// Every leaving card is scooped, including ones below the fold that fly up into the pile, in
+			// reading order and capped so a long page never copies more than two deals' worth.
+			const copies = leaving
+				.sort((a, b) => Math.round(a.rect.top - b.rect.top) || a.rect.left - b.rect.left)
+				.slice(0, MOTION.dealMaxCards * 2)
+				.map(({ node, rect }) => ({ clone: ghostOf(node, rect), rect }));
 			document.body.append(...copies.map(({ clone }) => clone));
 			for (const { clone } of copies) {
 				ghosts.add(clone);

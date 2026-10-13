@@ -6,7 +6,7 @@ const line = (seasonId: string, stats: Partial<BatterLine>): BatterLine => ({
 	seasonId, playerId: seasonId, displayName: seasonId, position: 'LF', year: 2000,
 	PA: 600, AB: 540, H: 150, doubles: 30, triples: 2, HR: 20, BB: 50, HBP: 5, SO: 100, R: 80, RBI: 80, SB: 5, CS: 2, SF: 5,
 	battingRuns: 10, stealRuns: 0, defensiveRuns: 0,
-	defensiveComponents: {} as BatterLine['defensiveComponents'], fieldingOuts: 0, caughtAdvancing: 0,
+	defensiveComponents: {} as BatterLine['defensiveComponents'], fieldingOuts: 0, caughtAdvancing: 0, grandSlams: 0, walkOffHomeRuns: 0,
 	...stats
 });
 const column = (key: string) => BATTING_COLUMNS.find(item => item.key === key)!;

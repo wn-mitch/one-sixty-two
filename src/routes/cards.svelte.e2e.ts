@@ -189,7 +189,9 @@ test('keeps a no-photo card draftable through the wide in-place flip when rankin
 	await expect(card.locator('[data-flip]')).toHaveCSS('transform', 'none');
 	await expect(card.locator('.back')).toHaveCSS('transform', 'none');
 	await openTextVersion(card);
-	await card.getByRole('button', { name: 'Show front', exact: true }).click();
+	// Wide screens show both faces side by side, so Escape puts the card down instead of a turn button.
+	await page.keyboard.press('Escape');
+	await expect(page.locator('[data-card-reader]:popover-open')).toHaveCount(0);
 	await card.getByRole('button', { name: `Select ${scenario.profile.year} ${scenario.profile.displayName}`, exact: true }).click();
 	const field = page.locator('.field-panel');
 	await field.locator(`[data-slot="${scenario.slot}"]`).click();
@@ -310,8 +312,11 @@ test('orders displayed exact seasons after a lower-ranked season is chosen', asy
 	const bySeason = new Map(profiles.map(profile => [profile.seasonId, profile]));
 	await openSavedDraft(page, draft);
 	await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
-	const hitterCards = page.getByRole('region', { name: 'Hitters', exact: true }).locator('.player-card');
-	const shown = await hitterCards.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-season-id')!));
+	// Hitters and pitchers share one ranked list; a season with batting WAR/162 ranks as a hitter.
+	const playerCards = page.getByRole('region', { name: 'Players', exact: true }).locator('.player-card');
+	const ranked = async () => (await playerCards.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-season-id')!)))
+		.map(id => ({ id, pitcher: typeof rankings.seasons[id]?.battingWAR162 !== 'number' }));
+	const shown = (await ranked()).filter(card => !card.pitcher).map(card => card.id);
 	const current = shown.map(id => bySeason.get(id)!).find(profile => profiles.some(other =>
 		other.playerId === profile.playerId && other.seasonId !== profile.seasonId &&
 		typeof rankings.seasons[other.seasonId]?.battingWAR162 === 'number' &&
@@ -321,10 +326,7 @@ test('orders displayed exact seasons after a lower-ranked season is chosen', asy
 		typeof rankings.seasons[profile.seasonId]?.battingWAR162 === 'number' &&
 		rankings.seasons[profile.seasonId].battingWAR162! < rankings.seasons[current!.seasonId].battingWAR162!)!;
 	await page.getByRole('combobox', { name: `Exact season for ${current!.displayName}`, exact: true }).selectOption(alternate.seasonId);
-	const orderedWars = async () => {
-		const ids = await hitterCards.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-season-id')!));
-		return ids.map(id => rankings.seasons[id].battingWAR162!);
-	};
+	const orderedWars = async () => (await ranked()).map(card => rankings.seasons[card.id][card.pitcher ? 'pitchingWAR162' : 'battingWAR162']!);
 	await expect.poll(orderedWars).toEqual((await orderedWars()).sort((a, b) => b - a));
 	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(current!.displayName);
 	await expect(page.locator(`[data-candidate-group="${current!.playerId}"] .player-card`)).toHaveAttribute('data-season-id', alternate.seasonId);
@@ -372,17 +374,21 @@ test.describe('normal card motion', () => {
 		const art = page.locator('.art-trigger').first();
 		await art.scrollIntoViewIfNeeded();
 		const surface = art.locator('[data-card][data-face="front"]');
+		// The card turns once about its center; the transform carries that single angle.
+		const tiltAngle = () => surface.evaluate(node => Number((node as HTMLElement).style.transform.match(/rotate3d\([^)]*,\s*(-?[\d.]+)deg\)/)?.[1] ?? 0));
+		// Park the real cursor off the cards so only the dispatched events below steer the tilt.
+		await page.mouse.move(1, 1);
+		await expect.poll(tiltAngle).toBeLessThan(.5);
 		await art.dispatchEvent('pointermove', { pointerType: 'touch', clientX: 1, clientY: 1 });
-		expect(await surface.evaluate(node => (node as HTMLElement).style.transform)).toBe('');
+		expect(await tiltAngle()).toBeLessThan(.5);
 		const bounds = await art.boundingBox();
 		expect(bounds).not.toBeNull();
 		await art.dispatchEvent('pointermove', { pointerType: 'mouse', clientX: bounds!.x + bounds!.width, clientY: bounds!.y });
-		await expect.poll(() => surface.evaluate(node => (node as HTMLElement).style.transform)).toMatch(/rotateX\((-?[\d.]+)deg\).*rotateY\((-?[\d.]+)deg\)/);
-		const tilt = await surface.evaluate(node => (node as HTMLElement).style.transform.match(/rotateX\((-?[\d.]+)deg\).*rotateY\((-?[\d.]+)deg\)/)?.slice(1).map(Number));
-		expect(tilt).toBeDefined();
-		for (const angle of tilt!) expect(Math.abs(angle)).toBeLessThanOrEqual(9);
+		await expect.poll(tiltAngle).toBeGreaterThan(6);
+		// A corner combines both axes, so it reaches the edge maximum times √2.
+		expect(await tiltAngle()).toBeLessThanOrEqual(7.5 * Math.SQRT2 + .01);
 		await art.dispatchEvent('pointerleave', { pointerType: 'mouse' });
-		await expect.poll(() => surface.evaluate(node => (node as HTMLElement).style.transform)).toBe('');
+		await expect.poll(tiltAngle).toBeLessThan(.5);
 
 		await page.evaluate(() => {
 			const root = document.querySelector('.candidates')!;

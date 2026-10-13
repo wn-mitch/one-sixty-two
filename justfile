@@ -39,6 +39,18 @@ bench *args:
 draft-spread policy from to *args:
     cargo run --release --quiet -p engine-cli -- draft-spread --policy {{policy}} --from {{from}} --to {{to}} {{args}}
 
+# Measures sticker earn rates over natively drafted and simulated seasons and rewrites
+# src/lib/collection/sticker-rarity.json, which ranks the stickers a card face shows.
+# Example: just sticker-rarity --from 1 --to 300 --seasons 10
+sticker-rarity *args:
+    node scripts/sticker-rarity.ts {{args}}
+
+# Measure every era front in a running Storybook and choose its sticker slots, writing
+# src/lib/collection/sticker-layout.json and sticker-slots.json. --solve re-solves the committed layout.
+# Example: just sticker-slots --storybook http://127.0.0.1:6409
+sticker-slots *args:
+    node scripts/sticker-slots.ts {{args}}
+
 hill-climb *args:
     npm run data:prepare
     cargo run --release --quiet -p engine-cli -- hill-climb {{args}}

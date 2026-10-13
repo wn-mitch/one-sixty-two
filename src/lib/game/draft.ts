@@ -20,7 +20,7 @@ import {
  type Slot,
  type TeamRoll
 } from './types.ts';
-import { analyzeDraft, canFinishDraft, isViableForSlot } from './draft-analysis.ts';
+import { analyzeDraft, canFinishDraft, isViableForSlot, type DraftAnalysis } from './draft-analysis.ts';
 import { randomStream, shuffle } from './random.ts';
 import { draftRules, type DraftRulePolicy } from './rules.ts';
 
@@ -94,7 +94,10 @@ export function rollYears(roll: TeamRoll, manifest: Manifest, schemaVersion: Rep
 }
 
 export function availableCandidates(draft: Draft, manifest: Manifest, roll: Roll | null = draft.currentRoll): Candidate[] {
- const analysis = analyzeDraft(draft, manifest);
+ return legalCandidates(analyzeDraft(draft, manifest), roll);
+}
+
+function legalCandidates(analysis: DraftAnalysis, roll: Roll | null): Candidate[] {
  return analysis.unused.filter(candidate => {
   if (roll && !rollContains(roll, candidate)) return false;
   return analysis.slots.some(slot =>
@@ -121,20 +124,32 @@ function nextTeamRoll(legal: readonly Candidate[], random: () => number, table: 
  return { franchiseId, decade: decades[Math.floor(random() * decades.length)] };
 }
 
+/** Draw weight of a jackpot season whose only open slot is the DH, unless it is a DH headliner. */
+const DH_ONLY_WEIGHT = 0.25;
+
 /**
- * Up to `size` legal elite seasons, one per player, none already dealt to the table; null when no
- * elite season is legal for the open slots.
+ * Up to `size` legal elite seasons, one per player, from players no earlier jackpot in the draft has
+ * dealt; null when none remain. Seasons that fit an open slot besides the DH, and DH headliners, draw at
+ * full weight; the rest draw at `DH_ONLY_WEIGHT`.
  */
-function nextJackpot(legal: readonly Candidate[], manifest: Manifest, random: () => number, table: readonly Roll[], size: number): Roll | null {
+function nextJackpot(analysis: DraftAnalysis, legal: readonly Candidate[], manifest: Manifest, random: () => number, shown: ReadonlySet<string>, size: number): Roll | null {
  const elite = new Set(manifest.jackpot);
- const dealt = new Set(table.flatMap(roll => isJackpot(roll) ? roll.jackpot : []));
- const players = new Set<string>();
+ const headliners = new Set(manifest.jackpotHeadliners);
+ let options = legal
+  .filter(candidate => elite.has(candidate.seasonId) && !shown.has(candidate.playerId))
+  .sort((a, b) => compareId(a.seasonId, b.seasonId))
+  .map(candidate => ({
+   candidate,
+   weight: headliners.has(candidate.seasonId) || analysis.slots.some(slot => slot !== 'DH' && candidate.eligibleSlots.includes(slot) && isViableForSlot(analysis, candidate, slot)) ? 1 : DH_ONLY_WEIGHT
+  }));
  const seasons: string[] = [];
- for (const candidate of shuffle(legal.filter(item => elite.has(item.seasonId) && !dealt.has(item.seasonId)).sort((a, b) => compareId(a.seasonId, b.seasonId)), random)) {
-  if (players.has(candidate.playerId)) continue;
-  players.add(candidate.playerId);
-  seasons.push(candidate.seasonId);
-  if (seasons.length === size) break;
+ while (options.length && seasons.length < size) {
+  let target = random() * options.reduce((total, option) => total + option.weight, 0);
+  let index = 0;
+  while (index < options.length - 1 && target >= options[index].weight) target -= options[index++].weight;
+  const chosen = options[index].candidate;
+  seasons.push(chosen.seasonId);
+  options = options.filter(option => option.candidate.playerId !== chosen.playerId);
  }
  return seasons.length ? { jackpot: seasons.sort(compareId) } : null;
 }
@@ -146,11 +161,12 @@ function guaranteedJackpots(seed: number, policy: DraftRulePolicy): Set<number> 
 }
 
 /** The next pack from the draft stream: a jackpot when forced or on the per-roll chance, otherwise a franchise. */
-function nextRoll(draft: Draft, manifest: Manifest, random: () => number, table: readonly Roll[], forced: boolean): Roll {
+function nextRoll(draft: Draft, manifest: Manifest, random: () => number, table: readonly Roll[], forced: boolean, shown: ReadonlySet<string>): Roll {
  const policy = draftRules(draft.schemaVersion);
- const legal = availableCandidates(draft, manifest, null);
+ const analysis = analyzeDraft(draft, manifest);
+ const legal = legalCandidates(analysis, null);
  const lucky = random() < policy.jackpots.chance;
- const jackpot = forced || lucky ? nextJackpot(legal, manifest, random, table, policy.jackpots.size) : null;
+ const jackpot = forced || lucky ? nextJackpot(analysis, legal, manifest, random, shown, policy.jackpots.size) : null;
  return jackpot ?? nextTeamRoll(legal, random, table);
 }
 
@@ -172,12 +188,12 @@ function appendAction(draft: Draft, action: DraftAction): DraftAction[] {
  return [...draft.actions, action];
 }
 
-function applyRoll(draft: Draft, manifest: Manifest, random: () => number, record: boolean): Draft {
+function applyRoll(draft: Draft, manifest: Manifest, random: () => number, record: boolean, shown: ReadonlySet<string>): Draft {
  const policy = draftRules(draft.schemaVersion);
  if (!draft.homeStadium) throw new Error('Choose a home stadium before rolling');
  if (draft.currentRoll) throw new Error('A draft roll is already pending');
  if (draft.picks.length === policy.slots.length) throw new Error('The roster is complete');
- const roll = nextRoll(draft, manifest, random, [], guaranteedJackpots(draft.seed, policy).has(draft.picks.length));
+ const roll = nextRoll(draft, manifest, random, [], guaranteedJackpots(draft.seed, policy).has(draft.picks.length), shown);
  const result = { ...draft, currentRoll: roll, packs: [roll] } as Draft;
  if (record) return { ...result, actions: appendAction(draft, { type: 'roll' }) } as Draft;
  return result;
@@ -193,10 +209,10 @@ export function maxPacks(draft: Draft): number {
  return 1 + draftRules(draft.schemaVersion).extraPacks;
 }
 
-function applyAddPack(draft: Draft, manifest: Manifest, random: () => number): Draft {
+function applyAddPack(draft: Draft, manifest: Manifest, random: () => number, shown: ReadonlySet<string>): Draft {
  if (!draft.packs.length) throw new Error('Roll before adding a pack');
  if (extraPacksLeft(draft) <= 0) throw new Error('No extra packs left');
- const packs = [...draft.packs, nextRoll(draft, manifest, random, draft.packs, false)];
+ const packs = [...draft.packs, nextRoll(draft, manifest, random, draft.packs, false, shown)];
  return { ...draft, currentRoll: null, packs, actions: appendAction(draft, { type: 'add-pack' }) } as Draft;
 }
 
@@ -353,16 +369,26 @@ function validAction(value: unknown): DraftAction {
  throw new Error('Invalid draft action');
 }
 
-function replayActions(input: Replay, manifest: Manifest): { draft: Draft; random: () => number } {
+/** The players a roll's jackpot deals; none for a franchise pack. */
+function jackpotPlayers(roll: Roll | undefined, manifest: Manifest): string[] {
+ if (!roll || !isJackpot(roll)) return [];
+ return roll.jackpot.map(seasonId => manifest.candidates.find(candidate => candidate.seasonId === seasonId)?.playerId ?? seasonId);
+}
+
+/** Rebuilds the draft from its actions, with every player an earlier jackpot dealt. */
+function replayActions(input: Replay, manifest: Manifest): { draft: Draft; random: () => number; shown: Set<string> } {
  if (!Array.isArray(input.actions)) throw new Error('Invalid draft actions');
  let draft = emptyDraft(manifest, input.seed);
  const random = randomStream(input.seed, 'draft');
+ const shown = new Set<string>();
  for (const value of input.actions) {
   const action = validAction(value);
   const previous = draft;
   if (action.type === 'select-stadium') draft = applyStadium(draft, manifest, action.stadiumId, action.stadiumVersion);
-  else if (action.type === 'roll') draft = applyRoll(draft, manifest, random, true);
-  else if (action.type === 'add-pack') draft = applyAddPack(draft, manifest, random);
+  else if (action.type === 'roll' || action.type === 'add-pack') {
+   draft = action.type === 'roll' ? applyRoll(draft, manifest, random, true, shown) : applyAddPack(draft, manifest, random, shown);
+   for (const playerId of jackpotPlayers(draft.packs.at(-1), manifest)) shown.add(playerId);
+  }
   else if (action.type === 'choose-pack') draft = applyChoosePack(draft, action.pack);
   else if (action.type === 'pick') {
    draft = commitPickWithPolicy(draft, manifest, action.seasonId, action.slot, draftRules(CURRENT_REPLAY_SCHEMA_VERSION), true);
@@ -371,11 +397,11 @@ function replayActions(input: Replay, manifest: Manifest): { draft: Draft; rando
    if (draft === previous) throw new Error('Invalid draft action');
   }
  }
- return { draft, random };
+ return { draft, random, shown };
 }
 
 
-function replayChronology(input: Replay, manifest: Manifest): { draft: Draft; random: () => number } {
+function replayChronology(input: Replay, manifest: Manifest): { draft: Draft; random: () => number; shown: Set<string> } {
  if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid draft seed');
  return replayActions(input, manifest);
 }
@@ -384,17 +410,17 @@ export function rollDraft(draft: Draft, manifest: Manifest): Draft {
  const policy = requireCurrentRules(draft);
  if (draft.packs.length) return draft;
  if (draft.picks.length === policy.slots.length) throw new Error('The roster is complete');
- const { draft: replayed, random } = replayActions(draft, manifest);
+ const { draft: replayed, random, shown } = replayActions(draft, manifest);
  if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
- return applyRoll(replayed, manifest, random, true);
+ return applyRoll(replayed, manifest, random, true, shown);
 }
 
 /** Deals another pack (a franchise, or on the jackpot chance an elite handful) beside the pending roll's from the draft's seeded stream; the player then chooses one. */
 export function addPack(draft: Draft, manifest: Manifest): Draft {
  requireCurrentRules(draft);
- const { draft: replayed, random } = replayActions(draft, manifest);
+ const { draft: replayed, random, shown } = replayActions(draft, manifest);
  if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
- return applyAddPack(replayed, manifest, random);
+ return applyAddPack(replayed, manifest, random, shown);
 }
 
 /** Keeps one of the open packs as the pending roll; the others are discarded. */

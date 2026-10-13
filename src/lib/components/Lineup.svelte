@@ -518,7 +518,7 @@
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
  }
  /* Each player is a compact card tile; tiles stack with a small gap. */
- .order { display: grid; gap: var(--space-2); padding-top: var(--space-3); }
+ .order { display: grid; gap: var(--space-2); padding-top: var(--space-3); container-type: inline-size; }
  .order-number { grid-area: num; }
  .order li > .card-trigger { grid-area: card; }
  .identity { grid-area: identity; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); min-width: 0; align-self: end; }
@@ -566,8 +566,8 @@
  .simulate .notice { margin: var(--space-2) 0 0; }
  .announcement { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
- /* Wide rows: one line per player, arrows side by side. */
- @media (min-width: 40rem) {
+ /* Wide rows: one line per player, arrows side by side, once the list itself is wide enough. */
+ @container (min-width: 40rem) {
   .order li { grid-template-columns: 3.25rem 56px minmax(0, 1fr) auto 5.5rem; grid-template-areas: 'num card identity meta move'; }
   .order .fixed-player { grid-template-areas: 'num card identity meta .' 'num card roles roles roles'; }
   .roles { max-width: 26rem; }

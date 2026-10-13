@@ -6,6 +6,7 @@
  import LeagueReport from '#lib/components/draft-mode/LeagueReport.svelte';
  import LeagueSeason from '#lib/components/draft-mode/LeagueSeason.svelte';
  import OpeningWindow from '#lib/components/draft-mode/OpeningWindow.svelte';
+ import DraftModeSkeleton from '#lib/components/skeletons/DraftModeSkeleton.svelte';
  import type { CardMediaStatus } from '#lib/cards/view-model.ts';
  import { STACK_ROLES } from '#lib/draft/cleanup.ts';
  import { heldPile, ownedBy } from '#lib/draft/run.ts';
@@ -86,7 +87,7 @@
  </nav>
 
  {#if session.screen === 'loading'}
-  <p class="muted" role="status">Loading Draft Mode…</p>
+  <DraftModeSkeleton />
  {:else if session.screen === 'failed'}
   <div class="failed" role="alert">
    <p>{session.failure}</p>

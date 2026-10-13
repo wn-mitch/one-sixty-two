@@ -135,6 +135,9 @@
 	.compact .reveal-copy { display: flex; align-items: center; gap: .875rem; }
 	.compact .roll-copy { order: -1; align-items: center; justify-content: start; gap: .75rem; min-height: 44px; box-sizing: border-box; padding: .5rem .75rem .5rem 0; color: var(--reveal-ink, var(--text)); background: var(--reveal-ground, var(--surface)); border-radius: 0 var(--radius) var(--radius) 0; }
 	.compact .team-mark + .reveal-copy { margin-left: -.625rem; }
+	/* The jackpot's foil tile is not the pill's colour, so the pill joins it squarely and pads the name off the foil. */
+	.compact .team-mark.jackpot-mark { border-radius: var(--radius) 0 0 var(--radius); }
+	.compact .jackpot-mark + .reveal-copy .roll-copy { padding-left: .625rem; }
 	.compact h2 { font-size: 1.375rem; text-wrap: nowrap; }
 	.compact .era { font-size: 1.25rem; }
 	.compact .eyebrow { margin: 0; color: var(--muted); font-size: .75rem; white-space: nowrap; }

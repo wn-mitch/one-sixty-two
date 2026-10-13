@@ -13,7 +13,7 @@ use std::path::Path;
 struct Line { label: String, request: SeasonRequest }
 
 /// Season seed `index` of `base`; every roster plays the same seeds, so their spreads compare like for like.
-fn season_seed(base: u32, index: u32) -> u32 {
+pub fn season_seed(base: u32, index: u32) -> u32 {
     base.wrapping_mul(0x85eb_ca6b) ^ index.wrapping_add(1).wrapping_mul(0x9e37_79b9)
 }
 

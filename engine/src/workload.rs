@@ -28,6 +28,20 @@ pub struct Workload {
     inning: u32,
     /// The role the current reliever was called in for; None for the starter and the remainder arm.
     entered: Option<ReliefRole>,
+    /// Save bookkeeping by pitcher index, from the first batter each one faced.
+    entries: Vec<Option<Entry>>,
+}
+
+/// The game state a pitcher took over: his club's lead and the runners on base when he faced his
+/// first batter, and whether the lead was later tied or lost while he pitched.
+#[derive(Clone, Copy, Debug)]
+struct Entry { lead: i32, runners: u32, lost: bool }
+
+impl Entry {
+    /// The tying run is on base, at bat or on deck.
+    fn tying_run_near(self) -> bool { self.lead <= self.runners as i32 + 2 }
+    /// MLB's save situations at entry: a lead of three or fewer, or the tying run within reach.
+    fn save_situation(self) -> bool { self.lead > 0 && (self.lead <= 3 || self.tying_run_near()) }
 }
 
 impl Workload {
@@ -35,7 +49,7 @@ impl Workload {
         if team.available.len() != team.pitchers.len() || team.rested.len() != team.pitchers.len() || team.roles.len() != team.pitchers.len() {
             return Err("Pitcher availability and roles must cover the staff".into());
         }
-        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])?, inning: 1, entered: None })
+        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])?, inning: 1, entered: None, entries: vec![None; team.pitchers.len()] })
     }
 
     /// A named pitcher may enter once per game, and only when rested enough for today.
@@ -102,6 +116,41 @@ impl Workload {
         let jam = self.inning >= LATE_INNING && scoring_position && (0..=3).contains(&lead);
         if jam && !matches!(self.entered, Some(ReliefRole::Closer | ReliefRole::Stopper)) && self.call(team, ReliefRole::Stopper, false) {
             self.starter_done = true;
+        }
+    }
+
+    /// The current pitcher faces a batter with this lead and this many runners on: his first
+    /// batter fixes his entry state.
+    pub fn note_batter(&mut self, lead: i32, runners: u32) {
+        let entry = self.entries[self.current].get_or_insert(Entry { lead, runners, lost: false });
+        if entry.lead > 0 && lead <= 0 { entry.lost = true; }
+    }
+
+    /// The score after a play: a lead the current pitcher took over and no longer holds is lost.
+    pub fn note_score(&mut self, lead: i32) {
+        if let Some(entry) = self.entries[self.current].as_mut() {
+            if entry.lead > 0 && lead <= 0 { entry.lost = true; }
+        }
+    }
+
+    /// Credits saves, blown saves and save opportunities once the game is over. A reliever who
+    /// entered in a save situation and let the lead go is charged a blown save. The pitcher who
+    /// finished a win earns the save when he took over a lead he never gave up, recorded an out, and
+    /// either entered with the tying run within reach, entered with a lead of three or fewer and
+    /// pitched an inning, or pitched three innings; holding a lead he inherited means he is not the
+    /// winning pitcher. Starters earn neither.
+    pub fn credit_saves(&self, team: &TeamInput, lines: &mut [PitcherLine], won: bool) {
+        for (index, entry) in self.entries.iter().enumerate() {
+            let Some(entry) = *entry else { continue };
+            if index == team.starter_index { continue; }
+            let line = &mut lines[index];
+            let blown = entry.save_situation() && entry.lost;
+            let outs = line.outs;
+            let save = won && index == self.current && entry.lead > 0 && !entry.lost && outs >= 1
+                && (entry.tying_run_near() || (entry.lead <= 3 && outs >= 3) || outs >= 9);
+            line.blown_saves += blown as i32;
+            line.saves += save as i32;
+            line.save_opportunities += (blown || save) as i32;
         }
     }
 }
@@ -229,5 +278,50 @@ mod tests {
         assert_eq!(workload.current, 0);
         workload.begin_half(&team, &lines, 9, 1);
         assert_eq!(workload.current, 1);
+    }
+
+    /// Plays one outing: `index` takes over at `lead` with `runners` on, records `outs`, and the
+    /// lead moves through `leads` after his plays.
+    fn outing(workload: &mut Workload, lines: &mut [PitcherLine], index: usize, (lead, runners): (i32, u32), outs: i32, leads: &[i32]) {
+        workload.current = index;
+        workload.note_batter(lead, runners);
+        for &lead in leads { workload.note_score(lead); workload.note_batter(lead, 0); }
+        lines[index].outs += outs;
+    }
+
+    /// Pitcher index, entry (lead, runners), outs recorded, leads after his plays.
+    type Outing<'a> = (usize, (i32, u32), i32, &'a [i32]);
+
+    fn credited(lines: &[PitcherLine]) -> Vec<(i32, i32, i32)> {
+        lines.iter().map(|line| (line.saves, line.blown_saves, line.save_opportunities)).collect()
+    }
+
+    #[test]
+    fn saves_follow_the_mlb_rule() {
+        let staff = staff();
+        let team = team(&staff);
+        let run = |outings: &[Outing], won: bool| {
+            let mut workload = Workload::new(&team).unwrap();
+            let mut lines = create_box(&team).pitching;
+            for &(index, entry, outs, leads) in outings { outing(&mut workload, &mut lines, index, entry, outs, leads); }
+            workload.credit_saves(&team, &mut lines, won);
+            credited(&lines)
+        };
+        let none = (0, 0, 0);
+        // A three-run lead held for an inning is a save; the starter who left with it is not credited.
+        assert_eq!(run(&[(0, (0, 0), 24, &[3]), (1, (3, 0), 3, &[])], true), [none, (1, 0, 1), none, none, none, none]);
+        // A four-run lead with the bases empty is no save situation, so a clean inning earns nothing.
+        assert_eq!(run(&[(0, (0, 0), 24, &[4]), (1, (4, 0), 3, &[])], true), [none; 6]);
+        // Four up with two on puts the tying run on deck: one out to end the game is a save.
+        assert_eq!(run(&[(0, (0, 0), 26, &[4]), (1, (4, 2), 1, &[])], true), [none, (1, 0, 1), none, none, none, none]);
+        // A one-run lead held for only two outs is not a save unless the tying run was near: here it was at bat.
+        assert_eq!(run(&[(0, (0, 0), 25, &[1]), (1, (1, 0), 2, &[])], true), [none, (1, 0, 1), none, none, none, none]);
+        // The setup man ties the game: a blown save. The closer who wins it back finishes with a lead he never lost: a save.
+        assert_eq!(run(&[(0, (0, 0), 21, &[2]), (2, (2, 1), 3, &[0, 1]), (1, (1, 0), 3, &[])], true), [none, (1, 0, 1), (0, 1, 1), none, none, none]);
+        // A lead lost in a game the club still loses is a blown save and no save.
+        assert_eq!(run(&[(0, (0, 0), 24, &[1]), (1, (1, 0), 3, &[-1])], false), [none, (0, 1, 1), none, none, none, none]);
+        // Three innings to close a big lead is a save; a reliever who does not finish is not credited.
+        assert_eq!(run(&[(0, (0, 0), 18, &[8]), (3, (8, 0), 9, &[])], true), [none, none, none, (1, 0, 1), none, none]);
+        assert_eq!(run(&[(0, (0, 0), 18, &[2]), (3, (2, 0), 6, &[]), (1, (2, 0), 3, &[])], true), [none, (1, 0, 1), none, none, none, none]);
     }
 }

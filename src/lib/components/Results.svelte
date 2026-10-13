@@ -202,6 +202,7 @@
 				<i aria-hidden="true">–</i>
 				<span>{result.losses}<small>L</small></span>
 			</h2>
+			{#if phrase}<SeasonClipping {phrase} />{/if}
 			<ResultsGrades wins={result.wins} {grade} {rosterGrade} {expected} />
 			<dl class="season-ledger">
 				<div><dt>{result.firstLoss === null ? 'Season' : 'First loss'}</dt><dd class:perfect={result.firstLoss === null}>{result.firstLoss === null ? 'No losses' : `Game ${result.firstLoss}`}</dd></div>
@@ -216,7 +217,7 @@
 		<div class="score-actions" aria-busy={sharing}>
 			<div class="share-shortcuts">
 				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'field', shareModel)}>{sharing ? 'Preparing…' : 'Challenge a friend'}<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 11l6-6M6 5h5v5"></path></svg></button>
-				<button class="secondary" type="button" disabled={sharing} onclick={() => onShare('copy-link', 'field', shareModel)}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg>{sharing ? 'Preparing…' : 'Copy link'}</button>
+				<button class="secondary" type="button" title="Copy link" disabled={sharing} onclick={() => onShare('copy-link', 'field', shareModel)}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg><span class="action-label">{sharing ? 'Preparing…' : 'Copy link'}</span></button>
 			</div>
 			<div class="more-actions">
 				<a class="button" href="/seasons"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5"></path></svg>Play head-to-head</a>
@@ -226,7 +227,6 @@
 
 	</header>
 
-	{#if phrase}<SeasonClipping {phrase} wins={result.wins} losses={result.losses} />{/if}
 
 	<div class="awards-share">
 		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
@@ -377,13 +377,14 @@
 	}
 	.scoreboard {
 		display: grid;
-		gap: var(--space-6);
-		padding: var(--space-6);
+		gap: var(--space-5);
+		padding: var(--space-5) var(--space-6);
 		background: var(--surface);
 		border-block: 1px solid var(--border);
 	}
-	/* The record and its grades read as one line: the score, then what it earned. */
+	/* The score and its headline share the first line; the grades and the season's facts follow on one line when they fit. */
 	.record-block { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); min-width: 0; }
+	.record-block > :global(.clipping) { flex: 1 1 16rem; }
 	.scoreboard h2 {
 		display: flex;
 		align-items: baseline;
@@ -408,8 +409,9 @@
 		font-weight: 500;
 	}
 	/* One compact line under the record: label and value pairs, separated by thin rules. */
-	.season-ledger { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: var(--space-1) 0; margin: 0; }
-	.season-ledger > div { display: flex; align-items: baseline; gap: var(--space-2); padding-inline: var(--space-4); border-left: 1px solid var(--border); }
+	.season-ledger { display: flex; flex-wrap: wrap; gap: var(--space-1) 0; margin: 0; }
+	/* Each label sits over its value, so the three facts fit beside the grades on wide screens. */
+	.season-ledger > div { display: grid; gap: 2px; padding-inline: var(--space-4); border-left: 1px solid var(--border); }
 	.season-ledger > div:first-child { padding-left: 0; border-left: 0; }
 	.season-ledger dt { color: var(--muted); font-size: var(--text-xs); }
 	.season-ledger dd { margin: 0; font-size: var(--text-base); font-weight: 750; font-variant-numeric: tabular-nums; }
@@ -477,7 +479,14 @@
 			align-items: center;
 			gap: var(--space-6) var(--space-8);
 		}
-		.score-actions { justify-self: end; }
+		/* The actions shrink to a compact stack so the record, grades and facts keep the width. */
+		.score-actions { justify-self: end; width: auto; }
+		.share-shortcuts { grid-template-columns: minmax(0, 1fr) auto; }
+		.share-shortcuts button { min-height: 2.75rem; }
+		.share-shortcuts .secondary { width: 2.75rem; padding: 0; }
+		.share-shortcuts .secondary .action-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+		.more-actions .button, .more-actions button { min-height: 2.25rem; padding-inline: var(--space-2); font-size: var(--text-xs); }
+		.season-ledger > div { padding-inline: var(--space-3); }
 	}
 	@media (max-width: 40rem) {
 		/* The fixed share bar never covers the last game; the site footer keeps its own clearance. */

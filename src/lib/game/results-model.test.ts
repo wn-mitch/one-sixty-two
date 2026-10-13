@@ -70,7 +70,9 @@ function fixture(): Fixture {
 		defensiveRuns: 0,
 		defensiveComponents: { ...ZERO_DEFENSE },
 		fieldingOuts: 3,
-		caughtAdvancing: 0
+		caughtAdvancing: 0,
+		grandSlams: 0,
+		walkOffHomeRuns: 0
 	}));
 	const pitching = input.roster.slice(9).map(({ profile }, index): PitcherLine => ({
 		seasonId: profile.seasonId,
@@ -87,7 +89,10 @@ function fixture(): Fixture {
 		starts: index < 3 ? 1 : 0,
 		appearances: 1,
 		BF: 1,
-		pitchingRunsAboveNeutral: -20 * 3 / 600
+		pitchingRunsAboveNeutral: -20 * 3 / 600,
+		saves: 0,
+		blownSaves: 0,
+		saveOpportunities: 0
 	}));
 	const result: SeasonResult = {
 		modelVersion: input.modelVersion,
@@ -114,6 +119,7 @@ function fixture(): Fixture {
 	};
 	const manifest: Manifest = {
 		jackpot: [],
+		jackpotHeadliners: [],
 		schemaVersion: 1,
 		dataVersion: input.data.dataVersion,
 		sourceCommit: 'test',

@@ -136,6 +136,9 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
         if finished { break; }
     }
     if !finished { return Err(format!("Simulation exceeded {MAX_INNINGS} innings without a winner")); }
+    let home_won = home.runs > away.runs;
+    home_workload.credit_saves(input.home, &mut home.pitching, home_won);
+    away_workload.credit_saves(input.away, &mut away.pitching, !home_won);
     let challenge_runs = if input.challenge_is_home { home.runs } else { away.runs };
     let opponent_runs = if input.challenge_is_home { away.runs } else { home.runs };
     if models.win_expectancy.is_some() {

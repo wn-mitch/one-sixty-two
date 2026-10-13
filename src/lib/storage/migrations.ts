@@ -192,6 +192,23 @@ export const MIGRATIONS: readonly Migration[] = [
      FROM rostered WHERE wins + losses = 162 ORDER BY rostered_at`
    });
   }
+ },
+ {
+  version: 7,
+  up(db) {
+   // The season grade heads the right column, and the right-column families each step down one spot.
+   // Stickers still at a step-6 default move; ones the player placed stay. Kinds and spots are frozen as of this step.
+   const moves: readonly { kinds: readonly string[]; from: [number, number]; to: [number, number] }[] = [
+    { kinds: ['drafted-10', 'drafted-5'], from: [0.9, 0.5], to: [0.9, 0.6] },
+    { kinds: ['rbi-130', 'closer'], from: [0.9, 0.4], to: [0.9, 0.5] },
+    { kinds: ['hr-60', 'hr-40', 'k-600', 'k-400'], from: [0.9, 0.3], to: [0.9, 0.4] },
+    { kinds: ['perfect', 'wins-120', 'wins-100'], from: [0.9, 0.2], to: [0.9, 0.3] },
+    { kinds: ['grade-perfect', 'grade-s-plus', 'grade-s', 'grade-aa', 'grade-a', 'grade-b', 'grade-c', 'grade-d', 'grade-f'], from: [0.9, 0.96], to: [0.9, 0.2] }
+   ];
+   for (const { kinds, from, to } of moves) {
+    db.exec({ sql: `UPDATE stickers SET x = ?, y = ? WHERE kind IN (${kinds.map(() => '?').join(', ')}) AND abs(x - ?) < 1e-6 AND abs(y - ?) < 1e-6`, bind: [...to, ...kinds, ...from] });
+   }
+  }
  }
 ];
 

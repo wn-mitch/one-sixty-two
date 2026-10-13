@@ -45,6 +45,7 @@
  --ease-out: cubic-bezier(.16, 1, .3, 1);
  --motion-deal: 600ms;
  --motion-field-flip: 640ms;
+ --motion-card-flight: 780ms;
  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
  font-variant-numeric: tabular-nums;
  font-synthesis: none;
@@ -135,7 +136,27 @@ th:first-child, td:first-child { text-align: left; }
  .stat-table th:first-child { width: 10rem; min-width: 8rem; max-width: 10rem; }
  .stat-table th, .stat-table td { padding-inline: .5rem; }
 }
-.skeleton { background: var(--surface-raised); border-radius: var(--radius); min-height: 4rem; animation: breathe 1s var(--ease-out) infinite alternate; }
+/*
+ * Skeletons hold a screen's layout while its code or data loads. Every bone shares one sheen pinned to the
+ * viewport, so a single slow sweep crosses the whole screen and then rests; it stops when motion is off.
+ * .sk is a block bone sized by its screen, .sk-card a 5:7 card, .sk-line one text line at the inherited font
+ * size, .sk-panel a surface that holds bones and .sk-outline an empty slot or ghost.
+ */
+:root { --sk-sheen: color-mix(in oklch, var(--text) 7%, transparent); }
+.sk, .sk-line::before {
+ display: block;
+ border-radius: var(--radius);
+ background: linear-gradient(100deg, transparent 30%, var(--sk-sheen) 50%, transparent 70%) -70vw 0 / 70vw 100% no-repeat fixed, var(--surface-raised);
+ animation: sk-sweep 2.8s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+.sk-card { aspect-ratio: 5 / 7; border-radius: var(--radius-lg); }
+.sk-line { display: flex; align-items: center; min-width: 0; height: 1lh; }
+.sk-line::before { content: ''; width: var(--sk-width, 100%); max-width: 100%; height: .72em; }
+.sk-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.sk-outline { display: block; border: 1px dashed var(--border); border-radius: var(--radius-lg); }
+@keyframes sk-sweep { from { background-position: -70vw 0, 0 0; } 60%, to { background-position: 100vw 0, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sk, .sk-line::before { animation: none; background-image: none; } }
+:root[data-motion='off'] .sk, :root[data-motion='off'] .sk-line::before { background-image: none; }
 @keyframes breathe { from { opacity: .4; } to { opacity: .8; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: 0s !important; scroll-behavior: auto !important; } }
 :root[data-motion='off'] *, :root[data-motion='off'] *::before, :root[data-motion='off'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

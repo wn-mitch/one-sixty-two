@@ -82,6 +82,7 @@ export class AutonomousMotionScheduler {
 	#lastTimestamp: number | null = null;
 	#lastPaint = Number.NEGATIVE_INFINITY;
 	#logicalTime = 0;
+	#ambientHolds = 0;
 
 	constructor(
 		environmentFactory: () => MotionSchedulerEnvironment = browserSchedulerEnvironment,
@@ -178,6 +179,23 @@ export class AutonomousMotionScheduler {
 		}
 		this.#request();
 	};
+
+	/** True while a raised card holds the rest of the page's ambient motion still. */
+	get ambientHeld(): boolean {
+		return this.#ambientHolds > 0;
+	}
+
+	/** Pauses ambient drift and lighting elsewhere until the returned release is called. */
+	holdAmbient(): () => void {
+		this.#ambientHolds += 1;
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			this.#ambientHolds -= 1;
+			this.wake();
+		};
+	}
 
 	register(
 		node: Element,

@@ -243,6 +243,27 @@ describe('app settings', () => {
 });
 
 describe('autonomous motion scheduler', () => {
+	it('holds ambient motion until every raised card releases it, then resumes', () => {
+		const { environment, scheduler } = createSchedulerFixture();
+		const frames: number[] = [];
+		// Ambient subscribers stand still while any hold is open, as wall and drift cards do.
+		scheduler.register({} as Element, { active: () => !scheduler.ambientHeld, frame: frame => frames.push(frame.time), state: () => undefined });
+		const releaseFirst = scheduler.holdAmbient();
+		const releaseSecond = scheduler.holdAmbient();
+		environment.flush(0);
+		expect(frames).toEqual([]);
+		releaseFirst();
+		releaseFirst();
+		expect(scheduler.ambientHeld).toBe(true);
+		environment.flush(40);
+		expect(frames).toEqual([]);
+		releaseSecond();
+		expect(scheduler.ambientHeld).toBe(false);
+		expect(environment.frames.size).toBe(1);
+		environment.flush(80);
+		expect(frames).toHaveLength(1);
+	});
+
 	it('shares one throttled frame loop and one observer across visible subscribers', () => {
 		const { environment, scheduler } = createSchedulerFixture();
 		const firstNode = {} as Element;

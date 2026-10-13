@@ -276,6 +276,10 @@ pub struct BatterLine {
     pub defensive_components: DefensiveRunComponents,
     pub fielding_outs: i32,
     pub caught_advancing: i32,
+    /// Home runs with the bases loaded.
+    pub grand_slams: i32,
+    /// Game-ending home runs in the bottom of the 9th or later.
+    pub walk_off_home_runs: i32,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -313,6 +317,12 @@ pub struct PitcherLine {
     #[serde(rename = "BF")]
     pub bf: i32,
     pub pitching_runs_above_neutral: f64,
+    /// Official saves: see `Workload::credit_saves`.
+    pub saves: i32,
+    /// Entered in a save situation and let the lead go.
+    pub blown_saves: i32,
+    /// Saves plus blown saves.
+    pub save_opportunities: i32,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]

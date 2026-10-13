@@ -9,6 +9,7 @@
  import CardReview from '../cards/CardReview.svelte';
  import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
  import { appSettings } from '../game/settings.svelte.ts';
+ import { EASE_OUT, MOTION } from '../motion-timing.ts';
  import CandidateList from './CandidateList.svelte';
  import { dealIntoGrid, dealOutOfGrid } from './deal-motion.ts';
  import { arriveAtTop, dropInto, freeze, morphInto, riseIn, stamp, stash, take } from './phase-motion.ts';
@@ -17,6 +18,9 @@
  import DraftSheet from './DraftSheet.svelte';
  import FoilPack from './FoilPack.svelte';
  import Settings from './Settings.svelte';
+ import { BOARD_WIDE_QUERY } from './skeletons/board.ts';
+ import PoolSkeleton from './skeletons/PoolSkeleton.svelte';
+ import Skeleton from './skeletons/Skeleton.svelte';
  let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onAddPack, onChoosePack, onDraft, onReassign, onNew }: {
   draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
   phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean;
@@ -40,8 +44,8 @@
  let dealtArrived = $state(false);
  /** A finished deal still owes the candidate grid its deal-out, played when the grid first renders. */
  let dealOutPending = $state(false);
- /** Header positions captured when Add pack is pressed beside the pool, so the packs unfold from them. */
- let returning = $state<{ card: DOMRect | null; control: DOMRect | null } | null>(null);
+ /** Add pack was pressed beside the pool, so the table fades back in and the added pack opens out of its ghost. */
+ let returning = $state(false);
  /** A confirmed pick is clearing the candidate grid before it commits. */
  let leaving = $state(false);
  let sheetTab = $state<'field' | 'back'>('field');
@@ -267,6 +271,37 @@
   const candidate = manifestBySeason.get(seasonId);
   if (pendingSlot && (!candidate || !legalSlots(draft, candidate, manifest).includes(pendingSlot))) pendingSlot = null;
  }
+ /**
+  * Adds a pack beside the taken roll. The session deals at once; a still copy of the pool fades out while the
+  * table fades back in and opens the added pack, as tapping its ghost would.
+  */
+ function addPackFromPool(): void {
+  if (busy || leaving) return;
+  cancelSelection();
+  const grid = draftBoard?.querySelector<HTMLElement>('.candidates');
+  const host = draftBoard?.querySelector<HTMLElement>('.draft-browser');
+  const before = draft;
+  returning = true;
+  const fading = grid && host && appSettings.effectiveEnabled ? fadeCopy(grid, host) : null;
+  onAddPack();
+  // A failed add leaves the pool in place.
+  if (draft === before) fading?.remove();
+ }
+ /** A still copy of `grid` laid over it in `host` that fades out, then removes itself. */
+ function fadeCopy(grid: HTMLElement, host: HTMLElement): HTMLElement {
+  const rect = grid.getBoundingClientRect();
+  const origin = host.getBoundingClientRect();
+  const copy = grid.cloneNode(true) as HTMLElement;
+  copy.setAttribute('aria-hidden', 'true');
+  copy.setAttribute('inert', '');
+  for (const element of copy.querySelectorAll('[id]')) element.removeAttribute('id');
+  Object.assign(copy.style, { position: 'absolute', left: `${rect.left - origin.left}px`, top: `${rect.top - origin.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, margin: '0', pointerEvents: 'none', zIndex: '0' });
+  // First in the section, so the foil pack's positioned cards paint over it.
+  host.prepend(copy);
+  copy.animate([{ opacity: 1 }, { opacity: 0 }], { duration: MOTION.returnFade / (appSettings.snapshot.cardSpeed || 1), easing: EASE_OUT, fill: 'forwards' })
+   .finished.finally(() => copy.remove()).catch(() => {});
+  return copy;
+ }
  async function confirmPick(): Promise<void> {
   if (!canConfirm || !selectedSeasonId || !pendingSlot || !selectedProfile || !selectedCandidate) return;
   const roll = draft.currentRoll;
@@ -480,7 +515,7 @@
   void loadMedia().then(value => {
    if (!disposed) { media = value; mediaStatus = 'ready'; }
   }).catch(() => { if (!disposed) mediaStatus = 'unavailable'; });
-  const query = window.matchMedia('(min-width: 1100px), (min-width: 1024px) and (orientation: landscape)');
+  const query = window.matchMedia(BOARD_WIDE_QUERY);
   wide = query.matches;
   const adapt = () => {
    const focusedInPanel = document.activeElement instanceof HTMLElement && !!document.activeElement.closest('.field-panel, .draft-sheet');
@@ -630,11 +665,7 @@
  {#if showingCandidates}
   {@const left = extraPacksLeft(draft)}
   {@const total = draftRules(draft.schemaVersion).extraPacks}
-  <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} aria-label={`Add a franchise pack to choose from, ${left} of ${total} left`} title="Add a franchise pack" onclick={event => {
-   cancelSelection();
-   returning = { card: draftBoard?.querySelector<HTMLElement>('[data-roll-mark]')?.getBoundingClientRect() ?? null, control: event.currentTarget.getBoundingClientRect() };
-   onAddPack();
-  }}>
+  <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} aria-label={`Add a franchise pack to choose from, ${left} of ${total} left`} title="Add a franchise pack" onclick={addPackFromPool}>
    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>
    <span class="reroll-word">Add pack</span>
    <span class="reroll-count" aria-hidden="true">{left}/{total}</span>
@@ -682,14 +713,14 @@
      addDisabled={busy || phase !== 'choosing'}
      {onAddPack}
      {returning}
-     onChoose={pack => { returning = null; onChoosePack(pack); }}
+     onChoose={pack => { returning = false; onChoosePack(pack); }}
      flyTarget={() => draftBoard?.querySelector<HTMLElement>('[data-roll-mark]') ?? null}
-     onOpen={() => { returning = null; dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
+     onOpen={() => { returning = false; dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
      onArrive={() => dealtArrived = true}
      onDealt={() => { dealing = false; dealOutPending = true; }}
     />
    {:else if loading || phase === 'revealing'}
-    <p class="loading-copy muted" role="status">Finding eligible seasons…</p>
+    <Skeleton label="Finding eligible seasons…"><PoolSkeleton {wide} /></Skeleton>
    {:else if showingCandidates}
     <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
@@ -707,6 +738,8 @@
 
 <style>
  .draft-board, .draft-browser { min-width: 0; }
+ /* Holds the fading copy of the pool when a pack is added; the foil pack shows above it. */
+ .draft-browser { position: relative; }
  .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; }
  .open-field { flex: none; display: flex; align-items: center; gap: .5rem; min-height: 3rem; padding-inline: .75rem; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
@@ -736,7 +769,7 @@
  .field-header > div { min-width: 0; width: 100%; }
  .field-title { display: flex; align-items: center; gap: .75rem; }
  h2 { margin: 0; font: 800 1.7rem/1.1 'Barlow Condensed', sans-serif; }
- .wide h2 { font: italic 900 1.5rem/1 'Barlow Condensed', sans-serif; text-transform: uppercase; white-space: nowrap; }
+ .wide h2 { font: italic 800 1.5rem/1 'Barlow Condensed', sans-serif; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; }
  .picked-count { color: var(--muted); font: 600 .75rem/1.2 system-ui, sans-serif; white-space: nowrap; }
  .pick-track { display: flex; flex: 1; gap: 3px; }
  .pick-track span { flex: 1; height: 4px; background: var(--border); }
@@ -761,7 +794,6 @@
  .preview-label { color: var(--accent); font-size: .6875rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
  .pick-name { font-size: 1rem; line-height: 1.2; }
  .pick-year { margin-left: .2rem; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
- .loading-copy { padding-block: var(--space-8); text-align: center; }
  .placement-hint { display: block; color: var(--muted); font-size: .75rem; }
  .wide .move-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
  .wide .move-controls p { flex-basis: 100%; }

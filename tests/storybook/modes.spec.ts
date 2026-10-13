@@ -100,14 +100,22 @@ test('Collection lists every rostered card and arranges a card’s stickers', as
 	const name = await grid.getByRole('button').first().locator('.name').innerText();
 	const stickered = grid.getByRole('button').filter({ has: page.locator('.name', { hasText: name }) }).first();
 	await expect(stickered.locator('.stickers [data-family]').first()).toBeVisible();
-	const before = await stickered.locator('.stickers [data-family]').count();
+	const face = stickered.locator('.stickers [data-family]');
+	const before = await face.count();
+	// A face holds the grade and at most three other stickers.
+	expect(before).toBeLessThanOrEqual(4);
 	await stickered.click();
 	const detail = page.locator('section.detail');
 	await detail.getByRole('button', { name: 'Arrange stickers' }).click();
 	await expect(detail.getByRole('button', { name: /^Move .* sticker/ })).toHaveCount(before);
+	// Hiding a family takes it off the face; the next rarest visible family, if any, takes its place.
+	const hidden = await detail.locator('.stickers li').filter({ has: page.getByRole('button', { name: 'Hide' }) }).first().locator('strong').innerText();
 	await detail.getByRole('button', { name: 'Hide' }).first().click();
-	await expect(stickered.locator('.stickers [data-family]')).toHaveCount(before - 1);
-	await expect(detail.getByRole('button', { name: /^Move .* sticker/ })).toHaveCount(before - 1);
+	await expect(stickered.getByRole('img', { name: new RegExp(hidden.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })).toHaveCount(0);
+	const after = await face.count();
+	expect(after).toBeGreaterThanOrEqual(before - 1);
+	expect(after).toBeLessThanOrEqual(before);
+	await expect(detail.getByRole('button', { name: /^Move .* sticker/ })).toHaveCount(after);
 });
 
 test('Collection groups cards by team or era with completion that leaves bullpens out', async ({ page }) => {

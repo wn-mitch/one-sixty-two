@@ -81,7 +81,7 @@ describe('device database migrations', () => {
    sticker('b', 'drafted-5', 'k0', 0.62, 0.71),
    sticker('b', 'drafted-10', 'k1', 0.62, 0.71)
   ]);
-  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 4, to: SCHEMA_VERSION });
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 6))).toEqual({ from: 4, to: 6 });
   expect(await db.all('SELECT season_id, kind, season_key, x, y FROM stickers ORDER BY season_id, kind')).toEqual([
    // A player-moved sticker keeps its spot.
    { season_id: 'a', kind: 'hr-40', season_key: 'k1', x: 0.42, y: 0.15 },
@@ -94,12 +94,35 @@ describe('device database migrations', () => {
   ]);
  });
 
+ it('puts the grade atop the right column and steps the right-column defaults down', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 6));
+  const sticker = (seasonId: string, kind: string, x: number, y: number) =>
+   ({ sql: 'INSERT INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)', bind: [seasonId, kind, 't', 'k', x, y] });
+  await db.run([
+   sticker('a', 'grade-a', 0.9, 0.96), sticker('a', 'wins-100', 0.9, 0.2), sticker('a', 'hr-40', 0.9, 0.3),
+   sticker('a', 'rbi-130', 0.9, 0.4), sticker('a', 'drafted-5', 0.9, 0.5), sticker('a', 'mvp', 0.1, 0.2),
+   sticker('b', 'grade-f', 0.5, 0.5)
+  ]);
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 6, to: SCHEMA_VERSION });
+  expect(await db.all('SELECT season_id, kind, x, y FROM stickers ORDER BY season_id, y')).toEqual([
+   { season_id: 'a', kind: 'grade-a', x: 0.9, y: 0.2 },
+   // Left-column stickers keep their spots.
+   { season_id: 'a', kind: 'mvp', x: 0.1, y: 0.2 },
+   { season_id: 'a', kind: 'wins-100', x: 0.9, y: 0.3 },
+   { season_id: 'a', kind: 'hr-40', x: 0.9, y: 0.4 },
+   { season_id: 'a', kind: 'rbi-130', x: 0.9, y: 0.5 },
+   { season_id: 'a', kind: 'drafted-5', x: 0.9, y: 0.6 },
+   // A player-placed grade stays put.
+   { season_id: 'b', kind: 'grade-f', x: 0.5, y: 0.5 }
+  ]);
+ });
+
  it('lifts stickers at the frame-edge defaults clear of the name band', async () => {
   const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 5));
   const sticker = (seasonId: string, kind: string, x: number, y: number) =>
    ({ sql: 'INSERT INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)', bind: [seasonId, kind, 't', 'k', x, y] });
   await db.run([sticker('a', 'sb-30', 0.1, 0.67), sticker('a', 'drafted-5', 0.9, 0.67), sticker('b', 'sb-30', 0.3, 0.8), sticker('b', 'k-400', 0.9, 0.37)]);
-  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 5, to: SCHEMA_VERSION });
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 6))).toEqual({ from: 5, to: 6 });
   expect(await db.all('SELECT season_id, kind, x, y FROM stickers ORDER BY season_id, kind')).toEqual([
    { season_id: 'a', kind: 'drafted-5', x: 0.9, y: 0.5 },
    { season_id: 'a', kind: 'sb-30', x: 0.1, y: 0.5 },
