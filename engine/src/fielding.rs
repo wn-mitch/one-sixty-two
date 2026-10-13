@@ -46,50 +46,92 @@ pub struct FieldingCandidates {
     retrieval_y: [f64; 16],
 }
 
-/// `reach` is non-decreasing in `ball_time - arrival`, so only margin improvements evaluate it.
-fn fill_candidate(trace: &FlightTrace, position: usize, hit_prevention: f64, c: &mut FieldingCandidates, slot: usize) {
-    let speed = defender_speed(position, hit_prevention);
-    let reaction = defender_reaction(position, hit_prevention);
-    let [sx, sy] = DEFENDER_START[position];
-    let airborne_end = if trace.landing < 0 { trace.count } else { trace.landing as usize };
-    let (mut air_index, mut air_probability, mut air_margin) = (-1isize, 0.0, f64::NEG_INFINITY);
-    for index in 1..airborne_end {
-        let time = trace.t[index];
-        if time < reaction || trace.z[index] > CATCH_HEIGHT_M { continue; }
-        let arrival = reaction + planar_distance(trace.x[index] - sx, trace.y[index] - sy) / speed;
-        if time - arrival <= air_margin { continue; }
-        let probability = reach(time, arrival);
-        if probability > air_probability { air_probability = probability; air_index = index as isize; air_margin = time - arrival; }
+/// One reach setting's parameters and running bests while scanning a trace.
+#[derive(Clone, Copy, Default)]
+struct Scan {
+    slot: usize, speed: f64, reaction: f64,
+    air_index: isize, air_probability: f64, air_margin: f64,
+    ground_index: isize, ground_probability: f64, ground_pickup: f64, ground_margin: f64,
+    retrieval_time: f64, retrieval_x: f64, retrieval_y: f64, done: bool,
+}
+
+/// One past the last rolling sample inside the infield attempt radius (0 when the ball never lands).
+fn infield_end(trace: &FlightTrace) -> usize {
+    if trace.landing < 0 { return 0; }
+    let mut end = trace.count;
+    while end > trace.landing as usize && planar_distance(trace.x[end - 1], trace.y[end - 1]) > INFIELD_ATTEMPT_RADIUS_M { end -= 1; }
+    end
+}
+
+/// Fills `position`'s candidate slots for each (reach skill, slot) setting in one pass over the
+/// trace. Every setting makes the same comparisons a pass of its own would; the settings share
+/// only the distance from the position's start to each sample. `reach` is non-decreasing in
+/// `ball_time - arrival`, so only margin improvements evaluate it. `infield_end` is
+/// `infield_end(trace)`.
+fn fill_candidates(trace: &FlightTrace, position: usize, settings: &[(f64, usize)], infield_end: usize, c: &mut FieldingCandidates) {
+    let mut storage = [Scan::default(); 2];
+    let scans = &mut storage[..settings.len()];
+    for (scan, &(hit_prevention, slot)) in scans.iter_mut().zip(settings) {
+        *scan = Scan {
+            slot, speed: defender_speed(position, hit_prevention), reaction: defender_reaction(position, hit_prevention),
+            air_index: -1, air_margin: f64::NEG_INFINITY, ground_index: -1, ground_margin: f64::NEG_INFINITY, retrieval_time: f64::INFINITY, ..Scan::default()
+        };
     }
-    c.air_index[slot] = air_index;
-    c.air_probability[slot] = air_probability;
-    let (mut ground_index, mut ground_probability, mut ground_pickup, mut ground_margin) = (-1isize, 0.0, 0.0, f64::NEG_INFINITY);
-    let (mut retrieval_time, mut retrieval_x, mut retrieval_y) = (f64::INFINITY, 0.0, 0.0);
+    let [sx, sy] = DEFENDER_START[position];
+    let distance = |index: usize| planar_distance(trace.x[index] - sx, trace.y[index] - sy);
+    let airborne_end = if trace.landing < 0 { trace.count } else { trace.landing as usize };
+    for index in 1..airborne_end {
+        if trace.z[index] > CATCH_HEIGHT_M { continue; }
+        let time = trace.t[index];
+        let mut shared = None;
+        for scan in scans.iter_mut() {
+            if time < scan.reaction { continue; }
+            let arrival = scan.reaction + *shared.get_or_insert_with(|| distance(index)) / scan.speed;
+            if time - arrival <= scan.air_margin { continue; }
+            let probability = reach(time, arrival);
+            if probability > scan.air_probability { scan.air_probability = probability; scan.air_index = index as isize; scan.air_margin = time - arrival; }
+        }
+    }
     if trace.landing >= 0 {
+        let infielder = position < INFIELDERS;
+        let mut open = scans.len();
         for index in trace.landing as usize..trace.count {
             let time = trace.t[index];
-            let arrival = reaction + planar_distance(trace.x[index] - sx, trace.y[index] - sy) / speed;
-            if position < INFIELDERS && time >= reaction && time - arrival > ground_margin && ground_probability < SURE_REACH && planar_distance(trace.x[index], trace.y[index]) <= INFIELD_ATTEMPT_RADIUS_M {
-                let probability = reach(time, arrival);
-                if probability > ground_probability { ground_probability = probability; ground_index = index as isize; ground_pickup = math::max(time, arrival); ground_margin = time - arrival; }
+            let shared = distance(index);
+            let mut in_radius = None;
+            for scan in scans.iter_mut() {
+                if scan.done { continue; }
+                let arrival = scan.reaction + shared / scan.speed;
+                if infielder && time >= scan.reaction && time - arrival > scan.ground_margin && scan.ground_probability < SURE_REACH
+                    && *in_radius.get_or_insert_with(|| planar_distance(trace.x[index], trace.y[index]) <= INFIELD_ATTEMPT_RADIUS_M) {
+                    let probability = reach(time, arrival);
+                    if probability > scan.ground_probability { scan.ground_probability = probability; scan.ground_index = index as isize; scan.ground_pickup = math::max(time, arrival); scan.ground_margin = time - arrival; }
+                }
+                if scan.retrieval_time == f64::INFINITY && arrival <= time { scan.retrieval_time = time; scan.retrieval_x = trace.x[index]; scan.retrieval_y = trace.y[index]; }
+                // Later points can change nothing once retrieval is set and no ground attempt can
+                // improve: the attempt is sure or no later sample is in attempt range.
+                if scan.retrieval_time != f64::INFINITY && (!infielder || scan.ground_probability >= SURE_REACH || index + 1 >= infield_end) { scan.done = true; open -= 1; }
             }
-            if retrieval_time == f64::INFINITY && arrival <= time { retrieval_time = time; retrieval_x = trace.x[index]; retrieval_y = trace.y[index]; }
-            // Later points can change nothing once retrieval is set and no ground attempt can improve.
-            if retrieval_time != f64::INFINITY && (position >= INFIELDERS || ground_probability >= SURE_REACH) { break; }
+            if open == 0 { break; }
         }
-        if retrieval_time == f64::INFINITY {
-            let last = trace.count - 1;
-            retrieval_x = trace.x[last];
-            retrieval_y = trace.y[last];
-            retrieval_time = math::max(trace.t[last], reaction + planar_distance(retrieval_x - sx, retrieval_y - sy) / speed);
+        let last = trace.count - 1;
+        for scan in scans.iter_mut().filter(|scan| scan.retrieval_time == f64::INFINITY) {
+            scan.retrieval_x = trace.x[last];
+            scan.retrieval_y = trace.y[last];
+            scan.retrieval_time = math::max(trace.t[last], scan.reaction + distance(last) / scan.speed);
         }
     }
-    c.ground_index[slot] = ground_index;
-    c.ground_probability[slot] = ground_probability;
-    c.ground_pickup[slot] = ground_pickup;
-    c.retrieval_time[slot] = retrieval_time;
-    c.retrieval_x[slot] = retrieval_x;
-    c.retrieval_y[slot] = retrieval_y;
+    for scan in scans.iter() {
+        let slot = scan.slot;
+        c.air_index[slot] = scan.air_index;
+        c.air_probability[slot] = scan.air_probability;
+        c.ground_index[slot] = scan.ground_index;
+        c.ground_probability[slot] = scan.ground_probability;
+        c.ground_pickup[slot] = scan.ground_pickup;
+        c.retrieval_time[slot] = scan.retrieval_time;
+        c.retrieval_x[slot] = scan.retrieval_x;
+        c.retrieval_y[slot] = scan.retrieval_y;
+    }
 }
 
 fn copy_slot(c: &mut FieldingCandidates, from: usize, to: usize) {
@@ -105,15 +147,21 @@ fn copy_slot(c: &mut FieldingCandidates, from: usize, to: usize) {
 
 /// Slot `position` holds the neutral defender and slot `8 + position` the actual defender.
 pub fn compute_candidates(trace: &FlightTrace, hit_prevention: &[f64; 8], candidates: &mut FieldingCandidates) {
+    let infield_end = infield_end(trace);
     for position in 0..8 {
-        fill_candidate(trace, position, 0.0, candidates, position);
-        if hit_prevention[position] == 0.0 { copy_slot(candidates, position, 8 + position); } else { fill_candidate(trace, position, hit_prevention[position], candidates, 8 + position); }
+        let skill = hit_prevention[position];
+        if skill == 0.0 {
+            fill_candidates(trace, position, &[(0.0, position)], infield_end, candidates);
+            copy_slot(candidates, position, 8 + position);
+        } else {
+            fill_candidates(trace, position, &[(0.0, position), (skill, 8 + position)], infield_end, candidates);
+        }
     }
 }
 
 /// Refills only `position`'s actual slot for a different reach skill.
 pub fn fill_actual_candidate(trace: &FlightTrace, position: usize, hit_prevention: f64, candidates: &mut FieldingCandidates) {
-    if hit_prevention == 0.0 { copy_slot(candidates, position, 8 + position); } else { fill_candidate(trace, position, hit_prevention, candidates, 8 + position); }
+    if hit_prevention == 0.0 { copy_slot(candidates, position, 8 + position); } else { fill_candidates(trace, position, &[(hit_prevention, 8 + position)], infield_end(trace), candidates); }
 }
 
 pub const OUTCOME_CAUGHT: u8 = 0;

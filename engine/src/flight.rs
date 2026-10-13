@@ -80,8 +80,7 @@ pub struct PreparedPark {
 }
 
 /// Fence lists per square cell. A fence is listed in every cell its padded box touches, in
-/// ascending index order, so a step inside one cell tests exactly the fences whose box test
-/// could pass, in the same order as a full scan.
+/// ascending index order, so the cells a step touches list every fence whose box test could pass.
 #[derive(Clone, Debug)]
 struct FenceGrid { origin: [f64; 2], columns: usize, rows: usize, cells: Vec<Vec<u16>> }
 
@@ -115,18 +114,32 @@ impl FenceGrid {
         [origin[0] + column as f64 * GRID_CELL_M, origin[0] + (column + 1) as f64 * GRID_CELL_M, origin[1] + row as f64 * GRID_CELL_M, origin[1] + (row + 1) as f64 * GRID_CELL_M]
     }
 
-    /// The candidate fences for a step from p to q, or None when the step spans cells (scan them all).
-    /// A step wholly outside the grid crosses no fence, since every padded fence box lies inside it.
-    fn candidates(&self, px: f64, py: f64, qx: f64, qy: f64) -> Option<&[u16]> {
-        let (min_x, max_x, min_y, max_y) = (px.min(qx), px.max(qx), py.min(qy), py.max(qy));
-        let column = ((min_x - self.origin[0]) / GRID_CELL_M).floor();
-        let row = ((min_y - self.origin[1]) / GRID_CELL_M).floor();
-        if !(column >= 0.0 && row >= 0.0) || column >= self.columns as f64 || row >= self.rows as f64 { return None; }
-        let (column, row) = (column as usize, row as usize);
-        let [x0, x1, y0, y1] = Self::cell_bounds(self.origin, column, row);
-        if min_x >= x0 && max_x <= x1 && min_y >= y0 && max_y <= y1 { Some(&self.cells[row * self.columns + column]) } else { None }
+    /// The cells covering a step's box [min x, max x, min y, max y] as [first column, last column,
+    /// first row, last row], or None (scan every fence) when the box leaves the grid or spans more
+    /// than two cells along an axis. Adjacent cells share their edge coordinates exactly, so the
+    /// covered cells contain every point of the box.
+    fn cells(&self, step: [f64; 4]) -> Option<[usize; 4]> {
+        let [min_x, max_x, min_y, max_y] = step;
+        let (first_column, last_column) = (((min_x - self.origin[0]) / GRID_CELL_M).floor(), ((max_x - self.origin[0]) / GRID_CELL_M).floor());
+        let (first_row, last_row) = (((min_y - self.origin[1]) / GRID_CELL_M).floor(), ((max_y - self.origin[1]) / GRID_CELL_M).floor());
+        if !(first_column >= 0.0 && first_row >= 0.0 && last_column < self.columns as f64 && last_row < self.rows as f64) { return None; }
+        if last_column - first_column > 1.0 || last_row - first_row > 1.0 { return None; }
+        let range = [first_column as usize, last_column as usize, first_row as usize, last_row as usize];
+        let [x0, _, y0, _] = Self::cell_bounds(self.origin, range[0], range[2]);
+        let [_, x1, _, y1] = Self::cell_bounds(self.origin, range[1], range[3]);
+        if min_x >= x0 && max_x <= x1 && min_y >= y0 && max_y <= y1 { Some(range) } else { None }
     }
 }
+
+/// The last single cell that held a whole step. Consecutive steps of a trace usually stay in it,
+/// and any cell holding a step's box lists every fence the step could cross.
+#[derive(Clone, Copy)]
+struct CellCache { bounds: [f64; 4], cell: usize }
+
+impl Default for CellCache {
+    fn default() -> Self { Self { bounds: [f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY], cell: 0 } }
+}
+
 const FENCE_STRIDE: usize = 8;
 const BOUNDS_PAD_M: f64 = 1e-3;
 
@@ -149,17 +162,32 @@ impl PreparedPark {
         Ok(Self { stadium: stadium.clone(), fences, bounds, grid })
     }
     /// The first fence crossed by p->q (lowest parameter, lowest index on ties) and its parameter.
-    fn first_crossing(&self, px: f64, py: f64, qx: f64, qy: f64) -> (f64, usize) {
+    /// A fence the step's box misses is never crossed, so only the fences listed in the step's cells
+    /// are tested; one listed in two cells is tested twice with the same result.
+    fn first_crossing(&self, cache: &mut CellCache, px: f64, py: f64, qx: f64, qy: f64) -> (f64, usize) {
         let (mut best, mut index) = (f64::INFINITY, usize::MAX);
-        match self.grid.candidates(px, py, qx, qy) {
-            Some(fences) => for &fence in fences {
-                let s = fence_crossing(self, fence as usize, px, py, qx, qy);
-                if s < best { best = s; index = fence as usize; }
-            },
-            None => for fence in 0..self.stadium.fences.len() {
-                let s = fence_crossing(self, fence, px, py, qx, qy);
-                if s < best { best = s; index = fence; }
-            },
+        let mut test = |fence: usize| {
+            let s = fence_crossing(self, fence, px, py, qx, qy);
+            if s < best || (s == best && s != f64::INFINITY && fence < index) { best = s; index = fence; }
+        };
+        let step = [px.min(qx), px.max(qx), py.min(qy), py.max(qy)];
+        let [x0, x1, y0, y1] = cache.bounds;
+        if step[0] >= x0 && step[1] <= x1 && step[2] >= y0 && step[3] <= y1 {
+            for &fence in &self.grid.cells[cache.cell] { test(fence as usize); }
+            return (best, index);
+        }
+        match self.grid.cells(step) {
+            Some([first_column, last_column, first_row, last_row]) => {
+                if first_column == last_column && first_row == last_row {
+                    *cache = CellCache { bounds: FenceGrid::cell_bounds(self.grid.origin, first_column, first_row), cell: first_row * self.grid.columns + first_column };
+                }
+                for row in first_row..=last_row {
+                    for column in first_column..=last_column {
+                        for &fence in &self.grid.cells[row * self.grid.columns + column] { test(fence as usize); }
+                    }
+                }
+            }
+            None => for fence in 0..self.stadium.fences.len() { test(fence); },
         }
         (best, index)
     }
@@ -203,7 +231,7 @@ fn fence_crossing(park: &PreparedPark, index: usize, px: f64, py: f64, qx: f64, 
 }
 
 /// Integration state for one trace; replaces the TS module-level buffers.
-struct Ball { position: [f64; 3], velocity: [f64; 3], lift: f64, drag_scale: f64 }
+struct Ball { position: [f64; 3], velocity: [f64; 3], lift: f64, drag_scale: f64, cell: CellCache }
 
 /// Reflects the horizontal velocity about the wall normal and backs the point inside the wall.
 fn reflect(fences: &[f64], index: usize, restitution: f64, ball: &mut Ball) {
@@ -248,7 +276,7 @@ fn airborne_step(park: &PreparedPark, trace: &mut FlightTrace, ball: &mut Ball, 
     let vx = ball.velocity[0] + acceleration[0] * FLIGHT_DT;
     let vy = ball.velocity[1] + acceleration[1] * FLIGHT_DT;
     let vz = ball.velocity[2] + acceleration[2] * FLIGHT_DT;
-    let (mut best, mut index) = park.first_crossing(px, py, qx, qy);
+    let (mut best, mut index) = park.first_crossing(&mut ball.cell, px, py, qx, qy);
     let mut kind = if index == usize::MAX { EVENT_NONE } else { EVENT_FENCE };
     for (object_index, object) in stadium.overhead.iter().enumerate() {
         let h = object.height_m;
@@ -328,7 +356,7 @@ fn rolling_step(park: &PreparedPark, trace: &mut FlightTrace, ball: &mut Ball, t
     let (ux, uy) = (ball.velocity[0] / speed, ball.velocity[1] / speed);
     let (px, py) = (ball.position[0], ball.position[1]);
     let (qx, qy) = (px + ux * distance, py + uy * distance);
-    let (best, index) = park.first_crossing(px, py, qx, qy);
+    let (best, index) = park.first_crossing(&mut ball.cell, px, py, qx, qy);
     if index == usize::MAX {
         ball.position[0] = qx; ball.position[1] = qy;
         ball.velocity[0] = ux * next_speed; ball.velocity[1] = uy * next_speed;
@@ -365,6 +393,7 @@ pub fn trace_flight(sample: &ContactSample, park: &PreparedPark, trace: &mut Fli
         velocity: [speed * math::cos(launch) * math::sin(spray), speed * math::cos(launch) * math::cos(spray), speed * math::sin(launch)],
         lift: LIFT_COEFFICIENT * lift_shape(launch_deg),
         drag_scale: 1.0 / carry,
+        cell: CellCache::default(),
     };
     push(trace, 0.0, 0.0, 0.0, LAUNCH_HEIGHT_M)?;
     let mut time = 0.0;
