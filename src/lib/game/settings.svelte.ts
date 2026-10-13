@@ -6,15 +6,6 @@ export const PLAYBACK_SPEEDS: readonly PlaybackSpeed[] = ['slow', 'normal', 'fas
 /** Milliseconds between revealed games during season playback. */
 /** How long the 162-game playback takes once the season is simulated; it eases in and out, so the first and last games read. */
 export const PLAYBACK_DURATION_MS: Readonly<Record<PlaybackSpeed, number>> = { slow: 8000, normal: 4000, fast: 2000 };
-/** Interface palettes and display type borrowed from card stock eras; `modern` is the default dark look. */
-export type InterfaceEra = 'modern' | 'vintage' | 'kraft' | 'neon' | 'chrome';
-export const INTERFACE_ERAS: readonly { id: InterfaceEra; label: string; years: string }[] = [
-	{ id: 'modern', label: 'Modern', years: 'Default' },
-	{ id: 'vintage', label: 'Vintage', years: '1950s–60s' },
-	{ id: 'kraft', label: 'Kraft', years: '1970s' },
-	{ id: 'neon', label: 'Neon', years: '1980s–90s' },
-	{ id: 'chrome', label: 'Chrome', years: '2000s–' }
-];
 
 export interface AppPreferences {
 	motionEnabled: boolean;
@@ -23,7 +14,6 @@ export interface AppPreferences {
 	rosterFirstClick: RosterClickBehavior;
 	showStickers: boolean;
 	playbackSpeed: PlaybackSpeed;
-	interfaceEra: InterfaceEra;
 	/** Desktop drafting also lists players with no open position on the field. */
 	showBlockedCards: boolean;
 }
@@ -66,7 +56,6 @@ function validStored(value: unknown): AppPreferences | null {
 			// Preferences added later fall back to their defaults when an older save lacks them.
 			showStickers: typeof candidate.showStickers === 'boolean' ? candidate.showStickers : true,
 			playbackSpeed: PLAYBACK_SPEEDS.includes(candidate.playbackSpeed as PlaybackSpeed) ? candidate.playbackSpeed as PlaybackSpeed : 'normal',
-			interfaceEra: INTERFACE_ERAS.some(era => era.id === candidate.interfaceEra) ? candidate.interfaceEra as InterfaceEra : 'modern',
 			showBlockedCards: typeof candidate.showBlockedCards === 'boolean' ? candidate.showBlockedCards : false
 		}
 		: null;
@@ -94,7 +83,6 @@ export class AppSettingsState {
 	rosterFirstClick = $state<RosterClickBehavior>('move');
 	showStickers = $state(true);
 	playbackSpeed = $state<PlaybackSpeed>('normal');
-	interfaceEra = $state<InterfaceEra>('modern');
 	showBlockedCards = $state(false);
 	reducedMotion = $state(false);
 	storageAvailable = $state(true);
@@ -106,7 +94,6 @@ export class AppSettingsState {
 	#loaded = false;
 	#motionAttributeCaptured = false;
 	#previousMotionAttribute: string | null = null;
-	#previousEraAttribute: string | null = null;
 
 	constructor(environmentFactory: () => AppSettingsEnvironment | null = browserEnvironment) {
 		this.#environmentFactory = environmentFactory;
@@ -128,7 +115,6 @@ export class AppSettingsState {
 			rosterFirstClick: this.rosterFirstClick,
 			showStickers: this.showStickers,
 			playbackSpeed: this.playbackSpeed,
-			interfaceEra: this.interfaceEra,
 			showBlockedCards: this.showBlockedCards,
 			reducedMotion: this.reducedMotion,
 			effectiveEnabled: this.effectiveEnabled,
@@ -143,10 +129,8 @@ export class AppSettingsState {
 		if (!this.#motionAttributeCaptured) {
 			this.#motionAttributeCaptured = true;
 			this.#previousMotionAttribute = root.getAttribute('data-motion');
-			this.#previousEraAttribute = root.getAttribute('data-era');
 		}
 		root.dataset.motion = this.effectiveEnabled ? 'on' : 'off';
-		root.dataset.era = this.interfaceEra;
 	}
 
 	#restoreMotionAttribute(): void {
@@ -154,8 +138,6 @@ export class AppSettingsState {
 		const root = document.documentElement;
 		if (this.#previousMotionAttribute === null) root.removeAttribute('data-motion');
 		else root.setAttribute('data-motion', this.#previousMotionAttribute);
-		if (this.#previousEraAttribute === null) root.removeAttribute('data-era');
-		else root.setAttribute('data-era', this.#previousEraAttribute);
 		this.#motionAttributeCaptured = false;
 		this.#previousMotionAttribute = null;
 	}
@@ -183,7 +165,6 @@ export class AppSettingsState {
 				this.rosterFirstClick = stored.rosterFirstClick;
 				this.showStickers = stored.showStickers;
 				this.playbackSpeed = stored.playbackSpeed;
-				this.interfaceEra = stored.interfaceEra;
 				this.showBlockedCards = stored.showBlockedCards;
 			}
 		} catch {
@@ -242,7 +223,6 @@ export class AppSettingsState {
 				rosterFirstClick: this.rosterFirstClick,
 				showStickers: this.showStickers,
 				playbackSpeed: this.playbackSpeed,
-				interfaceEra: this.interfaceEra,
 				showBlockedCards: this.showBlockedCards
 			} satisfies AppPreferences));
 		} catch {
@@ -294,13 +274,6 @@ export class AppSettingsState {
 	setShowBlockedCards(showBlockedCards: boolean): void {
 		if (showBlockedCards === this.showBlockedCards) return;
 		this.showBlockedCards = showBlockedCards;
-		this.#persist();
-		this.#notify();
-	}
-
-	setInterfaceEra(interfaceEra: InterfaceEra): void {
-		if (!INTERFACE_ERAS.some(era => era.id === interfaceEra) || interfaceEra === this.interfaceEra) return;
-		this.interfaceEra = interfaceEra;
 		this.#persist();
 		this.#notify();
 	}

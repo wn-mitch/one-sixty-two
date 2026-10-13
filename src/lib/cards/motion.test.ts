@@ -164,18 +164,16 @@ describe('app settings', () => {
 	it('keeps an older save and gives its missing preferences their defaults', () => {
 		const media = new FakeMediaPreference();
 		const storage = new MemoryStorage();
-		// Saved before stickers, playback speed and interface era existed.
+		// Saved before stickers and playback speed existed.
 		storage.values.set(APP_SETTINGS_STORAGE_KEY, JSON.stringify({ motionEnabled: false, cardAnimation: true, cardSpeed: 1.2, rosterFirstClick: 'review' }));
 		const settings = new AppSettingsState(() => ({ storage, reducedMotion: media }));
 		const release = settings.retain();
-		expect(settings.snapshot).toMatchObject({ motionEnabled: false, cardSpeed: 1.2, rosterFirstClick: 'review', showStickers: true, playbackSpeed: 'normal', interfaceEra: 'modern' });
+		expect(settings.snapshot).toMatchObject({ motionEnabled: false, cardSpeed: 1.2, rosterFirstClick: 'review', showStickers: true, playbackSpeed: 'normal' });
 		settings.setShowStickers(false);
 		settings.setPlaybackSpeed('slow');
-		settings.setInterfaceEra('kraft');
-		settings.setInterfaceEra('bogus' as never);
 		const restored = new AppSettingsState(() => ({ storage, reducedMotion: media }));
 		const releaseRestored = restored.retain();
-		expect(restored.snapshot).toMatchObject({ motionEnabled: false, showStickers: false, playbackSpeed: 'slow', interfaceEra: 'kraft' });
+		expect(restored.snapshot).toMatchObject({ motionEnabled: false, showStickers: false, playbackSpeed: 'slow' });
 		releaseRestored();
 		release();
 	});

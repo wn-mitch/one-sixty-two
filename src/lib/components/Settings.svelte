@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { appSettings, INTERFACE_ERAS, PLAYBACK_SPEEDS } from '#lib/game/settings.svelte.ts';
+	import { appSettings, PLAYBACK_SPEEDS } from '#lib/game/settings.svelte.ts';
 
 	let dialog = $state<HTMLDialogElement>();
 	let trigger = $state<HTMLButtonElement>();
@@ -16,7 +16,6 @@
 	const stickersId = `${uid}-stickers`;
 	const blockedId = `${uid}-blocked`;
 	const playbackLabelId = `${uid}-playback`;
-	const eraLabelId = `${uid}-era`;
 	const playbackLabels = { slow: 'Slow', normal: 'Normal', fast: 'Fast' } as const;
 
 	const systemNotice = $derived(appSettings.reducedMotion
@@ -176,15 +175,6 @@
 				</div>
 
 				<div class="setting-group">
-					<p id={eraLabelId} class="setting-label">Interface era</p>
-					<div class="choice-buttons era-choices" role="group" aria-labelledby={eraLabelId}>
-						{#each INTERFACE_ERAS as era (era.id)}
-							<button type="button" data-era-swatch={era.id} aria-pressed={appSettings.interfaceEra === era.id} disabled={!ready} onclick={() => appSettings.setInterfaceEra(era.id)}>{era.label}<small>{era.years}</small></button>
-						{/each}
-					</div>
-				</div>
-
-				<div class="setting-group">
 					<p id={rosterLabelId} class="setting-label">Roster first click</p>
 					<div class="choice-buttons" role="group" aria-labelledby={rosterLabelId}>
 						<button type="button" aria-pressed={appSettings.rosterFirstClick === 'move'} disabled={!ready} onclick={() => appSettings.setRosterFirstClick('move')}>Move first</button>
@@ -251,9 +241,6 @@
 	.choice-buttons { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
 	.choice-buttons button { flex: 1; min-width: 0; min-height: 44px; padding: var(--space-2); border: 0; border-radius: calc(var(--radius) - 2px); background: transparent; color: var(--muted); font-size: var(--text-sm); }
 	.choice-buttons button[aria-pressed='true'] { background: var(--accent); color: var(--background); }
-	.era-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); }
-	.era-choices button { display: grid; gap: 1px; line-height: 1.1; }
-	.era-choices small { font-family: inherit; font-size: var(--text-xs); font-weight: 500; letter-spacing: 0; text-transform: none; opacity: .8; }
 	.choice-buttons button:hover:not([aria-pressed='true']) { background: var(--surface-raised); color: var(--text); }
 	.settings-notice { margin: var(--space-5) 0 0; color: var(--muted); font-size: var(--text-sm); }
 

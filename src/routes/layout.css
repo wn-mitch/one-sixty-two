@@ -50,31 +50,6 @@
  font-variant-numeric: tabular-nums;
  font-synthesis: none;
 }
-/* Interface eras (Settings) swap palette, heading face and corner radius; layout never changes. */
-:root[data-era='vintage'] {
- --background: oklch(17% 0.014 65); --surface: oklch(22% 0.018 65); --surface-raised: oklch(28% 0.022 65); --surface-hover: oklch(33% 0.024 65);
- --text: oklch(95% 0.022 85); --muted: oklch(79% 0.03 80); --border: oklch(39% 0.024 65);
- --accent: oklch(74% 0.15 35); --accent-hover: oklch(81% 0.12 35); --focus: oklch(86% 0.1 85);
- --font-heading: 'Roboto Serif', Georgia, serif; --radius: .125rem; --radius-lg: .25rem;
-}
-:root[data-era='kraft'] {
- --background: oklch(19% 0.022 62); --surface: oklch(24% 0.028 62); --surface-raised: oklch(30% 0.032 62); --surface-hover: oklch(35% 0.034 62);
- --text: oklch(94% 0.03 85); --muted: oklch(79% 0.045 75); --border: oklch(41% 0.035 62);
- --accent: oklch(78% 0.15 65); --accent-hover: oklch(85% 0.12 70); --focus: oklch(86% 0.1 120);
- --font-heading: 'Barlow Condensed', sans-serif; --radius: .375rem; --radius-lg: .75rem;
-}
-:root[data-era='neon'] {
- --background: oklch(15% 0.03 285); --surface: oklch(20% 0.04 285); --surface-raised: oklch(26% 0.05 285); --surface-hover: oklch(31% 0.055 285);
- --text: oklch(97% 0.01 285); --muted: oklch(79% 0.04 285); --border: oklch(38% 0.06 285);
- --accent: oklch(83% 0.14 190); --accent-hover: oklch(89% 0.11 190); --focus: oklch(78% 0.18 340);
- --font-heading: 'Barlow Condensed', sans-serif; --radius: 0; --radius-lg: 0;
-}
-:root[data-era='chrome'] {
- --background: oklch(13% 0.004 250); --surface: oklch(19% 0.006 250); --surface-raised: oklch(25% 0.008 250); --surface-hover: oklch(30% 0.01 250);
- --text: oklch(98% 0.003 250); --muted: oklch(78% 0.01 250); --border: oklch(36% 0.012 250);
- --accent: oklch(87% 0.06 220); --accent-hover: oklch(93% 0.04 220); --focus: oklch(84% 0.12 220);
- --radius: .125rem; --radius-lg: .25rem;
-}
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--background); color: var(--text); min-width: 280px; line-height: 1.5; }
 button, input, select, textarea { font: inherit; }
