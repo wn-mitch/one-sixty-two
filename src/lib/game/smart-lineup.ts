@@ -53,7 +53,7 @@ export function smartRotation(order: string[], profiles: ReadonlyMap<string, Pro
 }
 
 /** The default role template, handed out best arm first: the best closes, the next two set up. */
-export function smartReliefRoles(assignments: ReliefAssignment[], profiles: ReadonlyMap<BullpenSlot, Profile>): ReliefAssignment[] {
+export function smartReliefRoles<S extends string = BullpenSlot>(assignments: ReliefAssignment<S>[], profiles: ReadonlyMap<S, Profile>): ReliefAssignment<S>[] {
  const ranked = rank(assignments.map(assignment => assignment.slot), slot => { const r = profiles.get(slot)?.pitchingRates; return r ? -pitcherCost(r) : null; });
  return assignments.map(assignment => {
   const [primary, secondary] = DEFAULT_RELIEF_ROLES[ranked.indexOf(assignment.slot)] ?? DEFAULT_RELIEF_ROLES.at(-1)!;

@@ -1,7 +1,7 @@
 <script lang="ts">
  import LeagueLineup from './LeagueLineup.svelte';
  import Standings from './Standings.svelte';
- import { headToHead, standings, type ClubLineup, type LeagueSeason } from '../../draft/league.ts';
+ import { headToHead, seasonLines, standings, type ClubLineup, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
  import type { Profile } from '../../game/types.ts';
  import { CHAPTER_MATCHDAYS, LEAGUE_CHAPTERS, LEAGUE_CLUBS, type LeagueGame } from '../../sim/league-types.ts';
@@ -20,6 +20,7 @@
  const series = $derived.by(() => { void revision; return headToHead(season, human, rival); });
  const recent = $derived.by(() => { void revision; return (season.chapters.at(-1)?.games ?? []).filter(game => game.home === human || game.away === human); });
  const lineup = $derived.by(() => { void revision; return season.lineups[human]; });
+ const lines = $derived.by(() => { void revision; return seasonLines(season, human); });
  const gamesPerChapter = CHAPTER_MATCHDAYS * LEAGUE_CLUBS / 2;
  const won = (game: LeagueGame) => game.home === human ? game.homeRuns > game.awayRuns : game.awayRuns > game.homeRuns;
  const ordinal = (value: number) => `${value}${value === 1 ? 'st' : value === 2 ? 'nd' : value === 3 ? 'rd' : 'th'}`;
@@ -55,7 +56,7 @@
  <section aria-labelledby="lineup-heading">
   <h2 id="lineup-heading">Lineup for chapter {played + 1}</h2>
   <p class="note">Changes apply from the next chapter. AI clubs keep their lineups.</p>
-  <LeagueLineup {run} {lineup} {profiles} disabled={playing} onChange={onLineup} />
+  <LeagueLineup {run} {lineup} {profiles} {lines} disabled={playing} onChange={onLineup} />
  </section>
 
  <footer class="play">

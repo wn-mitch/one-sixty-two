@@ -12,6 +12,8 @@
  import { DraftModeSession } from '#lib/draft/session.svelte.ts';
  import type { Profile } from '#lib/game/types.ts';
  import { loadMedia } from '#lib/media/client.ts';
+ import { loadRankings } from '#lib/rankings/client.ts';
+ import type { WarRankings } from '#lib/rankings/types.ts';
  import type { MediaManifest } from '#lib/media/types.ts';
  import { toasts } from '#lib/toast.svelte.ts';
 
@@ -19,6 +21,7 @@
  const profiles = new SvelteMap<string, Profile>();
  let media = $state.raw<MediaManifest | null>(null);
  let mediaStatus = $state<CardMediaStatus>('loading');
+ let rankings = $state.raw<WarRankings | null>(null);
  let confirmingNew = $state(false);
  const clubName = (seat: number) => session.clubName(seat);
 
@@ -26,6 +29,14 @@
   void session.initialize();
   void loadMedia().then(value => { media = value; mediaStatus = 'ready'; }).catch(() => { mediaStatus = 'unavailable'; });
   return () => session.dispose();
+ });
+ // Cards show WAR/162 from the rankings for the loaded data version; without them the box stays blank.
+ $effect(() => {
+  const version = session.manifest?.dataVersion;
+  let disposed = false;
+  rankings = null;
+  if (version) void loadRankings(version).then(value => { if (!disposed) rankings = value; }).catch(() => {});
+  return () => { disposed = true; };
  });
  $effect(() => { if (session.storageNotice) toasts.show(session.storageNotice, { id: 'draft-storage', tone: 'error' }); });
 
@@ -85,10 +96,10 @@
  {:else if session.screen === 'entry' && session.manifest}
   <DraftEntry franchises={session.manifest.franchises} refused={session.refused} busy={session.busy} onStart={(id, difficulty) => void session.start(id, difficulty)} />
  {:else if session.screen === 'drafting' && session.run}
-  <DraftTable run={session.run} revision={session.revision} {profiles} manifest={session.manifest} {media} {mediaStatus} {clubName}
+  <DraftTable run={session.run} revision={session.revision} {profiles} manifest={session.manifest} {media} {mediaStatus} {rankings} {clubName}
    onPick={cardId => refusal(session.pick(cardId))} />
  {:else if session.screen === 'window' && session.run}
-  <OpeningWindow run={session.run} revision={session.revision} {profiles} {clubName}
+  <OpeningWindow run={session.run} revision={session.revision} {profiles} manifest={session.manifest} {media} {mediaStatus} {rankings} {clubName}
    onCut={id => refusal(session.cut(id))} onCleanup={role => refusal(session.cleanup(role))} onAutofix={() => refusal(session.autofix())}
    onSubmit={(active, reserves) => refusal(session.submit(active, reserves))} />
  {:else if session.screen === 'season' && session.run && session.season}

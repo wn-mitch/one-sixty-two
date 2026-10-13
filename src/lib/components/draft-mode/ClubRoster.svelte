@@ -6,9 +6,13 @@
  import { money, rolesLabel } from './format.ts';
 
  /** A club's cards placed by the best legal arrangement: active slots, reserves, then cards with no place. */
- let { cards, profiles, open = true, action }: {
+ let { cards, profiles, open = true, action, activeSlot = null, onSlot }: {
   cards: readonly DraftCard[]; profiles: ReadonlyMap<string, Profile>; open?: boolean;
   action?: Snippet<[DraftCard]>;
+  /** The missing slot the pile is filtered to, if any. */
+  activeSlot?: DraftSlot | null;
+  /** Makes missing slots buttons that filter the pile to cards able to fill them. */
+  onSlot?: (slot: DraftSlot) => void;
  } = $props();
  const arrangement = $derived(arrangeRoster(cards));
  const byId = $derived(new Map(cards.map(card => [card.seasonId, card])));
@@ -31,7 +35,13 @@
   </li>
  {/each}
  {#if open}
-  {#each missing as slot (slot)}<li class="missing"><span class="slot">{slot}</span><span class="who">Missing</span></li>{/each}
+  {#each missing as slot (slot)}
+   <li class="missing" class:active={activeSlot === slot}>
+    {#if onSlot}
+     <button type="button" class="filter" aria-pressed={activeSlot === slot} onclick={() => onSlot(slot)}><span class="slot">{slot}</span><span class="who">{activeSlot === slot ? 'Showing who fits' : 'Missing'}</span></button>
+    {:else}<span class="slot">{slot}</span><span class="who">Missing</span>{/if}
+   </li>
+  {/each}
   {#each { length: openReserves } as _, index (index)}<li class="missing"><span class="slot">Res</span><span class="who">Open reserve</span></li>{/each}
  {/if}
 </ul>
@@ -44,5 +54,8 @@
  small { display: block; color: var(--muted); font-size: var(--text-xs); }
  .salary { font-variant-numeric: tabular-nums; }
  .missing .who { color: var(--error); }
+ .filter { grid-column: 1 / -1; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); align-items: center; gap: var(--space-2); min-height: 2.25rem; padding: 0; border: 0; background: none; text-align: left; font: inherit; }
+ .filter:hover .who { text-decoration: underline; }
+ .active .who { color: var(--accent); }
  .extra .slot { color: var(--error); }
 </style>

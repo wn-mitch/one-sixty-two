@@ -49,7 +49,19 @@
  </fieldset>
 
  <div class="start">
-  <p>{#if franchiseId}{nameOf(franchiseId)} · rival {rivals.length ? rivals.map(nameOf).join(' or ') : 'drawn at the table'}{:else}Choose a franchise to start.{/if}</p>
+  {#if franchiseId}
+   <p class="matchup">
+    <span class="club"><TeamLogo {franchiseId} label={nameOf(franchiseId)} size="small" />{nameOf(franchiseId)}</span>
+    <span class="versus">{rivals.length > 1 ? 'rival, one of' : 'rival'}</span>
+    {#each rivals as rival (rival)}
+     <span class="rival" title={nameOf(rival)}><TeamLogo franchiseId={rival} label={nameOf(rival)} size="small" /></span>
+    {:else}
+     <span>drawn at the table</span>
+    {/each}
+   </p>
+  {:else}
+   <p>Choose a franchise to start.</p>
+  {/if}
   <button class="primary" disabled={!franchiseId || busy} onclick={() => onStart(franchiseId, difficulty)}>{busy ? 'Dealing…' : 'Start draft'}</button>
  </div>
 </section>
@@ -74,4 +86,8 @@
  .difficulty span { color: var(--muted); font-size: var(--text-xs); }
  .start { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom)); background: var(--background); border-top: 1px solid var(--border); }
  .start p { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+ .matchup { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+ .club { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text); font-weight: 650; }
+ .rival { display: inline-flex; }
+ .versus { text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); }
 </style>

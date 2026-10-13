@@ -6,17 +6,21 @@
  import type { DraftCard } from '../../draft/types.ts';
  import type { Manifest, Profile } from '../../game/types.ts';
  import type { MediaManifest } from '../../media/types.ts';
+ import type { WarRankings } from '../../rankings/types.ts';
  import { FINISH_LABELS, historicalLine, money, rolesLabel } from './format.ts';
 
- let { card, profile, manifest, media, mediaStatus, actions }: {
+ let { card, profile, manifest, media, mediaStatus, rankings = null, compact = false, actions }: {
   card: DraftCard; profile: Profile | undefined; manifest: Manifest | null; media: MediaManifest | null; mediaStatus: CardMediaStatus;
+  rankings?: WarRankings | null;
+  /** One truncated line per caption row, so tiles in a dense grid stay the same height. */
+  compact?: boolean;
   actions?: Snippet;
  } = $props();
  // The draft card's finish is its pack rarity; the front shows it rather than recomputing one.
- const view = $derived(profile ? { ...createCardViewModel({ profile, slot: card.pricedSlot, manifest, media, mediaStatus }), fin: materialFor(card.finish) } : null);
+ const view = $derived(profile ? { ...createCardViewModel({ profile, slot: card.pricedSlot, manifest, media, mediaStatus, rankings }), fin: materialFor(card.finish) } : null);
 </script>
 
-<article class="tile" aria-label={profile ? `${profile.displayName}, ${card.year}` : card.seasonId}>
+<article class="tile" class:compact aria-label={profile ? `${profile.displayName}, ${card.year}` : card.seasonId}>
  <div class="art">
   {#if view}<Card s={view} face="front" onDetails={() => {}} />{:else}<span class="placeholder">Loading card…</span>{/if}
  </div>
@@ -38,6 +42,9 @@
  .salary { color: var(--text); font-weight: 700; }
  .finish.gem { color: var(--focus); }
  .finish.emboss { color: var(--accent); }
+ .caption { min-width: 0; }
+ .compact .caption p { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+ .compact .name { font-size: var(--text-sm); }
  .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
  .actions :global(button) { flex: 1 1 auto; }
 </style>
