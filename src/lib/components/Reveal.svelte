@@ -71,7 +71,7 @@
 			<p class="status">{concealed ? 'Dealing a pack…' : revealing ? 'Revealing your player pool…' : 'Choose one elite season from any franchise.'}</p>
 		{:else if team}
 			<div class="roll-copy">
-				<h2>{franchise?.name ?? team.franchiseId}</h2>
+				<h2 style:--chars={(franchise?.name ?? team.franchiseId).length}>{franchise?.name ?? team.franchiseId}</h2>
 				<p class="era">{years?.first}–{years?.last}</p>
 			</div>
 			<p class="status">{concealed ? 'Dealing a franchise…' : revealing ? 'Revealing your player pool…' : 'Choose one exact season from this franchise.'}</p>
@@ -139,13 +139,15 @@
 	.compact .era { font-size: 1.25rem; }
 	.compact .eyebrow { margin: 0; color: var(--muted); font-size: .75rem; white-space: nowrap; }
 	.compact .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-	.reveal.bar { flex: 1; gap: .5rem; min-height: 3rem; box-sizing: border-box; padding: .25rem .75rem .25rem .25rem; border-radius: var(--radius); }
+	.reveal.bar { container-type: inline-size; flex: 1; gap: .5rem; min-height: 3rem; box-sizing: border-box; padding: .25rem .75rem .25rem .25rem; border-radius: var(--radius); }
 	.reveal.bar:not(:has(.team-mark)) { padding-left: .75rem; }
 	.bar .team-mark { display: flex; }
 	/* The franchise name takes the whole first line; the era and pick count share the second. */
 	.bar .reveal-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: .125rem .5rem; }
 	.bar .roll-copy { display: contents; }
-	.bar h2 { order: -1; flex: 1 0 100%; min-width: 0; overflow: hidden; font-size: 1.25rem; overflow-wrap: normal; text-overflow: ellipsis; white-space: nowrap; }
+	/* A long franchise name shrinks to the bar beside the mark (condensed caps run about half an em
+	   per character) before it would ellipsize. */
+	.bar h2 { order: -1; flex: 1 0 100%; min-width: 0; overflow: hidden; font-size: clamp(.875rem, calc((100cqi - 3.5rem) / (var(--chars, 12) * .5)), 1.25rem); overflow-wrap: normal; text-overflow: ellipsis; white-space: nowrap; }
 	.bar .era { order: -1; margin: 0; font-size: .9375rem; }
 	.bar .eyebrow { margin: 0; font-size: .6875rem; line-height: 1; letter-spacing: .04em; text-transform: uppercase; }
 	.team-colored.bar .eyebrow { opacity: .8; }

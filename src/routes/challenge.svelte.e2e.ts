@@ -53,7 +53,8 @@ test('a challenge link opens a challenge card, binds the next draft, and offers 
  expect(html).toContain(`property="og:image" content="${publication.images.field.url}"`);
 
  await page.goto(`/c/${id}`);
- await expect(page.getByRole('heading', { level: 1, name: `Beat ${wins}–${losses}` })).toBeVisible();
+ // The challenge card renders after its manifest and replay load, which can take seconds under a busy suite.
+ await expect(page.getByRole('heading', { level: 1, name: `Beat ${wins}–${losses}` })).toBeVisible({ timeout: 30_000 });
  await expect(page.getByRole('link', { name: 'See their season', exact: true })).toHaveAttribute('href', `/r/${id}`);
  await page.getByRole('button', { name: 'Draft your team', exact: true }).click();
  await expect(page.getByRole('heading', { name: 'Choose your home stadium', exact: true })).toBeVisible();

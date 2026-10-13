@@ -13,6 +13,8 @@
 	const issued = $derived(new Date(`${phrase.date}T00:00:00Z`));
 	const dateline = $derived(issued.toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }));
 	const shortDate = $derived(issued.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }));
+	/** A bare page number reads "Page 4"; a section name prints as written. */
+	const page = $derived(phrase.page && /^\d+$/.test(phrase.page) ? `Page ${phrase.page}` : phrase.page);
 	const headline = $derived(phrase.phrase.charAt(0).toUpperCase() + phrase.phrase.slice(1));
 
 	function drop(_: Element) {
@@ -30,7 +32,7 @@
 	<figure class="clipping" aria-labelledby="clipping-headline">
 		<header class="masthead">
 			<p class="paper">{phrase.publication}</p>
-			<p class="dateline">{dateline}{#if phrase.page}{' · '}Page {phrase.page}{/if}</p>
+			<p class="dateline">{dateline}{#if page}{' · '}{page}{/if}</p>
 		</header>
 		<blockquote cite={phrase.url}>
 			<p id="clipping-headline" class="headline">{headline}</p>

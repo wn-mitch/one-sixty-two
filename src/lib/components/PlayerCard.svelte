@@ -345,8 +345,9 @@
 	.placement-list { display: flex; flex-wrap: wrap; gap: .35rem; min-width: 0; max-width: 100%; }
 	.placement { min-height: 2.75rem; min-width: 2.75rem; box-sizing: border-box; padding: .3rem .5rem; color: var(--card-ink); background: color-mix(in oklch, var(--surface) 72%, var(--focus)); border: 1px solid var(--focus); border-radius: .25rem; font-size: .72rem; font-weight: 750; }
 	.wide-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: .35rem; width: calc(100% + 1rem); box-sizing: border-box; margin: -.5rem; padding: .5rem; overflow-x: auto; }
-	.wide-season-picker { flex: 1 0 4.5rem; min-width: 4.5rem; }
-	.wide-season-picker select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; min-height: 2.75rem; padding-block: .25rem; }
+	/* Always wide enough for a four-digit year; a player with many positions scrolls the row instead of squeezing it. */
+	.wide-season-picker { flex: 1 0 5.75rem; min-width: 5.75rem; }
+	.wide-season-picker select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; min-height: 2.75rem; padding-block: .25rem; padding-inline: .55rem 1.75rem; font-variant-numeric: tabular-nums; }
 	.wide-controls .placement-list { display: contents; }
 	.wide-controls .placement { flex: 0 0 2.75rem; }
 	.placement:disabled { color: var(--card-muted); border-color: var(--border); background: var(--surface); cursor: not-allowed; opacity: .7; text-decoration: line-through; }
