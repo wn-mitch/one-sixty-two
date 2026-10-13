@@ -4,6 +4,8 @@
  import CompactPlate from './CompactPlate.svelte';
  import { fit } from './fit.ts';
  import { tilt } from './motion.ts';
+ import { CardLight, lightCanvas } from './surface/card-light.ts';
+ import type { ReliefProfile } from './surface/surfaces.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import Front1950s from './fronts/Front1950s.svelte';
  import Front1960s from './fronts/Front1960s.svelte';
@@ -34,6 +36,8 @@
   compact = false,
   idle = false,
   wall = false,
+  scene = false,
+  nameProfile,
   capture = false,
   stickers,
   freshStickers,
@@ -46,6 +50,10 @@
   compact?: boolean;
   idle?: boolean;
   wall?: boolean;
+  /** Drawn in a lit scene such as the home wall: a flat, fixed-light finish whose moving light comes from that scene's WebGL pass. */
+  scene?: boolean;
+  /** How a raised name is shaped under the WebGL light; the renderer's default when unset. */
+  nameProfile?: ReliefProfile;
   capture?: boolean;
   /** Overrides the collection's stickers for this card, e.g. while they are being arranged. */
   stickers?: readonly PlacedSticker[];
@@ -55,9 +63,15 @@
  } = $props();
 	let root = $state<HTMLDivElement>();
  const colors = $derived(Object.entries(s.k).map(([role, color]) => `--${role}:${color}`).join(';'));
- const motionFinish = $derived(s.fin.tier === 'foil' ? 'silver' : s.fin.tier === 'emboss' ? 'gold' : s.fin.tier);
  const Front = $derived(fronts[s.era]);
  const Back = $derived(backs[s.era]);
+ // Captures and lit scenes keep the static finish; every other front is lit by its own WebGL canvas.
+ const flat = $derived(capture || scene);
+ // Compact cards and thumbnails are too small for relief to read, so they keep the static finish too.
+ const lit = $derived(!flat && !compact && !thumbnail);
+ const light = new CardLight();
+ $effect(() => light.setNameProfile(nameProfile));
+ const motionFinish = $derived(s.fin.tier === 'foil' ? 'silver' : s.fin.tier === 'emboss' ? 'gold' : s.fin.tier);
 </script>
 
 <div
@@ -70,30 +84,35 @@
  data-interactive={interactive}
  data-compact={compact}
  data-capture={capture}
+ data-flat={flat}
  style="{colors};--stamp:{s.fin.stamp};--emb:{s.fin.emb}"
  use:fit
  use:tilt={{
-  enabled: interactive && !thumbnail && !capture,
+  enabled: interactive && !thumbnail && !flat,
   eventTarget: root?.parentElement ?? undefined,
-  idle: idle && !capture,
-  wall: wall && !capture,
+  idle: idle && !flat,
+  wall: wall && !flat,
   finish: motionFinish,
+  light: lit ? light : undefined,
   identity: `${s.full}|${s.year}|${s.team}|${s.pos}`
  }}
 >
- {#if face === 'front'}<Material {s} layer="under" {capture} />{/if}
+ {#if face === 'front'}<Material {s} layer="under" />{/if}
  <div class="face">
   {#if face === 'front'}<Front {s} />{:else}<Back {s} {onDetails} />{/if}
  </div>
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
- {#if face === 'front'}<Material {s} layer="over" {capture} />{/if}
+ {#if face === 'front'}<Material {s} layer="over" />{/if}
  <!-- Explicit stickers (the collection editor) always show; elsewhere the player's setting decides. -->
  {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer era={s.era} stickers={stickers ?? cardStickers(s.seasonId)} fresh={freshStickers} />{/if}
+ {#if face === 'front' && lit}<canvas class="light" aria-hidden="true" use:lightCanvas={light}></canvas>{/if}
 </div>
 
 <style>
- .card { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 5 / 7; transform-style: preserve-3d; --mx: 23%; --my: 5%; --lx: -.45; --ly: -.75; --ang: 200deg; --lift: 0; --glare: 0; --g1: .85; --g2: .12; --g3: .12; --k: 1; }
- .face { position: relative; transform-style: preserve-3d; width: 100%; height: 100%; }
+ /* The finish prints under one fixed light; its moving light, relief and foil come from the WebGL canvas. */
+ .card { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 5 / 7; isolation: isolate; --mx: 68%; --my: 24%; --lx: .36; --ly: -.64; --ang: 218deg; --lift: .42; --glare: .08; --g1: .92; --g2: .38; --g3: .66; --k: 1; }
+ .face { position: relative; width: 100%; height: 100%; }
+ .light { position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%; border-radius: 1.8cqw; pointer-events: none; }
  .card[data-compact='true'] { min-width: 72px; }
  .card[data-compact='true'] :global([data-layer='season.year']) { font-size: max(11cqw, 8px) !important; line-height: 1; }
  .card[data-compact='true'] :global([data-layer='season.year'] ~ span) { display: none; }
@@ -103,9 +122,8 @@
  .card :global([data-card]) { box-sizing: border-box; }
  .card :global(img) { max-width: none; }
  .card :global([data-layer]) { box-sizing: border-box; }
- /* Capture keeps fixed finish lighting in a flat scene. The front's isolated
-    paint group keeps its rotated era bands separate from the finish layers. */
- .card[data-capture='true'] { --mx: 68% !important; --my: 24% !important; --lx: .36 !important; --ly: -.64 !important; --ang: 218deg !important; --lift: .42 !important; --glare: .08 !important; --g1: .92 !important; --g2: .38 !important; --g3: .66 !important; transform: none !important; transform-style: flat !important; isolation: isolate; }
- .card[data-capture='true'] .face { transform: none !important; transform-style: flat !important; isolation: isolate; }
+ /* Captures and lit scenes hold the card flat; the front's isolated paint group keeps its rotated era bands separate from the finish layers. */
+ .card[data-flat='true'] { transform: none !important; }
+ .card[data-flat='true'] .face { transform: none !important; isolation: isolate; }
  .card[data-capture='true'], .card[data-capture='true'] :global(*) { animation: none !important; transition: none !important; }
 </style>

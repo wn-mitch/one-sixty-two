@@ -5,7 +5,7 @@
  let { definition, tilt = 0 }: { definition: StickerDefinition; tilt?: number } = $props();
 </script>
 
-<span class="sticker" data-family={definition.family} data-kind={definition.kind} data-foil={definition.foil} data-long={definition.label[0].length > 6 || undefined} style={`--tilt:${tilt}deg`}>
+<span class="sticker" data-surface="sticker" data-family={definition.family} data-kind={definition.kind} data-foil={definition.foil} data-long={definition.label[0].length > 6 || undefined} style={`--tilt:${tilt}deg`}>
  <b>{definition.label[0]}</b><small>{definition.label[1]}</small>
 </span>
 

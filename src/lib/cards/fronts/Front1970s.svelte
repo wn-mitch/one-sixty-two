@@ -32,16 +32,16 @@
 	{#if s.fin.emboss}
 		<div data-layer="material.photo-bevel" style="position:absolute; left:5.6cqw; right:5.6cqw; top:22.6cqw; height:70.8cqw; border-radius:44.4cqw 44.4cqw 2.2cqw 2.2cqw / 29.4cqw 29.4cqw 2.2cqw 2.2cqw; box-shadow:calc(var(--lx, -0.45) * -0.8cqw) calc(var(--ly, -0.75) * -0.8cqw) 1cqw rgba(0,0,0,0.45), calc(var(--lx, -0.45) * 0.5cqw) calc(var(--ly, -0.75) * 0.5cqw) 0.6cqw rgba(255,255,255,0.6);"></div>
 	{/if}
-	<div data-layer="frame.arch-keyline" style={`position:absolute; left:5.6cqw; right:5.6cqw; top:22.6cqw; height:70.8cqw; background:${s.k.field}; border-radius:44.4cqw 44.4cqw 2.2cqw 2.2cqw / 29.4cqw 29.4cqw 2.2cqw 2.2cqw;`}></div>
-	<div data-layer="photo.mask" style={`position:absolute; left:7cqw; right:7cqw; top:24cqw; height:68cqw; overflow:hidden; background:${s.k.accent}; border-radius:43cqw 43cqw 1.4cqw 1.4cqw / 28cqw 28cqw 1.4cqw 1.4cqw;`}>
+	<div data-layer="frame.arch-keyline" data-surface="stamp" style={`position:absolute; left:5.6cqw; right:5.6cqw; top:22.6cqw; height:70.8cqw; background:${s.k.field}; border-radius:44.4cqw 44.4cqw 2.2cqw 2.2cqw / 29.4cqw 29.4cqw 2.2cqw 2.2cqw;`}></div>
+	<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:7cqw; right:7cqw; top:24cqw; height:68cqw; overflow:hidden; background:${s.k.accent}; border-radius:43cqw 43cqw 1.4cqw 1.4cqw / 28cqw 28cqw 1.4cqw 1.4cqw;`}>
 		<PhotoMask {s} />
 	</div>
 
-	<div data-layer="name.band" style={`position:absolute; left:0; right:0; top:88.5cqw; padding:2cqw 18cqw 1.8cqw; background:${s.k.field}; color:${s.k.onField}; text-align:center;`}>
+	<div data-layer="name.band" data-surface="frame" style={`position:absolute; left:0; right:0; top:88.5cqw; padding:2cqw 18cqw 1.8cqw; background:${s.k.field}; color:${s.k.onField}; text-align:center;`}>
 		<div
 			use:fit={{ max: 11.5, min: 8, wrapMin: 5.6, lines: 2, maxH: 12 }}
 			data-rt
-			data-layer="name.full"
+			data-layer="name.full" data-surface="name"
 			data-fit
 			data-max="11.5"
 			data-min="8"
@@ -52,11 +52,11 @@
 		>{s.full}</div>
 	</div>
 
-	<div data-layer="season.roundel" style={`position:absolute; left:4.5cqw; top:77.5cqw; width:15cqw; height:15cqw; border-radius:50%; background:var(--stamp, ${s.k.stock}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock}; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5cqw; line-height:1;`}>
+	<div data-layer="season.roundel" data-surface="stamp" style={`position:absolute; left:4.5cqw; top:77.5cqw; width:15cqw; height:15cqw; border-radius:50%; background:var(--stamp, ${s.k.stock}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock}; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5cqw; line-height:1;`}>
 		<span data-rt data-layer="season.year" style="font-weight:800; font-size:4.6cqw;">{s.year}</span>
 		<span data-rt data-layer="season.position" style="font-weight:700; font-size:3.8cqw; letter-spacing:.06em;">{s.pos}</span>
 	</div>
-	<div data-layer="logo.roundel" style={`position:absolute; right:4.5cqw; top:77.5cqw; width:15cqw; height:15cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock};`}>
+	<div data-layer="logo.roundel" data-surface="stamp" style={`position:absolute; right:4.5cqw; top:77.5cqw; width:15cqw; height:15cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper}); box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock};`}>
 		<LogoSlot {s} markStyle="left:2.2cqw; top:2.2cqw; width:10.6cqw; height:10.6cqw;" fallbackStyle={`color:${s.k.fieldOnPaper};`} />
 	</div>
 

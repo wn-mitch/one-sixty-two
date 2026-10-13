@@ -58,16 +58,11 @@
 	.compact-plate {
 		position: absolute;
 		inset: 0;
-		/* Finish highlights extend to 10px; keep the readable plate above them. */
-		transform: translateZ(11px);
+		/* Finish layers stack up to z-index 100 in the card; keep the readable plate above them. */
+		z-index: 101;
 		border-radius: 1.8cqw;
 		font-family: 'Barlow Condensed', sans-serif;
 		pointer-events: none;
-	}
-	/* Captures use a flat compositing tree; stacking order keeps the plate above the finish instead. */
-	:global(.card[data-capture='true']) .compact-plate {
-		transform: none;
-		z-index: 1;
 	}
 	.fade {
 		position: absolute;

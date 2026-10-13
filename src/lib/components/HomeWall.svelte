@@ -6,6 +6,7 @@
 	import type { Franchise } from '../game/types.ts';
 	import TeamLogo from './TeamLogo.svelte';
 	import { arrangeHomeWall } from './home-wall.ts';
+	import { WallLight } from './wall-light.ts';
 
 	interface HomeWallCard {
 		seasonId: string;
@@ -26,6 +27,15 @@
 	let phone = $state(false);
 	let wallWidth = $state(0);
 	let wallStage = $state<HTMLDivElement>();
+	let wallGrid = $state<HTMLDivElement>();
+	let lightCanvas = $state<HTMLCanvasElement>();
+	let light: WallLight | null = null;
+	// Row offsets arrive before the light pass exists, so the latest ones are kept to seed it.
+	const trackOffsets = new Map<HTMLElement, number>();
+	const trackMoved = (track: HTMLElement, translated: number) => {
+		trackOffsets.set(track, translated);
+		light?.trackMoved(track, translated);
+	};
 
 	const rows = $derived.by(() => {
 		const speeds = phone ? phoneSpeeds : desktopSpeeds;
@@ -52,6 +62,20 @@
 	});
 	const noDetails = () => {};
 
+	$effect(() => {
+		void rows;
+		if (!wallStage || !wallGrid || !lightCanvas) return;
+		if (!light) {
+			light = WallLight.create(wallStage, wallGrid, lightCanvas);
+			for (const [track, translated] of trackOffsets) light?.trackMoved(track, translated);
+		}
+		light?.refresh();
+	});
+	$effect(() => () => {
+		light?.destroy();
+		light = null;
+	});
+
 	onMount(() => {
 		const query = window.matchMedia('(max-width: 47.999rem)');
 		const updateMode = () => { phone = query.matches; };
@@ -72,18 +96,18 @@
 
 <div class="wall-stage" bind:this={wallStage} aria-hidden="true">
 	{#if cards.length}
-		<div class="wall-grid">
+		<div class="wall-grid" bind:this={wallGrid}>
 			{#each rows as row, rowIndex (`${phone ? 'phone' : 'desktop'}-${rowIndex}`)}
 				<div class="wall-row">
-					<div class="wall-track" use:marquee={{ speed: row.speed, direction: row.direction }}>
+					<div class="wall-track" data-wall-track use:marquee={{ speed: row.speed, direction: row.direction, onMove: trackMoved }}>
 						<div class="wall-copy" data-marquee-copy>
 							{#each row.cards as entry (`first-${entry.key}`)}
-								<div class="wall-card" data-player={entry.card.playerId}><Card s={entry.card.model} wall onDetails={noDetails} /></div>
+								<div class="wall-card" data-player={entry.card.playerId} data-wall-card={entry.card.seasonId}><Card s={entry.card.model} scene onDetails={noDetails} /></div>
 							{/each}
 						</div>
 						<div class="wall-copy">
 							{#each row.cards as entry (`repeat-${entry.key}`)}
-								<div class="wall-card" data-player={entry.card.playerId}><Card s={entry.card.model} wall onDetails={noDetails} /></div>
+								<div class="wall-card" data-player={entry.card.playerId} data-wall-card={entry.card.seasonId}><Card s={entry.card.model} scene onDetails={noDetails} /></div>
 							{/each}
 						</div>
 					</div>
@@ -91,6 +115,8 @@
 			{/each}
 		</div>
 	{/if}
+	<!-- The wall's moving light, drawn over its static cards and under the scrims. -->
+	<canvas class="wall-light" bind:this={lightCanvas}></canvas>
 	<div class="horizontal-scrim"></div>
 	<div class="top-scrim"></div>
 	<div class="bottom-scrim"></div>
@@ -140,6 +166,13 @@
 	.wall-card {
 		width: 176px;
 		flex: 0 0 176px;
+	}
+	.wall-light {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		pointer-events: none;
 	}
 	.horizontal-scrim,
 	.top-scrim,

@@ -2,6 +2,7 @@ import { animate, type JSAnimation } from 'animejs';
 import { appSettings } from '../game/settings.svelte.ts';
 import { MOTION } from '../motion-timing.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
+import type { CardLight } from './surface/card-light.ts';
 import { easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
 
 export { TILT } from './tilt-math.ts';
@@ -9,12 +10,10 @@ export { TILT } from './tilt-math.ts';
 const LIGHT = { x: -0.45, y: -0.75 } as const;
 const SPOTLIGHT_INTERVAL = 1800;
 const SPOTLIGHT_DURATION = 2200;
-const MOTION_PROPERTIES = ['--mx', '--my', '--lx', '--ly', '--ang', '--lift', '--glare', '--g1', '--g2', '--g3'] as const;
 
 export type CardFinish = 'base' | 'silver' | 'gold' | 'gem';
-type MotionProperty = (typeof MOTION_PROPERTIES)[number];
 type FlipState = { angle: number; x: number; y: number; scale: number };
-type StyleSnapshot = { transform: string; properties: Record<MotionProperty, string> };
+type StyleSnapshot = { transform: string };
 type VisualState = {
 	rx: number;
 	ry: number;
@@ -23,7 +22,6 @@ type VisualState = {
 	lift: number;
 	hotspotX?: number;
 	hotspotY?: number;
-	twinkle?: number;
 	flat?: boolean;
 };
 
@@ -35,6 +33,8 @@ export interface TiltOptions {
 	wall?: boolean;
 	finish?: CardFinish;
 	identity?: string;
+	/** The card's WebGL light, which follows the tilt; without it the card keeps its static finish. */
+	light?: CardLight;
 }
 
 export interface FlipOptions {
@@ -55,7 +55,8 @@ interface FlipRect {
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
 const easeOutQuart = (value: number) => 1 - (1 - value) ** 4;
 
-function stableUnit(value: string, salt = 0): number {
+/** A stable 0..1 value for a string, so per-card rhythms survive re-renders. */
+export function stableUnit(value: string, salt = 0): number {
 	let hash = 2166136261 ^ salt;
 	for (let index = 0; index < value.length; index++) {
 		hash ^= value.charCodeAt(index);
@@ -65,56 +66,28 @@ function stableUnit(value: string, salt = 0): number {
 }
 
 function snapshotStyle(node: HTMLElement): StyleSnapshot {
-	const properties = {} as Record<MotionProperty, string>;
-	for (const property of MOTION_PROPERTIES) properties[property] = node.style.getPropertyValue(property);
-	return { transform: node.style.transform, properties };
+	return { transform: node.style.transform };
 }
 
-function restoreStyle(node: HTMLElement, snapshot: StyleSnapshot): void {
+function restoreStyle(node: HTMLElement, snapshot: StyleSnapshot, light?: CardLight): void {
 	node.style.transform = snapshot.transform;
-	for (const property of MOTION_PROPERTIES) {
-		const value = snapshot.properties[property];
-		if (value) node.style.setProperty(property, value);
-		else node.style.removeProperty(property);
-	}
+	light?.rest();
 }
 
-function applyFixedPose(node: HTMLElement): void {
-	node.style.setProperty('--mx', '68%');
-	node.style.setProperty('--my', '24%');
-	node.style.setProperty('--lx', '.36');
-	node.style.setProperty('--ly', '-.64');
-	node.style.setProperty('--ang', '218deg');
-	node.style.setProperty('--lift', '.42');
-	node.style.setProperty('--glare', '.08');
-	node.style.setProperty('--g1', '.92');
-	node.style.setProperty('--g2', '.38');
-	node.style.setProperty('--g3', '.66');
+/** Reduced motion holds the card flat under a fixed, readable light. */
+function applyFixedPose(node: HTMLElement, light?: CardLight): void {
 	node.style.transform = '';
+	light?.set({ lightX: 0.68, lightY: 0.24, spotlight: 0.2 });
 }
 
-function applyTilt(node: HTMLElement, state: VisualState, halfWidth: number, halfHeight: number): void {
-	const hotspotX = clamp(state.hotspotX ?? 0.5 + LIGHT.x * 0.6 - state.ry / 26, -0.2, 1.2);
-	const hotspotY = clamp(state.hotspotY ?? 0.5 + LIGHT.y * 0.6 + state.rx / 26, -0.2, 1.2);
-	const lightX = clamp((hotspotX - 0.5) * 2, -1, 1);
-	const lightY = clamp((hotspotY - 0.5) * 2, -1, 1);
-	const twinkle = state.twinkle ?? 0;
-	const spark = (x: number, y: number, phase: number) => clamp(
-		1.15 - Math.hypot(hotspotX - x, hotspotY - y) * 1.6 + twinkle * phase,
-		0.12,
-		1
-	).toFixed(2);
-
-	node.style.setProperty('--mx', `${(hotspotX * 100).toFixed(1)}%`);
-	node.style.setProperty('--my', `${(hotspotY * 100).toFixed(1)}%`);
-	node.style.setProperty('--lx', lightX.toFixed(3));
-	node.style.setProperty('--ly', lightY.toFixed(3));
-	node.style.setProperty('--ang', `${(200 + state.ry * 9 - state.rx * 6).toFixed(1)}deg`);
-	node.style.setProperty('--glare', (state.lift * 0.16).toFixed(3));
-	node.style.setProperty('--lift', state.lift.toFixed(3));
-	node.style.setProperty('--g1', spark(0.04, 0.03, 0.8));
-	node.style.setProperty('--g2', spark(0.96, 0.97, -0.45));
-	node.style.setProperty('--g3', spark(0.96, 0.4, 0.6));
+/**
+ * Poses the card and moves its light. Only the transform is styled; the light is drawn by the card's
+ * WebGL canvas. `direct` marks pointer or focus driven light, which redraws every frame.
+ */
+function applyTilt(node: HTMLElement, state: VisualState, halfWidth: number, halfHeight: number, light: CardLight | undefined, direct: boolean): void {
+	const lightX = clamp(state.hotspotX ?? 0.5 + LIGHT.x * 0.6 - state.ry / 26, -0.2, 1.2);
+	const lightY = clamp(state.hotspotY ?? 0.5 + LIGHT.y * 0.6 + state.rx / 26, -0.2, 1.2);
+	light?.set({ lightX, lightY, spotlight: clamp(state.lift * 0.5, 0, 1) }, direct);
 	node.style.transform = state.flat ? '' : tiltPose(state.rx, state.ry, state.envelope, halfWidth, halfHeight).transform;
 }
 
@@ -352,7 +325,6 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			let offsetY = 0;
 			let hotspotX: number | undefined;
 			let hotspotY: number | undefined;
-			let twinkle = 0;
 			const autonomousWeight = 1 - hoverBlend;
 			if (options.idle && autonomousWeight > 0) {
 				({ rx: offsetX, ry: offsetY } = idleDrift(time / 1000, rhythm, autonomousWeight));
@@ -367,10 +339,6 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				offsetX = Math.sin(spotlightAngle) * 0.7 * spotlightWeight;
 				offsetY = Math.cos(spotlightAngle) * 1.05 * spotlightWeight;
 				lift = Math.max(lift, spotlightWeight * 0.55);
-				if (options.finish === 'gem') {
-					const seconds = time / 1000;
-					twinkle = 0.22 * Math.sin(seconds * 2.7 + rhythm.phaseX1) + 0.13 * Math.sin(seconds * 4.1 + rhythm.phaseY2);
-				}
 			}
 			const step = stepTilt(pose, { targetX: target.rx, targetY: target.ry, holding, pressing: pointerActive, offsetX, offsetY }, delta);
 			pose = step.state;
@@ -380,19 +348,19 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				if (settled(pose.x, 0, 0.01)) pose.x = rest();
 				if (settled(pose.y, 0, 0.01)) pose.y = rest();
 			}
-			applyTilt(node, { rx, ry, envelope, lift, hotspotX, hotspotY, twinkle }, halfWidth, halfHeight);
+			applyTilt(node, { rx, ry, envelope, lift, hotspotX, hotspotY }, halfWidth, halfHeight, options.light, directInteraction || hoverBlend > 0.001);
 			dirty = false;
 		},
 		state(settings, visible) {
 			if (!visible) {
-				restoreStyle(node, snapshot);
+				restoreStyle(node, snapshot, options.light);
 				return;
 			}
 			if (settings.reducedMotion) {
 				pose = restingTilt();
 				currentLift = rest();
 				hoverBlend = 0;
-				applyFixedPose(node);
+				applyFixedPose(node, options.light);
 				return;
 			}
 			dirty = true;
@@ -426,7 +394,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			detachEvents();
 			unregisterWall?.();
 			registration.unregister();
-			restoreStyle(node, snapshot);
+			restoreStyle(node, snapshot, options.light);
 		}
 	};
 }

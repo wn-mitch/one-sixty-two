@@ -27,6 +27,7 @@
 	<img
 		data-rt
 		data-layer="logo.mark"
+		data-surface="mark"
 		src={s.logo}
 		alt={`${s.logoLabel}: ${s.team}`}
 		style={`position:absolute; left:2cqw; top:2cqw; width:11cqw; height:11cqw; object-fit:contain; ${markStyle}`}
@@ -36,6 +37,7 @@
 	<div
 		data-rt
 		data-layer="logo.fallback"
+		data-surface="mark"
 		role="img"
 		aria-label={`${failed ? 'Team mark image unavailable' : s.logoLabel}: ${s.team} abbreviation`}
 		title={failed ? 'Team mark image unavailable' : s.logoLabel}

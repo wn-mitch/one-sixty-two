@@ -15,21 +15,21 @@
 		{#if s.fin.emboss}
 			<div data-layer="material.photo-bevel" style="position:absolute; left:0; right:0; top:0; height:100cqw; border-radius:0; box-shadow:calc(var(--lx, -0.45) * -0.8cqw) calc(var(--ly, -0.75) * -0.8cqw) 1cqw rgba(0,0,0,0.45), calc(var(--lx, -0.45) * 0.5cqw) calc(var(--ly, -0.75) * 0.5cqw) 0.6cqw rgba(255,255,255,0.6);"></div>
 		{/if}
-		<div data-layer="photo.mask" style={`position:absolute; left:0; right:0; top:0; height:100cqw; overflow:hidden; background:${s.k.accent};`}>
+		<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:0; right:0; top:0; height:100cqw; overflow:hidden; background:${s.k.accent};`}>
 			<PhotoMask {s} />
 		</div>
 
-		<div data-rt data-layer="season.chip" style={`position:absolute; top:4.4cqw; left:4.4cqw; padding:1.1cqw 2.4cqw; background:${s.k.field}; color:${s.k.onField}; display:flex; align-items:center; gap:1.4cqw; font-weight:800; font-size:5cqw; line-height:1;`}>
+		<div data-rt data-layer="season.chip" data-surface="frame" style={`position:absolute; top:4.4cqw; left:4.4cqw; padding:1.1cqw 2.4cqw; background:${s.k.field}; color:${s.k.onField}; display:flex; align-items:center; gap:1.4cqw; font-weight:800; font-size:5cqw; line-height:1;`}>
 			<span data-layer="season.year">{s.year}</span>
 			<span aria-hidden="true" style={`width:0.45cqw; height:3.8cqw; background:${s.k.onField};`}></span>
 			<span data-layer="season.position">{s.pos}</span>
 		</div>
-		<div data-layer="logo.disc" style={`position:absolute; top:4.4cqw; right:4.4cqw; width:16cqw; height:16cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper});`}>
+		<div data-layer="logo.disc" data-surface="stamp" style={`position:absolute; top:4.4cqw; right:4.4cqw; width:16cqw; height:16cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper});`}>
 			<LogoSlot {s} markStyle="left:2.2cqw; top:2.2cqw; width:11.6cqw; height:11.6cqw;" fallbackStyle={`font-size:5.2cqw; color:${s.k.fieldOnPaper};`} />
 		</div>
 
-		<div data-layer="identity.tab" style={`position:absolute; left:0; bottom:40cqw; min-width:52cqw; max-width:90cqw; box-sizing:border-box; padding:3cqw 7cqw 1.6cqw 5cqw; background:${s.k.field}; clip-path:polygon(0 0, calc(100% - 4.4cqw) 0, 100% 4.4cqw, 100% 100%, 0 100%);`}>
-			<div data-rt data-layer="name.full" data-fit data-max="13" data-min="8.5" data-wrap-min="6" data-lines="2" data-max-h="12.5" style="text-shadow:var(--emb, 0 0 0 transparent); max-width:78cqw; font-weight:800; font-size:13cqw; line-height:0.86; text-transform:uppercase; white-space:nowrap; text-wrap:balance;">{s.full}</div>
+		<div data-layer="identity.tab" data-surface="frame" style={`position:absolute; left:0; bottom:40cqw; min-width:52cqw; max-width:90cqw; box-sizing:border-box; padding:3cqw 7cqw 1.6cqw 5cqw; background:${s.k.field}; clip-path:polygon(0 0, calc(100% - 4.4cqw) 0, 100% 4.4cqw, 100% 100%, 0 100%);`}>
+			<div data-rt data-layer="name.full" data-surface="name" data-fit data-max="13" data-min="8.5" data-wrap-min="6" data-lines="2" data-max-h="12.5" style="text-shadow:var(--emb, 0 0 0 transparent); max-width:78cqw; font-weight:800; font-size:13cqw; line-height:0.86; text-transform:uppercase; white-space:nowrap; text-wrap:balance;">{s.full}</div>
 			<div data-rt data-layer="team.name" data-fit data-max="4.2" data-min="3.2" style="margin-top:1.3cqw; max-width:78cqw; font-weight:700; font-size:4.2cqw; line-height:1; letter-spacing:0.08em; text-transform:uppercase; white-space:nowrap;">{s.team}</div>
 		</div>
 

@@ -286,6 +286,8 @@ export function candidateGridMotion(node: HTMLElement, controller: CandidateGrid
 export interface MarqueeOptions {
 	speed: number;
 	direction: 1 | -1;
+	/** Called with the row's horizontal offset whenever it moves, for anything drawn in step with it. */
+	onMove?: (node: HTMLElement, translated: number) => void;
 }
 
 /**
@@ -304,10 +306,12 @@ export function marquee(node: HTMLElement, initialOptions: MarqueeOptions) {
 	const render = () => {
 		if (!distance) {
 			node.style.transform = snapshot;
+			options.onMove?.(node, 0);
 			return;
 		}
-		const translated = options.direction === 1 ? -offset : -distance + offset;
-		node.style.transform = `${snapshot ? `${snapshot} ` : ''}translate3d(${translated.toFixed(2)}px, 0, 0)`;
+		const translated = Number((options.direction === 1 ? -offset : -distance + offset).toFixed(2));
+		node.style.transform = `${snapshot ? `${snapshot} ` : ''}translate3d(${translated}px, 0, 0)`;
+		options.onMove?.(node, translated);
 	};
 
 	const measure = () => {
@@ -354,6 +358,7 @@ export function marquee(node: HTMLElement, initialOptions: MarqueeOptions) {
 			if (!settings.effectiveEnabled) {
 				offset = 0;
 				node.style.transform = snapshot;
+				options.onMove?.(node, 0);
 			}
 		}
 	});
