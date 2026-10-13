@@ -35,9 +35,9 @@
 		}
 		if (useCurrent && inProgress) {
 			claimChallenge(inProgress.seed);
-			await goto('/?resume=1');
+			await goto('/classic?resume=1');
 		} else {
-			await goto('/?new=1');
+			await goto('/classic?new=1');
 		}
 	}
 </script>
@@ -84,7 +84,7 @@
 	{:else}
 		<h1>Challenge not found</h1>
 		<p class="lede muted">This challenge link has expired or was made with an older version of the game.</p>
-		<div class="actions"><a class="button primary" href="/?new=1">Start a draft</a></div>
+		<div class="actions"><a class="button primary" href="/classic?new=1">Start a draft</a></div>
 	{/if}
 </main>
 

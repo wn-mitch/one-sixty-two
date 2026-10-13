@@ -239,7 +239,6 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	expect(saved.picks.find(pick => pick.seasonId === scenario.swap.swapWith)?.slot).toBe(scenario.swap.origin);
 
 	await page.reload();
-	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
 	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
 	const restored = await savedDraft(page);
 	expect(restored.currentRoll).toEqual(pendingRoll);

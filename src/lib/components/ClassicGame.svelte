@@ -1,5 +1,7 @@
 <script lang="ts">
- import { onMount, tick } from 'svelte';
+ import { onMount, tick, untrack } from 'svelte';
+ import { goto } from '$app/navigation';
+ import { page } from '$app/state';
  import Welcome from '#lib/components/Welcome.svelte';
  import ConfirmNewDraft from '#lib/components/ConfirmNewDraft.svelte';
  import ErrorDialog from '#lib/components/ErrorDialog.svelte';
@@ -50,6 +52,37 @@
  function retryRankings() {
   rankingAttempt++;
  }
+
+ // The welcome screen is `/` and the game is `/classic`, one page between them, so the browser's back button
+ // returns home with the draft kept for Resume and forward (or a reload) returns to the game.
+ $effect(() => {
+  const current = session;
+  const phase = current?.phase;
+  if (!current || !phase || phase === 'start' || current.shared) return;
+  untrack(() => {
+   if (page.url.pathname !== '/') return;
+   // A `?new=1` or `?resume=1` hand-off is replaced; Start and Resume add a history entry to go back to.
+   const handOff = page.url.searchParams.has('new') || page.url.searchParams.has('resume');
+   void goto('/classic', { replace: handOff, reset: false });
+  });
+ });
+ $effect(() => {
+  const path = page.url.pathname;
+  untrack(() => {
+   const current = session;
+   if (path === '/' && current && current.phase !== 'start') current.leave();
+  });
+ });
+ $effect(() => {
+  // Arriving at `/classic` on the welcome step (a reload, a link or forward) opens the game itself.
+  const current = session;
+  if (page.url.pathname !== '/classic' || !current || current.phase !== 'start') return;
+  if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;
+  untrack(() => {
+   if (current.savedDraft) void current.resume();
+   else void current.startNew();
+  });
+ });
  onMount(() => {
   let disposed = false;
   let currentSession: GameSession | null = null;

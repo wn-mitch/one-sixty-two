@@ -646,11 +646,8 @@
   </div>
  {:else if selectedProfile}
   <div class="pick-confirmation" data-pending-slot={pendingSlot ?? ''} data-selected-season={selectedSeasonId}>
-   <p class="pick-line">
-    <span class="preview-label">{pendingSlot ? `Preview · ${pendingSlot}` : 'Selected'}</span>
-    <span class="pick-name"><strong>{selectedProfile.displayName}</strong> <span class="pick-year">{selectedProfile.year}</span></span>
-    {#if !pendingSlot}<span class="placement-hint">{destinations.length ? 'Choose a highlighted open position.' : 'Reassign your roster to make room.'}</span>{/if}
-   </p>
+   <!-- The highlighted slots and the Draft button carry the pick; only a pick with nowhere to go needs words. -->
+   {#if !destinations.length}<p class="placement-hint">Reassign your roster to make room.</p>{/if}
    <div class="confirmation-actions">
     <button type="button" class="primary" disabled={!canConfirm} onclick={() => void confirmPick()}>{pendingSlot ? `Draft at ${pendingSlot}` : 'Draft player'}</button>
     {#if pendingSlot}<button type="button" class="secondary" onclick={() => pendingSlot = null}>Back</button>{/if}
@@ -781,7 +778,6 @@
  .field-header.sheet-tabs { padding-block: 0 .75rem; }
  .field-header.sheet-tabs .tabs { flex: 1; min-width: 0; }
  .tab-count { margin-left: .35rem; opacity: .65; font-size: .8em; font-variant-numeric: tabular-nums; }
- :global(.draft-sheet) .preview-label { display: none; }
  :global(.draft-sheet .roster > .pick-track) { display: none; }
  /* The candidate's card fits the space between the sheet header and footer, so a turned card is never cut off. */
  [role='tabpanel'][id$='-panel-back'] { --card-front-width: min(20rem, calc((100dvh - 23rem) * 5 / 7)); }
@@ -790,17 +786,12 @@
  .confirmation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
  .confirmation-actions button, .move-controls button, .field-header button { min-height: 44px; }
  .pick-confirmation p, .move-controls p { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
- .pick-confirmation .pick-line { display: grid; gap: .3rem; margin-bottom: .85rem; }
- .preview-label { color: var(--accent); font-size: .6875rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
- .pick-name { font-size: 1rem; line-height: 1.2; }
- .pick-year { margin-left: .2rem; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
- .placement-hint { display: block; color: var(--muted); font-size: .75rem; }
+ .placement-hint { color: var(--muted); font-size: .75rem; }
  .wide .move-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
  .wide .move-controls p { flex-basis: 100%; }
  .wide .confirmation-actions { gap: .4rem; }
  .wide .confirmation-actions button { padding-inline: .65rem; font-size: .8125rem; }
  .wide .confirmation-actions .primary { margin-left: auto; order: 3; }
- .wide .pick-confirmation .pick-line { margin-bottom: .75rem; }
  .draft-header { min-width: 0; }
  .wide .draft-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 20px; min-height: 64px; box-sizing: border-box; padding-block: 10px; border-bottom: 1px solid var(--border); background: var(--background); }
  .wordmark { flex: none; display: inline-flex; align-items: center; gap: .625rem; min-height: 44px; color: var(--text); text-decoration: none; font-size: 1.25rem; font-weight: 850; letter-spacing: -.04em; }

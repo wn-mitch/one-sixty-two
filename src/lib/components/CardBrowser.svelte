@@ -69,7 +69,7 @@
 <section class="browser" class:wide aria-label={label} aria-busy={busy}>
  <div class="rail">
   <div class="search-row">
-   <label for="{uid}-search" class:sr-only={!wide}>{searchLabel}</label>
+   <label for="{uid}-search" class="sr-only">{searchLabel}</label>
    <span class="search-field">
     <input id="{uid}-search" type="search" placeholder="Search" bind:value={query} onbeforeinput={() => onBeforeSearch?.()} oninput={() => onSearch?.()} disabled={busy} />
     {#if query}<button type="button" class="quiet clear-search" aria-label="Clear search" disabled={busy} onclick={() => { onBeforeSearch?.(); query = ''; onSearch?.(); }}>×</button>{/if}
@@ -120,12 +120,11 @@
  .content { scroll-margin-top: 72px; }
  .content:focus { outline: none; }
  .search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-block: var(--space-1) var(--space-2); }
- .search-row label { grid-column: 1 / -1; }
  .filters-toggle { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 3rem; padding-inline: var(--space-4); }
  .filters-badge { padding: .1rem .4rem; border-radius: 999px; background: var(--text); color: var(--background); font-size: var(--text-xs); font-weight: 750; }
  .filter-panel { margin-bottom: var(--space-2); }
  .filter-panel[hidden] { display: none; }
- .search-row label, legend { font-size: var(--text-sm); font-weight: 650; }
+ legend { font-size: var(--text-sm); font-weight: 650; }
  input[type='search'] { width: 100%; min-width: 0; min-height: 3rem; }
  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
  legend { margin-bottom: var(--space-2); }

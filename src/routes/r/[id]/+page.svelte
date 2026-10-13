@@ -1,5 +1,5 @@
 <script lang="ts">
-	import GamePage from '../../+page.svelte';
+	import GamePage from '#lib/components/ClassicGame.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();

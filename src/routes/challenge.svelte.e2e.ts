@@ -109,5 +109,5 @@ test('a draft in progress can answer the challenge instead of being replaced', a
 test('a challenge link without a published season says so and still starts a draft', async ({ page }) => {
  await page.goto('/c/aaaaaaaaaaaaaaaaaaaaaa');
  await expect(page.getByRole('heading', { level: 1, name: 'Challenge not found' })).toBeVisible();
- await expect(page.getByRole('link', { name: 'Start a draft', exact: true })).toHaveAttribute('href', '/?new=1');
+ await expect(page.getByRole('link', { name: 'Start a draft', exact: true })).toHaveAttribute('href', '/classic?new=1');
 });

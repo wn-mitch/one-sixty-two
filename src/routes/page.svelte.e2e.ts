@@ -206,8 +206,9 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeFocused();
 	const savedRoll = (await deviceDraft(page)).currentRoll;
+	// A reload on `/classic` reopens the saved draft without the welcome screen.
 	await page.reload();
-	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
+	await expect(page).toHaveURL(/\/classic$/);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect((await deviceDraft(page)).currentRoll).toEqual(savedRoll);
 	for (let index = 0; index < SLOTS.length; index++) {
@@ -355,7 +356,7 @@ test('starts a clean draft from a replay link without touching the local save', 
 	// The replay recomputes first; New draft only skips its confirmation once results are showing.
 	await expect(page.getByRole('heading', { name: /^Final record/ })).toBeVisible({ timeout: 120000 });
 	await page.getByRole('button', { name: 'New draft', exact: true }).click();
-	await expect(page).toHaveURL(/\/\?new=1$/);
+	await expect(page).toHaveURL(/\/classic\?new=1$/);
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect((await deviceDraft(page)).picks.length).toBe(0);
@@ -495,7 +496,7 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator(SEASON_GAME)).toHaveCount(162);
 	const completed = await deviceDraftText(page);
-	await page.reload();
+	await page.goto('/');
 	const gate = Promise.withResolvers<void>();
 	const paused = Promise.withResolvers<void>();
 	let chunkUrl = '';
@@ -556,4 +557,22 @@ test('confirms a new draft in a modal without moving the page', async ({ page })
 	await expect(confirm).toBeHidden();
 	await expect(page.getByRole('region', { name: 'Choose your home stadium' })).toBeVisible();
 	expect(await savedSeed()).not.toBe(seed);
+});
+
+test('keeps the draft at /classic so Back returns home and Forward resumes it', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: /Start draft/ }).click();
+	await expect(page).toHaveURL(/\/classic$/);
+	await chooseStadium(page);
+	await expect(page.locator('.player-card').first()).toBeVisible();
+	const seed = (await deviceDraft<Draft>(page)).seed;
+
+	await page.goBack();
+	await expect(page).toHaveURL(/\/$/);
+	await expect(page.getByRole('button', { name: 'Resume draft', exact: true })).toBeEnabled();
+
+	await page.goForward();
+	await expect(page).toHaveURL(/\/classic$/);
+	await expect(page.locator('.player-card').first()).toBeVisible();
+	expect((await deviceDraft<Draft>(page)).seed).toBe(seed);
 });

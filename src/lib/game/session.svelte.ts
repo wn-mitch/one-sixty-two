@@ -60,7 +60,7 @@ export class Session {
  private selected = new Map<string, Profile>();
  private savedPhase: SavedPhase = 'draft';
  private retryAction = $state<'initialize' | 'pool' | 'resume' | 'simulation' | null>(null);
- private shared = false;
+ shared = false;
  private epoch = 0;
  private runId = 0;
  private shareRequest = 0;
@@ -114,8 +114,9 @@ export class Session {
    if (epoch !== this.epoch) return;
    this.manifest = manifest;
    const sharedPath = location.pathname.match(/^\/r\/([A-Za-z0-9_-]{22})$/);
-   const forceNew = location.pathname === '/' && new URLSearchParams(location.search).get('new') === '1';
-   resumeSaved = location.pathname === '/' && new URLSearchParams(location.search).get('resume') === '1';
+   const classicPath = location.pathname === '/' || location.pathname === '/classic';
+   const forceNew = classicPath && new URLSearchParams(location.search).get('new') === '1';
+   resumeSaved = classicPath && new URLSearchParams(location.search).get('resume') === '1';
    if (forceNew) {
     this.shared = false;
     this.draft = createDraft(manifest, newSeed());
@@ -172,7 +173,7 @@ export class Session {
    this.error = error instanceof Error ? error.message : 'Could not load game data. Please retry.';
    if (!this.incompatible) this.retryAction = this.draft ? 'resume' : 'initialize';
   } finally { if (epoch === this.epoch) this.loading = false; }
-  // `/?resume=1` (answering a challenge with the draft in progress) skips the Resume button.
+  // `/classic?resume=1` (answering a challenge with the draft in progress) skips the Resume button.
   if (resumeSaved && epoch === this.epoch && this.savedDraft) await this.resume();
  }
  /** Every completed season of the player's own draft joins the device library; viewed replays do not. */
@@ -198,6 +199,7 @@ export class Session {
   if (!this.draft || this.shared) return;
   const draft = this.draft;
   const epoch = this.epoch;
+  this.savedPhase = phase;
   // Writes queue in order on the database worker; the notice reflects the latest outcome.
   void deviceDb()
    .then(device => persistDraft(device.db, draft, phase).then(failure => failure ?? device.notice))
@@ -246,6 +248,17 @@ export class Session {
    this.retryAction = 'resume';
   } finally { if (epoch === this.epoch) this.loading = false; }
  }
+ /** Returns to the welcome screen, as the browser's back button does, keeping the draft for Resume. */
+ leave(): void {
+  if (this.phase === 'start' || this.shared) return;
+  this.stopRun();
+  // Anything still loading for the screen being left settles without moving the player back into it.
+  this.epoch += 1;
+  this.loading = false;
+  this.confirmNew = false;
+  if (this.draft) this.savedDraft = this.draft;
+  this.phase = 'start';
+ }
  requestNew(): void {
   if (this.loading) return;
   const active = this.draft ?? this.savedDraft;
@@ -259,7 +272,7 @@ export class Session {
   const epoch = ++this.epoch;
   if (location.pathname.startsWith('/r/')) {
    this.loading = true;
-   try { await goto('/?new=1', { replaceState: true }); }
+   try { await goto('/classic?new=1', { replace: true }); }
    catch (error) {
     if (epoch === this.epoch) this.error = error instanceof Error ? error.message : 'Could not start a new draft';
    } finally { if (epoch === this.epoch) this.loading = false; }

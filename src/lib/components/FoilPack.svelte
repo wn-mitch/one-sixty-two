@@ -223,11 +223,16 @@
 			if (ghost) ghost.style.translate = `${spent || -offset}px 0`;
 			// The card waits face down inside the pack, smaller than it and behind it, until the seal is off, then pulls
 			// up out of its top. It comes forward only once the spent pack has dropped clear, growing to full size as it lands.
-			const inside = `scale(${(ghostTo && to ? Math.min(1, ghostTo.width / to.width) : 1) * MOTION.addInside})`;
+			const insideScale = (ghostTo && to ? Math.min(1, ghostTo.width / to.width) : 1) * MOTION.addInside;
+			const inside = `scale(${insideScale})`;
 			const riseDelay = MOTION.ghostOpen * MOTION.addRiseAt / speed;
 			const clear = MOTION.packDrop * MOTION.addClear / speed;
 			if (card) card.style.zIndex = '0';
 			const rise = play(card, [{ transform: `translateY(0) ${inside}` }, { transform: `translateY(-45%) ${inside}` }], { duration: MOTION.addRise / speed, delay: riseDelay, fill: 'both' });
+			// The pack is see-through while it brightens, so the card is cut off at the pack's top edge: only the part
+			// that has come out of the top shows, never the card sliding along inside it as the row re-centers.
+			const mouth = card && to && ghostTo ? insideClip(card, to, ghostTo.top, insideScale) : undefined;
+			const clipped = mouth && card?.animate([{ clipPath: mouth[0] }, { clipPath: mouth[1] }], { duration: MOTION.addRise / speed, delay: riseDelay, fill: 'both', easing: EASE_OUT });
 			// Face down from the first frame; it turns over as it comes forward.
 			const flip = play(flippers[key], [{ transform: 'rotateY(180deg)' }, { transform: 'rotateY(0deg)' }], { duration: MOTION.addFlip / speed, delay: riseDelay + MOTION.addRise / speed + clear, fill: 'both' });
 			await Promise.all([
@@ -242,6 +247,7 @@
 			void play(falling, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(115%) rotate(-4deg)', opacity: 0 }], { duration: MOTION.packDrop / speed, easing: EASE_IN_OUT }).then(() => falling?.remove());
 			await wait(clear);
 			if (card) card.style.zIndex = '';
+			clipped?.cancel();
 			await Promise.all([
 				play(card, [{ transform: `translateY(-45%) ${inside}` }, { transform: 'translateY(0) scale(1.06)' }], { duration: MOTION.addSettle / speed }),
 				flip
@@ -254,6 +260,20 @@
 			await tick();
 			cards[packKey(added)]?.focus({ preventScroll: true });
 		}
+	}
+
+	/**
+	 * Clip paths, before and after the rise, that hide the part of `card` below the pack's top edge. `rest` is the card's
+	 * laid-out box; the card is scaled by `scale` about its center and rises by 45% of its height.
+	 */
+	function insideClip(card: HTMLElement, rest: DOMRect, mouthTop: number, scale: number): [string, string] {
+		const height = card.offsetHeight;
+		const top = rest.top + (rest.height - height) / 2;
+		const below = (rise: number) => {
+			const visible = height / 2 + (mouthTop - top - height / 2 + rise * height) / scale;
+			return `inset(0 0 ${Math.min(height, Math.max(0, height - visible)).toFixed(1)}px 0)`;
+		};
+		return [below(0), below(.45)];
 	}
 
 	/** An inert copy of the opened ghost, pinned where it sits in the row with its seal off, to fall away in its place. */
