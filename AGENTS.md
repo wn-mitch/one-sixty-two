@@ -60,6 +60,7 @@ Use Node >=24.12, npm, and rustup with `wasm-pack`. Prefer existing `just` recip
 - `just test`: Rust, unit, and application browser suites.
 - `just smoke --seed 162 --policy best`: draft and full-season smoke run.
 - `just bench`: draft and wasm season timings, native engine timings, and a result fingerprint.
+- Repeated or batch drafts and season simulations (calibration, sweeps, luck measurements) run natively and in parallel through `engine-cli` (`just draft-spread`), never as loops over the TypeScript draft or the wasm engine from Node; `.claude/hooks/native-sims.sh` blocks the latter. `engine-cli/src/draft/` ports the Classic draft rules and calibration policies, so rule changes in `src/lib/game/draft.ts` or `rules.ts` need the matching native change. A single `just smoke` run is a check, not a measurement.
 - `just hill-climb --budget-minutes N`: native best-roster search with a holdout report and estimated P(162-0); `just hill-climb-replay --seed N` replays its roster.
 - `just draft-feasibility`: headless Draft Mode pool, salary, cleanup and roster-legality proof with a JSON report.
 - `just storybook`: isolated component workshop.

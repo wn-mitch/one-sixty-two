@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../src/lib/game/draft.ts';
-import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, SLOTS, VALUATION_VERSION, type Draft, type Manifest, type Profile, type ShowcaseCard, type SimulationData, type Slot } from '../src/lib/game/types.ts';
+import { addPack, availableCandidates, choosePack, commitPick, createDraft, extraPacksLeft, legalSlots, rollDraft, selectHomeStadium } from '../src/lib/game/draft.ts';
+import { randomStream } from '../src/lib/game/random.ts';
+import { compareId, DEFENSE_METHOD_VERSION, HITTER_SLOTS, SLOTS, VALUATION_VERSION, type Draft, type Manifest, type Profile, type Roll, type ShowcaseCard, type SimulationData, type Slot } from '../src/lib/game/types.ts';
 import { validateDefensiveEnvironment, validateProfile } from '../src/lib/sim/validation.ts';
 import { decodeParkFit, type StoredParkFit } from '../src/lib/draft/park-fit.ts';
 import { decodeDraftCards, type StoredDraftCardTable } from '../src/lib/draft/card-table.ts';
@@ -175,8 +176,46 @@ export class ProfileChunks {
 	}
 }
 
-/** Deterministic drafting policy for smoke and benchmark runs: the best or worst modeled profile for the first fillable slot. */
-export type Policy = 'best' | 'worst';
+/**
+ * Deterministic drafting policy for smoke, benchmark and grade calibration runs. `best`, `worst` and
+ * `random` fill the first fillable slot with its best or worst modeled profile or a seeded uniform pick.
+ * `vorp` takes the card with the most runs above replacement for any open slot, and `packs` also adds
+ * a pack while every open pack's best card ranks below the `addBelow` quantile of its slot's cards,
+ * then keeps the pack with the best card.
+ */
+export type Policy = 'best' | 'worst' | 'random' | 'vorp' | 'packs';
+export const POLICIES: readonly Policy[] = ['best', 'worst', 'random', 'vorp', 'packs'];
+
+export interface ValuePolicy {
+	/** Runs above replacement by season id, from the draft card table. */
+	values: ReadonlyMap<string, number>;
+	/** Card values priced at each slot, ascending. */
+	slotValues: ReadonlyMap<Slot, readonly number[]>;
+	/** Quantile from 0 to 1. */
+	addBelow: number;
+}
+
+function belowQuantile(valuation: ValuePolicy, slot: Slot, value: number): boolean {
+	const sorted = valuation.slotValues.get(slot);
+	if (!sorted?.length) return false;
+	return value < sorted[Math.min(sorted.length - 1, Math.floor(valuation.addBelow * sorted.length))];
+}
+
+/** The highest-valued legal placement in one open pack, preferring the card's priced slot. */
+function valuedPick(draft: Draft, manifest: Manifest, roll: Roll, values: ReadonlyMap<string, number>, priced: ReadonlyMap<string, Slot>): { seasonId: string; slot: Slot; value: number } {
+	let pick: { seasonId: string; slot: Slot; value: number } | null = null;
+	for (const candidate of availableCandidates(draft, manifest, roll).toSorted((left, right) => compareId(left.seasonId, right.seasonId))) {
+		const slots = legalSlots(draft, candidate, manifest);
+		if (!slots.length) continue;
+		const value = values.get(candidate.seasonId);
+		if (value === undefined) throw new Error(`Draft card table is missing ${candidate.seasonId}`);
+		if (pick && value <= pick.value) continue;
+		const pricedSlot = priced.get(candidate.seasonId);
+		pick = { seasonId: candidate.seasonId, slot: pricedSlot && slots.includes(pricedSlot) ? pricedSlot : slots[0], value };
+	}
+	if (!pick) throw new Error('Current legal roll has no selectable candidate');
+	return pick;
+}
 
 function hitterValue(profile: Profile): number {
 	const rates = profile.battingRates;
@@ -194,7 +233,8 @@ function pitcherValue(profile: Profile): number {
 	return rates[0] + rates[1] + rates[3] + rates[4] + rates[5] + rates[6];
 }
 
-function chooseProfile(profiles: Profile[], slot: Slot, policy: Policy): Profile {
+function chooseProfile(profiles: Profile[], slot: Slot, policy: Policy, random: () => number): Profile {
+	if (policy === 'random') return profiles.toSorted((left, right) => compareId(left.seasonId, right.seasonId))[Math.floor(random() * profiles.length)];
 	const hitter = (HITTER_SLOTS as readonly Slot[]).includes(slot);
 	return profiles.toSorted((left, right) => {
 		const difference = (hitter ? hitterValue(left) : pitcherValue(left)) - (hitter ? hitterValue(right) : pitcherValue(right));
@@ -213,16 +253,49 @@ export function stadiumId(manifest: Manifest, requested: string | null): string 
 	return requested ?? ids[0];
 }
 
-export async function draftRoster(manifest: Manifest, seed: number, policy: Policy, stadium: string, chunks: ProfileChunks): Promise<{ draft: Draft; profiles: Profile[] }> {
+/** Card values for the `vorp` and `packs` policies; undefined for the others, which do not need them. */
+export async function policyValuation(policy: Policy, addBelow: number): Promise<(ValuePolicy & { priced: ReadonlyMap<string, Slot> }) | undefined> {
+	if (policy !== 'vorp' && policy !== 'packs') return undefined;
+	const { cards } = await loadDraftData();
+	return {
+		values: new Map(cards.map(card => [card.seasonId, card.valueRuns])),
+		priced: new Map(cards.map(card => [card.seasonId, card.pricedSlot])),
+		slotValues: new Map(SLOTS.map(slot => [slot, cards.filter(card => card.pricedSlot === slot).map(card => card.valueRuns).toSorted((left, right) => left - right)])),
+		addBelow
+	};
+}
+
+export async function draftRoster(manifest: Manifest, seed: number, policy: Policy, stadium: string, chunks: ProfileChunks, valuation?: ValuePolicy & { priced: ReadonlyMap<string, Slot> }): Promise<{ draft: Draft; profiles: Profile[] }> {
+	if ((policy === 'vorp' || policy === 'packs') && !valuation) throw new Error(`The ${policy} policy needs draft card values`);
 	let draft = selectHomeStadium(createDraft(manifest, seed), manifest, stadium);
 	const selectedProfiles: Profile[] = [];
+	// Separate from the draft's own stream so the rolls match the other policies for the same seed.
+	const random = randomStream(seed, 'verification-policy');
 	while (draft.picks.length < SLOTS.length) {
 		draft = rollDraft(draft, manifest);
+		if (valuation && (policy === 'vorp' || policy === 'packs')) {
+			const best = () => draft.packs
+				.map((pack, index) => ({ pack: index, choice: valuedPick(draft, manifest, pack, valuation.values, valuation.priced) }))
+				.reduce((left, right) => right.choice.value > left.choice.value ? right : left);
+			let top = best();
+			while (policy === 'packs' && belowQuantile(valuation, top.choice.slot, top.choice.value) && extraPacksLeft(draft) > 0) {
+				draft = addPack(draft, manifest);
+				top = best();
+			}
+			if (draft.packs.length > 1) draft = choosePack(draft, top.pack);
+			const choice = top.choice;
+			const candidate = manifest.candidates.find(item => item.seasonId === choice.seasonId)!;
+			const profile = (await chunks.forRoll(candidate.franchiseId, candidate.decade)).find(item => item.seasonId === choice.seasonId);
+			if (!profile) throw new Error(`Profile chunk is missing candidate ${choice.seasonId}`);
+			draft = commitPick(draft, manifest, choice.seasonId, choice.slot);
+			selectedProfiles.push(profile);
+			continue;
+		}
 		const roll = draft.currentRoll;
 		assert.ok(roll, 'A draft roll must be present before candidate selection');
-		const chunk = await chunks.forRoll(roll.franchiseId, roll.decade);
-		const profilesBySeason = new Map(chunk.map(profile => [profile.seasonId, profile]));
 		const available = availableCandidates(draft, manifest);
+		const rollChunks = [...new Map(available.map(candidate => [`${candidate.franchiseId}-${candidate.decade}`, candidate])).values()];
+		const profilesBySeason = new Map((await Promise.all(rollChunks.map(candidate => chunks.forRoll(candidate.franchiseId, candidate.decade)))).flat().map(profile => [profile.seasonId, profile]));
 		let slot: Slot | undefined;
 		let eligibleProfiles: Profile[] = [];
 		for (const openSlot of SLOTS) {
@@ -238,7 +311,7 @@ export async function draftRoster(manifest: Manifest, seed: number, policy: Poli
 			break;
 		}
 		if (!slot || !eligibleProfiles.length) throw new Error('Current legal roll has no selectable profile for an open slot');
-		const profile = chooseProfile(eligibleProfiles, slot, policy);
+		const profile = chooseProfile(eligibleProfiles, slot, policy, random);
 		draft = commitPick(draft, manifest, profile.seasonId, slot);
 		selectedProfiles.push(profile);
 	}
