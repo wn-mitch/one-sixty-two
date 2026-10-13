@@ -11,13 +11,18 @@
 	import type { Manifest, Profile } from '#lib/game/types.ts';
 	import { loadMedia } from '#lib/media/client.ts';
 	import type { MediaManifest } from '#lib/media/types.ts';
+	import { loadRankings } from '#lib/rankings/client.ts';
+	import type { WarRankings } from '#lib/rankings/types.ts';
 	import { deviceDb } from '#lib/storage/db.ts';
+	import { HITTER_SLOTS } from '#lib/game/types.ts';
 
 	let manifest = $state.raw<Manifest | null>(null);
 	let cards = $state.raw<CollectedCard[]>([]);
 	const profiles = new SvelteMap<string, Profile>();
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaStatus = $state<CardMediaStatus>('loading');
+	// Cards show WAR/162 and their WAR-based finish from the rankings; without them those stay blank.
+	let rankings = $state.raw<WarRankings | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let status = $state('');
@@ -26,9 +31,20 @@
 		const byCard = new Map<string, CardViewModel>();
 		for (const card of cards) {
 			const profile = profiles.get(card.seasonId);
-			if (profile) byCard.set(card.seasonId, createCardViewModel({ profile, slot: card.slots[0] ?? null, media, manifest, mediaStatus }));
+			if (profile) byCard.set(card.seasonId, createCardViewModel({ profile, slot: card.slots[0] ?? null, media, manifest, rankings, mediaStatus }));
 		}
 		return byCard;
+	});
+	/** WAR/162 in each card's own role, for sorting; bullpens and unranked seasons have none. */
+	const war = $derived.by(() => {
+		const bySeason = new Map<string, number>();
+		for (const card of cards) {
+			const ranking = rankings?.seasons[card.seasonId];
+			const slot = card.slots[0];
+			const value = !ranking || slot === 'BP' ? null : (HITTER_SLOTS as readonly string[]).includes(slot) ? ranking.battingWAR162 : ranking.pitchingWAR162;
+			if (value !== null && Number.isFinite(value)) bySeason.set(card.seasonId, value);
+		}
+		return bySeason;
 	});
 
 	async function refresh(): Promise<void> {
@@ -73,7 +89,11 @@
 		let live = true;
 		loadMedia().then(value => { if (live) { media = value; mediaStatus = 'ready'; } }).catch(() => { if (live) mediaStatus = 'unavailable'; });
 		loadManifest()
-			.then(value => { manifest = value; return refresh(); })
+			.then(value => {
+				manifest = value;
+				loadRankings(value.dataVersion).then(loaded => { if (live) rankings = loaded; }).catch(() => {});
+				return refresh();
+			})
 			.catch(caught => { error = caught instanceof Error ? caught.message : 'The game data could not be loaded.'; })
 			.finally(() => { loading = false; });
 		return () => { live = false; };
@@ -99,7 +119,7 @@
 	{:else if error}
 		<p class="error" role="alert">{error}</p>
 	{:else if manifest}
-		<CollectionBinder {cards} {views} candidates={manifest.candidates} franchises={manifest.franchises} {status} {onMove} {onHide} />
+		<CollectionBinder {cards} {views} {war} candidates={manifest.candidates} franchises={manifest.franchises} {status} {onMove} {onHide} />
 	{/if}
 </main>
 

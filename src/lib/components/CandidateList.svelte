@@ -1,17 +1,27 @@
 <script lang="ts">
  import { tick, untrack } from 'svelte';
- import { availableCandidates, legalSlots } from '../game/draft.ts';
+ import { availableCandidates, legalSlots, rollContains, rollKey } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
- import type { Draft, Manifest, Profile, RosterSlot, Slot } from '../game/types.ts';
+ import { BULLPEN_SLOTS, STARTER_SLOTS, type Draft, type Manifest, type Profile, type RosterSlot, type Slot } from '../game/types.ts';
  import { rankingForSeason } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import { compareEntries, isHitter, rankGroups, warValue } from './candidate-ranking.ts';
  import type { CandidateEntry, CandidateGroup, RankingKind, RankingSort } from './candidate-ranking.ts';
  import { candidateGridMotion, createCandidateGridMotion } from '../cards/grid-motion.ts';
  import PlayerCard from './PlayerCard.svelte';
+ import CardBrowser from './CardBrowser.svelte';
  import { appSettings } from '../game/settings.svelte.ts';
 
- type FilterSlot = Slot | 'All';
+ /** A hitter position, the whole rotation (SP), the whole bullpen (RP), or every player. */
+ type FilterSlot = Slot | 'SP' | 'RP' | 'All';
+ const FILTER_GROUPS: Partial<Record<FilterSlot, readonly Slot[]>> = { SP: STARTER_SLOTS, RP: BULLPEN_SLOTS };
+ /** The roster slots a filter covers. */
+ function filterSlots(option: Exclude<FilterSlot, 'All'>): readonly Slot[] {
+  return FILTER_GROUPS[option] ?? [option as Slot];
+ }
+ function filterFor(slot: Slot): Exclude<FilterSlot, 'All'> {
+  return (STARTER_SLOTS as readonly Slot[]).includes(slot) ? 'SP' : (BULLPEN_SLOTS as readonly Slot[]).includes(slot) ? 'RP' : slot;
+ }
 
  let {
   profiles,
@@ -68,14 +78,12 @@
  const showBlocked = $derived(appSettings.showBlockedCards);
  let browseRevision = $state(0);
  let sort = $state<RankingSort>('war');
- let filtersOpen = $state(false);
  const manifestBySeason = $derived(new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])));
  const usedPlayerIds = $derived(new Set(draft.picks.map(pick => manifestBySeason.get(pick.seasonId)?.playerId).filter((id): id is string => !!id)));
  const usedFranchises = $derived(new Set(draft.picks.map(pick => pick.franchiseId)));
  const candidates = $derived(draft.currentRoll
   ? manifest.candidates.filter(candidate =>
-   candidate.franchiseId === draft.currentRoll!.franchiseId &&
-   candidate.decade === draft.currentRoll!.decade &&
+   rollContains(draft.currentRoll!, candidate) &&
    !usedPlayerIds.has(candidate.playerId) &&
    !usedFranchises.has(candidate.franchiseId)
   )
@@ -96,7 +104,7 @@
   const filled = new Set(draft.picks.map(pick => pick.slot));
   return draftRules(draft.schemaVersion).slots.filter(slot => found.has(slot) && !filled.has(slot));
  });
- const filterOptions = $derived.by((): FilterSlot[] => ['All', ...qualificationSlots]);
+ const filterOptions = $derived.by((): FilterSlot[] => ['All', ...new Set(qualificationSlots.map(filterFor))]);
  const activeFilter = $derived(filterOptions.includes(filter) ? filter : 'All');
  const groupsBeforeFilter = $derived.by(() => {
   const entries: CandidateEntry[] = [];
@@ -119,7 +127,7 @@
   if (activeFilter !== 'All') {
    const entries = visibleGroups.flatMap(group => group.entries
     .filter(entry => profileMatchesFilter(entry.profile, activeFilter))
-    .map(entry => ({ profile: entry.profile, slots: [activeFilter] })));
+    .map(entry => ({ profile: entry.profile, slots: filterSlots(activeFilter as Exclude<FilterSlot, 'All'>) })));
    filtered = rankGroups(entries, sort, rankings);
   }
   // Phones keep blocked players in the grid but after every player who can still be placed.
@@ -128,7 +136,7 @@
    || compareEntries(selectedEntry(a), selectedEntry(b), a.kind, sort, rankings));
  });
  const filterCounts = $derived.by(() => new Map(filterOptions
-  .filter((option): option is Slot => option !== 'All')
+  .filter((option): option is Exclude<FilterSlot, 'All'> => option !== 'All')
   .map(option => [option, visibleGroups.filter(group => group.entries.some(entry => profileMatchesFilter(entry.profile, option))).length])));
  const blockedGroupCount = $derived(groupsBeforeFilter.filter(group =>
   group.entries.every(entry => !viableSeasonIds.has(entry.profile.seasonId)) &&
@@ -139,7 +147,7 @@
  const pagedGroups = $derived(groups.slice(currentPage * 20, (currentPage + 1) * 20));
  const sectionKinds: RankingKind[] = ['Hitters', 'Pitchers'];
  const sections = $derived(sectionKinds.map(kind => ({ kind, groups: pagedGroups.filter(group => group.kind === kind) })));
- const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll?.franchiseId ?? ''}:${draft.currentRoll?.decade ?? ''}`);
+ const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll ? rollKey(draft.currentRoll) : ''}`);
 
  function selectedEntry(group: CandidateGroup): CandidateEntry {
   const preferred = selectedSeasonId && group.entries.some(entry => entry.profile.seasonId === selectedSeasonId)
@@ -158,7 +166,7 @@
   return profile.eligibleSlots.some(isHitter) ? 'Hitters' : 'Pitchers';
  }
  function profileMatchesFilter(profile: Profile, option: FilterSlot): boolean {
-  return option === 'All' || profile.eligibleSlots.includes(option);
+  return option === 'All' || filterSlots(option).some(slot => profile.eligibleSlots.includes(slot));
  }
  function changeSeason(group: CandidateGroup, seasonId: string) {
   if (group.entries.some(entry => entry.profile.seasonId === seasonId)) onSeasonChange(group.playerId, seasonId);
@@ -249,41 +257,13 @@
 </script>
 
 <svelte:window onpointerdown={handlePointerDown} onfocusin={handleFocusIn} />
-<section use:candidateGridMotion={gridMotion} class:candidates-wide={wide} class="candidates" aria-label="Choose a historical player season" aria-busy={busy}>
- <div class="filter-rail">
-  <div class="search-row">
-   <label for="{uid}-search" class:sr-only={!wide}>Find your pick</label>
-   <span class="search-field">
-    <input id="{uid}-search" type="search" placeholder="Search" bind:value={query} oninput={resetBrowse} disabled={busy} />
-    {#if query}<button type="button" class="quiet clear-search" aria-label="Clear search" disabled={busy} onclick={() => { query = ''; resetBrowse(); }}>×</button>{/if}
-   </span>
-   {#if !wide}
-    <button type="button" class="secondary filters-toggle" class:active={activeFilter !== 'All'} aria-expanded={filtersOpen} aria-controls="{uid}-filters" onclick={() => filtersOpen = !filtersOpen}>
-     Positions{#if activeFilter !== 'All'}<span class="filters-badge">{activeFilter}</span>{/if}
-    </button>
-   {/if}
-  </div>
-  <div class="sort-row" role="group" aria-labelledby="{uid}-sort-label">
-   <span id="{uid}-sort-label" class="sort-label">Sort by</span>
-   <span class="sort-options">
-    <button type="button" aria-pressed={sort === 'war'} disabled={busy} onclick={() => { if (sort !== 'war') reshuffle(() => sort = 'war'); }}>WAR</button>
-    <button type="button" aria-pressed={sort === 'metrics'} disabled={busy} onclick={() => { if (sort !== 'metrics') reshuffle(() => sort = 'metrics'); }}>OPS / ERA</button>
-   </span>
-  </div>
-  <!-- Phones keep the position filter behind its toggle so the first cards sit near the top. -->
-  <div class="filter-panel" id="{uid}-filters" hidden={!wide && !filtersOpen}>
-   <fieldset class="filters" disabled={busy}>
-    <legend>Qualifies for position</legend>
-    <div class="filter-options" role="group" aria-label="Qualifies for position">
-     {#each filterOptions as option}
-      {@const count = option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0}
-      <button type="button" class="quiet filter" aria-pressed={activeFilter === option} aria-label={option} onclick={() => { if (activeFilter !== option) reshuffle(() => filter = option); }}>
-       <span>{option}</span><span class="filter-count">{count}</span>
-      </button>
-     {/each}
-    </div>
-   </fieldset>
-  </div>
+<div use:candidateGridMotion={gridMotion} class:candidates-wide={wide} class="candidates">
+<CardBrowser label="Choose a historical player season" {wide} {busy} bind:query searchLabel="Find your pick" onSearch={resetBrowse}
+ sorts={[{ value: 'war', label: 'WAR' }, { value: 'metrics', label: 'OPS / ERA' }]} {sort} onSort={value => reshuffle(() => sort = value as RankingSort)}
+ filters={filterOptions.map(option => ({ value: option, count: option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0 }))}
+ filter={activeFilter} filterLegend="Qualifies for position" filterToggle="Positions" onFilter={value => reshuffle(() => filter = value as FilterSlot)}
+ resultsId="{uid}-results">
+ {#snippet rail()}
   {#if rankingLoading}
    <p class="ranking-status muted" role="status">Loading composite WAR/162.{sort === 'war' ? ' Cards are in stable ID order until it arrives. Sort by OPS / ERA to rank by those stats now.' : ''} Drafting is available.</p>
   {:else if rankingError}
@@ -292,8 +272,8 @@
     <button type="button" class="secondary" onclick={onRetryRankings}>Retry rankings</button>
    </div>
   {/if}
- </div>
- <div class="candidate-content" id="{uid}-results" tabindex="-1">
+ {/snippet}
+
   {#if !draft.currentRoll}
    <p class="notice">Roll a franchise and era to open your next player pool.</p>
   {:else if groups.length === 0 && wide && !showBlocked && blockedGroupCount > 0}
@@ -365,30 +345,11 @@
     </nav>
    {/if}
   {/if}
- </div>
-</section>
+</CardBrowser>
+</div>
 
 <style>
  .candidates { min-width: 0; }
- .candidate-content { min-width: 0; scroll-margin-top: 72px; }
- .filter-rail { min-width: 0; }
- .search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-block: var(--space-1) var(--space-2); }
- .search-row label { grid-column: 1 / -1; }
- .filters-toggle { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 3rem; padding-inline: var(--space-4); }
- .filters-badge { padding: .1rem .4rem; border-radius: 999px; background: var(--text); color: var(--background); font-size: var(--text-xs); font-weight: 750; }
- .filter-panel { margin-bottom: var(--space-2); }
- .filter-panel[hidden] { display: none; }
- .search-row label, legend { font-size: var(--text-sm); font-weight: 650; }
- input[type='search'] { width: 100%; min-width: 0; min-height: 3rem; }
- fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
- legend { margin-bottom: var(--space-2); }
- .filter-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
- .filter { min-width: 2.75rem; min-height: 2.75rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); }
- .filter { text-align: left; }
- .filter { display: inline-flex; align-items: baseline; gap: .35rem; }
- .filter-count { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
- .filter[aria-pressed='true'] { color: var(--background); border-color: var(--text); background: var(--text); }
- .filter[aria-pressed='true'] .filter-count { color: inherit; }
  .section-heading { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); align-items: baseline; justify-content: space-between; margin-block: var(--space-6) var(--space-3); }
  /* On phones the first section sits right under search so its cards start above the fold. */
  .candidates:not(.candidates-wide) .player-section:first-of-type .section-heading { margin-top: var(--space-3); }
@@ -401,15 +362,6 @@
  /* The previewed card already sits on the field, so its source steps back slightly. */
  .candidate-card[data-previewing='true'] :global(.art-frame) { opacity: .7; transition: opacity .18s ease-out; }
  .empty { padding-block: var(--space-4) var(--space-8); }
- .search-field { position: relative; display: block; min-width: 0; }
- .search-field input { padding-right: 2.75rem; }
- .search-field input::-webkit-search-cancel-button { display: none; }
- .clear-search { position: absolute; top: 50%; right: 2px; translate: 0 -50%; width: 2.75rem; padding: 0; color: var(--muted); font-size: 1.4rem; line-height: 1; }
- .sort-row { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); font-size: var(--text-sm); }
- .sort-label { color: var(--muted); font-weight: 650; white-space: nowrap; }
- .sort-options { display: flex; flex: 1; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
- .sort-options button { flex: 1; min-height: 2.5rem; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--muted); font-size: var(--text-base); }
- .sort-options button[aria-pressed='true'] { background: var(--text); color: var(--background); }
  .ranking-status { font-size: var(--text-sm); }
  .pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: min(100%, 17.25rem); box-sizing: border-box; margin: var(--space-6) auto 0; padding: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
  .page-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-3); border: 0; background: transparent; font-size: var(--text-sm); font-weight: 650; }
@@ -420,16 +372,9 @@
  .page-counter small { font-size: var(--text-xs); }
  .page-counter strong { color: var(--text); }
  @media (min-width: 48rem) {
-  .candidates-wide { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 28px; align-items: start; }
-  .candidates-wide .filter-rail { position: sticky; top: 72px; max-height: calc(100dvh - 88px); overflow-y: auto; overscroll-behavior: contain; padding: 0 .25rem .25rem; }
-  .candidates-wide .filter-options { display: grid; gap: 3px; }
-  .candidates-wide .filter { display: flex; justify-content: space-between; align-items: center; gap: .45rem; width: 100%; min-height: 44px; padding: 0 10px; border-radius: 4px; }
   /* The first heading lines up with Your field: the panel's border plus its header padding. */
   .candidates-wide .player-section:first-of-type .section-heading { margin-top: calc(1rem + 1px); }
   .candidates-wide .section-heading h3 { font: italic 900 1.5rem/1 'Barlow Condensed', sans-serif; text-transform: uppercase; }
-  .candidates-wide .search-row { grid-template-columns: minmax(0, 1fr); margin-block: 0 20px; }
-  .candidates-wide .sort-row { display: grid; gap: var(--space-2); margin-bottom: 20px; }
-  .candidates-wide .sort-options button { padding-inline: var(--space-1); font-size: var(--text-sm); }
   .candidates-wide .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 20px; grid-auto-flow: dense; }
  }
  @media (min-width: 23.4375rem) and (max-width: 47.999rem) {

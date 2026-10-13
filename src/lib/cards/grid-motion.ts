@@ -14,6 +14,8 @@ export interface CandidateGridMotion {
 	capture(): number;
 	/** `gather` scoops leaving cards into one pile, slides the rest up into place, and lifts new cards in from below. */
 	play(revision: number, style?: 'reflow' | 'gather'): void;
+	/** Deals every card now in the grid onto the table, in reading order, as if it had just been laid down. */
+	enter(): void;
 	skip(): void;
 	destroy(): void;
 }
@@ -222,6 +224,25 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 					complete();
 				});
 			}, () => {})));
+		},
+		enter() {
+			revision++;
+			clear();
+			snapshots.clear();
+			if (!root || !motionEnabled) return;
+			[...after().values()]
+				.map(node => ({ node, rect: node.getBoundingClientRect() }))
+				.filter(({ rect }) => rect.width > 0 && rect.bottom > 0 && rect.top < innerHeight)
+				.sort((a, b) => Math.round(a.rect.top - b.rect.top) || a.rect.left - b.rect.left)
+				.slice(0, MOTION.dealMaxCards * 2)
+				.forEach(({ node }, index) => {
+					pendingStyles.set(node, { transform: node.style.transform, opacity: node.style.opacity });
+					node.style.opacity = '0';
+					run(node, {
+						translateY: [-36, 0], rotate: [(index % 2 ? 1 : -1) * (3 + (index % 3)), 0], scale: [1.04, 1], opacity: [0, 1],
+						duration: MOTION.dealOut, delay: index * MOTION.dealStagger, ease: 'outQuart'
+					}, () => restore(node));
+				});
 		},
 		skip() {
 			revision++;

@@ -14,7 +14,8 @@ const season = (wins: number, batting: SavedBatter[], pitching: SavedPitcher[], 
  batting, pitching,
  ...(mvp ? { mvp: { seasonId: mvp, label: mvp } } : {})
 });
-const kinds = (entry: ReturnType<typeof season>, seasonId: string) => seasonStickers(entry).filter(item => item.seasonId === seasonId).map(item => item.kind).sort();
+const kinds = (entry: ReturnType<typeof season>, seasonId: string) => seasonStickers(entry)
+ .filter(item => item.seasonId === seasonId && !item.kind.startsWith('grade-')).map(item => item.kind).sort();
 
 describe('sticker rules', () => {
  it('awards counting stickers exactly at their thresholds', () => {
@@ -51,6 +52,15 @@ describe('sticker rules', () => {
   expect(kinds(season(119, [batter('a', {})], []), 'a')).toEqual(['wins-100']);
   expect(kinds(season(120, [batter('a', {})], []), 'a')).toEqual(['wins-120']);
   expect(kinds(season(162, [batter('a', {})], []), 'a')).toEqual(['perfect']);
+ });
+
+ it('gives every card on a complete season that season\'s grade, and shows the best grade earned', () => {
+  const grades = (wins: number) => seasonStickers(season(wins, [batter('a', {})], [pitcher('b', {})])).filter(item => item.kind.startsWith('grade-'));
+  expect(grades(138)).toEqual([{ seasonId: 'a', kind: 'grade-b' }, { seasonId: 'b', kind: 'grade-b' }]);
+  expect(grades(139).map(item => item.kind)).toEqual(['grade-a', 'grade-a']);
+  expect(grades(162).map(item => item.kind)).toEqual(['grade-perfect', 'grade-perfect']);
+  const sticker = (kind: string): PlacedSticker => ({ kind, x: 0.9, y: 0.92, hidden: false, earnedAt: '2026-01-01' });
+  expect(faceStickers([sticker('grade-aa'), sticker('grade-s'), sticker('grade-f')]).map(item => item.kind)).toEqual(['grade-s']);
  });
 
  it('shows the highest visible tier of each family', () => {

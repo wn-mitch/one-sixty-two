@@ -85,12 +85,27 @@ describe('device database migrations', () => {
   expect(await db.all('SELECT season_id, kind, season_key, x, y FROM stickers ORDER BY season_id, kind')).toEqual([
    // A player-moved sticker keeps its spot.
    { season_id: 'a', kind: 'hr-40', season_key: 'k1', x: 0.42, y: 0.15 },
-   { season_id: 'a', kind: 'perfect', season_key: 'k1', x: 0.9, y: 0.22 },
-   { season_id: 'b', kind: 'drafted-10', season_key: 'k1', x: 0.9, y: 0.67 },
-   { season_id: 'b', kind: 'drafted-5', season_key: 'k0', x: 0.9, y: 0.67 },
+   { season_id: 'a', kind: 'perfect', season_key: 'k1', x: 0.9, y: 0.2 },
+   { season_id: 'b', kind: 'drafted-10', season_key: 'k1', x: 0.9, y: 0.5 },
+   { season_id: 'b', kind: 'drafted-5', season_key: 'k0', x: 0.9, y: 0.5 },
    // Tiers earned in different seasons are both kept.
-   { season_id: 'b', kind: 'wins-100', season_key: 'k0', x: 0.9, y: 0.22 },
-   { season_id: 'b', kind: 'wins-120', season_key: 'k1', x: 0.9, y: 0.22 }
+   { season_id: 'b', kind: 'wins-100', season_key: 'k0', x: 0.9, y: 0.2 },
+   { season_id: 'b', kind: 'wins-120', season_key: 'k1', x: 0.9, y: 0.2 }
+  ]);
+ });
+
+ it('lifts stickers at the frame-edge defaults clear of the name band', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 5));
+  const sticker = (seasonId: string, kind: string, x: number, y: number) =>
+   ({ sql: 'INSERT INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)', bind: [seasonId, kind, 't', 'k', x, y] });
+  await db.run([sticker('a', 'sb-30', 0.1, 0.67), sticker('a', 'drafted-5', 0.9, 0.67), sticker('b', 'sb-30', 0.3, 0.8), sticker('b', 'k-400', 0.9, 0.37)]);
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 5, to: SCHEMA_VERSION });
+  expect(await db.all('SELECT season_id, kind, x, y FROM stickers ORDER BY season_id, kind')).toEqual([
+   { season_id: 'a', kind: 'drafted-5', x: 0.9, y: 0.5 },
+   { season_id: 'a', kind: 'sb-30', x: 0.1, y: 0.5 },
+   { season_id: 'b', kind: 'k-400', x: 0.9, y: 0.3 },
+   // A player-placed sticker stays put.
+   { season_id: 'b', kind: 'sb-30', x: 0.3, y: 0.8 }
   ]);
  });
 

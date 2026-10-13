@@ -33,7 +33,8 @@ describe('collection', () => {
   const slugger = cards.find(card => card.seasonId === SLUGGER)!;
   expect(slugger).toMatchObject({ times: 2, firstAt: day(0), lastAt: day(1), best: { wins: 100, losses: 62 } });
   expect(slugger.best.line).toMatchObject({ HR: 45 });
-  expect(slugger.stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['hr-40', day(0)], ['wins-100', day(0)]]);
+  expect(slugger.stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['hr-40', day(0)], ['wins-100', day(0)]]);
+  // Every card on a complete season earns its grade once; a later season with the same grade adds nothing.
   expect((await stickersFromSeason(db, 'k2'))).toEqual([]);
  });
 
@@ -54,7 +55,7 @@ describe('collection', () => {
   const { db } = await memoryDb();
   for (let index = 0; index < 10; index++) await db.run(save(entry(`k${index}`, 70, day(index))));
   const stickers = (await loadStickers(db)).get(ARM)!;
-  expect(stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['drafted-5', day(4)], ['drafted-10', day(9)]]);
+  expect(stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['drafted-5', day(4)], ['drafted-10', day(9)]]);
   expect((await stickersFromSeason(db, 'k4')).map(item => item.sticker.kind)).toEqual(['drafted-5', 'drafted-5']);
  });
 
@@ -81,6 +82,6 @@ describe('collection', () => {
   migrate(raw, NO_LEGACY);
   const cards = await loadCollection(db);
   expect(cards.map(card => [card.seasonId, card.times])).toEqual([[ARM, 5], [SLUGGER, 5]]);
-  expect((await loadStickers(db)).get(ARM)!.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['wins-100', day(0)], ['drafted-5', day(4)]]);
+  expect((await loadStickers(db)).get(ARM)!.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['wins-100', day(0)], ['drafted-5', day(4)]]);
  });
 });

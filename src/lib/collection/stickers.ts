@@ -1,5 +1,6 @@
 import type { LibraryEntry, SavedBatter, SavedPitcher } from '../game/library.ts';
 import { onBase, QUALIFYING_OUTS, QUALIFYING_PA, ra9 } from '../game/library-stats.ts';
+import { seasonGrade, type SeasonGrade } from '../game/grade.ts';
 
 /**
  * Stickers are cosmetic marks a card earns on the player's own teams. They are derived only from
@@ -9,7 +10,7 @@ import { onBase, QUALIFYING_OUTS, QUALIFYING_PA, ra9 } from '../game/library-sta
  */
 export const STICKER_RULES_VERSION = 'stickers-v1';
 
-export type StickerFamily = 'team' | 'mvp' | 'power' | 'contact' | 'production' | 'speed' | 'eye' | 'strikeouts' | 'ace' | 'closer' | 'loyalty';
+export type StickerFamily = 'grade' | 'team' | 'mvp' | 'power' | 'contact' | 'production' | 'speed' | 'eye' | 'strikeouts' | 'ace' | 'closer' | 'loyalty';
 
 export interface StickerDefinition {
  kind: string;
@@ -23,23 +24,34 @@ export interface StickerDefinition {
 
 /** Default spot (card-normalized centre) for each family; spots are shared by families a card cannot both hold. */
 export const STICKER_SPOTS: Readonly<Record<StickerFamily, { x: number; y: number; tilt: number }>> = {
- // Defaults hug the left and right frame edges, clear of the name band, the face and the stat row.
- mvp: { x: 0.1, y: 0.22, tilt: -9 },
- team: { x: 0.9, y: 0.22, tilt: 8 },
- contact: { x: 0.1, y: 0.37, tilt: -6 },
- ace: { x: 0.1, y: 0.37, tilt: -6 },
- power: { x: 0.9, y: 0.37, tilt: 7 },
- strikeouts: { x: 0.9, y: 0.37, tilt: 7 },
- eye: { x: 0.1, y: 0.52, tilt: 5 },
- production: { x: 0.9, y: 0.52, tilt: -5 },
- closer: { x: 0.9, y: 0.52, tilt: -5 },
- speed: { x: 0.1, y: 0.67, tilt: 3 },
- loyalty: { x: 0.9, y: 0.67, tilt: -3 }
+ // Defaults hug the left and right frame edges between the corner marks and the name band, clear of the face and the stat row.
+ mvp: { x: 0.1, y: 0.2, tilt: -9 },
+ team: { x: 0.9, y: 0.2, tilt: 8 },
+ contact: { x: 0.1, y: 0.3, tilt: -6 },
+ ace: { x: 0.1, y: 0.3, tilt: -6 },
+ power: { x: 0.9, y: 0.3, tilt: 7 },
+ strikeouts: { x: 0.9, y: 0.3, tilt: 7 },
+ eye: { x: 0.1, y: 0.4, tilt: 5 },
+ production: { x: 0.9, y: 0.4, tilt: -5 },
+ closer: { x: 0.9, y: 0.4, tilt: -5 },
+ speed: { x: 0.1, y: 0.5, tilt: 3 },
+ loyalty: { x: 0.9, y: 0.5, tilt: -3 },
+ // The season grade sits on the bottom credit strip, over the corner wordmark and clear of the stat row.
+ grade: { x: 0.9, y: 0.96, tilt: -6 }
 };
 
 const define = (kind: string, family: StickerFamily, tier: number, label: [string, string], title: string): StickerDefinition => ({ kind, family, tier, label, title });
 
+/** Grade sticker kinds, best first; a card shows the best grade it has earned. */
+export const GRADE_STICKERS: readonly { grade: SeasonGrade; kind: string }[] = [
+ { grade: 'Perfect', kind: 'grade-perfect' }, { grade: 'S+', kind: 'grade-s-plus' }, { grade: 'S', kind: 'grade-s' },
+ { grade: 'AA', kind: 'grade-aa' }, { grade: 'A', kind: 'grade-a' }, { grade: 'B', kind: 'grade-b' },
+ { grade: 'C', kind: 'grade-c' }, { grade: 'D', kind: 'grade-d' }, { grade: 'F', kind: 'grade-f' }
+];
+
 export const STICKERS: readonly StickerDefinition[] = [
+ ...GRADE_STICKERS.map(({ grade, kind }, index) => define(kind, 'grade', GRADE_STICKERS.length - index,
+  grade === 'Perfect' ? ['162', '–0'] : [grade, 'grade'], grade === 'Perfect' ? 'Graded Perfect: a 162–0 season' : `Graded ${grade} on one of your teams`)),
  define('wins-100', 'team', 1, ['100', 'wins'], 'On a 100-win team'),
  define('wins-120', 'team', 2, ['120', 'wins'], 'On a 120-win team'),
  define('perfect', 'team', 3, ['162', '–0'], 'On a team that went 162–0'),
@@ -104,6 +116,8 @@ export function seasonStickers(entry: Pick<LibraryEntry, 'record' | 'roster' | '
  const earned: { seasonId: string; kind: string }[] = [];
  for (const card of entry.roster) {
   const kinds = [...team];
+  const grade = GRADE_STICKERS.find(item => item.grade === seasonGrade(entry.record.wins, entry.record.losses));
+  if (grade) kinds.push(grade.kind);
   if (entry.mvp?.seasonId === card.seasonId) kinds.push('mvp');
   for (const line of entry.batting) if (line.seasonId === card.seasonId) kinds.push(...battingStickers(line));
   for (const line of entry.pitching) if (line.seasonId === card.seasonId) kinds.push(...pitchingStickers(line));

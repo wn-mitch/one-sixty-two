@@ -5,7 +5,7 @@
  let { definition, tilt = 0 }: { definition: StickerDefinition; tilt?: number } = $props();
 </script>
 
-<span class="sticker" data-family={definition.family} style={`--tilt:${tilt}deg`}>
+<span class="sticker" data-family={definition.family} data-kind={definition.kind} style={`--tilt:${tilt}deg`}>
  <b>{definition.label[0]}</b><small>{definition.label[1]}</small>
 </span>
 
@@ -39,5 +39,17 @@
  .sticker[data-family='strikeouts'] { --tone: oklch(42% 0.13 265); }
  .sticker[data-family='ace'] { --tone: oklch(50% 0.2 280); }
  .sticker[data-family='closer'] { --tone: oklch(48% 0.19 20); }
+ /* Grade stickers share the grade chip's tones. */
+ .sticker[data-family='grade'] { color: oklch(16% .009 255); text-shadow: none; }
+ .sticker[data-family='grade'] b { font-style: italic; font-weight: 900; }
+ .sticker[data-kind='grade-perfect'] { --tone: oklch(85% .15 110); }
+ .sticker[data-kind='grade-s-plus'] { --tone: oklch(86% .16 88); }
+ .sticker[data-kind='grade-s'] { --tone: oklch(79% .15 68); }
+ .sticker[data-kind='grade-aa'] { --tone: oklch(74% .14 305); }
+ .sticker[data-kind='grade-a'] { --tone: oklch(76% .12 240); }
+ .sticker[data-kind='grade-b'] { --tone: oklch(78% .13 155); }
+ .sticker[data-kind='grade-c'] { --tone: oklch(72% .04 230); }
+ .sticker[data-kind='grade-d'] { --tone: oklch(66% .06 55); }
+ .sticker[data-kind='grade-f'] { --tone: oklch(68% .15 25); }
  .sticker[data-family='loyalty'] { --tone: oklch(80% 0.02 255); color: oklch(24% 0.02 255); text-shadow: none; }
 </style>

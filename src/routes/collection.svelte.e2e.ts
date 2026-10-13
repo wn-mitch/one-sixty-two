@@ -30,17 +30,17 @@ test('a saved season fills the collection with stickers that can be hidden and m
  await page.goto('/collection');
  const grid = page.getByRole('list', { name: 'Collected cards' });
  await expect(grid.getByRole('button')).toHaveCount(2);
- await expect(page.getByText(/2\s+cards · 2\s+of [\d,]+ player-seasons, <0\.01% · 6\s+stickers/)).toBeVisible();
+ await expect(page.getByText(/2\s+cards · 2\s+of [\d,]+ player-seasons, <0\.01% · 8\s+stickers/)).toBeVisible();
  const tile = grid.getByRole('button', { name: new RegExp(hitterLabel) });
- // The card face shows the highest tier of each family: 120 wins, MVP, 60 HR, 130 RBI, .400 OBP.
+ // The card face shows the season grade and the highest tier of each family: 120 wins, MVP, 60 HR, 130 RBI, .400 OBP.
  const faceFamilies = () => tile.locator('.stickers [data-family]').evaluateAll(nodes => nodes.map(node => `${node.getAttribute('data-family')}:${node.textContent}`));
- await expect.poll(faceFamilies, { timeout: 30000 }).toEqual(['team:120wins', 'mvp:TeamMVP', 'power:60HR', 'production:130RBI', 'eye:.400OBP']);
+ await expect.poll(faceFamilies, { timeout: 30000 }).toEqual(['grade:Cgrade', 'team:120wins', 'mvp:TeamMVP', 'power:60HR', 'production:130RBI', 'eye:.400OBP']);
 
  await tile.click();
  const detail = page.getByRole('region', { name: hitterLabel });
  await expect(detail.getByRole('heading', { level: 2 })).toBeFocused();
  await detail.getByRole('listitem').filter({ hasText: '60 home runs' }).getByRole('button', { name: 'Hide' }).click();
- await expect.poll(faceFamilies).toEqual(['team:120wins', 'mvp:TeamMVP', 'production:130RBI', 'eye:.400OBP']);
+ await expect.poll(faceFamilies).toEqual(['grade:Cgrade', 'team:120wins', 'mvp:TeamMVP', 'production:130RBI', 'eye:.400OBP']);
 
  await detail.getByRole('button', { name: 'Arrange stickers' }).click();
  const handle = detail.getByRole('button', { name: /Move Team MVP sticker/ });

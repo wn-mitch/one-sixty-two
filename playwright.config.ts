@@ -13,5 +13,7 @@ export default defineConfig({
 		reuseExistingServer: false
 	},
 	use: { baseURL: `http://127.0.0.1:${port}`, headless: true },
-	testMatch: '**/*.e2e.{ts,js}'
+	testMatch: '**/*.e2e.{ts,js}',
+	// Agent worktrees under .claude/ hold their own copies of every test.
+	testIgnore: '**/.claude/**'
 });

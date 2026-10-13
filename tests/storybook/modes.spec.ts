@@ -96,7 +96,9 @@ test('Collection lists every rostered card and arranges a card’s stickers', as
 	expect(await grid.getByRole('listitem').count()).toBeGreaterThanOrEqual(14);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 	await page.getByLabel('With stickers').check();
-	const stickered = grid.getByRole('button').first();
+	// Located by name: hiding its last sticker drops the card out of the With stickers filter.
+	const name = await grid.getByRole('button').first().locator('.name').innerText();
+	const stickered = grid.getByRole('button').filter({ has: page.locator('.name', { hasText: name }) }).first();
 	await expect(stickered.locator('.stickers [data-family]').first()).toBeVisible();
 	const before = await stickered.locator('.stickers [data-family]').count();
 	await stickered.click();

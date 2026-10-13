@@ -160,6 +160,38 @@ export const MIGRATIONS: readonly Migration[] = [
     });
    }
   }
+ },
+ {
+  version: 6,
+  up(db) {
+   // Default spots tighten up the frame edges so the lowest stickers clear the name band, and season
+   // grades become stickers. Stickers
+   // still at a step-5 default move; ones the player placed stay. Spots are frozen as of this step.
+   const moves: readonly { kinds: readonly string[]; from: [number, number]; to: [number, number] }[] = [
+    { kinds: ['mvp'], from: [0.1, 0.22], to: [0.1, 0.2] },
+    { kinds: ['perfect', 'wins-120', 'wins-100'], from: [0.9, 0.22], to: [0.9, 0.2] },
+    { kinds: ['hits-200', 'ace'], from: [0.1, 0.37], to: [0.1, 0.3] },
+    { kinds: ['hr-60', 'hr-40', 'k-600', 'k-400'], from: [0.9, 0.37], to: [0.9, 0.3] },
+    { kinds: ['obp-400'], from: [0.1, 0.52], to: [0.1, 0.4] },
+    { kinds: ['rbi-130', 'closer'], from: [0.9, 0.52], to: [0.9, 0.4] },
+    { kinds: ['sb-30'], from: [0.1, 0.67], to: [0.1, 0.5] },
+    { kinds: ['drafted-10', 'drafted-5'], from: [0.9, 0.67], to: [0.9, 0.5] }
+   ];
+   for (const { kinds, from, to } of moves) {
+    db.exec({ sql: `UPDATE stickers SET x = ?, y = ? WHERE kind IN (${kinds.map(() => '?').join(', ')}) AND abs(x - ?) < 1e-6 AND abs(y - ?) < 1e-6`, bind: [...to, ...kinds, ...from] });
+   }
+   // Every rostering on a complete season earns that season's grade sticker, dated from its first
+   // rostering. Grade floors are frozen here as they stood for this step.
+   db.exec({
+    sql: `INSERT OR IGNORE INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden)
+     SELECT season_id, CASE
+      WHEN wins >= 162 THEN 'grade-perfect' WHEN wins >= 153 THEN 'grade-s-plus' WHEN wins >= 149 THEN 'grade-s'
+      WHEN wins >= 145 THEN 'grade-aa' WHEN wins >= 139 THEN 'grade-a' WHEN wins >= 130 THEN 'grade-b'
+      WHEN wins >= 120 THEN 'grade-c' WHEN wins >= 110 THEN 'grade-d' ELSE 'grade-f' END,
+      rostered_at, season_key, 0.9, 0.96, 0
+     FROM rostered WHERE wins + losses = 162 ORDER BY rostered_at`
+   });
+  }
  }
 ];
 
