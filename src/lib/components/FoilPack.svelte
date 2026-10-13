@@ -72,23 +72,30 @@
 	const DIVIDER = 1 + GAP + 2 * GAP;
 	/** Dealt cards sit lifted at 1.06 scale. */
 	const LIFT = 1.06;
+	/** The narrowest the extra-pack ghost gets before the dealt cards shrink to make room for it. */
+	const MIN_GHOST = 64;
 	/**
-	 * The first card stays centered with the divider, added cards and ghost to its right, shrinking up to a fifth to fit.
-	 * Otherwise a lone card keeps its place and the ghost narrows to peek in; with cards added, the row centers as a whole.
+	 * The dealt cards center as a group (one card alone sits where the pack was) with the ghost to their right.
+	 * When the row misses fitting, the cards and ghost shrink together up to a fifth; past that the ghost narrows
+	 * to peek in, down to `MIN_GHOST`, and only then do the cards shrink further.
 	 */
 	const layout = $derived.by(() => {
 		const full = stageWidth * .86;
-		const right = shown.length - 1 + (ghostShown ? 1 : 0);
-		const span = (count: number, size: number) => count ? DIVIDER + count * (size * LIFT + GAP) - GAP : 0;
-		if (!width || full * LIFT / 2 + span(right, full) <= width / 2) return { anchored: true, size: full, ghost: full };
-		// Slightly smaller cards keep the first one centered when the row only just misses fitting.
-		const fitted = (width / 2 - DIVIDER + GAP - right * GAP) / (LIFT * (right + .5));
-		if (right && fitted >= full * .8) return { anchored: true, size: fitted, ghost: fitted };
-		if (shown.length === 1) return { anchored: true, size: full, ghost: Math.max(64, Math.min(full, width / 2 - full * LIFT / 2 - DIVIDER - 4)) };
-		const count = shown.length + (ghostShown ? 1 : 0);
-		const size = Math.min(full, (width - DIVIDER - (count - 1) * GAP) / count / LIFT);
-		return { anchored: false, size, ghost: size };
+		const count = shown.length;
+		// Half the row right of center is `perCard * size + fixed`, before the ghost and its lead-in.
+		const perCard = (count + LIFT - 1) / 2;
+		const fixed = count > 1 ? (DIVIDER + (count - 2) * GAP) / 2 : 0;
+		const lead = ghostShown ? (count > 1 ? GAP : DIVIDER) : 0;
+		const room = width / 2 - 4 - fixed - lead;
+		if (!width) return { size: full, ghost: full };
+		if (!ghostShown) return { size: Math.min(full, room / perCard), ghost: full };
+		const even = room / (perCard + 1);
+		if (even >= full * .8) return { size: Math.min(full, even), ghost: Math.min(full, even) };
+		const size = Math.min(full, (room - MIN_GHOST) / perCard);
+		return { size, ghost: Math.max(MIN_GHOST, Math.min(size, room - perCard * size)) };
 	});
+	/** Half the dealt cards' laid-out width (the divider follows the first card), so the row centers on them. */
+	const anchor = $derived((shown.length * layout.size + (shown.length > 1 ? DIVIDER + (shown.length - 2) * GAP : 0)) / 2);
 	/** The caption names what to tap only after the player hesitates, so the pack and card teach themselves. */
 	let hinting = $state(false);
 	$effect(() => {
@@ -297,7 +304,7 @@
 
 <div class="foil-pack" class:opening={stage !== 'sealed'} class:dealt={stage === 'dealt' || stage === 'taking'} class:pack-gone={packGone} bind:clientWidth={width}>
 	<div class="stage" bind:clientWidth={stageWidth}>
-		<div class="hand" class:anchored={layout.anchored} style:--card-w="{layout.size}px" style:--ghost-w="{layout.ghost}px">
+		<div class="hand" style:--card-w="{layout.size}px" style:--ghost-w="{layout.ghost}px" style:--anchor="{anchor}px">
 			{#each shown as pack, index (packKey(pack))}
 				{#if index === 1}<span class="divider" aria-hidden="true"></span>{/if}
 				<button
@@ -371,10 +378,10 @@
 	.opening .stage { z-index: 6; }
 	@media (max-width: 47.999rem) { .foil-pack { padding-block: var(--space-6) var(--space-6); } }
 	.pack { grid-area: 1 / 1; }
-	/* Added packs sit in one row centered on the pack that may run wider than it, sharing the column's width. */
-	.hand { position: absolute; z-index: 1; inset: 0 auto; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 12px; width: max-content; }
-	/* The first card stays where the pack was dealt; everything added sits to its right. */
-	.hand.anchored { translate: calc(var(--card-w) / -2) 0; }
+	/* The dealt cards share the center: adding a pack slides the cards already dealt over so the row sits even. */
+	.hand { position: absolute; z-index: 1; inset: 0 auto; left: 50%; translate: calc(-1 * var(--anchor)) 0; display: flex; align-items: center; gap: 12px; width: max-content; transition: translate var(--motion-deal) var(--ease-out); }
+	:global([data-motion='off']) .hand { transition: none; }
+	@media (prefers-reduced-motion: reduce) { .hand { transition: none; } }
 	.divider { flex: none; align-self: center; width: 1px; height: 70%; margin-inline: 12px; margin-inline-start: 0; background: var(--border); animation: ghost-in var(--motion-deal) var(--ease-out) var(--motion-deal) both; }
 	.ghost-pack { --mx: 30%; position: relative; flex: none; display: grid; grid-template-rows: 9% 1fr 9%; width: var(--ghost-w); aspect-ratio: 5 / 7; padding: 0; border: 0; border-radius: .3rem; color: var(--background); background: var(--foil); overflow: hidden; opacity: .4; filter: saturate(.3); container-type: inline-size; cursor: pointer; transition: opacity .15s, filter .15s; animation: ghost-in var(--motion-deal) var(--ease-out) var(--motion-deal) backwards; }
 	.ghost-pack:hover:not(:disabled), .ghost-pack:focus-visible { background: var(--foil); opacity: .65; filter: none; }

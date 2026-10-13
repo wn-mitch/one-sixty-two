@@ -56,8 +56,8 @@ test.describe('Draft board browsing', () => {
 		await expect.poll(() => page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.reduce((count, node) => count + node.getAnimations().length, 0))).toBe(0);
 	});
 
-	test('opens up to two ghost packs beside the dealt card without moving it, keeps the one taken, and hints only after a pause', async ({ page }) => {
-		// Wide enough for the dealt card to stay centered with two more to its right; narrower columns center the row instead.
+	test('opens up to two ghost packs beside the dealt card, centers the dealt cards as a group, keeps the one taken, and hints only after a pause', async ({ page }) => {
+		// Wide enough for three full-size cards with the ghost beside them.
 		await page.setViewportSize({ width: 1512, height: 828 });
 		await openStoryByName(page, 'Draft/Board', 'Partial roster');
 		const caption = page.locator('.foil-pack .caption');
@@ -74,14 +74,17 @@ test.describe('Draft board browsing', () => {
 		await ghost.click();
 		await expect(cards).toHaveCount(2);
 		await expect(ghost).toHaveAccessibleName('Add a franchise pack to choose from, 1 of 2 left');
-		// The dealt card stays where it was dealt; the new one opens to its right and takes focus.
+		// The new card opens right of the dealt one and takes focus; the pair slides over to share the center.
 		await expect(cards.first()).toHaveAttribute('aria-label', first!);
 		await expect(cards.nth(1)).toBeFocused();
 		await ghost.click();
 		await expect(cards).toHaveCount(3);
 		await expect(ghost).toHaveCount(0);
-		const settledAt = await cards.first().boundingBox();
-		expect(Math.abs(settledAt!.x + settledAt!.width / 2 - (dealtAt!.x + dealtAt!.width / 2))).toBeLessThan(1);
+		const center = dealtAt!.x + dealtAt!.width / 2;
+		await expect.poll(() => cards.evaluateAll(nodes => {
+			const boxes = nodes.map(node => node.getBoundingClientRect());
+			return (boxes[0].left + boxes.at(-1)!.right) / 2;
+		})).toBeCloseTo(center, 0);
 		const [left, middle, right] = await cards.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
 		expect(left).toBeLessThan(middle);
 		expect(middle).toBeLessThan(right);

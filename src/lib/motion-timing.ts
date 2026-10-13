@@ -8,8 +8,6 @@
 export const EASE_OUT = 'cubic-bezier(.16, 1, .3, 1)';
 /** Symmetric: things leaving the stage, such as the emptied pack. */
 export const EASE_IN_OUT = 'cubic-bezier(.55, 0, .45, 1)';
-/** Gentle start for cards travelling between field slots. */
-export const EASE_SLIDE = 'cubic-bezier(.45, .05, .25, 1)';
 
 /** Durations in milliseconds. */
 export const MOTION = {
@@ -63,7 +61,7 @@ export const MOTION = {
 	/** Turning the field card between the field and its stadium details. */
 	fieldFlip: 640,
 	/** A field card sliding between slots: base plus distance, capped; divided by the card speed setting. */
-	fieldSlide: { base: 360, perPixel: .8, max: 700 },
+	fieldSlide: { base: 300, perPixel: .4, max: 520 },
 	/** A sort or filter change scooping the leaving candidate cards into one pile. */
 	gather: 380,
 	/** Gap between consecutive cards scooped up or rising in after a sort or filter change. */

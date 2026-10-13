@@ -3,8 +3,9 @@ import { autonomousMotion } from './motion-runtime.ts';
 import { appSettings } from '../game/settings.svelte.ts';
 import { MOTION } from '../motion-timing.ts';
 
+/** Where a card sat before a change, and the card itself, kept so one that leaves can be copied then. */
 interface Snapshot {
-	clone: HTMLElement;
+	node: HTMLElement;
 	rect: DOMRect;
 }
 
@@ -125,9 +126,10 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			clear();
 			snapshots.clear();
 			if (!root || !motionEnabled) return revision;
+			// Positions only: copying every card here cost a deep clone per card on each sort or filter.
 			for (const [key, node] of after()) {
 				const rect = measured(node);
-				if (rect) snapshots.set(key, { rect, clone: ghostOf(node, rect) });
+				if (rect) snapshots.set(key, { node, rect });
 			}
 			return revision;
 		},
@@ -142,32 +144,42 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 			const remember = (node: HTMLElement) => pendingStyles.set(node, {
 				transform: node.style.transform, opacity: node.style.opacity
 			});
+			// Every read happens before any write, so the browser lays the grid out once rather than
+			// once per card; the copies of leaving cards go into the page together at the end.
+			const leaving: Snapshot[] = [];
+			const moves: { node: HTMLElement; x: number; y: number }[] = [];
 			for (const [key, snapshot] of snapshots) {
 				const node = nodes.get(key);
 				if (!node) {
-					document.body.append(snapshot.clone);
-					ghosts.add(snapshot.clone);
-					departures.push(snapshot.clone);
+					// Only cards that were on screen are seen leaving.
+					if (snapshot.rect.bottom > 0 && snapshot.rect.top < innerHeight) leaving.push(snapshot);
 					continue;
 				}
 				const rect = measured(node);
 				if (!rect) continue;
 				const x = snapshot.rect.left - rect.left;
 				const y = snapshot.rect.top - rect.top;
-				if (x || y) {
-					remember(node);
-					node.style.transform = `translate(${x}px, ${y}px)`;
-					survivors.push({ node, x, y });
-				}
+				if (x || y) moves.push({ node, x, y });
 			}
-			for (const [key, node] of nodes) {
-				if (!snapshots.has(key)) {
-					remember(node);
-					node.style.opacity = '0';
-					entrants.push(node);
-				}
-			}
+			const arriving = [...nodes].filter(([key]) => !snapshots.has(key)).map(([, node]) => ({ node, rect: node.getBoundingClientRect() }));
 			snapshots.clear();
+			for (const { node, x, y } of moves) {
+				remember(node);
+				node.style.transform = `translate(${x}px, ${y}px)`;
+				survivors.push({ node, x, y });
+			}
+			for (const { node } of arriving) {
+				remember(node);
+				node.style.opacity = '0';
+				entrants.push(node);
+			}
+			const copies = leaving.map(({ node, rect }) => ({ clone: ghostOf(node, rect), rect }));
+			document.body.append(...copies.map(({ clone }) => clone));
+			for (const { clone } of copies) {
+				ghosts.add(clone);
+				departures.push(clone);
+			}
+			const departedAt = new Map(copies.map(({ clone, rect }) => [clone, rect]));
 			const stage = <T>(
 				items: T[], start: (item: T, complete: () => void) => void, complete: () => void
 			) => {
@@ -183,7 +195,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 				const pileX = bounds.left + bounds.width / 2;
 				const pileY = Math.max(bounds.top, 0) + 40;
 				departures.forEach((node, index) => {
-					const rect = node.getBoundingClientRect();
+					const rect = departedAt.get(node)!;
 					run(node, {
 						translateX: [0, pileX - (rect.left + rect.width / 2)], translateY: [0, pileY - (rect.top + rect.height / 2)],
 						scale: [1, .45], rotate: [0, (index % 2 ? 1 : -1) * (4 + (index % 3) * 2)], opacity: [1, 0],
@@ -199,8 +211,7 @@ export function createCandidateGridMotion(): CandidateGridMotion {
 					node.style.transform = `translate(${x}px, ${y}px)`;
 					run(node, { translateX: [x, 0], translateY: [y, 0], duration: MOTION.gridMove, delay: lead, ease: 'outQuart' }, () => restore(node));
 				});
-				entrants
-					.map(node => ({ node, rect: node.getBoundingClientRect() }))
+				arriving
 					.sort((a, b) => Math.round(a.rect.top - b.rect.top) || a.rect.left - b.rect.left)
 					.forEach(({ node }, index) => {
 						run(node, { translateY: [48, 0], opacity: [0, 1], duration: MOTION.gridMove, delay: lead + MOTION.gridMove * .3 + Math.min(index, 12) * MOTION.gatherStagger, ease: 'outQuart' }, () => restore(node));

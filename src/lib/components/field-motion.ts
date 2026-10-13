@@ -1,5 +1,5 @@
 import { appSettings } from '../game/settings.svelte.ts';
-import { EASE_SLIDE, MOTION } from '../motion-timing.ts';
+import { EASE_OUT, MOTION } from '../motion-timing.ts';
 
 const ITEM = '.roster-item[data-season-id]';
 
@@ -56,11 +56,14 @@ function flyIn(item: HTMLElement, from: DOMRect, speed: number): void {
 	const dx = from.left - to.left;
 	const dy = from.top - to.top;
 	const scale = from.width / to.width;
+	// One fast-start curve from the candidate card straight into the slot: most of the trip happens in
+	// the first beats after the click, then it settles. The copy is the slot's miniature scaled up, so
+	// it fades up as it leaves rather than popping in over the candidate card.
 	const animation = ghost.animate([
-		{ transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
-		{ transform: `translate(${dx * .35}px, ${dy * .35}px) scale(${1 + (scale - 1) * .2 + .06})`, offset: .45 },
-		{ transform: 'none' }
-	], { duration: duration(Math.hypot(dx, dy), speed), easing: EASE_SLIDE });
+		{ transform: `translate(${dx}px, ${dy}px) scale(${scale})`, opacity: .4 },
+		{ opacity: 1, offset: .2 },
+		{ transform: 'none', opacity: 1 }
+	], { duration: duration(Math.hypot(dx, dy), speed), easing: EASE_OUT });
 	arrivals.set(seasonId, animation);
 	const land = () => {
 		ghost.remove();
@@ -95,9 +98,8 @@ export function slideField(root: HTMLElement, before: Map<string, DOMRect>): voi
 		if (slot) slot.style.zIndex = '4';
 		const animation = item.animate([
 			{ transform: `translate(${dx}px, ${dy}px) scale(${scale})`, transformOrigin: '50% 0' },
-			{ transform: `translate(${dx * .35}px, ${dy * .35}px) scale(${1 + (scale - 1) * .2 + .06})`, transformOrigin: '50% 0', offset: .45 },
 			{ transform: 'none', transformOrigin: '50% 0' }
-		], { duration: duration(Math.hypot(dx, dy), speed), easing: EASE_SLIDE });
+		], { duration: duration(Math.hypot(dx, dy), speed), easing: EASE_OUT });
 		const reset = () => { if (slot) slot.style.zIndex = ''; };
 		animation.finished.then(reset, reset);
 	}
