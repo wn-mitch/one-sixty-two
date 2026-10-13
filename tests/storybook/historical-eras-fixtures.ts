@@ -48,6 +48,7 @@ function buildManifest(decade: number, profiles: Profile[]): Manifest {
 		sourceCommit: 'fixture',
 		franchises: Array.from({ length: 30 }, (_, index) => ({ id: `F${String(index).padStart(2, '0')}`, name: `Fixture Club ${String(index).padStart(2, '0')}`, decades: [decade] })),
 		candidates,
+		jackpot: [],
 		stadiums: syntheticStadiumSummaries(Array.from({ length: 30 }, (_, index) => `F${String(index).padStart(2, '0')}`)),
 		chunks: Object.fromEntries(profiles.map(profile => [
 			`${profile.franchiseId}-${decade}`,

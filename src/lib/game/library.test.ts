@@ -12,6 +12,7 @@ const candidates: Candidate[] = SLOTS.map((slot, index) => ({
 }));
 const franchiseIds = candidates.map(candidate => candidate.franchiseId);
 const manifest = {
+ jackpot: [],
  schemaVersion: 1, dataVersion: 'library-v1', sourceCommit: 'synthetic', candidates,
  franchises: franchiseIds.map(id => ({ id, name: `Club ${id}`, decades: [1980] })),
  chunks: {}, stadiums: syntheticStadiumSummaries(franchiseIds), simulationUrl: '', attributionUrl: '', showcaseUrl: '', archiveUrl: '',

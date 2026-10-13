@@ -70,7 +70,6 @@
 
 <section class="season-moments" aria-labelledby="season-moments-heading">
  <div class="heading">
-  <p class="eyebrow">Biggest win-expectancy swings</p>
   <h3 id="season-moments-heading">Season turning points</h3>
  </div>
  <div class="moment-grid">
@@ -85,23 +84,24 @@
  .heading h3 { font-size: var(--text-xl); }
  .moment-grid { display: grid; gap: var(--space-4); }
  .moment-card { display: grid; align-content: start; gap: var(--space-4); min-width: 0; padding: var(--space-5); border: 1px solid var(--border); border-top: .25rem solid var(--border); border-radius: var(--radius); background: var(--surface); }
- .moment-card.has-participant { grid-template-columns: 6.875rem minmax(0, 1fr); }
+ /* The player card leads the panel; the copy reads as its caption. */
+ .moment-card.has-participant { grid-template-columns: 11rem minmax(0, 1fr); }
  .moment-card.highlight { border-top-color: var(--success); }
  .moment-card.lowlight { border-top-color: var(--error); }
  /* Only the card itself is the inspect target; it does not stretch down the panel. */
  .participant-card { all: unset; display: block; align-self: start; width: 100%; border-radius: var(--radius); cursor: pointer; touch-action: manipulation; }
  .participant-card:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
  .participant-art { display: block; width: 100%; border-radius: var(--radius); box-shadow: 0 .75rem 1.5rem color-mix(in oklch, var(--background) 68%, transparent); }
- .moment-copy { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-3); min-width: 0; }
+ .moment-copy { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-2); min-width: 0; }
  .moment-label { margin: 0; color: var(--muted); font-size: var(--text-xs); font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
  .highlight .moment-label { color: var(--success); }
  .lowlight .moment-label { color: var(--error); }
- h4 { margin: 0; font-size: var(--text-lg); overflow-wrap: anywhere; }
+ h4 { margin: 0; font-size: var(--text-base); overflow-wrap: anywhere; }
  .situation, .story, .final, .empty { margin: 0; }
- .situation, .final { color: var(--muted); font-size: var(--text-sm); }
+ .situation, .final { color: var(--muted); font-size: var(--text-xs); }
  .call { margin: 0; padding-left: var(--space-3); border-left: 3px solid var(--border); }
- .call p { margin: 0; max-width: 56ch; font: italic 700 1.375rem/1.2 'Barlow Condensed', sans-serif; letter-spacing: .005em; }
- .story { max-width: 64ch; color: var(--muted); font-size: var(--text-sm); line-height: 1.55; }
+ .call p { margin: 0; max-width: 56ch; font: italic 700 1.125rem/1.2 'Barlow Condensed', sans-serif; letter-spacing: .005em; }
+ .story { max-width: 64ch; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
  .expectancy { margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); font-weight: 750; font-variant-numeric: tabular-nums; }
  .expectancy small { margin-left: var(--space-2); font-size: var(--text-sm); }
  @media (min-width: 48rem) {
@@ -109,6 +109,6 @@
  }
  @media (max-width: 30rem) {
   .moment-card { gap: var(--space-3); padding: var(--space-4); }
-  .moment-card.has-participant { grid-template-columns: 4.5rem minmax(0, 1fr); }
+  .moment-card.has-participant { grid-template-columns: 6.5rem minmax(0, 1fr); }
  }
 </style>

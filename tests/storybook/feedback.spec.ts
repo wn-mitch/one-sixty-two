@@ -152,7 +152,7 @@ test.describe('Agentation feedback integration', () => {
 	});
 
 	test('retains local feedback and Copy while the configured endpoint is unavailable', async ({ page }) => {
-		await page.route('http://127.0.0.1:4748/**', route => route.abort('connectionfailed'));
+		await page.route(`http://127.0.0.1:${process.env.AGENTATION_TEST_PORT ?? 4748}/**`, route => route.abort('connectionfailed'));
 		await openStoryByName(page, 'Interactions/Cards', 'Flip');
 		await expect(page.getByRole('button', { name: 'Start feedback mode', exact: true })).toBeVisible();
 

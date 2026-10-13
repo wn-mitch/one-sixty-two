@@ -1,5 +1,6 @@
 <script lang="ts">
  import { tick, untrack, type Snippet } from 'svelte';
+ import { MediaQuery } from 'svelte/reactivity';
  import type { InspectionSeasonView } from '../game/results-types.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import type { CardViewModel } from './view-model.ts';
@@ -22,7 +23,8 @@ let {
  onReturned,
  raisedOnly = false,
  flipInPlace = false,
- readerNav
+ readerNav,
+ pairFaces = true
 }: {
  s: CardViewModel;
  onDetails: () => void;
@@ -41,6 +43,8 @@ let {
  flipInPlace?: boolean;
  /** Controls beside the raised reader's turn button, such as stepping through a hand of cards. */
  readerNav?: Snippet;
+ /** Raise the front beside the back where the screen has room; off where the pair would cover its source. */
+ pairFaces?: boolean;
 } = $props();
 
 let stack = $state<HTMLDivElement>();
@@ -52,6 +56,10 @@ let previousOpen = untrack(() => readerOpen);
 // A reader that mounts already open belongs to a parent that places focus itself.
 let openedOnMount = untrack(() => readerOpen);
 let backDisplayed = $state(untrack(() => turned));
+/** Wide screens with room for two raised cards show the front beside the back instead of hiding it. */
+const roomForBoth = new MediaQuery('(min-width: 48rem) and (min-height: 34rem)');
+// The raised position is set before the reader opens, so its flight measures the paired destination.
+const paired = $derived(pairFaces && roomForBoth.current);
 
 function controlOwner(): Element | undefined {
  return stack?.closest('.player-card') ?? stack?.closest('.card-review') ?? stack?.parentElement ?? undefined;
@@ -148,7 +156,15 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
   </button>
  {/if}
   <div class="slot" aria-hidden="true"></div>
-  <div bind:this={stack} class="reader" data-card-reader popover="manual">
+  <div bind:this={stack} class="reader" class:paired data-card-reader popover="manual">
+   {#if paired && readerOpen}
+    <!-- The face the raised card is not showing. -->
+    <div class="companion" data-card-companion aria-hidden="true" inert>
+     {#if turned}<Card {s} face="front" interactive={false} {onDetails} />
+     {:else if inspectionView || textBack}<InspectionBack {s} view={inspectionView} simplified={textBack} {onDetails} />
+     {:else}<Card {s} face="back" {onDetails} />{/if}
+    </div>
+   {/if}
    <div class="stack" class:turned class:back-layout={backDisplayed} data-flip data-text-back={textBack} data-motion-reduced={!appSettings.animateCards} use:flip={{ turned, opened: readerOpen, sourceElement, onReturned: flightReturned }} use:surfaceFlip>
     <div class="front" inert={turned} aria-hidden={turned}>
      {#if onFrontSelect}
@@ -207,6 +223,14 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
  .external-source .reader { width: 410px; visibility: hidden; }
  .external-source .reader:popover-open { width: min(410px, calc(100vw - 2rem)); visibility: visible; pointer-events: auto; }
  .external-source .front { aspect-ratio: 5 / 7; }
+ /* A raised back with its front beside it: the pair centers on the screen, the front on the left. */
+ .cardbox .reader.paired:popover-open { width: min(410px, calc((100vw - 4rem) / 2)); translate: .75rem -50%; }
+ .cardbox .reader.paired:popover-open:has(.reader-return) { translate: .75rem calc(-50% + 28px); }
+ .companion { position: absolute; top: 50%; right: calc(100% + 1.5rem); width: 100%; translate: 0 -50%; animation: companion-in var(--motion-deal) var(--ease-out) var(--motion-deal) both; }
+ .reader:has(.reader-return) .companion { top: calc(50% - 28px); }
+ @keyframes companion-in { from { opacity: 0; transform: translateX(2rem); } }
+ :global([data-motion='off']) .companion { animation: none; }
+ @media (prefers-reduced-motion: reduce) { .companion { animation: none; } }
  .front :global(.card) { transition: opacity 80ms var(--ease-out); }
  .stack[data-motion-reduced='true'] .front :global(.card) { transition: none; }
  .stack[data-motion-reduced='true'], .stack[data-motion-reduced='true'] .back, .stack[data-motion-reduced='true'].back-layout .front { transform: none; }

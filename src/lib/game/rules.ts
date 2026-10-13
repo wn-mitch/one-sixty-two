@@ -15,8 +15,13 @@ export interface DraftRulePolicy {
  minYear: number;
  maxYear: number;
  modelVersion: typeof MODEL_VERSION;
- /** Times per draft a pending franchise and decade may be replaced before picking. */
- rerolls: number;
+ /** Extra franchise packs per draft a pending roll may add before the player chooses one of them. */
+ extraPacks: number;
+ /**
+  * Jackpot packs: `guaranteed` of the draft's rolls (seeded positions) are jackpots, and every other
+  * roll or added pack is one with probability `chance`. Each deals `size` elite seasons.
+  */
+ jackpots: { guaranteed: number; chance: number; size: number };
 }
 
 const CURRENT_RULE_POLICY: DraftRulePolicy = {
@@ -26,7 +31,8 @@ const CURRENT_RULE_POLICY: DraftRulePolicy = {
  minYear: MIN_SEASON_YEAR,
  maxYear: MAX_SEASON_YEAR,
  modelVersion: MODEL_VERSION,
- rerolls: 2
+ extraPacks: 2,
+ jackpots: { guaranteed: 2, chance: 0.2, size: 5 }
 };
 
 export function draftRules(schemaVersion: ReplaySchemaVersion): DraftRulePolicy {

@@ -4,7 +4,7 @@
  import type { CardViewModel } from './view-model.ts';
  import CardFlip from './CardFlip.svelte';
 
- let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, flipInPlace = false, onMove, moveRequested = $bindable(false), readerNav }: {
+ let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, flipInPlace = false, onMove, moveRequested = $bindable(false), readerNav, pairFaces = true }: {
   id?: string;
   s: CardViewModel;
   inspection?: ResultsInspection;
@@ -22,6 +22,8 @@
   moveRequested?: boolean;
   /** Controls beside the raised card's turn button. */
   readerNav?: Snippet;
+  /** Raise the front beside the back on wide screens. */
+  pairFaces?: boolean;
  } = $props();
  const generatedId = $props.id();
  const reviewId = $derived(id ?? generatedId);
@@ -92,7 +94,7 @@ let heading = $state<HTMLHeadingElement>();
    {#if textBack}<button type="button" class="back-text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>{/if}
    {#if onMove}<button type="button" onclick={moveCard}>Move card</button>{/if}
   {/snippet}
- <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} {flipInPlace} {readerNav} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
+ <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} {flipInPlace} {readerNav} {pairFaces} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
 </div>
 </section>
 

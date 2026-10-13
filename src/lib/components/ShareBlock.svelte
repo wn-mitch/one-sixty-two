@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { challengeUrl } from '#lib/game/share.ts';
+	import { onDestroy } from 'svelte';
 	import ShareArtwork from '#lib/share/ShareArtwork.svelte';
+	import { renderSharePng } from '#lib/share/render.ts';
 	import { toasts } from '#lib/toast.svelte.ts';
 	import {
 		SHARE_DIMENSIONS,
@@ -28,6 +30,30 @@
 	// lay out exactly as they do in the captured PNG.
 	let previewWidth = $state(0);
 	let previewScale = $derived(previewWidth / SHARE_DIMENSIONS[format].width);
+	/**
+	 * Before publication the preview is a PNG drawn on this device, so it can be copied or saved straight
+	 * away; the live artwork shows until it is ready, or if this browser cannot draw it.
+	 */
+	let localImages = $state<Record<string, string>>({});
+	const drawing = new Set<string>();
+	let destroyed = false;
+	/** The model is rebuilt as media and rankings arrive; a drawing belongs to the content it shows. */
+	const modelKey = $derived(`${model.dataVersion}:${model.mediaVersion}:${model.rankingVersion}:${model.record.wins}-${model.record.losses}:${model.battingOrder.join(',')}`);
+	const imageKey = $derived(`${modelKey}|${format}`);
+	$effect(() => {
+		const key = imageKey;
+		const [current, wanted] = [model, format];
+		if (publishedImage || localImages[key] || drawing.has(key)) return;
+		drawing.add(key);
+		renderSharePng(current, wanted).then(blob => {
+			if (!destroyed) localImages = { ...localImages, [key]: URL.createObjectURL(blob) };
+		}).catch(() => {}).finally(() => drawing.delete(key));
+	});
+	onDestroy(() => {
+		destroyed = true;
+		for (const url of Object.values(localImages)) URL.revokeObjectURL(url);
+	});
+	let localImage = $derived(publishedImage ? null : localImages[imageKey] ?? null);
 	let statusIsError = $derived(/unavailable|could not|denied|incompatible|cannot be published/i.test(status));
 
 	// Share progress and outcomes are toasts; one slot so an outcome replaces its progress message.
@@ -41,7 +67,6 @@
 <section class="share-panel" aria-labelledby="share-art-heading" aria-busy={sharing}>
 	<header>
 		<div>
-			<p class="eyebrow">Share the season</p>
 			<h3 id="share-art-heading">Challenge a friend</h3>
 		</div>
 	</header>
@@ -58,6 +83,13 @@
 				src={publishedImage.url}
 				width={publishedImage.width}
 				height={publishedImage.height}
+				alt={`${previewRecord.wins}-${previewRecord.losses} season share image`}
+			/>
+		{:else if localImage}
+			<img
+				src={localImage}
+				width={SHARE_DIMENSIONS[format].width}
+				height={SHARE_DIMENSIONS[format].height}
 				alt={`${previewRecord.wins}-${previewRecord.losses} season share image`}
 			/>
 		{:else}
@@ -120,7 +152,6 @@
 		gap: var(--space-4);
 	}
 	h3 { margin: var(--space-1) 0 0; }
-	.eyebrow { margin: 0; }
 	.preview {
 		position: relative;
 		width: 100%;

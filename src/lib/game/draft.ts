@@ -8,6 +8,7 @@ import {
  validateReliefRoles,
  type Candidate,
  type Draft,
+ isJackpot,
  type DraftAction,
  type HitterSlot,
  type Manifest,
@@ -16,10 +17,11 @@ import {
  type Replay,
  type ReplaySchemaVersion,
  type Roll,
- type Slot
+ type Slot,
+ type TeamRoll
 } from './types.ts';
 import { analyzeDraft, canFinishDraft, isViableForSlot } from './draft-analysis.ts';
-import { randomStream } from './random.ts';
+import { randomStream, shuffle } from './random.ts';
 import { draftRules, type DraftRulePolicy } from './rules.ts';
 
 function requireCurrentRules(draft: Draft): DraftRulePolicy {
@@ -38,6 +40,7 @@ function emptyDraft(manifest: Manifest, seed: number): Draft {
   homeStadium: null,
   picks: [],
   currentRoll: null,
+  packs: [],
   battingOrder: [],
   starterOrder: [],
   reliefRoles: [],
@@ -63,8 +66,25 @@ export function legalSlots(draft: Draft, candidate: Candidate, manifest: Manifes
  );
 }
 
+/** Whether a season belongs to a pack: its franchise-decade, or one of a jackpot's dealt seasons. */
+export function rollContains(roll: Roll, candidate: Candidate): boolean {
+ if (isJackpot(roll)) return roll.jackpot.includes(candidate.seasonId);
+ return candidate.franchiseId === roll.franchiseId && candidate.decade === roll.decade;
+}
+
+/** A stable identity for a pack on the table. */
+export function rollKey(roll: Roll): string {
+ return isJackpot(roll) ? `jackpot:${roll.jackpot.join('|')}` : `${roll.franchiseId}-${roll.decade}`;
+}
+
+/** A pack's spoken name: the franchise and era, or the jackpot. */
+export function rollLabel(roll: Roll, manifest: Manifest): string {
+ if (isJackpot(roll)) return `Jackpot pack of ${roll.jackpot.length} elite seasons`;
+ return `${manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name}, ${manifest.coverage.find(coverage => coverage.decade === roll.decade)?.label}`;
+}
+
 /** The roll's era, bounded by the decade's data coverage and the draft's year limits. */
-export function rollYears(roll: Roll, manifest: Manifest, schemaVersion: ReplaySchemaVersion): { first: number; last: number } {
+export function rollYears(roll: TeamRoll, manifest: Manifest, schemaVersion: ReplaySchemaVersion): { first: number; last: number } {
  const policy = draftRules(schemaVersion);
  const coverage = manifest.coverage.find(item => item.decade === roll.decade);
  return {
@@ -76,18 +96,22 @@ export function rollYears(roll: Roll, manifest: Manifest, schemaVersion: ReplayS
 export function availableCandidates(draft: Draft, manifest: Manifest, roll: Roll | null = draft.currentRoll): Candidate[] {
  const analysis = analyzeDraft(draft, manifest);
  return analysis.unused.filter(candidate => {
-  if (roll && (candidate.franchiseId !== roll.franchiseId || candidate.decade !== roll.decade)) return false;
+  if (roll && !rollContains(roll, candidate)) return false;
   return analysis.slots.some(slot =>
    candidate.eligibleSlots.includes(slot) && isViableForSlot(analysis, candidate, slot)
   );
  });
 }
 
-/** A uniformly random franchise with legal seasons left, then one of its legal decades; a reroll excludes the pending roll when anything else remains. */
-function nextRoll(draft: Draft, manifest: Manifest, random: () => number, exclude: Roll | null = null): Roll {
- const legal = availableCandidates(draft, manifest, null);
- const others = exclude ? legal.filter(candidate => candidate.franchiseId !== exclude.franchiseId || candidate.decade !== exclude.decade) : legal;
- const candidates = others.length ? others : legal;
+/**
+ * A uniformly random franchise with legal seasons left, then one of its legal decades. An added pack
+ * avoids the franchises already on the table, or failing that their exact decades, when anything else remains.
+ */
+function nextTeamRoll(legal: readonly Candidate[], random: () => number, table: readonly Roll[]): TeamRoll {
+ const teams = table.filter((roll): roll is TeamRoll => !isJackpot(roll));
+ const newFranchises = legal.filter(candidate => !teams.some(roll => roll.franchiseId === candidate.franchiseId));
+ const newDecades = legal.filter(candidate => !teams.some(roll => roll.franchiseId === candidate.franchiseId && roll.decade === candidate.decade));
+ const candidates = newFranchises.length ? newFranchises : newDecades.length ? newDecades : legal;
  const franchises = [...new Set(candidates.map(candidate => candidate.franchiseId))].sort(compareId);
  if (!franchises.length) throw new Error('Dataset error: no legal candidates remain. Your draft is preserved.');
  const franchiseId = franchises[Math.floor(random() * franchises.length)];
@@ -95,6 +119,39 @@ function nextRoll(draft: Draft, manifest: Manifest, random: () => number, exclud
   .filter(candidate => candidate.franchiseId === franchiseId)
   .map(candidate => candidate.decade))].sort((a, b) => a - b);
  return { franchiseId, decade: decades[Math.floor(random() * decades.length)] };
+}
+
+/**
+ * Up to `size` legal elite seasons, one per player, none already dealt to the table; null when no
+ * elite season is legal for the open slots.
+ */
+function nextJackpot(legal: readonly Candidate[], manifest: Manifest, random: () => number, table: readonly Roll[], size: number): Roll | null {
+ const elite = new Set(manifest.jackpot);
+ const dealt = new Set(table.flatMap(roll => isJackpot(roll) ? roll.jackpot : []));
+ const players = new Set<string>();
+ const seasons: string[] = [];
+ for (const candidate of shuffle(legal.filter(item => elite.has(item.seasonId) && !dealt.has(item.seasonId)).sort((a, b) => compareId(a.seasonId, b.seasonId)), random)) {
+  if (players.has(candidate.playerId)) continue;
+  players.add(candidate.playerId);
+  seasons.push(candidate.seasonId);
+  if (seasons.length === size) break;
+ }
+ return seasons.length ? { jackpot: seasons.sort(compareId) } : null;
+}
+
+/** Roll indexes, by pick number, that are guaranteed jackpots for this seed. */
+function guaranteedJackpots(seed: number, policy: DraftRulePolicy): Set<number> {
+ const order = shuffle(policy.slots.map((_, index) => index), randomStream(seed, 'jackpot'));
+ return new Set(order.slice(0, policy.jackpots.guaranteed));
+}
+
+/** The next pack from the draft stream: a jackpot when forced or on the per-roll chance, otherwise a franchise. */
+function nextRoll(draft: Draft, manifest: Manifest, random: () => number, table: readonly Roll[], forced: boolean): Roll {
+ const policy = draftRules(draft.schemaVersion);
+ const legal = availableCandidates(draft, manifest, null);
+ const lucky = random() < policy.jackpots.chance;
+ const jackpot = forced || lucky ? nextJackpot(legal, manifest, random, table, policy.jackpots.size) : null;
+ return jackpot ?? nextTeamRoll(legal, random, table);
 }
 
 function applyStadium(draft: Draft, manifest: Manifest, stadiumId: string, stadiumVersion: string | null): Draft {
@@ -120,20 +177,34 @@ function applyRoll(draft: Draft, manifest: Manifest, random: () => number, recor
  if (!draft.homeStadium) throw new Error('Choose a home stadium before rolling');
  if (draft.currentRoll) throw new Error('A draft roll is already pending');
  if (draft.picks.length === policy.slots.length) throw new Error('The roster is complete');
- const result = { ...draft, currentRoll: nextRoll(draft, manifest, random) } as Draft;
+ const roll = nextRoll(draft, manifest, random, [], guaranteedJackpots(draft.seed, policy).has(draft.picks.length));
+ const result = { ...draft, currentRoll: roll, packs: [roll] } as Draft;
  if (record) return { ...result, actions: appendAction(draft, { type: 'roll' }) } as Draft;
  return result;
 }
 
-/** Rerolls this draft may still spend on a pending roll. */
-export function rerollsLeft(draft: Draft): number {
- return draftRules(draft.schemaVersion).rerolls - draft.actions.filter(action => action.type === 'reroll').length;
+/** Extra packs this draft may still add to a pending roll. */
+export function extraPacksLeft(draft: Draft): number {
+ return draftRules(draft.schemaVersion).extraPacks - draft.actions.filter(action => action.type === 'add-pack').length;
 }
 
-function applyReroll(draft: Draft, manifest: Manifest, random: () => number): Draft {
- if (!draft.currentRoll) throw new Error('Roll before rerolling');
- if (rerollsLeft(draft) <= 0) throw new Error('No rerolls left');
- return { ...draft, currentRoll: nextRoll(draft, manifest, random, draft.currentRoll), actions: appendAction(draft, { type: 'reroll' }) } as Draft;
+/** The most packs one roll can hold: its own plus every extra pack the draft allows. */
+export function maxPacks(draft: Draft): number {
+ return 1 + draftRules(draft.schemaVersion).extraPacks;
+}
+
+function applyAddPack(draft: Draft, manifest: Manifest, random: () => number): Draft {
+ if (!draft.packs.length) throw new Error('Roll before adding a pack');
+ if (extraPacksLeft(draft) <= 0) throw new Error('No extra packs left');
+ const packs = [...draft.packs, nextRoll(draft, manifest, random, draft.packs, false)];
+ return { ...draft, currentRoll: null, packs, actions: appendAction(draft, { type: 'add-pack' }) } as Draft;
+}
+
+function applyChoosePack(draft: Draft, pack: number): Draft {
+ if (draft.packs.length < 2) throw new Error('There is no pack to choose');
+ const chosen = draft.packs[pack];
+ if (!chosen) throw new Error('Choose one of the open packs');
+ return { ...draft, currentRoll: chosen, packs: [chosen], actions: appendAction(draft, { type: 'choose-pack', pack }) } as Draft;
 }
 
 function commitPickWithPolicy(
@@ -146,7 +217,7 @@ function commitPickWithPolicy(
 ): Draft {
  if (!draft.currentRoll) throw new Error('Roll before choosing a player');
  const candidate = manifest.candidates.find(item => item.seasonId === seasonId);
- if (!candidate || candidate.franchiseId !== draft.currentRoll.franchiseId || candidate.decade !== draft.currentRoll.decade) {
+ if (!candidate || !rollContains(draft.currentRoll, candidate)) {
   throw new Error('Choose a season from the current roll');
  }
  const year = Number(candidate.seasonId.split(':')[1]);
@@ -156,8 +227,9 @@ function commitPickWithPolicy(
  if (!policy.slots.includes(slot) || !legalSlots(draft, candidate, manifest).includes(slot)) {
   throw new Error('Player is not eligible for that empty slot');
  }
- const picks: Pick[] = [...draft.picks, { ...draft.currentRoll, seasonId, slot }];
- let result = { ...draft, picks, currentRoll: null } as Draft;
+ const pick: Pick = { franchiseId: candidate.franchiseId, decade: candidate.decade, seasonId, slot };
+ const picks: Pick[] = [...draft.picks, isJackpot(draft.currentRoll) ? { ...pick, jackpot: true } : pick];
+ let result = { ...draft, picks, currentRoll: null, packs: [] } as Draft;
  if (picks.length === policy.slots.length) {
   result = {
    ...result,
@@ -203,7 +275,7 @@ function reassignedDraft(
  });
  const result = { ...draft, picks } as Draft;
  if (!canFinishDraft(result, manifest)) throw new Error('This move would prevent completing the roster');
- if (result.currentRoll && availableCandidates(result, manifest, result.currentRoll).length === 0) {
+ if (result.packs.some(pack => availableCandidates(result, manifest, pack).length === 0)) {
   throw new Error('This move would leave the current roll without a legal pick');
  }
  if (record) {
@@ -256,9 +328,13 @@ function validAction(value: unknown): DraftAction {
   if (Object.keys(action).length !== 1) throw new Error('Invalid draft action');
   return { type: 'roll' };
  }
- if (action.type === 'reroll') {
+ if (action.type === 'add-pack') {
   if (Object.keys(action).length !== 1) throw new Error('Invalid draft action');
-  return { type: 'reroll' };
+  return { type: 'add-pack' };
+ }
+ if (action.type === 'choose-pack') {
+  if (Object.keys(action).length !== 2 || !Number.isInteger(action.pack)) throw new Error('Invalid draft action');
+  return { type: 'choose-pack', pack: action.pack as number };
  }
  if (action.type === 'pick') {
   if (Object.keys(action).length !== 3 || typeof action.seasonId !== 'string' ||
@@ -286,7 +362,8 @@ function replayActions(input: Replay, manifest: Manifest): { draft: Draft; rando
   const previous = draft;
   if (action.type === 'select-stadium') draft = applyStadium(draft, manifest, action.stadiumId, action.stadiumVersion);
   else if (action.type === 'roll') draft = applyRoll(draft, manifest, random, true);
-  else if (action.type === 'reroll') draft = applyReroll(draft, manifest, random);
+  else if (action.type === 'add-pack') draft = applyAddPack(draft, manifest, random);
+  else if (action.type === 'choose-pack') draft = applyChoosePack(draft, action.pack);
   else if (action.type === 'pick') {
    draft = commitPickWithPolicy(draft, manifest, action.seasonId, action.slot, draftRules(CURRENT_REPLAY_SCHEMA_VERSION), true);
   } else {
@@ -305,19 +382,25 @@ function replayChronology(input: Replay, manifest: Manifest): { draft: Draft; ra
 
 export function rollDraft(draft: Draft, manifest: Manifest): Draft {
  const policy = requireCurrentRules(draft);
- if (draft.currentRoll) return draft;
+ if (draft.packs.length) return draft;
  if (draft.picks.length === policy.slots.length) throw new Error('The roster is complete');
  const { draft: replayed, random } = replayActions(draft, manifest);
  if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
  return applyRoll(replayed, manifest, random, true);
 }
 
-/** Replaces the pending franchise and decade with a fresh draw from the draft's seeded stream. */
-export function rerollDraft(draft: Draft, manifest: Manifest): Draft {
+/** Deals another pack (a franchise, or on the jackpot chance an elite handful) beside the pending roll's from the draft's seeded stream; the player then chooses one. */
+export function addPack(draft: Draft, manifest: Manifest): Draft {
  requireCurrentRules(draft);
  const { draft: replayed, random } = replayActions(draft, manifest);
  if (!samePicks(draft.picks, replayed.picks)) throw new Error('Invalid draft snapshot');
- return applyReroll(replayed, manifest, random);
+ return applyAddPack(replayed, manifest, random);
+}
+
+/** Keeps one of the open packs as the pending roll; the others are discarded. */
+export function choosePack(draft: Draft, pack: number): Draft {
+ requireCurrentRules(draft);
+ return applyChoosePack(draft, pack);
 }
 
 export function commitPick(draft: Draft, manifest: Manifest, seasonId: string, slot: Slot): Draft {
@@ -337,17 +420,21 @@ function validateOrder(value: unknown, expected: string[]): string[] {
 
 function sameRoll(left: Roll | null | undefined, right: Roll | null): boolean {
  if (left == null) return right === null;
- return right !== null && Object.keys(left).length === 2 &&
-  left.franchiseId === right.franchiseId && left.decade === right.decade;
+ if (right === null || !left || typeof left !== 'object') return false;
+ if (isJackpot(right)) {
+  return Object.keys(left).length === 1 && isJackpot(left) && Array.isArray(left.jackpot) &&
+   left.jackpot.length === right.jackpot.length && left.jackpot.every((seasonId, index) => seasonId === right.jackpot[index]);
+ }
+ return Object.keys(left).length === 2 && !isJackpot(left) && left.franchiseId === right.franchiseId && left.decade === right.decade;
 }
 
 function samePicks(value: Pick[], expected: Pick[]): boolean {
  if (value.length !== expected.length) return false;
  return value.every((pick, index) => {
-  if (!pick || typeof pick !== 'object' || Object.keys(pick).length !== 4) return false;
   const other = expected[index];
+  if (!pick || typeof pick !== 'object' || Object.keys(pick).length !== (other.jackpot ? 5 : 4)) return false;
   return pick.seasonId === other.seasonId && pick.slot === other.slot &&
-   pick.franchiseId === other.franchiseId && pick.decade === other.decade;
+   pick.franchiseId === other.franchiseId && pick.decade === other.decade && pick.jackpot === other.jackpot;
  });
 }
 
@@ -378,11 +465,13 @@ function validateWithRules(value: unknown, manifest: Manifest, requireCurrentRol
  if (requireCurrentRoll && !Object.prototype.hasOwnProperty.call(input, 'currentRoll')) throw new Error('Invalid saved roll');
  const { draft } = replayChronology(input, manifest);
  if (!samePicks(input.picks, draft.picks) || !sameStadium(input.homeStadium, draft.homeStadium)) throw new Error('Invalid draft snapshot');
+ if (requireCurrentRoll && (!Array.isArray(input.packs) || input.packs.length !== draft.packs.length ||
+  input.packs.some((pack, index) => !sameRoll(pack, draft.packs[index])))) throw new Error('Invalid saved roll');
  if (!sameRoll(input.currentRoll, draft.currentRoll)) {
   if (complete && input.currentRoll) throw new Error('Complete roster cannot have a pending roll');
   throw new Error('Invalid saved roll');
  }
- if (complete && draft.currentRoll) throw new Error('Complete roster cannot have a pending roll');
+ if (complete && draft.packs.length) throw new Error('Complete roster cannot have a pending roll');
  draft.battingOrder = validateOrder(input.battingOrder, draft.battingOrder);
  draft.starterOrder = validateOrder(input.starterOrder, draft.starterOrder);
  draft.reliefRoles = validateReliefRoles(input.reliefRoles, draft.picks.length === policy.slots.length);

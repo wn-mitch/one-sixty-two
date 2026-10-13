@@ -7,8 +7,9 @@ import {
  legalSlots,
  reassignPick,
  replayInput,
- rerollDraft,
- rerollsLeft,
+ addPack,
+ choosePack,
+ extraPacksLeft,
  rollDraft,
  selectHomeStadium,
  validateDraft,
@@ -18,13 +19,15 @@ import { decodeReplay, encodeReplay } from './share.ts';
 import { persistDraft, restoreDraft } from './persistence.ts';
 import { brokenDb, memoryDb } from '../storage/test-db.ts';
 import type { Db } from '../storage/sql.ts';
-import { SLOTS, type Candidate, type Draft, type Manifest, type Slot } from './types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, SLOTS, compareId, isJackpot, type Candidate, type Draft, type Manifest, type Roll, type Slot, type TeamRoll } from './types.ts';
+import { draftRules } from './rules.ts';
 import { randomStream } from './random.ts';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 
 function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Manifest {
  const franchiseIds = [...new Set(candidates.map(candidate => candidate.franchiseId))].sort();
  return {
+  jackpot: [],
   schemaVersion: 1,
   dataVersion,
   sourceCommit: 'synthetic',
@@ -64,6 +67,12 @@ candidates[0].seasonId = 'anon0:1982:AL:T0';
 candidates[12].seasonId = 'anon12:2022:NL:T12';
 candidates.push({ ...candidates[0], seasonId: 'anon0:1983:AL:T0' });
 const manifest = makeManifest(candidates);
+
+/** The roll as a franchise pack; these fixtures have no elite pool, so every roll is one. */
+function team(roll: Roll | null): TeamRoll {
+ if (!roll || isJackpot(roll)) throw new Error('Expected a franchise roll');
+ return roll;
+}
 
 /** A new draft with its home stadium pinned, ready to roll. */
 function startDraft(source: Manifest, seed: number): Draft {
@@ -140,31 +149,50 @@ function scarcePool(openCandidates: Candidate[], open: Slot[]): Manifest {
  return makeManifest([...fillers, ...openCandidates], 'scarce-v1');
 }
 
-describe('rerolls', () => {
- it('replaces the pending roll with a different one twice per draft, then refuses', () => {
+describe('extra packs', () => {
+ it('deals up to two extra packs per draft beside a roll and keeps only the chosen one', () => {
   const rolled = rollDraft(startDraft(manifest, 5), manifest);
-  expect(rerollsLeft(rolled)).toBe(2);
-  const once = rerollDraft(rolled, manifest);
-  expect(once.currentRoll).not.toEqual(rolled.currentRoll);
-  expect(once.actions.at(-1)).toEqual({ type: 'reroll' });
-  const twice = rerollDraft(once, manifest);
-  expect(twice.currentRoll).not.toEqual(once.currentRoll);
-  expect(rerollsLeft(twice)).toBe(0);
-  expect(() => rerollDraft(twice, manifest)).toThrow('No rerolls left');
-  expect(() => rerollDraft(startDraft(manifest, 5), manifest)).toThrow('Roll before rerolling');
+  const first = team(rolled.currentRoll);
+  expect(rolled.packs).toEqual([first]);
+  expect(extraPacksLeft(rolled)).toBe(2);
+  const two = addPack(rolled, manifest);
+  expect(two.currentRoll).toBeNull();
+  expect(two.packs).toHaveLength(2);
+  expect(two.packs[0]).toEqual(first);
+  // Another franchise is on the table, not another decade of the same one.
+  expect(team(two.packs[1]).franchiseId).not.toBe(first.franchiseId);
+  expect(two.actions.at(-1)).toEqual({ type: 'add-pack' });
+  const pick = availableCandidates(rolled, manifest)[0];
+  expect(() => commitPick(two, manifest, pick.seasonId, legalSlots(two, pick, manifest)[0])).toThrow('Roll before choosing a player');
+  const three = addPack(two, manifest);
+  expect(three.packs).toHaveLength(3);
+  expect(new Set(three.packs.map(pack => team(pack).franchiseId)).size).toBe(3);
+  expect(extraPacksLeft(three)).toBe(0);
+  expect(() => addPack(three, manifest)).toThrow('No extra packs left');
+  expect(() => choosePack(three, 3)).toThrow('Choose one of the open packs');
+  const chosen = choosePack(three, 1);
+  expect(chosen.currentRoll).toEqual(three.packs[1]);
+  expect(chosen.packs).toEqual([three.packs[1]]);
+  expect(chosen.actions.at(-1)).toEqual({ type: 'choose-pack', pack: 1 });
+  expect(availableCandidates(chosen, manifest).every(candidate => candidate.franchiseId === team(three.packs[1]).franchiseId)).toBe(true);
+  expect(() => addPack(startDraft(manifest, 5), manifest)).toThrow('Roll before adding a pack');
  });
 
- it('replays rerolls exactly from the seed, through saves and share links', async () => {
-  let draft = rerollDraft(rollDraft(startDraft(manifest, 21), manifest), manifest);
-  const candidate = availableCandidates(draft, manifest)[0];
-  draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
-  draft = rerollDraft(rollDraft(draft, manifest), manifest);
-  expect(validateDraft(draft, manifest)).toEqual(draft);
+ it('replays added and chosen packs exactly from the seed, through saves and share links', async () => {
+  let draft = addPack(rollDraft(startDraft(manifest, 21), manifest), manifest);
+  // An undecided table survives a reload.
   const { db } = await memoryDb();
   expect(await persistDraft(db, draft, 'draft')).toBeNull();
   expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft, phase: 'draft' });
-  // A forged roll after a reroll does not match the seeded stream.
-  expect(() => validateDraft({ ...draft, currentRoll: { franchiseId: candidate.franchiseId, decade: candidate.decade } }, manifest)).toThrow();
+  expect(() => validateDraft({ ...draft, packs: [draft.packs[1], draft.packs[0]] }, manifest)).toThrow('Invalid saved roll');
+  draft = choosePack(draft, 1);
+  const candidate = availableCandidates(draft, manifest)[0];
+  draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
+  draft = addPack(rollDraft(draft, manifest), manifest);
+  draft = choosePack(draft, 0);
+  expect(validateDraft(draft, manifest)).toEqual(draft);
+  // A forged roll does not match the seeded stream.
+  expect(() => validateDraft({ ...draft, currentRoll: { franchiseId: candidate.franchiseId, decade: candidate.decade }, packs: [{ franchiseId: candidate.franchiseId, decade: candidate.decade }] }, manifest)).toThrow();
   while (draft.picks.length < SLOTS.length) {
    if (!draft.currentRoll) draft = rollDraft(draft, manifest);
    const next = availableCandidates(draft, manifest)[0];
@@ -179,7 +207,7 @@ describe('permanent deterministic drafting', () => {
  it.each(Array.from({ length: 32 }, (_, seed) => seed))('finishes seed %i with fourteen distinct identities and franchises', seed => {
   const initial = createDraft(manifest, seed);
   expect(initial.homeStadium).toBeNull();
-  expect(initial.schemaVersion).toBe(6);
+  expect(initial.schemaVersion).toBe(8);
   expect(legalSlots(initial, candidates[0], manifest)).toEqual(['C']);
   const draft = finish(seed);
   const selected = draft.picks.map(pick => manifest.candidates.find(item => item.seasonId === pick.seasonId)!);
@@ -233,7 +261,7 @@ describe('permanent deterministic drafting', () => {
   const unused = availableCandidates(next, expanded, null);
   expect(unused.some(candidate => candidate.franchiseId === selected.franchiseId)).toBe(false);
   expect(unused.some(candidate => candidate.playerId === selected.playerId)).toBe(false);
-  expect(rollDraft(next, expanded).currentRoll?.franchiseId).not.toBe(selected.franchiseId);
+  expect(team(rollDraft(next, expanded).currentRoll).franchiseId).not.toBe(selected.franchiseId);
  });
 
  it('rejects a joint player/franchise trap that two independent matchings would accept', () => {
@@ -261,7 +289,7 @@ describe('permanent deterministic drafting', () => {
  });
 
  it('does not invent early decades for a newer franchise', () => {
-  const rolls = Array.from({ length: 64 }, (_, seed) => rollDraft(startDraft(manifest, seed), manifest).currentRoll!);
+  const rolls = Array.from({ length: 64 }, (_, seed) => team(rollDraft(startDraft(manifest, seed), manifest).currentRoll));
   expect(rolls.some(roll => roll.franchiseId === 'F12')).toBe(true);
   expect(rolls.filter(roll => roll.franchiseId === 'F12').every(roll => roll.decade === 2020)).toBe(true);
  });
@@ -274,7 +302,7 @@ describe('permanent deterministic drafting', () => {
   expect(rollDraft(draft, manifest)).toBe(draft);
   expect(() => validateDraft({
    ...draft,
-   currentRoll: { ...draft.currentRoll!, decade: draft.currentRoll!.decade + 10 }
+   currentRoll: { ...team(draft.currentRoll), decade: team(draft.currentRoll).decade + 10 }
   }, manifest)).toThrow('saved roll');
   const candidate = availableCandidates(draft, manifest)[0];
   const next = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
@@ -284,13 +312,17 @@ describe('permanent deterministic drafting', () => {
  });
 
  it('preserves a closing-pitcher-only final roll', () => {
-  let finalDraft = startDraft(manifest, 21);
-  while (finalDraft.picks.length < SLOTS.length - 1) {
-   finalDraft = rollDraft(finalDraft, manifest);
-   const candidate = availableCandidates(finalDraft, manifest)[0];
-   finalDraft = commitPick(finalDraft, manifest, candidate.seasonId, legalSlots(finalDraft, candidate, manifest)[0]);
-  }
-  expect(finalDraft.picks.every(pick => pick.slot !== 'CL')).toBe(true);
+  // The first seed whose first-legal-season drafting leaves the closer for last.
+  const finalDraft = Array.from({ length: 64 }, (_, seed) => {
+   let draft = startDraft(manifest, seed);
+   while (draft.picks.length < SLOTS.length - 1) {
+    draft = rollDraft(draft, manifest);
+    const candidate = availableCandidates(draft, manifest)[0];
+    draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
+   }
+   return draft;
+  }).find(draft => draft.picks.every(pick => pick.slot !== 'CL'));
+  if (!finalDraft) throw new Error('No seed left the closer for the final roll');
   const rolled = rollDraft(finalDraft, manifest);
   const remaining = availableCandidates(rolled, manifest);
   expect(remaining).toHaveLength(1);
@@ -378,7 +410,7 @@ describe('permanent deterministic drafting', () => {
   const roll = pending!.currentRoll;
   const pickCount = pending!.picks.length;
   const moved = reassignPick(pending!, flexible, original.seasonId, 'DH');
-  if (moved.schemaVersion !== 6) throw new Error('Expected current draft');
+  if (moved.schemaVersion !== 8) throw new Error('Expected current draft');
   expect(moved.currentRoll).toEqual(roll);
   expect(moved.seed).toBe(pending!.seed);
   expect(moved.picks).toHaveLength(pickCount);
@@ -507,7 +539,8 @@ describe('permanent deterministic drafting', () => {
     franchiseId: candidate.franchiseId,
     decade: candidate.decade
    })),
-   currentRoll: { franchiseId: 'P', decade: 1980 }
+   currentRoll: { franchiseId: 'P', decade: 1980 },
+   packs: [{ franchiseId: 'P', decade: 1980 }]
   };
   expect(() => reassignPick(draft, source, selected.seasonId, '1B')).toThrow('current roll');
  });
@@ -534,9 +567,9 @@ describe('permanent deterministic drafting', () => {
   const complete = finish(162, flexible);
   const catcher = complete.picks.find(pick => pick.slot === 'C')!;
   const moved = reassignPick(complete, flexible, catcher.seasonId, '1B');
-  if (moved.schemaVersion !== 6) throw new Error('Expected current replay');
+  if (moved.schemaVersion !== 8) throw new Error('Expected current replay');
   const input = replayInput(moved);
-  if (input.schemaVersion !== 6) throw new Error('Expected current replay');
+  if (input.schemaVersion !== 8) throw new Error('Expected current replay');
   const forgedPick = {
    ...input,
    picks: input.picks.map((pick, index) => index === 0 ? { ...pick, slot: 'DH' as const } : pick)
@@ -588,5 +621,84 @@ describe('permanent deterministic drafting', () => {
   const draft = finish();
   expect(await persistDraft(db, draft, 'simulating')).toBeNull();
   expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft, phase: 'simulating' });
+ });
+});
+
+describe('jackpot packs', () => {
+ const pool: Candidate[] = [];
+ for (let franchise = 0; franchise < 24; franchise++) {
+  for (const [index, slot] of SLOTS.entries()) {
+   pool.push({ seasonId: `p${franchise}x${index}:1985:AL:J${franchise}`, playerId: `p${franchise}x${index}`, franchiseId: `J${String(franchise).padStart(2, '0')}`, decade: 1980, eligibleSlots: [slot] });
+  }
+ }
+ const elite = makeManifest(pool);
+ elite.jackpot = pool.filter((_, index) => index % 3 === 0).map(candidate => candidate.seasonId).sort(compareId);
+ const { guaranteed, size } = draftRules(CURRENT_REPLAY_SCHEMA_VERSION).jackpots;
+
+ /** Drafts the first legal season of every roll, recording each jackpot dealt. */
+ function finishWithJackpots(seed: number): { draft: Draft; dealt: string[][] } {
+  let draft = startDraft(elite, seed);
+  const dealt: string[][] = [];
+  while (draft.picks.length < SLOTS.length) {
+   draft = rollDraft(draft, elite);
+   const roll = draft.currentRoll!;
+   if (isJackpot(roll)) {
+    dealt.push(roll.jackpot);
+    expect(availableCandidates(draft, elite).map(candidate => candidate.seasonId).sort(compareId)).toEqual(roll.jackpot);
+   }
+   const candidate = availableCandidates(draft, elite)[0];
+   draft = commitPick(draft, elite, candidate.seasonId, legalSlots(draft, candidate, elite)[0]);
+  }
+  return { draft, dealt };
+ }
+
+ it('deals at least the guaranteed jackpots, each a legal handful of elite seasons from distinct players', () => {
+  const counts: number[] = [];
+  for (let seed = 1; seed <= 8; seed++) {
+   const { draft, dealt } = finishWithJackpots(seed);
+   counts.push(dealt.length);
+   for (const jackpot of dealt) {
+    expect(jackpot.length).toBeGreaterThan(0);
+    expect(jackpot.length).toBeLessThanOrEqual(size);
+    expect(jackpot.every(seasonId => elite.jackpot.includes(seasonId))).toBe(true);
+    expect(new Set(jackpot.map(seasonId => seasonId.split(':')[0])).size).toBe(jackpot.length);
+   }
+   const taken = draft.picks.filter(pick => pick.jackpot);
+   expect(taken).toHaveLength(dealt.length);
+   for (const pick of taken) {
+    const candidate = elite.candidates.find(item => item.seasonId === pick.seasonId)!;
+    expect(pick).toMatchObject({ franchiseId: candidate.franchiseId, decade: candidate.decade, jackpot: true });
+   }
+  }
+  expect(Math.min(...counts)).toBeGreaterThanOrEqual(guaranteed);
+  // The per-roll chance adds jackpots beyond the guarantee in some drafts.
+  expect(Math.max(...counts)).toBeGreaterThan(guaranteed);
+  // Eight full drafts with legality checks on every pick.
+ }, 60_000);
+
+ it('replays jackpot picks from the seed and rejects a forged jackpot mark', () => {
+  const { draft } = finishWithJackpots(5);
+  const input = replayInput(draft);
+  expect(validateReplay(input, elite).picks).toEqual(draft.picks);
+  const index = draft.picks.findIndex(pick => pick.jackpot);
+  const { jackpot: _mark, ...unmarked } = draft.picks[index];
+  expect(() => validateReplay({ ...input, picks: input.picks.with(index, unmarked) }, elite)).toThrow('snapshot');
+  const plain = draft.picks.findIndex(pick => !pick.jackpot);
+  expect(() => validateReplay({ ...input, picks: input.picks.with(plain, { ...draft.picks[plain], jackpot: true }) }, elite)).toThrow('snapshot');
+ });
+
+ it('lets the player choose a jackpot beside a franchise pack by its place on the table', () => {
+  for (let seed = 1; seed <= 200; seed++) {
+   let draft = rollDraft(startDraft(elite, seed), elite);
+   if (isJackpot(draft.currentRoll!)) continue;
+   draft = addPack(draft, elite);
+   if (!isJackpot(draft.packs[1])) continue;
+   const chosen = choosePack(draft, 1);
+   expect(chosen.currentRoll).toEqual(draft.packs[1]);
+   expect(chosen.actions.at(-1)).toEqual({ type: 'choose-pack', pack: 1 });
+   expect(validateDraft(chosen, elite)).toEqual(chosen);
+   return;
+  }
+  throw new Error('No seed added a jackpot beside a franchise pack');
  });
 });

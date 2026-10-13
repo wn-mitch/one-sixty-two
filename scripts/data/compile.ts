@@ -165,6 +165,22 @@ function buildShowcase(candidates: Profile[], source: GroupedWarRows): ShowcaseC
  return showcase;
 }
 
+/** Seasons per roster slot, by modeled value, that jackpot packs deal from: about the best possible roster's depth. */
+const JACKPOT_PER_SLOT = 8;
+
+/** The top `JACKPOT_PER_SLOT` seasons eligible for each roster slot by `valueRuns`, merged and sorted by identity. */
+function jackpotPool(draftable: readonly Profile[], table: { seasonId: string[]; valueRuns: number[] }): string[] {
+ const values = new Map(table.seasonId.map((seasonId, index) => [seasonId, table.valueRuns[index]]));
+ const pool = new Set<string>();
+ for (const slot of SLOTS) {
+  const eligible = draftable
+   .filter(profile => profile.eligibleSlots.includes(slot))
+   .toSorted((left, right) => values.get(right.seasonId)! - values.get(left.seasonId)! || compareId(left.seasonId, right.seasonId));
+  for (const profile of eligible.slice(0, JACKPOT_PER_SLOT)) pool.add(profile.seasonId);
+ }
+ return [...pool].sort(compareId);
+}
+
 export function buildGallery(chunks: Record<string, Profile[]>): Record<string, ShowcaseCard> {
  const gallery: Record<string, ShowcaseCard> = {};
  for (const key of Object.keys(chunks).sort(compareId)) {
@@ -238,12 +254,14 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  };
  validateCompiled(candidates, simulationBase);
  const chunks: Record<string, Profile[]> = {};
+ const valueRuns = new Map(draftCards.seasonId.map((seasonId, index) => [seasonId, draftCards.valueRuns[index]]));
  const decadesByFranchise = new Map<string, Set<number>>();
  const yearRanges = new Map<number, { firstYear: number; lastYear: number }>();
  for (const profile of candidates) {
   const decade = Math.floor(profile.year / 10) * 10;
   const key = `${profile.franchiseId}-${decade}`;
-  (chunks[key] ??= []).push(profile);
+  const value = valueRuns.get(profile.seasonId);
+  (chunks[key] ??= []).push(value === undefined ? profile : { ...profile, valueRuns: value });
   const franchiseDecades = decadesByFranchise.get(profile.franchiseId) ?? new Set<number>();
   franchiseDecades.add(decade);
   decadesByFranchise.set(profile.franchiseId, franchiseDecades);
@@ -268,8 +286,9 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  };
  const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, contactFits, messages: compiled.diagnostics };
  const showcase = buildShowcase(candidates, joinedWar);
+ const jackpot = jackpotPool(draftable, draftCards);
  const gallery = buildGallery(chunks);
- const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, draftCards, parkFits, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
+ const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, draftCards, parkFits, jackpot, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
  const dataVersion = createHash('sha256').update(canonicalJSON(payload)).digest('hex');
  const prefix = `/data/${dataVersion}`;
  const manifest: Manifest = {
@@ -278,7 +297,8 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
   chunks: Object.fromEntries(Object.keys(chunks).sort(compareId).map(key => [key, `${prefix}/${key}.json`])),
   simulationUrl: `${prefix}/simulation.json`, showcaseUrl: `${prefix}/showcase.json`, attributionUrl: `${prefix}/attribution.json`, archiveUrl: `${prefix}/transformed-data.tar.gz`, attribution, approximations: APPROXIMATIONS,
   diagnostics: { ...diagnosticCounts, reportUrl: `${prefix}/diagnostics.json` },
-  stadiums: stadiums.summaries
+  stadiums: stadiums.summaries,
+  jackpot
  };
  const simulation: SimulationData = { ...simulationBase, dataVersion };
  const files: Record<string, unknown> = { 'manifest.json': manifest, 'simulation.json': simulation, 'showcase.json': showcase, 'attribution.json': attribution, 'defense-source.json': DEFENSE_METHOD, 'diagnostics.json': diagnostics, 'draft-cards.json': { ...draftCards, dataVersion } };

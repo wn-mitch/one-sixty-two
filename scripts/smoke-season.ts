@@ -4,36 +4,41 @@ import { RELIEF_SLOTS, SLOTS } from '../src/lib/game/types.ts';
 import { simulateSeason } from '../src/lib/engine/node.ts';
 import { prepareSeasonInput } from '../src/lib/game/season-input.ts';
 import type { SeasonResult } from '../src/lib/sim/types.ts';
-import { draftRoster, loadVerificationData, ProfileChunks, stadiumId, type Policy } from './verification-data.ts';
+import { draftRoster, loadVerificationData, POLICIES, policyValuation, ProfileChunks, stadiumId, type Policy } from './verification-data.ts';
 
 interface Options {
 	seed: number;
 	policy: Policy;
 	stadium: string | null;
+	addBelow: number;
 }
 
 function parseOptions(arguments_: string[]): Options {
 	let seed = 162;
 	let policy: Policy = 'best';
 	let stadium: string | null = null;
+	let addBelow = .85;
 	for (let index = 0; index < arguments_.length; index++) {
 		const argument = arguments_[index];
 		const [flag, inlineValue] = argument.split('=', 2);
-		if (flag !== '--seed' && flag !== '--policy' && flag !== '--stadium') throw new Error(`Unknown argument: ${argument}`);
+		if (flag !== '--seed' && flag !== '--policy' && flag !== '--stadium' && flag !== '--add-below') throw new Error(`Unknown argument: ${argument}`);
 		const value = inlineValue ?? arguments_[++index];
 		if (value === undefined) throw new Error(`${flag} requires a value`);
 		if (flag === '--seed') {
 			seed = Number(value);
 		} else if (flag === '--stadium') {
 			stadium = value;
-		} else if (value === 'best' || value === 'worst') {
-			policy = value;
+		} else if (flag === '--add-below') {
+			addBelow = Number(value);
+			if (!(addBelow >= 0 && addBelow <= 1)) throw new Error('--add-below must be a quantile from 0 to 1');
+		} else if ((POLICIES as readonly string[]).includes(value)) {
+			policy = value as Policy;
 		} else {
-			throw new Error('Policy must be best or worst');
+			throw new Error(`Policy must be one of ${POLICIES.join(', ')}`);
 		}
 	}
 	if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Seed must be an unsigned 32-bit integer');
-	return { seed, policy, stadium };
+	return { seed, policy, stadium, addBelow };
 }
 
 function assertConcreteSeason(result: SeasonResult): void {
@@ -52,7 +57,8 @@ async function main(): Promise<void> {
 	assert.equal(SLOTS.length, 16, 'Current smoke contract requires sixteen roster slots');
 	const { manifest, simulation } = await loadVerificationData();
 	const stadium = stadiumId(manifest, options.stadium);
-	const { draft, profiles } = await draftRoster(manifest, options.seed, options.policy, stadium, new ProfileChunks(manifest));
+	const valuation = await policyValuation(options.policy, options.addBelow);
+	const { draft, profiles } = await draftRoster(manifest, options.seed, options.policy, stadium, new ProfileChunks(manifest), valuation);
 	assert.equal(draft.picks.length, SLOTS.length, 'Smoke policy did not fill every roster slot');
 	assert.equal(new Set(profiles.map(profile => profile.playerId)).size, SLOTS.length, 'Smoke policy drafted a player more than once');
 	assert.deepStrictEqual(new Set(draft.picks.map(pick => pick.slot)), new Set(SLOTS), 'Smoke policy did not fill the declared slots exactly once');
@@ -87,6 +93,7 @@ async function main(): Promise<void> {
 		modelVersion: result.modelVersion,
 		seed: options.seed,
 		policy: options.policy,
+		...(options.policy === 'packs' ? { addBelow: options.addBelow, extraPacks: draft.actions.filter(action => action.type === 'add-pack').length } : {}),
 		homeStadium: draft.homeStadium,
 		picks: draft.picks.map(pick => ({ seasonId: pick.seasonId, slot: pick.slot, franchiseId: pick.franchiseId, decade: pick.decade })),
 		record: { wins: result.wins, losses: result.losses },

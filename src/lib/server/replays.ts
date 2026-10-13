@@ -99,7 +99,8 @@ function action(value: unknown): DraftAction {
 	const item = value as Record<string, unknown>;
 	if (!item || typeof item !== 'object') throw new ReplayInvalidError();
 	if (item.type === 'roll') return { type: 'roll' };
-	if (item.type === 'reroll') return { type: 'reroll' };
+	if (item.type === 'add-pack') return { type: 'add-pack' };
+	if (item.type === 'choose-pack' && Number.isInteger(item.pack)) return { type: 'choose-pack', pack: item.pack as number };
 	if (item.type === 'select-stadium' && isString(item.stadiumId) && isString(item.stadiumVersion)) return { type: 'select-stadium', stadiumId: item.stadiumId, stadiumVersion: item.stadiumVersion };
 	if (item.type === 'pick' && isString(item.seasonId) && isSlot(item.slot)) return { type: 'pick', seasonId: item.seasonId, slot: item.slot };
 	if (item.type === 'reassign' && isString(item.seasonId) && (HITTER_SLOTS as readonly unknown[]).includes(item.slot)) return { type: 'reassign', seasonId: item.seasonId, slot: item.slot as Extract<DraftAction, { type: 'reassign' }>['slot'] };
@@ -141,8 +142,9 @@ function canonicalReplay(value: unknown, dataVersion: string): { input: Replay; 
 		homeStadium: { id: stadium.id as string, version: stadium.version as string },
 		picks: picks.map(item => {
 			const pick = item as Record<string, unknown>;
-			if (!pick || !isString(pick.franchiseId) || !Number.isInteger(pick.decade) || !isString(pick.seasonId) || !isSlot(pick.slot)) throw new ReplayInvalidError();
-			return { franchiseId: pick.franchiseId, decade: pick.decade as number, seasonId: pick.seasonId, slot: pick.slot };
+			if (!pick || !isString(pick.franchiseId) || !Number.isInteger(pick.decade) || !isString(pick.seasonId) || !isSlot(pick.slot) || (pick.jackpot !== undefined && pick.jackpot !== true)) throw new ReplayInvalidError();
+			const parsed = { franchiseId: pick.franchiseId, decade: pick.decade as number, seasonId: pick.seasonId, slot: pick.slot };
+			return pick.jackpot ? { ...parsed, jackpot: true as const } : parsed;
 		}),
 		battingOrder: [...replay.battingOrder as string[]],
 		starterOrder: [...replay.starterOrder as string[]],

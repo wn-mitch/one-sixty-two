@@ -71,6 +71,8 @@ export interface Profile {
   members: { seasonId: string; playerId: string; displayName: string }[];
   excluded: { seasonId: string; playerId: string; displayName: string };
  };
+ /** Modeled runs above replacement at the card's best slot (as priced in `draft-cards.json`); absent for collected team bullpens. */
+ valueRuns?: number;
 }
 export interface Candidate { seasonId: string; playerId: string; franchiseId: string; decade: number; eligibleSlots: RosterSlot[] }
 /** Every candidate but the collected team bullpens; Draft Mode prices and deals only these. */
@@ -86,6 +88,8 @@ export interface Manifest {
  diagnostics: { excludedBatting: number; excludedPitching: number; excludedProfiles: number; estimatedProfiles: number; reportUrl: string };
  /** The 2025 reference stadium deck, one per current franchise. */
  stadiums: StadiumSummary[];
+ /** Elite draftable seasons jackpot packs deal from, sorted by season identity. */
+ jackpot: string[];
 }
 /** A 2025 club: the closer, its next three relievers by relief outs as named relievers, and the rest of its relief pooled as the remainder arm. */
 export interface Opponent { id: string; name: string; homeStadium: ParkRef; hitters: Profile[]; starters: Profile[]; closer: Profile; relievers: Profile[]; bullpen: Profile }
@@ -105,18 +109,25 @@ export interface SimulationData extends DefensiveEnvironment {
  defenseMethodVersion: typeof DEFENSE_METHOD_VERSION;
  valuationVersion: typeof VALUATION_VERSION;
 }
-export interface Roll { franchiseId: string; decade: number }
-export interface Pick extends Roll { seasonId: string; slot: Slot }
-export const CURRENT_REPLAY_SCHEMA_VERSION = 6 as const;
+/** A franchise pack: every legal season the franchise had in one decade. */
+export interface TeamRoll { franchiseId: string; decade: number }
+/** A jackpot pack: a seeded handful of elite seasons (`Manifest.jackpot`) from any franchise and decade. */
+export interface JackpotRoll { jackpot: string[] }
+export type Roll = TeamRoll | JackpotRoll;
+export const isJackpot = (roll: Roll): roll is JackpotRoll => 'jackpot' in roll;
+/** The franchise and decade are the drafted season's own; `jackpot` marks a card taken from a jackpot pack. */
+export interface Pick extends TeamRoll { seasonId: string; slot: Slot; jackpot?: true }
+export const CURRENT_REPLAY_SCHEMA_VERSION = 8 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
 export const MODEL_VERSION = 'contact-v2' as const;
-export const RULES_VERSION = 'classic-v4' as const;
+export const RULES_VERSION = 'classic-v6' as const;
 export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
 export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =
  | { type: 'select-stadium'; stadiumId: string; stadiumVersion: string }
  | { type: 'roll' }
- | { type: 'reroll' }
+ | { type: 'add-pack' }
+ | { type: 'choose-pack'; pack: number }
  | { type: 'pick'; seasonId: string; slot: Slot }
  | { type: 'reassign'; seasonId: string; slot: HitterSlot };
 export interface Replay {
@@ -134,7 +145,11 @@ export interface Replay {
  reliefRoles: ReliefAssignment[];
  actions: DraftAction[];
 }
-export interface Draft extends Replay { currentRoll: Roll | null }
+/**
+ * `packs` are the franchise packs open on the table for the pending roll, in the order they were dealt.
+ * With one pack it is `currentRoll`; with two or three, `currentRoll` is null until the player chooses one.
+ */
+export interface Draft extends Replay { currentRoll: Roll | null; packs: Roll[] }
 /**
  * Roles for every slot of `slots` in order once the roster is complete, none before; a secondary
  * role may not repeat the primary.

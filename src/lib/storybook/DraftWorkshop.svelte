@@ -2,7 +2,7 @@
 	import { onDestroy, untrack } from 'svelte';
 	import DraftBoard from '#lib/components/DraftBoard.svelte';
 	import ErrorDialog from '#lib/components/ErrorDialog.svelte';
-	import { commitPick, reassignPick, rerollDraft, rollDraft } from '#lib/game/draft.ts';
+	import { addPack, choosePack, commitPick, reassignPick, rollContains, rollDraft } from '#lib/game/draft.ts';
 	import type { Draft, HitterSlot, Profile, Slot } from '#lib/game/types.ts';
 	import type { WarRankings } from '#lib/rankings/types.ts';
 	import { createExampleFixtures, type ExampleFixtures } from './fixtures.ts';
@@ -59,7 +59,7 @@
 		const roll = draftState.currentRoll;
 		if (!roll) return [];
 		const seasonIds = new Set(source.manifest.candidates
-			.filter(candidate => candidate.franchiseId === roll.franchiseId && candidate.decade === roll.decade)
+			.filter(candidate => rollContains(roll, candidate))
 			.map(candidate => candidate.seasonId));
 		return source.profiles.filter(profile => seasonIds.has(profile.seasonId));
 	}
@@ -125,16 +125,26 @@
 		}
 	}
 
-	function reroll(): void {
+	function addExtraPack(): void {
 		if (busy || phase !== 'choosing') return;
 		try {
-			draft = rerollDraft(draft, fixtures.manifest);
-			phase = 'revealing';
+			draft = addPack(draft, fixtures.manifest);
 			pool = [];
+			error = '';
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : 'Could not add a pack';
+		}
+	}
+
+	function chooseExtraPack(chosen: number): void {
+		if (busy || phase !== 'choosing') return;
+		try {
+			draft = choosePack(draft, chosen);
+			phase = 'revealing';
 			error = '';
 			beginReveal();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Could not reroll';
+			error = cause instanceof Error ? cause.message : 'Could not open that pack';
 		}
 	}
 
@@ -222,7 +232,8 @@
 				{rankingError}
 				onRetryRankings={loadRankings}
 				onRoll={roll}
-				onReroll={reroll}
+				onAddPack={addExtraPack}
+				onChoosePack={chooseExtraPack}
 				onDraft={draftPlayer}
 				onReassign={reassign}
 				onNew={reset}

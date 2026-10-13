@@ -4,7 +4,8 @@ export type RosterClickBehavior = 'move' | 'review';
 export type PlaybackSpeed = 'slow' | 'normal' | 'fast';
 export const PLAYBACK_SPEEDS: readonly PlaybackSpeed[] = ['slow', 'normal', 'fast'];
 /** Milliseconds between revealed games during season playback. */
-export const PLAYBACK_INTERVAL_MS: Readonly<Record<PlaybackSpeed, number>> = { slow: 120, normal: 70, fast: 35 };
+/** How long the 162-game playback takes once the season is simulated; it eases in and out, so the first and last games read. */
+export const PLAYBACK_DURATION_MS: Readonly<Record<PlaybackSpeed, number>> = { slow: 8000, normal: 4000, fast: 2000 };
 /** Interface palettes and display type borrowed from card stock eras; `modern` is the default dark look. */
 export type InterfaceEra = 'modern' | 'vintage' | 'kraft' | 'neon' | 'chrome';
 export const INTERFACE_ERAS: readonly { id: InterfaceEra; label: string; years: string }[] = [

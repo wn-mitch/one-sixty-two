@@ -42,7 +42,7 @@
  </span>
  <span class="identity">
   <strong>{profile.displayName}</strong>
-  <span>{profile.year}</span>
+  <span>{assignedSlot} · {profile.year}</span>
  </span>
 </span>
 

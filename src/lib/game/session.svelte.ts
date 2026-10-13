@@ -1,6 +1,6 @@
 import { goto } from '$app/navigation';
-import { loadChunk, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
-import { commitPick, createDraft, reassignPick, rerollDraft, rollDraft, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
+import { loadRollProfiles, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
+import { addPack, choosePack, commitPick, createDraft, reassignPick, rollDraft, rollLabel, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
 import { libraryKey, saveSeason } from './library.ts';
 import { newCards, newStickers, type NewCard, type NewSticker } from '../collection/collection.ts';
 import { refreshStickers } from '../collection/store.svelte.ts';
@@ -21,7 +21,7 @@ import {
  supportsImageClipboard
 } from './share.ts';
 import { draftRules } from './rules.ts';
-import { appSettings, PLAYBACK_INTERVAL_MS } from './settings.svelte.ts';
+import { appSettings, PLAYBACK_DURATION_MS } from './settings.svelte.ts';
 import type { Draft, HitterSlot, Manifest, Profile, ReliefAssignment, Slot } from './types.ts';
 import { prepareSeasonInput } from './season-input.ts';
 import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts';
@@ -235,7 +235,8 @@ export class Session {
     this.phase = 'lineup';
     this.loading = false;
     if (this.savedPhase === 'simulating' || this.savedPhase === 'results' || this.shared) await this.simulate();
-   } else if (this.draft.currentRoll) {
+   } else if (this.draft.packs.length) {
+    // Two or three open packs wait for the player's choice; the pool loads once one is chosen.
     this.phase = 'choosing';
     await this.loadPool();
    } else this.phase = 'ready';
@@ -304,25 +305,42 @@ export class Session {
    this.error = error instanceof Error ? error.message : 'Could not choose the stadium';
   }
  }
- /** Spends a reroll on the pending franchise and decade, then reveals the new pool. */
- async reroll(): Promise<void> {
-  if (this.busy || this.phase !== 'choosing' || !this.draft?.currentRoll || !this.manifest) return;
-  await this.roll(true);
+ /** Deals another franchise pack beside the open ones; the pool waits until the player chooses a pack. */
+ addPack(): void {
+  if (this.busy || this.phase !== 'choosing' || !this.draft?.packs.length || !this.manifest) return;
+  try {
+   this.draft = addPack(this.draft, this.manifest);
+   this.save('draft');
+   this.pool = [];
+   this.error = '';
+   this.announce = `Added ${rollLabel(this.draft.packs.at(-1)!, this.manifest)}. Choose one of ${this.draft.packs.length} packs.`;
+  } catch (error) {
+   this.error = error instanceof Error ? error.message : 'Could not add a pack';
+  }
  }
- async roll(reroll = false): Promise<void> {
-  if (this.busy || this.phase !== (reroll ? 'choosing' : 'ready') || !this.draft || !this.manifest) return;
+ /** Keeps one open pack, by its place on the table, as the pending roll and reveals its pool. */
+ async choosePack(pack: number): Promise<void> {
+  if (this.busy || this.phase !== 'choosing' || !this.draft || this.draft.packs.length < 2 || !this.manifest) return;
   const epoch = this.epoch;
   this.error = '';
   try {
-   this.draft = reroll ? rerollDraft(this.draft, this.manifest) : rollDraft(this.draft, this.manifest);
-   this.save('draft'); // The committed roll survives reload before any reveal choreography.
-   this.phase = 'revealing';
-   this.pool = [];
-   await this.loadPool();
+   this.draft = choosePack(this.draft, pack);
+   this.save('draft');
+   await this.revealPool(epoch);
+  } catch (error) {
    if (epoch !== this.epoch) return;
-   this.phase = 'choosing';
-   const roll = this.draft.currentRoll!;
-   this.announce = `${this.manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name}, ${this.manifest.coverage.find(coverage => coverage.decade === roll.decade)?.label}. Choose your player season.`;
+   this.error = error instanceof Error ? error.message : 'Could not open that pack';
+   this.retryAction = this.draft.currentRoll ? 'pool' : null;
+  }
+ }
+ async roll(): Promise<void> {
+  if (this.busy || this.phase !== 'ready' || !this.draft || !this.manifest) return;
+  const epoch = this.epoch;
+  this.error = '';
+  try {
+   this.draft = rollDraft(this.draft, this.manifest);
+   this.save('draft'); // The committed roll survives reload before any reveal choreography.
+   await this.revealPool(epoch);
   } catch (error) {
    if (epoch !== this.epoch) return;
    this.phase = this.draft.currentRoll ? 'choosing' : 'ready';
@@ -330,12 +348,21 @@ export class Session {
    this.retryAction = this.draft.currentRoll ? 'pool' : null;
   }
  }
+ private async revealPool(epoch: number): Promise<void> {
+  if (!this.draft?.currentRoll || !this.manifest) return;
+  this.phase = 'revealing';
+  this.pool = [];
+  await this.loadPool();
+  if (epoch !== this.epoch || !this.draft.currentRoll) return;
+  this.phase = 'choosing';
+  this.announce = `${rollLabel(this.draft.currentRoll, this.manifest)}. Choose your player season.`;
+ }
  private async loadPool(): Promise<void> {
   if (!this.manifest || !this.draft?.currentRoll) return;
   this.loading = true;
   const epoch = this.epoch;
   try {
-   const pool = await loadChunk(this.manifest, this.draft.currentRoll);
+   const pool = await loadRollProfiles(this.manifest, this.draft.currentRoll);
    if (epoch === this.epoch) { this.pool = pool; this.retryAction = null; }
   } finally { if (epoch === this.epoch) this.loading = false; }
  }
@@ -425,10 +452,15 @@ export class Session {
      this.save('results');
      void this.saveToLibrary(message.result, epoch);
      if (this.skipReveal) this.showResults();
-     else this.revealTimer = window.setInterval(() => {
-      this.revealed = Math.min(162, this.revealed + 1);
-      if (this.revealed === 162) this.showResults();
-     }, PLAYBACK_INTERVAL_MS[appSettings.playbackSpeed]);
+     else {
+      const started = performance.now();
+      const duration = PLAYBACK_DURATION_MS[appSettings.playbackSpeed];
+      this.revealTimer = window.setInterval(() => {
+       const progress = Math.min(1, (performance.now() - started) / duration);
+       this.revealed = Math.max(this.revealed, Math.round(162 * (.5 - Math.cos(Math.PI * progress) / 2)));
+       if (this.revealed === 162) this.showResults();
+      }, 16);
+     }
     }
    };
    worker.onerror = () => {

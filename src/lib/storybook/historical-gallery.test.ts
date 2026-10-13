@@ -42,6 +42,7 @@ function manifest(dataVersion: string, profiles: Profile[]): Manifest {
 		eligibleSlots: [...value.eligibleSlots]
 	}));
 	return {
+		jackpot: [],
 		schemaVersion: 1,
 		dataVersion,
 		sourceCommit: 'fixture',

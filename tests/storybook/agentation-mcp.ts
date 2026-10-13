@@ -29,7 +29,7 @@ export interface AgentationMcpClient {
 }
 
 export async function connectAgentationMcp(
-	endpoint = 'http://127.0.0.1:4748'
+	endpoint = `http://127.0.0.1:${process.env.AGENTATION_TEST_PORT ?? 4748}`
 ): Promise<AgentationMcpClient> {
 	const transport = new StdioClientTransport({
 		command: 'npx',

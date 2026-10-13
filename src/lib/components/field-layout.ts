@@ -18,22 +18,21 @@ const FALLBACK_OUTLINE: readonly (readonly [number, number])[] = Array.from({ le
 });
 
 /**
- * The field is a card: a 424×594 face (5:7) with the field window above the staff plate, and the
- * stadium nameplate, which never changes during a draft, at the foot.
+ * The field is a card: a 424-unit-wide face with the field window above a staff plate holding the
+ * rotation and closer above the other relievers. The stadium card in the third-base corner names the park.
  * Card art, base positions, and every slot anchor share these units, so cards stay on their positions at every width.
  */
 export const FIELD = {
 	width: 424,
-	height: 594,
+	height: 678,
 	/** Artwork width of a roster card in card units; its height is 7/5 of this. */
 	card: 56,
 	window: { x: 10, y: 10, width: 404, height: 404 },
 	home: { x: 212, y: 350 },
 	/** The compact stadium card in the third-base corner, mirroring the DH across home plate. */
 	stadium: { x: 46, y: 344 },
-	/** Room for the staff cards and their name captions, no more. */
-	staffPlate: { y: 422, height: 120 },
-	nameplate: { y: 548, height: 34 },
+	/** Two rows of staff cards, each with room for a two-line name and its slot · year line. */
+	staffPlate: { y: 422, height: 246 },
 	/** Center of each roster card's artwork; the caption hangs below it. */
 	slots: {
 		LF: { x: 76, y: 76 },
@@ -46,15 +45,16 @@ export const FIELD = {
 		'1B': { x: 352, y: 220 },
 		C: { x: 212, y: 342 },
 		DH: { x: 378, y: 344 },
-		SP1: { x: 38, y: 466 },
-		SP2: { x: 96, y: 466 },
-		SP3: { x: 154, y: 466 },
-		CL: { x: 212, y: 466 },
-		RP1: { x: 270, y: 466 },
-		RP2: { x: 328, y: 466 },
-		RP3: { x: 386, y: 466 },
+		// The rotation and the closer share the top row's four columns, 101 units apart; the other relievers sit centered below.
+		SP1: { x: 60.5, y: 466 },
+		SP2: { x: 161.5, y: 466 },
+		SP3: { x: 262.5, y: 466 },
+		CL: { x: 363.5, y: 466 },
+		RP1: { x: 111, y: 587 },
+		RP2: { x: 212, y: 587 },
+		RP3: { x: 313, y: 587 },
 		/** Older saved seasons drafted a team bullpen; it takes the first relief spot. */
-		BP: { x: 270, y: 466 }
+		BP: { x: 111, y: 587 }
 	}
 } as const satisfies {
 	width: number;
@@ -64,7 +64,6 @@ export const FIELD = {
 	home: Point;
 	stadium: Point;
 	staffPlate: { y: number; height: number };
-	nameplate: { y: number; height: number };
 	slots: Record<RosterSlot, Point>;
 };
 

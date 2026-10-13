@@ -1,4 +1,4 @@
-import { DEFENSE_METHOD_VERSION, POSITIONS, SLOTS, VALUATION_VERSION, compareId, type Draft, type Manifest, type Position, type Profile, type Roll, type ShowcaseCard, type SimulationData } from './types.ts';
+import { DEFENSE_METHOD_VERSION, POSITIONS, SLOTS, VALUATION_VERSION, compareId, type Draft, type Manifest, type Position, type Profile, isJackpot, type Roll, type ShowcaseCard, type TeamRoll, type SimulationData } from './types.ts';
 import { resolveStadium, validateDefensiveEnvironment, validateProfile, validateStadiumDeck, validateTeam } from '../sim/validation.ts';
 
 const DATA_VERSION = /^[a-f0-9]{64}$/;
@@ -54,11 +54,12 @@ export async function loadManifest(): Promise<Manifest> {
  });
  return fetchJson<Manifest>(current.manifestUrl, manifest => {
   if (!manifest || manifest.schemaVersion !== 1 || manifest.dataVersion !== current.dataVersion || !Array.isArray(manifest.franchises) || manifest.franchises.length !== 30 || !Array.isArray(manifest.candidates) ||
-   !Array.isArray(manifest.stadiums) || manifest.stadiums.length !== 30 || new Set(manifest.stadiums.map(stadium => stadium?.ref?.id)).size !== 30) throw new Error('Dataset manifest is incompatible');
+   !Array.isArray(manifest.stadiums) || manifest.stadiums.length !== 30 || new Set(manifest.stadiums.map(stadium => stadium?.ref?.id)).size !== 30 ||
+   !Array.isArray(manifest.jackpot)) throw new Error('Dataset manifest is incompatible');
   validateShowcaseUrl(manifest);
  });
 }
-export async function loadChunk(manifest: Manifest, roll: Roll): Promise<Profile[]> {
+export async function loadChunk(manifest: Manifest, roll: TeamRoll): Promise<Profile[]> {
  const url = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
  if (!url) throw new Error('Dataset error: no chunk for the committed roll');
  const expected = new Map(manifest.candidates.filter(candidate => candidate.franchiseId === roll.franchiseId && candidate.decade === roll.decade).map(candidate => [candidate.seasonId, candidate]));
@@ -73,6 +74,16 @@ export async function loadChunk(manifest: Manifest, roll: Roll): Promise<Profile
   })) throw new Error('Dataset error: the loaded seasons do not match this roll. Your draft is preserved. Please retry.');
  });
 }
+/** A pack's profiles: its franchise-decade chunk, or a jackpot's dealt seasons from each of their chunks. */
+export async function loadRollProfiles(manifest: Manifest, roll: Roll): Promise<Profile[]> {
+ if (!isJackpot(roll)) return loadChunk(manifest, roll);
+ const candidates = roll.jackpot.map(seasonId => manifest.candidates.find(candidate => candidate.seasonId === seasonId));
+ if (candidates.some(candidate => !candidate)) throw new Error('Dataset error: a jackpot season is missing from the dataset');
+ const chunks = new Map(candidates.map(candidate => [`${candidate!.franchiseId}-${candidate!.decade}`, candidate!]));
+ const pools = await Promise.all([...chunks.values()].map(candidate => loadChunk(manifest, candidate)));
+ const dealt = new Set(roll.jackpot);
+ return pools.flat().filter(profile => dealt.has(profile.seasonId)).sort((a, b) => compareId(a.seasonId, b.seasonId));
+}
 /** The drafted profiles in pick order, loading each roster chunk once. */
 export async function loadDraftProfiles(manifest: Manifest, draft: Pick<Draft, 'picks'>): Promise<Profile[]> {
  const chunks = new Map(draft.picks.map(pick => [`${pick.franchiseId}-${pick.decade}`, pick]));
@@ -85,7 +96,7 @@ export async function loadDraftProfiles(manifest: Manifest, draft: Pick<Draft, '
  });
 }
 /** Read one compiler-selected card, preserving its canonical identity and slot. */
-export async function loadGalleryCard(manifest: Manifest, roll: Roll): Promise<ShowcaseCard> {
+export async function loadGalleryCard(manifest: Manifest, roll: TeamRoll): Promise<ShowcaseCard> {
  const key = `${roll.franchiseId}-${roll.decade}`;
  if (!DATA_VERSION.test(manifest.dataVersion) ||
   manifest.chunks[key] !== versionedDataUrl(manifest, `${key}.json`)) throw new Error('Dataset gallery is incompatible');

@@ -1,11 +1,12 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import type { Draft, Manifest, Profile, Slot } from '../lib/game/types.ts';
+import { createDraft, legalSlots, rollContains, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
+import { isJackpot, type Draft, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
 import { selectLogo, selectPhoto } from '../lib/media/client.ts';
 import { isHitter, rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
 import type { WarRankings } from '../lib/rankings/types.ts';
 import {
 	deviceDraft,
+	rollProfiles,
 	cardScenario,
 	currentManifest,
 	currentMedia,
@@ -28,7 +29,7 @@ function groupsFor(
 ) {
 	const roll = draft.currentRoll!;
 	const candidates = new Set(manifest.candidates
-		.filter(candidate => candidate.franchiseId === roll.franchiseId && candidate.decade === roll.decade)
+		.filter(candidate => rollContains(roll, candidate))
 		.map(candidate => candidate.seasonId));
 	const needle = query.trim().toLowerCase();
 	const entries: CandidateEntry[] = profiles
@@ -298,11 +299,14 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 test('orders displayed exact seasons after a lower-ranked season is chosen', async ({ page, request }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	const [manifest, rankings] = await Promise.all([currentManifest(request), currentRankings(request)]);
-	const draft = rollDraft(selectHomeStadium(createDraft(manifest, 13), manifest, manifest.stadiums[0].ref.id), manifest);
-	const roll = draft.currentRoll!;
-	const response = await request.get(manifest.chunks[`${roll.franchiseId}-${roll.decade}`]);
-	expect(response.ok()).toBe(true);
-	const profiles = await response.json() as Profile[];
+	// A franchise roll, so players can have several exact seasons; a jackpot deals one per player.
+	const rolled = (seed: number) => rollDraft(selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id), manifest);
+	let seed = 13;
+	while (isJackpot(rolled(seed).currentRoll!)) seed++;
+	const draft = rolled(seed);
+	// Only seasons the roll deals appear as exact-season choices; a jackpot's chunks hold others too.
+	const dealt = new Set(manifest.candidates.filter(candidate => rollContains(draft.currentRoll!, candidate)).map(candidate => candidate.seasonId));
+	const profiles = (await rollProfiles(request, manifest, draft.currentRoll!)).filter(profile => dealt.has(profile.seasonId));
 	const bySeason = new Map(profiles.map(profile => [profile.seasonId, profile]));
 	await openSavedDraft(page, draft);
 	await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
@@ -333,11 +337,11 @@ test('fits complete candidate names after phone and desktop resizing with reduce
 	const manifest = await currentManifest(request);
 	await openSavedDraft(page, rollDraft(selectHomeStadium(createDraft(manifest, 13), manifest, manifest.stadiums[0].ref.id), manifest));
 	await page.locator('.candidate-card').first().scrollIntoViewIfNeeded();
-	await expect(page.locator('.candidate-content [data-layer="name.family"]').first()).toBeVisible();
+	await expect(page.locator('.candidates [data-layer="name.family"]').first()).toBeVisible();
 	await page.evaluate(() => document.fonts.ready);
 	for (const width of [374, 320, 1280]) {
 		await page.setViewportSize({ width, height: 900 });
-		await expect.poll(() => page.locator('.candidate-content [data-layer="name.family"]').evaluateAll(nodes =>
+		await expect.poll(() => page.locator('.candidates [data-layer="name.family"]').evaluateAll(nodes =>
 			nodes.filter(node => !node.closest('[inert]')).map(node => {
 				const element = node as HTMLElement;
 				const range = document.createRange();

@@ -1,8 +1,8 @@
 <script lang="ts">
  import { onMount, tick, untrack } from 'svelte';
- import { legalSlots, legalReassignments, rerollsLeft, rollYears } from '../game/draft.ts';
+ import { extraPacksLeft, legalSlots, legalReassignments, maxPacks, rollContains, rollKey, rollYears } from '../game/draft.ts';
  import { draftRules } from '../game/rules.ts';
- import { HITTER_SLOTS, compareId, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../game/types.ts';
+ import { HITTER_SLOTS, compareId, isJackpot, type Draft, type HitterSlot, type Manifest, type Profile, type Roll, type Slot } from '../game/types.ts';
  import { loadMedia } from '../media/client.ts';
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
@@ -17,11 +17,11 @@
  import DraftSheet from './DraftSheet.svelte';
  import FoilPack from './FoilPack.svelte';
  import Settings from './Settings.svelte';
- let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onReroll, onDraft, onReassign, onNew }: {
+ let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onAddPack, onChoosePack, onDraft, onReassign, onNew }: {
   draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
   phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean;
   rankings: WarRankings | null; rankingLoading: boolean; rankingError: boolean;
-  onRetryRankings: () => void; onRoll: () => void; onReroll: () => void; onNew: () => void;
+  onRetryRankings: () => void; onRoll: () => void; onAddPack: () => void; onChoosePack: (pack: number) => void; onNew: () => void;
   onDraft: (seasonId: string, slot: Slot) => void;
   onReassign: (seasonId: string, slot: HitterSlot) => void;
  } = $props();
@@ -40,6 +40,8 @@
  let dealtArrived = $state(false);
  /** A finished deal still owes the candidate grid its deal-out, played when the grid first renders. */
  let dealOutPending = $state(false);
+ /** Header positions captured when Add pack is pressed beside the pool, so the packs unfold from them. */
+ let returning = $state<{ card: DOMRect | null; control: DOMRect | null } | null>(null);
  /** A confirmed pick is clearing the candidate grid before it commits. */
  let leaving = $state(false);
  let sheetTab = $state<'field' | 'back'>('field');
@@ -55,6 +57,19 @@
  let returningSourceClick = false;
  let preserveSheetCancel = false;
  let draftBoard = $state<HTMLElement>();
+ /** Two or three open packs, from the pool's toolbar or a reload, show as dealt cards until one is taken. */
+ $effect(() => {
+  if (draft.packs.length < 2 || untrack(() => dealing)) return;
+  dealing = true;
+  dealtArrived = false;
+  dealOutPending = false;
+ });
+ const dealtPacks = $derived(draft.packs.map(pack => isJackpot(pack) ? { roll: pack } : {
+  roll: pack,
+  name: manifest.franchises.find(franchise => franchise.id === pack.franchiseId)?.name,
+  years: rollYears(pack, manifest, draft.schemaVersion),
+  color: media?.teams[pack.franchiseId]?.color
+ }));
  const showingCandidates = $derived(!(phase === 'ready' || dealing) && !(loading || phase === 'revealing') && pool.length > 0);
  $effect(() => {
   if (!dealOutPending || !showingCandidates) return;
@@ -92,13 +107,13 @@
  const preview = $derived(selectedProfile && pendingSlot && !movingSeasonId ? { profile: selectedProfile, slot: pendingSlot } : null);
  const selectedCard = $derived(selectedProfile ? createCardViewModel({ profile: selectedProfile, manifest, media, mediaStatus, rankings }) : null);
  const inspectedCard = $derived(inspectedProfile ? createCardViewModel({ profile: inspectedProfile, slot: draft.picks.find(pick => pick.seasonId === inspectedSeasonId)?.slot, manifest, media, mediaStatus, rankings }) : null);
- const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll?.franchiseId ?? ''}:${draft.currentRoll?.decade ?? ''}`);
+ const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll ? rollKey(draft.currentRoll) : ''}`);
  const rosterSlots = $derived(draftRules(draft.schemaVersion).slots);
  const occupiedSlots = $derived(new Set(draft.picks.map(pick => pick.slot)));
  const roll = $derived(draft.currentRoll);
- const rollColor = $derived(roll ? media?.teams[roll.franchiseId]?.color : undefined);
+ const rollColor = $derived(roll && !isJackpot(roll) ? media?.teams[roll.franchiseId]?.color : undefined);
  const homeStadium = $derived(draft.homeStadium ? manifest.stadiums.find(stadium => stadium.ref.id === draft.homeStadium!.id) ?? null : null);
- const rollFranchise = $derived(roll ? manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name : undefined);
+ const rollFranchise = $derived(roll ? isJackpot(roll) ? 'Jackpot' : manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name : undefined);
  const canConfirm = $derived(phase === 'choosing' && !busy && !leaving && !movingSeasonId && !!selectedProfile && !!pendingSlot && destinations.includes(pendingSlot));
 
  function clearTransient(): void {
@@ -255,7 +270,7 @@
  async function confirmPick(): Promise<void> {
   if (!canConfirm || !selectedSeasonId || !pendingSlot || !selectedProfile || !selectedCandidate) return;
   const roll = draft.currentRoll;
-  if (!roll || selectedCandidate.franchiseId !== roll.franchiseId || selectedCandidate.decade !== roll.decade) return;
+  if (!roll || !rollContains(roll, selectedCandidate)) return;
   if (!legalSlots(draft, selectedCandidate, manifest).includes(pendingSlot)) return;
   const seasonId = selectedSeasonId;
   const slot = pendingSlot;
@@ -486,11 +501,11 @@
   if (arrival) void tick().then(() => {
    if (disposed || !draftBoard) return;
    arriveAtTop();
-   // The chosen park's card shrinks onto the field nameplate's team mark while the board rises around it;
+   // The chosen park's card shrinks onto the field's stadium card while the board rises around it;
    // phones keep the field in a sheet, so the card settles into the sealed pack instead.
    const from = arrival.rects.get('card');
    const clone = arrival.clones.get('card');
-   const target = draftBoard.querySelector<HTMLElement>('.field-panel .nameplate .team-mark') ?? draftBoard.querySelector<HTMLElement>('.foil-pack .pack');
+   const target = draftBoard.querySelector<HTMLElement>('.field-panel .stadium-mini .mini-card') ?? draftBoard.querySelector<HTMLElement>('.foil-pack .pack');
    if (from && clone && target) morphInto(clone, from, target);
    riseIn(draftBoard.querySelectorAll<HTMLElement>(':scope > .draft-header, :scope > .draft-toolbar, .field-panel'));
   });
@@ -580,6 +595,7 @@
     showControl={false}
     sourceElement={inspectionSourceElement}
     raisedOnly
+    pairFaces={false}
     onMove={inspectionOffersMove ? moveFromInspection : undefined}
     onClose={returnToField}
    />
@@ -612,11 +628,15 @@
 <div bind:this={draftBoard} class="draft-board" class:wide>
 {#snippet rerollControl()}
  {#if showingCandidates}
-  {@const left = rerollsLeft(draft)}
-  {@const total = draftRules(draft.schemaVersion).rerolls}
-  <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} aria-label={`Reroll franchise and decade, ${left} of ${total} left`} title="Reroll franchise & decade" onclick={() => { cancelSelection(); onReroll(); }}>
-   <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M12.5 6A5 5 0 1 0 13 9.5M12.5 2.5V6H9"></path></svg>
-   <span class="reroll-word">Reroll</span>
+  {@const left = extraPacksLeft(draft)}
+  {@const total = draftRules(draft.schemaVersion).extraPacks}
+  <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} aria-label={`Add a franchise pack to choose from, ${left} of ${total} left`} title="Add a franchise pack" onclick={event => {
+   cancelSelection();
+   returning = { card: draftBoard?.querySelector<HTMLElement>('[data-roll-mark]')?.getBoundingClientRect() ?? null, control: event.currentTarget.getBoundingClientRect() };
+   onAddPack();
+  }}>
+   <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>
+   <span class="reroll-word">Add pack</span>
    <span class="reroll-count" aria-hidden="true">{left}/{total}</span>
   </button>
  {/if}
@@ -651,21 +671,20 @@
  </div>
  <div class="board-columns">
   <section class="draft-browser" aria-label="Make your next pick" inert={leaving}>
-   {#if phase === 'ready' || dealing}
+   {#if phase === 'ready' || dealing || draft.packs.length > 1}
     <FoilPack
-     {roll}
-     franchiseName={rollFranchise}
-     years={roll ? rollYears(roll, manifest, draft.schemaVersion) : null}
-     teamColor={rollColor}
+     packs={dealtPacks}
      pickNumber={draft.picks.length + 1}
      pickCount={rosterSlots.length}
      marks={manifest.franchises.map(franchise => franchise.id)}
      disabled={busy && !dealing}
-     rerolls={{ left: rerollsLeft(draft), total: draftRules(draft.schemaVersion).rerolls }}
-     rerollDisabled={busy || phase !== 'choosing'}
-     {onReroll}
+     extraPacks={{ left: extraPacksLeft(draft), total: draftRules(draft.schemaVersion).extraPacks, max: maxPacks(draft) }}
+     addDisabled={busy || phase !== 'choosing'}
+     {onAddPack}
+     {returning}
+     onChoose={pack => { returning = null; onChoosePack(pack); }}
      flyTarget={() => draftBoard?.querySelector<HTMLElement>('[data-roll-mark]') ?? null}
-     onOpen={() => { dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
+     onOpen={() => { returning = null; dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
      onArrive={() => dealtArrived = true}
      onDealt={() => { dealing = false; dealOutPending = true; }}
     />

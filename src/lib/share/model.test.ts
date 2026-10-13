@@ -17,7 +17,7 @@ function fixture(): CreateShareRenderModelInput {
 		decade: Math.floor(profile.year / 10) * 10
 	}));
 	const draft: Draft = {
-		schemaVersion: 6,
+		schemaVersion: 8,
 		modelVersion: MODEL_VERSION,
 		rulesVersion: RULES_VERSION,
 		dataVersion: season.data.dataVersion,
@@ -28,9 +28,11 @@ function fixture(): CreateShareRenderModelInput {
 		starterOrder: [...season.starterOrder],
 		reliefRoles: season.reliefRoles,
 		actions: [],
-		currentRoll: null
+		currentRoll: null,
+		packs: []
 	};
 	const manifest: Manifest = {
+		jackpot: [],
 		schemaVersion: 1,
 		dataVersion: season.data.dataVersion,
 		sourceCommit: 'synthetic',

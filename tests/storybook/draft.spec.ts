@@ -56,26 +56,63 @@ test.describe('Draft board browsing', () => {
 		await expect.poll(() => page.locator('[data-candidate-group]').evaluateAll(nodes => nodes.reduce((count, node) => count + node.getAnimations().length, 0))).toBe(0);
 	});
 
-	test('rerolls the dealt card before it is taken and hints only after a pause', async ({ page }) => {
-		await page.setViewportSize({ width: 1212, height: 788 });
+	test('opens up to two ghost packs beside the dealt card without moving it, keeps the one taken, and hints only after a pause', async ({ page }) => {
+		// Wide enough for the dealt card to stay centered with two more to its right; narrower columns center the row instead.
+		await page.setViewportSize({ width: 1512, height: 828 });
 		await openStoryByName(page, 'Draft/Board', 'Partial roster');
 		const caption = page.locator('.foil-pack .caption');
+		await expect(caption).toHaveText('Tap the pack');
 		await expect(caption).toHaveCSS('opacity', '0');
 		await page.getByRole('button', { name: 'Roll next franchise', exact: true }).click();
-		const take = page.getByRole('button', { name: /^Take / });
-		await expect(take).toBeFocused();
+		const cards = page.locator('.foil-pack .dealt-card');
+		await expect(cards.first()).toBeFocused();
 		await expect(caption).toHaveCSS('opacity', '0');
-		const reroll = page.locator('.foil-pack').getByRole('button', { name: 'Reroll' });
-		const before = await take.getAttribute('aria-label');
-		await reroll.click();
-		await expect(page.locator('.foil-pack .reroll-row .muted')).toHaveText('1 of 2 left');
-		await expect(take).not.toHaveAttribute('aria-label', before!);
-		await expect(caption).toHaveText('Take the card');
-		await expect(caption).toHaveCSS('opacity', '1', { timeout: 6000 });
-		const franchise = await page.locator('.dealt-card .front strong').textContent();
-		await take.click();
+		const first = await cards.first().getAttribute('aria-label');
+		const dealtAt = await cards.first().boundingBox();
+		const ghost = page.locator('.foil-pack .ghost-pack');
+		await expect(ghost).toHaveAccessibleName('Add a franchise pack to choose from, 2 of 2 left');
+		await ghost.click();
+		await expect(cards).toHaveCount(2);
+		await expect(ghost).toHaveAccessibleName('Add a franchise pack to choose from, 1 of 2 left');
+		// The dealt card stays where it was dealt; the new one opens to its right and takes focus.
+		await expect(cards.first()).toHaveAttribute('aria-label', first!);
+		await expect(cards.nth(1)).toBeFocused();
+		await ghost.click();
+		await expect(cards).toHaveCount(3);
+		await expect(ghost).toHaveCount(0);
+		const settledAt = await cards.first().boundingBox();
+		expect(Math.abs(settledAt!.x + settledAt!.width / 2 - (dealtAt!.x + dealtAt!.width / 2))).toBeLessThan(1);
+		const [left, middle, right] = await cards.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
+		expect(left).toBeLessThan(middle);
+		expect(middle).toBeLessThan(right);
+		await expect(caption).toHaveText('Take one pack');
+		await expect(caption).toHaveCSS('opacity', '1', { timeout: 8000 });
+		// Three cards share the column without spilling past it.
+		const column = await page.locator('.draft-browser').boundingBox();
+		for (const box of await cards.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()))) {
+			expect(box.left).toBeGreaterThanOrEqual(column!.x - 1);
+			expect(box.right).toBeLessThanOrEqual(column!.x + column!.width + 1);
+		}
+		const franchise = await cards.nth(1).locator('.front strong').textContent();
+		await cards.nth(1).click();
 		await expect(page.locator('.candidates')).toBeVisible({ timeout: 6000 });
 		await expect(page.locator('.reveal h2')).toHaveText(franchise!);
+		await expect(page.locator('.draft-header').getByRole('button', { name: /Add a franchise pack/ })).toBeDisabled();
+	});
+
+	test('adding a pack from the pool brings the current pack back beside the new one', async ({ page }) => {
+		await page.setViewportSize({ width: 1212, height: 788 });
+		await openChoosing(page);
+		const current = await page.locator('.reveal h2').textContent();
+		await page.locator('.draft-header').getByRole('button', { name: /Add a franchise pack/ }).click();
+		const cards = page.locator('.foil-pack .dealt-card');
+		await expect(cards).toHaveCount(2);
+		await expect(cards.first().locator('.front strong')).toHaveText(current!);
+		const added = await cards.nth(1).locator('.front strong').textContent();
+		expect(added).not.toBe(current);
+		await cards.nth(1).click();
+		await expect(page.locator('.candidates')).toBeVisible({ timeout: 6000 });
+		await expect(page.locator('.reveal h2')).toHaveText(added!);
 	});
 
 	test('gathers leaving cards into a pile and settles the filtered grid when a filter changes', async ({ page }) => {
@@ -577,17 +614,27 @@ test('picks a home stadium from the real park deck', async ({ page }) => {
 	await expect(submit).toBeDisabled();
 });
 
-test('the stadium nameplate sits at the foot of the field and turns it to the park details', async ({ page }) => {
+test('the field keeps every roster card apart and the stadium card turns it to the park details', async ({ page }) => {
 	await page.setViewportSize({ width: 1212, height: 788 });
 	await openStoryByName(page, 'Draft/Board', 'Partial roster');
-	const nameplate = page.locator('.field-panel .nameplate');
-	const staffBottom = await page.locator('.field-panel .staff-slot').evaluateAll(slots => Math.max(...slots.map(slot => slot.getBoundingClientRect().bottom)));
-	expect((await nameplate.boundingBox())!.y).toBeGreaterThanOrEqual(staffBottom);
-	// The first-base corner and its caption stay clear of the DH below it.
-	const [first, dh] = await Promise.all(['1B', 'DH'].map(slot => page.locator(`.field-panel .field-slot[data-slot="${slot}"]`).boundingBox()));
-	expect(first!.y + first!.height).toBeLessThanOrEqual(dh!.y);
-	await nameplate.getByRole('button', { name: /^Turn over: / }).click();
-	await expect(page.locator('.field-panel .field-card')).toHaveClass(/turned/);
+	const field = page.locator('.field-panel .field-card');
+	// No two slots, including staff placeholders and the stadium card, overlap anywhere on the card.
+	const boxes = await field.locator('.field-slot, .staff-slot, .stadium-mini').evaluateAll(nodes => nodes.map(node => {
+		const rect = node.getBoundingClientRect();
+		return { name: (node as HTMLElement).dataset.slot ?? 'park', left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+	}));
+	const overlaps = boxes.flatMap((a, index) => boxes.slice(index + 1)
+		.filter(b => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)
+		.map(b => `${a.name}/${b.name}`));
+	expect(overlaps).toEqual([]);
+	// The rotation and closer share the top staff row; the other relievers sit below it.
+	const top = async (slot: string) => (await field.locator(`.staff-slot[data-slot="${slot}"]`).boundingBox())!.y;
+	expect(Math.abs(await top('CL') - await top('SP1'))).toBeLessThan(1);
+	expect(await top('RP1')).toBeGreaterThan(await top('CL'));
+	const stadium = field.getByRole('button', { name: /\. Turn over for stadium details\.$/ });
+	await expect(stadium).toContainText('Park');
+	await stadium.click();
+	await expect(field).toHaveClass(/turned/);
 	await page.getByRole('button', { name: 'Show field', exact: true }).click();
-	await expect(page.locator('.field-panel .field-card')).not.toHaveClass(/turned/);
+	await expect(field).not.toHaveClass(/turned/);
 });

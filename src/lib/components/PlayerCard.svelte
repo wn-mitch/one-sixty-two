@@ -3,7 +3,7 @@
 	import Card from '../cards/Card.svelte';
 	import CardReview from '../cards/CardReview.svelte';
 	import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
-	import { compareId } from '../game/types.ts';
+	import { BULLPEN_SLOTS, compareId, STARTER_SLOTS } from '../game/types.ts';
 	import type { Manifest, Profile, Slot } from '../game/types.ts';
 	import { loadMedia } from '../media/client.ts';
 	import type { MediaManifest } from '../media/types.ts';
@@ -73,6 +73,20 @@
 	/** Draftable slots this season qualifies for; a collected team bullpen's BP is not one. */
 	const eligible = $derived(profile.eligibleSlots.filter((slot): slot is Slot => slot !== 'BP'));
 	const available = $derived(legalSlots ? eligible.filter(slot => legalSlots.includes(slot)) : []);
+	/**
+	 * One placement button per position: each hitter slot alone, the rotation as SP and the bullpen as RP.
+	 * A grouped button previews the first open slot in rotation or bullpen order; the field still offers the others.
+	 */
+	const placements = $derived.by(() => {
+		const groups: { label: string; slots: Slot[] }[] = [];
+		for (const slot of eligible) {
+			const label = (STARTER_SLOTS as readonly Slot[]).includes(slot) ? 'SP' : (BULLPEN_SLOTS as readonly Slot[]).includes(slot) ? 'RP' : slot;
+			const group = groups.find(item => item.label === label);
+			if (group) group.slots.push(slot);
+			else groups.push({ label, slots: [slot] });
+		}
+		return groups.map(group => ({ label: group.label, target: group.slots.find(slot => available.includes(slot)) ?? null }));
+	});
 	const card = $derived(createCardViewModel({
 		profile,
 		slot: assignedSlot ?? null,
@@ -171,16 +185,15 @@
 					<span class="fixed-season"><span class="sr-only">Exact season</span><strong>{profile.year}</strong></span>
 				{/if}
 				<span class="placement-list" aria-label={`Preview placement for ${profile.displayName} ${profile.year}`}>
-					{#each eligible as slot}
-						{@const open = available.includes(slot)}
+					{#each placements as { label, target } (label)}
 						<button
 							type="button"
 							class="placement"
-							disabled={!open}
-							aria-label={open ? `Preview ${profile.year} ${profile.displayName} at ${slot}` : `${slot} unavailable for ${profile.year} ${profile.displayName}`}
-							title={open ? `${slot} placement preview` : `${slot} unavailable`}
-							onclick={event => open && place(slot, event.currentTarget)}
-						>{slot}</button>
+							disabled={!target}
+							aria-label={target ? `Preview ${profile.year} ${profile.displayName} at ${target}` : `${label} unavailable for ${profile.year} ${profile.displayName}`}
+							title={target ? `${target} placement preview` : `${label} unavailable`}
+							onclick={event => target && place(target, event.currentTarget)}
+						>{label}</button>
 					{/each}
 				</span>
 				{#if legalSlots !== undefined && !available.length}<span class="no-open-position">No open position</span>{/if}

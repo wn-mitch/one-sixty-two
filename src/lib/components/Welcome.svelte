@@ -30,10 +30,11 @@
 <section class="welcome" aria-labelledby="home-heading">
  <div class="welcome-copy">
   <h1 id="home-heading">Can you go <strong>162-0?</strong></h1>
-  <p class="intro">Pick your home stadium, then roll a franchise and decade. Draft nine hitters, three starters, a closer, and three relievers; reroll a franchise up to twice. One pick per franchise; each athlete only once. Take your team through all 162 games.</p>
+  <p class="intro">Pick your home stadium, then roll a franchise and decade. Draft nine hitters, three starters, a closer, and three relievers; add up to two extra packs to choose from, and watch for jackpot packs of elite seasons. One pick per franchise; each athlete only once. Take your team through all 162 games. Going 162–0 is close to impossible, even for the best roster; your grade shows how close you came.</p>
   <div class="actions">
    <button class="primary start" disabled={loading || !manifest} onclick={onStart}>Start draft <span aria-hidden="true">↗</span></button>
    {#if hasSavedDraft}<button class="secondary resume" disabled={loading} onclick={onResume}>Resume draft</button>{/if}
+   <a class="button draft-mode" href="/draft">Draft Mode <span class="beta">Beta</span></a>
   </div>
   <p class="library-link"><a href="/seasons">My seasons</a> · <a href="/collection">Collection</a> · <a href="/h2h">Head-to-head</a></p>
   {#if loading}
@@ -102,6 +103,8 @@
   font-size: var(--text-base);
  }
  .resume { min-height: 3.5rem; white-space: nowrap; }
+ .draft-mode { min-height: 3.5rem; gap: var(--space-2); white-space: nowrap; }
+ .beta { padding: .1rem .4rem; border: 1px solid currentColor; border-radius: 999px; color: var(--accent); font-size: var(--text-xs); letter-spacing: .06em; text-transform: uppercase; }
  .library-link { margin: var(--space-4) 0 0; font-size: var(--text-sm); }
  .library-link a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--muted); font-weight: 650; }
  .start-status { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); }
@@ -148,7 +151,7 @@
   .intro { margin: var(--space-4) 0 var(--space-5); font-size: var(--text-base); }
   .actions { align-items: stretch; }
   .start { max-width: none; }
-  .resume { width: 100%; }
+  .resume, .draft-mode { width: 100%; }
   .era-strip { margin: 0 max(var(--space-4), env(safe-area-inset-right)) var(--space-6) max(var(--space-4), env(safe-area-inset-left)); }
   .era-strip figure { gap: 4px; }
   .era-strip figcaption { font-size: var(--text-xs); letter-spacing: 0; }

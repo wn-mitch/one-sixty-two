@@ -15,6 +15,7 @@ const candidates = SLOTS.map((slot, index) => ({
 candidates[0].eligibleSlots = ['C', '1B'];
 candidates[1].eligibleSlots = ['C', '1B'];
 const manifest = {
+	jackpot: [],
 	schemaVersion: 1,
 	dataVersion,
 	sourceCommit: 'synthetic',
@@ -72,13 +73,19 @@ describe('replay R2 storage', () => {
 		expect(first.key).toBe(`${REPLAY_PREFIX}${first.id}`);
 		expect(bucket.puts).toBe(1);
 		expect(await loadReplay(bucket, first.id, dataVersion)).toEqual(input);
-		expect(input.schemaVersion).toBe(6);
+		expect(input.schemaVersion).toBe(8);
 		expect(input.homeStadium).toEqual(manifest.stadiums[0].ref);
 		expect(input.actions.at(-1)?.type).toBe('reassign');
-		// Rerolls are part of the stored chronology.
-		const rerolled = { ...input, actions: [...input.actions.slice(0, 2), { type: 'reroll' as const }, ...input.actions.slice(2)] };
-		const stored = await storeReplay(bucket, rerolled, dataVersion);
-		expect((await loadReplay(bucket, stored.id, dataVersion)).actions[2]).toEqual({ type: 'reroll' });
+		// Added and chosen packs are part of the stored chronology.
+		const packs = [{ type: 'add-pack' as const }, { type: 'choose-pack' as const, pack: 1 }];
+		const withPacks = { ...input, actions: [...input.actions.slice(0, 2), ...packs, ...input.actions.slice(2)] };
+		const stored = await storeReplay(bucket, withPacks, dataVersion);
+		expect((await loadReplay(bucket, stored.id, dataVersion)).actions.slice(2, 4)).toEqual(packs);
+		await expect(storeReplay(bucket, { ...input, actions: [{ type: 'choose-pack', pack: '1' }] }, dataVersion)).rejects.toThrow();
+		// A pick's jackpot mark is stored when present and must be exactly true.
+		const marked = { ...input, picks: input.picks.with(0, { ...input.picks[0], jackpot: true as const }) };
+		expect((await loadReplay(bucket, (await storeReplay(bucket, marked, dataVersion)).id, dataVersion)).picks[0].jackpot).toBe(true);
+		await expect(storeReplay(bucket, { ...input, picks: input.picks.with(0, { ...input.picks[0], jackpot: 'yes' } as unknown as Replay['picks'][number]) }, dataVersion)).rejects.toThrow();
 	});
 
 	it('rejects pre-cutover schemas and models before writing or returning stored replay bytes', async () => {

@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { availableCandidates, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import type { Candidate, Draft, Manifest, Profile, Slot } from '../lib/game/types.ts';
+import { isJackpot, type Candidate, type Draft, type Manifest, type Profile, type Roll, type Slot } from '../lib/game/types.ts';
 import type { MediaManifest, MediaPointer } from '../lib/media/types.ts';
 import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 
@@ -72,30 +72,47 @@ export async function currentRankings(request: APIRequestContext): Promise<WarRa
  return manifestResponse.json() as Promise<WarRankings>;
 }
 
+/** Every profile a pack can deal: its franchise-decade chunk, or each chunk a jackpot draws from. Caches by chunk URL. */
+export async function rollProfiles(request: APIRequestContext, manifest: Manifest, roll: Roll, cache = new Map<string, Profile[]>()): Promise<Profile[]> {
+ const keys = isJackpot(roll)
+  ? [...new Set(roll.jackpot.map(seasonId => {
+   const candidate = manifest.candidates.find(item => item.seasonId === seasonId)!;
+   return `${candidate.franchiseId}-${candidate.decade}`;
+  }))]
+  : [`${roll.franchiseId}-${roll.decade}`];
+ const profiles: Profile[] = [];
+ for (const key of keys) {
+  const url = manifest.chunks[key];
+  let chunk = cache.get(url);
+  if (!chunk) {
+   const response = await request.get(url);
+   expect(response.ok()).toBe(true);
+   chunk = await response.json() as Profile[];
+   cache.set(url, chunk);
+  }
+  profiles.push(...chunk);
+ }
+ return profiles;
+}
+
 export async function cardScenario(
  request: APIRequestContext,
  manifest: Manifest,
  accept: (candidate: Candidate, profile: Profile) => boolean
 ): Promise<CardScenario> {
  const profilesByChunk = new Map<string, Profile[]>();
- for (let seed = 1; seed <= 500; seed++) {
+ for (let seed = 1; seed <= 3000; seed++) {
   const draft = rollDraft(selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id), manifest);
-  if (!draft.currentRoll) continue;
-  const chunkUrl = manifest.chunks[`${draft.currentRoll.franchiseId}-${draft.currentRoll.decade}`];
-  let profiles = profilesByChunk.get(chunkUrl);
-  if (!profiles) {
-   const response = await request.get(chunkUrl);
-   expect(response.ok()).toBe(true);
-   profiles = await response.json() as Profile[];
-   profilesByChunk.set(chunkUrl, profiles);
-  }
+  // Card scenarios stand on a franchise pool.
+  if (!draft.currentRoll || isJackpot(draft.currentRoll)) continue;
+  const profiles = await rollProfiles(request, manifest, draft.currentRoll, profilesByChunk);
   for (const candidate of availableCandidates(draft, manifest)) {
    const profile = profiles.find(item => item.seasonId === candidate.seasonId);
    const slot = legalSlots(draft, candidate, manifest)[0];
    if (profile && slot && accept(candidate, profile)) return { draft, candidate, profile, profiles, slot };
   }
  }
- throw new Error('Current data did not produce the requested card scenario in 500 deterministic rolls');
+ throw new Error('Current data did not produce the requested card scenario in 3000 deterministic rolls');
 }
 
 export async function openSavedDraft(page: Page, draft: Draft): Promise<void> {

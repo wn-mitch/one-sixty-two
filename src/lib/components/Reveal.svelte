@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { STOCK, roles } from '../cards/tokens.ts';
-	import type { Manifest, ReplaySchemaVersion, Roll } from '../game/types.ts';
+	import { isJackpot, type Manifest, type ReplaySchemaVersion, type Roll } from '../game/types.ts';
+	import { GEMHOLO } from '../cards/finish.ts';
 	import { rollYears } from '../game/draft.ts';
 	import { draftRules } from '../game/rules.ts';
 	import TeamLogo from './TeamLogo.svelte';
@@ -20,8 +21,10 @@
 		bar?: boolean;
 	} = $props();
 
-	const franchise = $derived(manifest.franchises.find(item => item.id === roll?.franchiseId));
-	const years = $derived(roll ? rollYears(roll, manifest, schemaVersion) : null);
+	const team = $derived(roll && !isJackpot(roll) ? roll : null);
+	const jackpot = $derived(roll && isJackpot(roll) ? roll : null);
+	const franchise = $derived(manifest.franchises.find(item => item.id === team?.franchiseId));
+	const years = $derived(team ? rollYears(team, manifest, schemaVersion) : null);
 	const policy = $derived(draftRules(schemaVersion));
 	const palette = $derived(teamColor && !concealed ? roles({ primary: teamColor, secondary: STOCK }) : null);
 	// The roll copy grows sideways out of the team mark when a concealed roll lands, on the foil pack's deal tempo.
@@ -50,17 +53,25 @@
 	aria-live="polite"
 	aria-atomic="true"
 >
-	{#if roll}
+	{#if team}
 		<div class="team-mark" data-roll-mark>
-			<TeamLogo franchiseId={roll.franchiseId} label={franchise?.name ?? roll.franchiseId} size={compact || bar ? 'small' : 'medium'} />
+			<TeamLogo franchiseId={team.franchiseId} label={franchise?.name ?? team.franchiseId} size={compact || bar ? 'small' : 'medium'} />
 		</div>
+	{:else if jackpot}
+		<div class="team-mark jackpot-mark" data-roll-mark style:--foil={GEMHOLO}><span aria-hidden="true"></span></div>
 	{/if}
 	<div class="reveal-copy" onanimationend={event => { if (event.animationName.endsWith('grow-sideways')) unveiling = false; }}>
 		<!-- The wide header shows a rolled pick's count beside its controls instead. -->
 		{#if !(compact && roll)}<p class="eyebrow">Pick {pickNumber} of {policy.slots.length}</p>{/if}
-		{#if roll}
+		{#if jackpot}
 			<div class="roll-copy">
-				<h2>{franchise?.name ?? roll.franchiseId}</h2>
+				<h2>Jackpot</h2>
+				<p class="era">{jackpot.jackpot.length} elite seasons</p>
+			</div>
+			<p class="status">{concealed ? 'Dealing a pack…' : revealing ? 'Revealing your player pool…' : 'Choose one elite season from any franchise.'}</p>
+		{:else if team}
+			<div class="roll-copy">
+				<h2>{franchise?.name ?? team.franchiseId}</h2>
 				<p class="era">{years?.first}–{years?.last}</p>
 			</div>
 			<p class="status">{concealed ? 'Dealing a franchise…' : revealing ? 'Revealing your player pool…' : 'Choose one exact season from this franchise.'}</p>
@@ -92,6 +103,10 @@
 	.eyebrow { margin: 0 0 var(--space-1); color: var(--muted); }
 	.team-colored .eyebrow { color: var(--reveal-ink); }
 	.team-mark { flex: none; }
+	/* A jackpot has no franchise mark: a gem-foil tile with a star stands in at the logo's size. */
+	.jackpot-mark { --mx: 50%; --my: 50%; display: grid; place-items: center; width: 3rem; height: 3rem; background: var(--foil); border-radius: var(--radius); }
+	.compact .team-mark.jackpot-mark, .bar .team-mark.jackpot-mark { display: grid; width: 2.25rem; height: 2.25rem; padding: 0; background: var(--foil); border-radius: var(--radius); }
+	.jackpot-mark span { width: 62%; height: 62%; background: oklch(22% .03 280); clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
 	h2 {
 		margin: 0;
 		font: italic 900 2rem/1 'Barlow Condensed', sans-serif;

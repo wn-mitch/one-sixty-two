@@ -27,10 +27,8 @@
 <section class="awards" aria-labelledby="awards-heading">
 	<div class="section-heading">
 		<div>
-			<p class="eyebrow">Every participant considered</p>
 			<h3 id="awards-heading">Season awards</h3>
 		</div>
-		<p>MVP and LVP use the app’s estimated WAR, not a historical WAR system or a forecast of team wins.</p>
 	</div>
 	<div class="award-rail">
 		{#each featured as entry (entry.card.seasonId)}
@@ -85,9 +83,7 @@
 <style>
 	.awards { display: grid; gap: var(--space-3); min-width: 0; }
 	.section-heading { display: flex; align-items: end; justify-content: space-between; gap: var(--space-6); }
-	.section-heading .eyebrow { margin: 0 0 var(--space-2); }
 	.section-heading h3 { font-size: var(--text-xl); }
-	.section-heading > p { max-width: 36rem; margin: 0; color: var(--muted); font-size: var(--text-sm); text-align: right; }
 	.award-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-4); min-width: 0; padding: var(--space-1) var(--space-1) var(--space-2); }
 	.award-entry { display: grid; align-content: start; gap: var(--space-2); min-width: 0; --award-tone: var(--accent); }
 	.award-entry.red { --award-tone: var(--error); }
@@ -119,7 +115,6 @@
 		.award-copy strong { font-size: var(--text-base); }
 		.primary-metric strong { font-size: var(--text-xl); white-space: nowrap; }
 		.section-heading { display: block; }
-		.section-heading > p { margin-top: var(--space-2); text-align: left; }
 	}
 	@media (max-width: 64rem) {
 		.award-rail { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(13rem, 16rem); justify-content: start; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline mandatory; }
@@ -127,7 +122,6 @@
 	}
 	@media (max-width: 40rem) {
 		.section-heading { display: block; }
-		.section-heading > p { margin-top: var(--space-2); text-align: left; }
 		.award-rail { grid-auto-columns: minmax(13rem, calc(100% - 3rem)); margin-inline: calc(var(--space-4) * -1); padding-inline: var(--space-4); scroll-padding-inline: var(--space-4); }
 	}
 </style>

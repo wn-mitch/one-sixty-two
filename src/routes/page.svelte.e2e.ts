@@ -314,6 +314,8 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	const replay = await context.newPage();
 	await replay.goto(url);
 	await expect(replay.locator('#results-heading')).toBeVisible({ timeout: 30_000 });
+	// Real profile chunks carry every drafted card's value, so the roster is graded too.
+	await expect(replay.locator('.draft-grade')).toContainText(/^.*Draft (S\+|S|AA|A|B|C|D|F) · built for about \d+ wins$/);
 	const replayGames = replay.getByRole('region', { name: 'All 162 games', exact: true });
 	await expect(replayGames.locator(SEASON_GAME)).toHaveCount(162);
 	const replayMoments = replay.getByRole('region', { name: 'Season turning points', exact: true });
@@ -459,11 +461,13 @@ for (const invalid of ['empty', 'wrong-roll']) {
 	test(`recovers a ${invalid} chunk through Retry without changing the roll`, async ({ page }) => {
 		await page.goto('/');
 		await expect(page.getByRole('button', { name: /Start draft/ })).toBeEnabled();
-		let intercepted = 0;
+		// A jackpot roll loads several chunks; only the first one fails, and Retry fetches it once more.
+		const chunks: string[] = [];
 		await page.route('**/data/**/*.json', route => {
-			if (/\/[^/]+-\d{4}\.json$/.test(new URL(route.request().url()).pathname)) {
-				intercepted++;
-				if (intercepted === 1) return route.fulfill({ contentType: 'application/json', body: invalid === 'empty' ? '[]' : '[{"franchiseId":"invalid","year":2025}]' });
+			const path = new URL(route.request().url()).pathname;
+			if (/\/[^/]+-\d{4}\.json$/.test(path)) {
+				chunks.push(path);
+				if (chunks.length === 1) return route.fulfill({ contentType: 'application/json', body: invalid === 'empty' ? '[]' : '[{"franchiseId":"invalid","year":2025}]' });
 			}
 			return route.continue();
 		});
@@ -471,7 +475,7 @@ for (const invalid of ['empty', 'wrong-roll']) {
 		await selectStadium(page);
 		const committed = await openPackThroughRetry(page);
 		await expect(page.locator('.player-card').first()).toBeVisible({ timeout: 5000 });
-		expect(intercepted).toBe(2);
+		expect(chunks.filter(path => path === chunks[0])).toHaveLength(2);
 		expect((await deviceDraft(page)).currentRoll).toEqual(committed);
 	});
 }

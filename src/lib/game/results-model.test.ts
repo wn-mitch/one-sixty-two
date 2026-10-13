@@ -42,7 +42,8 @@ function fixture(): Fixture {
 		starterOrder: [...input.starterOrder],
 		reliefRoles: input.reliefRoles,
 		actions: [],
-		currentRoll: null
+		currentRoll: null,
+		packs: []
 	};
 	const batting = input.roster.slice(0, 9).map(({ profile, slot }): BatterLine => ({
 		seasonId: profile.seasonId,
@@ -112,6 +113,7 @@ function fixture(): Fixture {
 		lowlightTrace: null
 	};
 	const manifest: Manifest = {
+		jackpot: [],
 		schemaVersion: 1,
 		dataVersion: input.data.dataVersion,
 		sourceCommit: 'test',

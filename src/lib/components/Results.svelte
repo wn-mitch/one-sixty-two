@@ -15,7 +15,7 @@
 	import type { NewCard, NewSticker } from '../collection/collection.ts';
 	import ResultsCollection from './ResultsCollection.svelte';
 	import GradeBadge from './GradeBadge.svelte';
-	import { gradeRange, seasonGrade } from '../game/grade.ts';
+	import { draftGrade, expectedWins, gradeRange, seasonGrade } from '../game/grade.ts';
 	import SeasonCalendar from './SeasonCalendar.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
 	import ResultsHand from './ResultsHand.svelte';
@@ -63,6 +63,8 @@
 		newCards = []
 	}: Props = $props();
 	const grade = $derived(seasonGrade(result.wins, result.losses));
+	const expected = $derived(expectedWins(draft.picks.map(pick => profiles.find(profile => profile.seasonId === pick.seasonId) ?? {})));
+	const rosterGrade = $derived(expected === null ? null : draftGrade(expected));
 	const challengeVerdict = $derived(challenge
 		? result.wins > challenge.wins ? 'You beat their record.' : result.wins === challenge.wins ? 'You matched their record.' : 'You fell short of their record.'
 		: '');
@@ -179,7 +181,6 @@
 	{#if challenge}
 		<aside class="challenge-offer" aria-labelledby="challenge-offer-heading">
 			<div>
-				<p class="eyebrow">Challenge</p>
 				<h2 id="challenge-offer-heading">{challengeVerdict} They went {challenge.wins}–{challenge.losses}.</h2>
 			</div>
 			<a class="button primary" href={challengeSeriesPath(encodeReplay(draft), challenge)}>Play the best-of-five</a>
@@ -187,7 +188,6 @@
 	{/if}
 	<header class="scoreboard">
 		<div class="record-block">
-			<p class="eyebrow">Your club · Season final</p>
 			<h2
 				id="results-heading"
 				bind:this={resultsHeading}
@@ -198,7 +198,8 @@
 				<i aria-hidden="true">–</i>
 				<span>{result.losses}<small>L</small></span>
 			</h2>
-			{#if grade}<p class="season-grade"><span class="badge"><GradeBadge {grade} /></span><span>Grade {grade} · {gradeRange(grade)}</span></p>{/if}
+			{#if grade}<p class="season-grade"><span class="badge"><GradeBadge {grade} /></span><span>Season {grade} · {gradeRange(grade)}</span></p>{/if}
+			{#if rosterGrade && expected !== null}<p class="season-grade draft-grade" title="The roster's average over many seasons, before this season's luck"><span class="badge"><GradeBadge grade={rosterGrade} /></span><span>Draft {rosterGrade} · built for about {Math.round(expected)} wins</span></p>{/if}
 		</div>
 
 		<div class="score-actions" aria-busy={sharing}>
@@ -227,8 +228,6 @@
 		</dl>
 	</header>
 
-	<ResultsCollection {newStickers} {newCards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
-
 	<div class="awards-share">
 		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 		<ShareBlock
@@ -238,18 +237,18 @@
 			status={shareStatus}
 			onShare={(action, format) => onShare(action, format, shareModel)}
 		/>
+		<ResultsHand
+			cards={resultsModel.rest}
+			{cardViews}
+			{rankingLoading}
+			{rankingError}
+			{mediaUnavailable}
+			selectedSeasonId={inspectedSeasonId}
+			reviewId={resultsReviewId}
+			onInspect={inspectCard}
+		/>
+		<ResultsCollection {newStickers} {newCards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
 	</div>
-
-	<ResultsHand
-		cards={resultsModel.rest}
-		{cardViews}
-		{rankingLoading}
-		{rankingError}
-		{mediaUnavailable}
-		selectedSeasonId={inspectedSeasonId}
-		reviewId={resultsReviewId}
-		onInspect={inspectCard}
-	/>
 
 
 	<SeasonMoments {result} cards={resultsModel.cards} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
@@ -289,14 +288,12 @@
 	<section class="season-review" aria-labelledby="season-review-heading">
 		<header class="review-heading">
 			<h3 id="season-review-heading">Season in review</h3>
-			<span>Simulated season · 162 games</span>
 		</header>
 	<section class="season-totals" aria-labelledby="batting-heading">
 		<div class="section-heading">
 			<div>
 				<h4 id="batting-heading" tabindex="-1">Batting</h4>
 			</div>
-			<p>Every plate appearance, including all games after the first loss. WAR is the app's estimate. Choose a column to sort.</p>
 		</div>
 		<div class="table-scroll stat-table-scroll" role="region" aria-label="Season batting totals" use:tableScroll>
 			<table class="stat-table">
@@ -364,10 +361,8 @@
 	<section class="game-log" aria-label="All 162 games">
 		<div class="section-heading">
 			<div>
-				<p class="eyebrow">Every score counts</p>
 				<h3 id="game-log-heading" tabindex="-1">All {result.games.length} games</h3>
 			</div>
-			<p>Choose any game for its inning line and complete box score.</p>
 		</div>
 		<SeasonCalendar games={result.games} seed={result.seed} />
 	</section>
@@ -387,9 +382,9 @@
 		background: var(--surface);
 		border-block: 1px solid var(--border);
 	}
-	.record-block .eyebrow { margin: 0 0 var(--space-3); }
 	.season-grade { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-sm); font-weight: 650; }
 	.season-grade .badge { font-size: var(--text-2xl); }
+	.draft-grade { margin-top: var(--space-2); }
 	.scoreboard h2 {
 		display: flex;
 		align-items: baseline;
@@ -438,20 +433,22 @@
 	.awards-share { display: grid; gap: var(--space-8); min-width: 0; }
 	.awards-share > :global(.share-panel) { grid-template-columns: minmax(0, 1fr); padding-block: var(--space-6) 0; border-bottom: 0; }
 	@media (min-width: 64rem) {
-		.awards-share { grid-template-columns: minmax(0, 1fr) 24rem; align-items: start; }
-		.awards-share > :global(.share-panel) { padding-block: 0; border-block: 0; }
+		/* The rest of the hand fills the column under the awards, beside the taller share panel. */
+		.awards-share { grid-template-columns: minmax(0, 1fr) 24rem; grid-template-rows: auto auto 1fr; grid-template-areas: 'awards share' 'hand share' 'collection share'; align-items: start; }
+		.awards-share > :global(.awards) { grid-area: awards; }
+		.awards-share > :global(.share-panel) { grid-area: share; padding-block: 0; border-block: 0; }
+		.awards-share > :global(.rest-hand) { grid-area: hand; }
+		.awards-share > :global(.collection-drawer) { grid-area: collection; }
 	}
 	.season-review { display: grid; gap: var(--space-6); min-width: 0; }
 	.review-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--border); }
 	.review-heading h3 { font-size: var(--text-xl); }
-	.review-heading > span { color: var(--muted); font-size: var(--text-xs); }
 	.season-totals, .game-log { display: grid; gap: var(--space-3); min-width: 0; }
 	.section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 	.section-heading h3 { font-size: var(--text-xl); }
 	.section-heading h4 { margin: 0; font-size: var(--text-base); font-weight: 750; }
 	.section-heading > p { max-width: 60ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	.challenge-offer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6); padding: var(--space-4) var(--space-5); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: color-mix(in oklch, var(--accent) 10%, var(--surface)); }
-	.challenge-offer .eyebrow { margin: 0 0 var(--space-1); color: var(--accent); }
 	.challenge-offer h2 { margin: 0; font-size: var(--text-lg); line-height: 1.25; }
 	.challenge-offer .button { flex: none; min-height: 2.75rem; }
 	.result-nav {

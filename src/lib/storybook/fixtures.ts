@@ -1,6 +1,6 @@
 import { commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { stadiumSummary } from '../sim/park.ts';
-import { HITTER_SLOTS, POSITIONS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
+import { HITTER_SLOTS, POSITIONS, SLOTS, isJackpot, type Candidate, type Draft, type HitterSlot, type Manifest, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
 import type { WarSeasonRanking, WarRankings } from '../rankings/types.ts';
 import { neutralDefensivePosition } from '../sim/defense.ts';
 import { testSeason } from '../sim/test-fixtures.ts';
@@ -18,7 +18,6 @@ export interface ExampleFixtures {
 
 const SEED = 162;
 /** The example draft's seed: its first roll is F2 in the 2020s. */
-const DRAFT_SEED = 22;
 const F2 = 'F2';
 const F2_DECADE = 2020;
 
@@ -84,6 +83,7 @@ export function exampleBullpen(relief: Profile): Profile {
   displayName: 'Example Club bullpen',
   eligibleSlots: ['BP'],
   primaryHitterSlot: null,
+  valueRuns: undefined,
   batting: undefined,
   battingRates: undefined,
   bullpen: {
@@ -117,6 +117,8 @@ function canonicalProfiles(): { roster: RosterProfile[]; simulationData: Simulat
   let fixture = cloneProfile(profile);
   fixture.displayName = fixtureName(index, slot);
   fixture.historicalTeam = `Example Club ${fixture.franchiseId}`;
+  // 760 runs above replacement in all: a casual draft that expects about 119 wins.
+  fixture.valueRuns = 40 + (index % 4) * 5;
   fixture = withOutfieldFlexibility(fixture, slot);
   return { profile: fixture, slot };
  });
@@ -192,6 +194,8 @@ function buildManifest(profiles: Profile[], candidates: Candidate[], simulationD
   approximations: [],
   coverage,
   diagnostics: { excludedBatting: 0, excludedPitching: 0, excludedProfiles: 0, estimatedProfiles: 0, reportUrl: '' },
+  // No elite seasons, so the scripted workshop drafts deal only franchise packs.
+  jackpot: [],
   attribution: {
    title: 'Synthetic Storybook examples',
    credit: 'Illustrative fixture data',
@@ -207,14 +211,21 @@ function buildManifest(profiles: Profile[], candidates: Candidate[], simulationD
 
 function canonicalForRoll(draft: Draft, roster: RosterProfile[]): RosterProfile {
  const roll = draft.currentRoll;
- if (!roll) throw new Error('Example fixture draft has no pending roll');
+ if (!roll || isJackpot(roll)) throw new Error('Example fixture draft has no pending franchise roll');
  const selected = roster.find(({ profile }) => profile.franchiseId === roll.franchiseId && Math.floor(profile.year / 10) * 10 === roll.decade);
  if (!selected) throw new Error(`Example fixture has no canonical profile for ${roll.franchiseId}/${roll.decade}`);
  return selected;
 }
 
 function draftStates(manifest: Manifest, roster: RosterProfile[]): Pick<ExampleFixtures, 'initialDraft' | 'choosingDraft' | 'partialDraft' | 'completeDraft'> {
- const initialDraft = selectHomeStadium(createDraft(manifest, DRAFT_SEED), manifest, manifest.stadiums[0].ref.id);
+ // The first seed whose opening roll deals F2 in the 2020s, which the workshop states are written around.
+ const start = (seed: number) => selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id);
+ const seed = Array.from({ length: 512 }, (_, value) => value).find(value => {
+  const roll = rollDraft(start(value), manifest).currentRoll;
+  return roll !== null && !isJackpot(roll) && roll.franchiseId === F2 && roll.decade === F2_DECADE;
+ });
+ if (seed === undefined) throw new Error('No example fixture seed rolls F2/2020 first');
+ const initialDraft = start(seed);
  let draft = rollDraft(initialDraft, manifest);
  const choosingDraft = draft;
  let partialDraft: Draft | null = null;
@@ -276,7 +287,8 @@ export function createExampleFixtures(): ExampleFixtures {
  const candidates = profiles.map(profile => candidateFor(profile));
  const manifest = buildManifest(profiles, candidates, simulationData);
  const states = draftStates(manifest, roster);
- if (states.choosingDraft.currentRoll?.franchiseId !== F2 || states.choosingDraft.currentRoll.decade !== F2_DECADE) {
+ const firstRoll = states.choosingDraft.currentRoll;
+ if (!firstRoll || isJackpot(firstRoll) || firstRoll.franchiseId !== F2 || firstRoll.decade !== F2_DECADE) {
   throw new Error('Example fixture seed no longer rolls F2/2020 first');
  }
  const rankings = rankingsFor(profiles, simulationData.dataVersion);

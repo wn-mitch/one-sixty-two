@@ -6,12 +6,13 @@ import {
 	legalReassignments,
 	legalSlots,
 	reassignPick,
+	rollContains,
 	rollDraft,
 	selectHomeStadium,
 	type LegalReassignment
 } from '../lib/game/draft.ts';
 import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Profile } from '../lib/game/types.ts';
-import { currentManifest, openSavedDraft, deviceDraft } from './draft-test-fixtures.ts';
+import { currentManifest, openSavedDraft, deviceDraft, rollProfiles } from './draft-test-fixtures.ts';
 
 const FIXTURE_SEED = 1;
 
@@ -37,8 +38,7 @@ function displayedCandidates(draft: Draft, manifest: Manifest): Candidate[] {
 		.filter((playerId): playerId is string => !!playerId));
 	const usedFranchises = new Set(draft.picks.map(pick => pick.franchiseId));
 	return manifest.candidates.filter(candidate =>
-		candidate.franchiseId === draft.currentRoll!.franchiseId &&
-		candidate.decade === draft.currentRoll!.decade &&
+		rollContains(draft.currentRoll!, candidate) &&
 		!usedPlayerIds.has(candidate.playerId) &&
 		!usedFranchises.has(candidate.franchiseId)
 	);
@@ -89,10 +89,7 @@ function pendingAssignmentScenario(manifest: Manifest): AssignmentScenario {
 }
 
 async function targetProfile(request: APIRequestContext, manifest: Manifest, scenario: AssignmentScenario): Promise<Profile> {
-	const roll = scenario.draft.currentRoll!;
-	const response = await request.get(manifest.chunks[`${roll.franchiseId}-${roll.decade}`]);
-	expect(response.ok()).toBe(true);
-	const profiles = await response.json() as Profile[];
+	const profiles = await rollProfiles(request, manifest, scenario.draft.currentRoll!);
 	const profile = profiles.find(candidate => candidate.seasonId === scenario.target.seasonId);
 	if (!profile) throw new Error('Assignment fixture profile is absent from its current-roll chunk');
 	return profile;

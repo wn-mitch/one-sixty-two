@@ -18,7 +18,7 @@
  type Preview = { profile: Profile; slot: Slot };
 
  const pct = (value: number, total: number) => `${(value / total) * 100}%`;
- const { window: fieldWindow, staffPlate, nameplate, stadium: stadiumPoint } = FIELD;
+ const { window: fieldWindow, staffPlate, stadium: stadiumPoint } = FIELD;
 
  let {
   draft,
@@ -162,11 +162,7 @@
  let failedPhoto = $state('');
  const art = $derived(fieldArt(stadium));
  const palette = $derived(stadiumColor ? roles({ primary: stadiumColor, secondary: STOCK }) : null);
- const cardStyle = $derived(palette ? `--stock: ${palette.field}; --stock-ink: ${palette.onField};` : undefined);
- const dimensions = $derived(([['LF', -45], ['CF', 0], ['RF', 45]] as const).flatMap(([label, bearing]) => {
-  const dimension = stadium?.dimensions.find(item => item.bearingDeg === bearing);
-  return dimension ? [`${label} ${Math.round(dimension.distanceFt)}`] : [];
- }));
+ const cardStyle = $derived(`aspect-ratio: ${FIELD.width} / ${FIELD.height};${palette ? ` --stock: ${palette.field}; --stock-ink: ${palette.onField};` : ''}`);
  let turned = $state(false);
 </script>
 
@@ -192,18 +188,6 @@
      <path class="base" d="M{art.home.x - 5} {art.home.y - 4}h10v4l-5 5l-5 -5z"></path>
      <rect class="staff-plate" x={fieldWindow.x} y={staffPlate.y} width={fieldWindow.width} height={staffPlate.height} rx="6"></rect>
     </svg>
-    <div class="nameplate" style={`--top:${pct(nameplate.y, FIELD.height)};--height:${pct(nameplate.height, FIELD.height)}`}>
-     {#if stadium}<TeamLogo franchiseId={stadium.franchiseId} label={stadiumFranchise ?? stadium.franchiseId} size="small" />{/if}
-     <span class="plate-copy">
-      <strong>{stadium?.name ?? 'Your field'}</strong>
-      {#if dimensions.length}<span class="dimensions">{dimensions.join(' · ')}</span>{/if}
-     </span>
-     {#if stadium}
-      <button type="button" class="turn" aria-label={`Turn over: ${stadium.name} details`} onclick={() => turned = true}>
-       <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-      </button>
-     {/if}
-    </div>
     {#if stadium}
      <button
       type="button"
@@ -220,9 +204,8 @@
          <TeamLogo franchiseId={stadium.franchiseId} label={stadiumFranchise ?? stadium.franchiseId} size="small" />
         {/if}
        </span>
-       <span class="mini-name">{stadium.name}</span>
       </span>
-      <span class="mini-caption" aria-hidden="true">Park</span>
+      <span class="mini-caption" aria-hidden="true"><strong>{stadium.name}</strong><span>Park</span></span>
      </button>
     {/if}
     {#each field as state}{@render slotButton(state, 'field-slot')}{/each}
@@ -280,7 +263,6 @@
  .field-card {
   container-type: inline-size;
   width: min(100%, 30rem);
-  aspect-ratio: 424 / 594;
   margin: 0 auto var(--space-2);
   perspective: 1400px;
  }
@@ -310,37 +292,6 @@
  .mound { fill: oklch(34% .035 65); }
  .base { fill: oklch(92% .01 255 / .8); }
  .staff-plate { fill: oklch(17% .012 255 / .88); }
- .nameplate {
-  position: absolute;
-  left: calc(100cqi * 16 / 424);
-  right: calc(100cqi * 16 / 424);
-  top: var(--top);
-  height: var(--height);
-  display: flex;
-  align-items: center;
-  gap: calc(100cqi * 8 / 424);
-  min-width: 0;
-  color: var(--stock-ink, var(--text));
- }
- .plate-copy { display: grid; flex: 1; min-width: 0; gap: calc(100cqi * 2 / 424); }
- .nameplate strong { font: italic 900 calc(100cqi * 17 / 424) / .95 'Barlow Condensed', sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
- .nameplate .dimensions { font: 700 calc(100cqi * 10.5 / 424) / 1 'Barlow Condensed', sans-serif; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
- .turn {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  margin-block: -8px;
-  margin-right: -10px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: inherit;
-  background: transparent;
- }
- .turn:hover { background: color-mix(in oklch, currentColor 14%, transparent); }
- .turn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
  .field-slot, .staff-slot {
   /* Roster artwork is 56 of the card's 424 units, so every card scales with the field card. */
@@ -367,8 +318,8 @@
   transform: translateX(-50%);
   transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
  }
- /* Seven staff cards sit 58 units apart, so their slots stay narrower than the spacing. */
- .staff-slot { --roster-slot-width: calc(100cqi * 57 / 424); }
+ /* Staff columns are 101 units apart, so a slot may be wider than the card to keep names on fewer lines. */
+ .staff-slot { --roster-slot-width: calc(100cqi * 92 / 424); }
  .field-slot:hover:not(:disabled), .staff-slot:hover:not(:disabled) { background: transparent; }
  .field-slot:active:not(:disabled), .staff-slot:active:not(:disabled) { transform: translate(-50%, 1px); }
  .field-slot:focus-visible, .staff-slot:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
@@ -405,7 +356,7 @@
  .highlighted .slot-placeholder { border-color: var(--accent); color: var(--accent); background: color-mix(in oklch, var(--accent) 14%, transparent); }
  .preview .card-frame { outline-style: dashed; }
  /* C, DH, and the pitching staff sit just above an edge of the field card, so their names stay on one line instead of spilling past it. */
- .field-slot:is([data-slot='C'], [data-slot='DH']) :global(.identity strong), .staff-slot :global(.identity strong) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+ .field-slot:is([data-slot='C'], [data-slot='DH']) :global(.identity strong) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
  .source { opacity: .82; }
  .unavailable .slot-placeholder { border-color: var(--error); color: var(--error); }
  .staff-slots { display: contents; }
@@ -436,7 +387,7 @@
  .stadium-mini:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
  .mini-card {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   gap: calc(100cqi * 2 / 424);
   width: var(--mini-width);
   aspect-ratio: 5 / 7;
@@ -451,8 +402,10 @@
  .mini-photo { display: grid; place-items: center; min-height: 0; overflow: hidden; border-radius: calc(100cqi * 2 / 424); background: oklch(17% .012 255 / .55); }
  .mini-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
  .mini-photo :global(.team-mark) { width: 70%; height: auto; aspect-ratio: 1; flex-basis: auto; overflow: hidden; }
- .mini-name { font: italic 900 calc(100cqi * 7.5 / 424) / .95 'Barlow Condensed', sans-serif; text-align: left; text-transform: uppercase; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
- .mini-caption { color: var(--muted); font: 800 calc(100cqi * 9 / 424) / 1 'Barlow Condensed', sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+ /* The park's name reads like a player caption: name, then its slot. One line each, so it stays inside the field window. */
+ .mini-caption { display: grid; width: calc(100cqi * 80 / 424); text-align: center; }
+ .mini-caption strong, .mini-caption span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .5625rem; line-height: 1.08; }
+ .mini-caption span { color: var(--muted); }
  @media (prefers-reduced-motion: reduce) { .stadium-mini, .mini-card { transition: none; } }
  .slot-placeholder b { font-size: calc(100cqi * 15 / 424); }
  @media (prefers-reduced-motion: reduce) { .flipper { transition: none; } }

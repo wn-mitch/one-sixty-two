@@ -33,9 +33,7 @@
 <section class="rest-hand" aria-labelledby="rest-hand-heading">
 	<div class="section-heading">
 		<div>
-			<p class="eyebrow">The complete roster</p>
 			<h3 id="rest-hand-heading">Rest of the hand</h3>
-			<p class="muted hand-order">In draft order</p>
 		</div>
 	</div>
 	<div class="hand-scroll" role="region" aria-label="Rest of roster cards">
@@ -74,7 +72,6 @@
 <style>
 	.rest-hand { display: grid; gap: var(--space-2); min-width: 0; }
 	.section-heading { display: flex; align-items: end; justify-content: space-between; gap: var(--space-6); }
-	.section-heading .eyebrow { margin: 0 0 var(--space-2); }
 	.section-heading h3 { font-size: var(--text-xl); }
 	.hand-scroll { min-width: 0; container-type: inline-size; padding: var(--space-3) 0; }
 	/*
@@ -86,7 +83,6 @@
 	.hand-card { position: relative; flex: 0 0 var(--w); width: var(--w); min-height: 0; padding: 0; border: 0; background: transparent; border-radius: .35rem; filter: drop-shadow(0 .55rem .7rem oklch(8% .01 255 / .38)); transition: transform 180ms var(--ease-out), filter 180ms var(--ease-out); }
 	.hand-card:hover, .hand-card:focus-visible { z-index: 20; background: transparent; transform: translateY(-.7rem); filter: drop-shadow(0 1rem 1rem oklch(8% .01 255 / .48)); }
 	.hand-card > span { display: block; }
-	.hand-order { margin: var(--space-1) 0 0; font-size: var(--text-xs); }
 	.pick { position: absolute; z-index: 5; top: -.4rem; left: -.4rem; min-width: 1.6rem; padding: .15rem .35rem; border-radius: var(--radius); background: var(--text); color: var(--background); font: 800 .8rem / 1 'Barlow Condensed', sans-serif; text-align: center; }
 	.source-note { max-width: 74ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	@media (max-width: 40rem) {

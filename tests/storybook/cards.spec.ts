@@ -124,12 +124,15 @@ test.describe('Cards workshop', () => {
 		await expect.poll(() => flip.locator('[data-flip]').evaluate(node => node.style.transform)).toMatch(/rotateY\(180(?:\.00)?deg\)/);
 		const readerRect = await flip.locator('[data-flip]').evaluate(node => {
 			const rect = node.getBoundingClientRect();
-			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, viewportWidth: innerWidth, viewportHeight: innerHeight };
+			// Wide screens raise the front beside the back; the pair is what centers.
+			const companion = node.closest('[data-card-reader]')!.querySelector('[data-card-companion]')?.getBoundingClientRect();
+			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, left: companion?.left ?? rect.left, viewportWidth: innerWidth, viewportHeight: innerHeight };
 		});
-		expect(Math.abs(readerRect.x + readerRect.width / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
+		await expect(flip.locator('[data-card-companion]')).toHaveCount(1);
+		expect(Math.abs((readerRect.left + readerRect.x + readerRect.width) / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
 		expect(Math.abs(readerRect.y + readerRect.height / 2 - readerRect.viewportHeight / 2)).toBeLessThan(3);
 		const returnRect = await flip.getByRole('button', { name: 'Show front', exact: true }).boundingBox();
-		expect(Math.abs(returnRect!.x + returnRect!.width / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
+		expect(Math.abs(returnRect!.x + returnRect!.width / 2 - (readerRect.x + readerRect.width / 2))).toBeLessThan(3);
 		expect(returnRect!.y).toBeGreaterThan(readerRect.y + readerRect.height);
 		const settledPose = await flip.locator('[data-flip]').evaluate(node => node.style.transform);
 		for (let replay = 0; replay < 2; replay += 1) {
@@ -238,9 +241,12 @@ test.describe('Cards workshop with system reduced motion', () => {
 		await expect(flip.locator('[data-flip]')).toHaveCSS('transform', 'none');
 		const readerRect = await flip.locator('[data-flip]').evaluate(node => {
 			const rect = node.getBoundingClientRect();
-			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, viewportWidth: innerWidth, viewportHeight: innerHeight };
+			// Wide screens raise the front beside the back; the pair is what centers.
+			const companion = node.closest('[data-card-reader]')!.querySelector('[data-card-companion]')?.getBoundingClientRect();
+			return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, left: companion?.left ?? rect.left, viewportWidth: innerWidth, viewportHeight: innerHeight };
 		});
-		expect(Math.abs(readerRect.x + readerRect.width / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
+		await expect(flip.locator('[data-card-companion]')).toHaveCount(1);
+		expect(Math.abs((readerRect.left + readerRect.x + readerRect.width) / 2 - readerRect.viewportWidth / 2)).toBeLessThan(3);
 		expect(Math.abs(readerRect.y + readerRect.height / 2 - readerRect.viewportHeight / 2)).toBeLessThan(3);
 	});
 });

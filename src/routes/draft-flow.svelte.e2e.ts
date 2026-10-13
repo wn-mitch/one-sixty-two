@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import { HITTER_SLOTS, SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
-import { deviceDraft, cardScenario, currentManifest, openSavedDraft, type CardScenario } from './draft-test-fixtures.ts';
+import { addPack, availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
+import { HITTER_SLOTS, SLOTS, isJackpot, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
+import { deviceDraft, cardScenario, currentManifest, openSavedDraft, rollProfiles, STORAGE_KEY, type CardScenario } from './draft-test-fixtures.ts';
 
 test.setTimeout(180000);
 
@@ -39,14 +39,7 @@ async function findPitcherScenario(request: APIRequestContext, manifest: Manifes
 			draft = rollDraft(draft, manifest);
 			const roll = draft.currentRoll;
 			if (!roll) break;
-			const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
-			let profiles = chunks.get(chunkUrl);
-			if (!profiles) {
-				const response = await request.get(chunkUrl);
-				expect(response.ok()).toBe(true);
-				profiles = await response.json() as Profile[];
-				chunks.set(chunkUrl, profiles);
-			}
+			const profiles = await rollProfiles(request, manifest, roll, chunks);
 			const available = availableCandidates(draft, manifest);
 			for (const candidate of available) {
 				const slots = legalSlots(draft, candidate, manifest);
@@ -68,15 +61,8 @@ async function retentionScenario(request: APIRequestContext, manifest: Manifest)
 	for (let seed = 1; seed <= 500; seed++) {
 		const draft = rollDraft(selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id), manifest);
 		const roll = draft.currentRoll;
-		if (!roll) continue;
-		const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
-		let profiles = chunks.get(chunkUrl);
-		if (!profiles) {
-			const response = await request.get(chunkUrl);
-			expect(response.ok()).toBe(true);
-			profiles = await response.json() as Profile[];
-			chunks.set(chunkUrl, profiles);
-		}
+		if (!roll || isJackpot(roll)) continue;
+		const profiles = await rollProfiles(request, manifest, roll, chunks);
 
 		for (const primaryCandidate of availableCandidates(draft, manifest)) {
 			const primary = profiles.find(profile => profile.seasonId === primaryCandidate.seasonId);
@@ -110,18 +96,10 @@ async function blockedScenario(request: APIRequestContext, manifest: Manifest): 
 		let draft = selectHomeStadium(createDraft(manifest, seed), manifest, manifest.stadiums[0].ref.id);
 		for (let pick = 0; pick < SLOTS.length - 1; pick++) {
 			draft = rollDraft(draft, manifest);
-			const roll = draft.currentRoll!;
 			const available = availableCandidates(draft, manifest);
 			const availableIds = new Set(available.map(candidate => candidate.seasonId));
 			const usedPlayers = new Set(draft.picks.map(item => bySeason.get(item.seasonId)!.playerId));
-			const chunkUrl = manifest.chunks[`${roll.franchiseId}-${roll.decade}`];
-			let profiles = profilesByChunk.get(chunkUrl);
-			if (!profiles) {
-				const response = await request.get(chunkUrl);
-				expect(response.ok()).toBe(true);
-				profiles = await response.json() as Profile[];
-				profilesByChunk.set(chunkUrl, profiles);
-			}
+			const profiles = await rollProfiles(request, manifest, draft.currentRoll!, profilesByChunk);
 			const byPlayer = new Map<string, Profile[]>();
 			for (const profile of profiles) {
 				if (!bySeason.has(profile.seasonId) || usedPlayers.has(profile.playerId)) continue;
@@ -400,4 +378,24 @@ test.describe('draft sheet interaction boundaries', () => {
 		expect(box!.width).toBeGreaterThanOrEqual(44);
 		expect(box!.height).toBeGreaterThanOrEqual(44);
 	});
+});
+
+test('a reload with packs still on the table deals them face up, and the taken one becomes the roll', async ({ page, request }) => {
+	const manifest = await currentManifest(request);
+	const draft = addPack(rollDraft(selectHomeStadium(createDraft(manifest, 7), manifest, manifest.stadiums[0].ref.id), manifest), manifest);
+	await page.addInitScript(({ key, value }) => {
+		if (!localStorage.getItem(key)) localStorage.setItem(key, value);
+	}, { key: STORAGE_KEY, value: JSON.stringify({ ...draft, phase: 'draft' }) });
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
+	const cards = page.locator('.foil-pack .dealt-card');
+	await expect(cards).toHaveCount(2);
+	const chosen = draft.packs[1];
+	if (isJackpot(chosen)) throw new Error('Seed 7 no longer adds a franchise pack');
+	const name = manifest.franchises.find(franchise => franchise.id === chosen.franchiseId)!.name;
+	await cards.nth(1).click();
+	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+	await expect(page.locator('.reveal h2')).toHaveText(name);
+	await expect.poll(async () => (await savedDraft(page)).currentRoll).toEqual(chosen);
+	expect((await savedDraft(page)).actions.at(-1)).toEqual({ type: 'choose-pack', pack: 1 });
 });
