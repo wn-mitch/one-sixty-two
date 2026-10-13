@@ -74,7 +74,15 @@ export interface CollectedCard {
  lastAt: string;
  /** Best team record the card was rostered on, and its line that season. */
  best: { wins: number; losses: number; line: SavedBatter | SavedPitcher | null };
+ /** Every saved line the card posted on the player's teams, oldest first. */
+ lines: (SavedBatter | SavedPitcher)[];
  stickers: PlacedSticker[];
+}
+
+/** The most WAR the card produced in one season on the player's teams; lines saved before WAR was kept have none. */
+export function bestWar(card: Pick<CollectedCard, 'lines'>): number | null {
+ const values = card.lines.map(line => line.war).filter(value => Number.isFinite(value));
+ return values.length ? Math.max(...values) : null;
 }
 
 interface RosteredRow extends Row { season_id: string; season_key: string; rostered_at: string; label: string; slot: string; wins: number; losses: number; line_json: string | null }
@@ -89,10 +97,11 @@ export async function loadCollection(db: Db): Promise<CollectedCard[]> {
   if (!card) {
    cards.set(row.season_id, {
     seasonId: row.season_id, label: row.label, slots: [row.slot as RosterSlot], times: 1, firstAt: row.rostered_at, lastAt: row.rostered_at,
-    best: { wins: row.wins, losses: row.losses, line }, stickers: stickers.get(row.season_id) ?? []
+    best: { wins: row.wins, losses: row.losses, line }, lines: line ? [line] : [], stickers: stickers.get(row.season_id) ?? []
    });
    continue;
   }
+  if (line) card.lines.push(line);
   card.times++;
   card.lastAt = row.rostered_at;
   card.label = row.label;

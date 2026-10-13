@@ -10,7 +10,7 @@ const CANDIDATES = [
 ];
 const FRANCHISES: Franchise[] = [{ id: 'BOS', name: 'Boston Red Sox', decades: [1950, 1990] }, { id: 'ATL', name: 'Atlanta Braves', decades: [1990] }];
 const card = (seasonId: string, slot: CollectedCard['slots'][number] = 'LF'): CollectedCard => ({
- seasonId, label: seasonId, slots: [slot], times: 1, firstAt: '', lastAt: '', best: { wins: 100, losses: 62, line: null }, stickers: []
+ seasonId, label: seasonId, slots: [slot], times: 1, firstAt: '', lastAt: '', best: { wins: 100, losses: 62, line: null }, lines: [], stickers: []
 });
 
 describe('collection shelves', () => {

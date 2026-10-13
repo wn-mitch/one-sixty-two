@@ -5,7 +5,7 @@ import { currentManifest } from './draft-test-fixtures.ts';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 
-test('a saved season fills the collection with stickers that can be hidden and moved, and they persist', async ({ page, request }) => {
+test('a saved season fills the collection and its sticker album, with stickers that can be hidden and moved, and they persist', async ({ page, request }) => {
  const manifest = await currentManifest(request);
  const hitter = manifest.candidates.find(candidate => candidate.eligibleSlots.includes('LF') && !candidate.seasonId.startsWith('bullpen:'))!;
  const pitcher = manifest.candidates.find(candidate => candidate.eligibleSlots.includes('SP1') && candidate.franchiseId !== hitter.franchiseId)!;
@@ -30,7 +30,9 @@ test('a saved season fills the collection with stickers that can be hidden and m
  await page.goto('/collection');
  const grid = page.getByRole('list', { name: 'Collected cards' });
  await expect(grid.getByRole('button')).toHaveCount(2);
- await expect(page.getByText(/2\s+cards · 2\s+of [\d,]+ player-seasons, <0\.01% · 7\s+stickers/)).toBeVisible();
+ await expect(page.getByText(/2\s+cards · 2\s+of [\d,]+ player-seasons, <0\.01%/)).toBeVisible();
+ // Kinds reached across both cards (grade C, 20–120 wins, MVP, 20–60 HR, 150–175 hits, 100–145 RBI, .350–.400 OBP, 200–300 K) and one sticker per family per card.
+ await expect(page.getByText(/23\s+of 97 sticker kinds · 10\s+on your cards/)).toBeVisible();
  const tile = grid.getByRole('button', { name: new RegExp(hitterLabel) });
  // The face shows the grade and the three rarest families by simulated earn rate: MVP, 60 HR, .400 OBP (120 wins, 175 hits and 145 RBI are more common).
  const faceFamilies = () => tile.locator('.stickers [data-family]').evaluateAll(nodes => nodes.map(node => `${node.getAttribute('data-family')}:${node.textContent}`));
@@ -39,11 +41,14 @@ test('a saved season fills the collection with stickers that can be hidden and m
  await tile.click();
  const detail = page.getByRole('region', { name: hitterLabel });
  await expect(detail.getByRole('heading', { level: 2 })).toBeFocused();
- await detail.getByRole('listitem').filter({ hasText: '60 home runs' }).getByRole('button', { name: 'Hide' }).click();
+ // The panel shows progress toward each counting sticker's next rung; Hide and Show wait behind Edit stickers.
+ await expect(detail.getByText('61 of 70 HR', { exact: true })).toBeVisible();
+ await expect(detail.getByRole('button', { name: /^Hide / })).toHaveCount(0);
+ await detail.getByRole('button', { name: 'Edit stickers' }).click();
+ await detail.getByRole('button', { name: 'Hide 60 home runs' }).click();
  // Hiding 60 HR lets the next rarest family, 145 RBI, onto the face.
  await expect.poll(faceFamilies).toEqual(['grade:Cgrade', 'mvp:TeamMVP', 'eye:.400OBP', 'production:145RBI']);
 
- await detail.getByRole('button', { name: 'Arrange stickers' }).click();
  const handle = detail.getByRole('button', { name: /Move Team MVP sticker/ });
  const before = await handle.boundingBox();
  await handle.focus();
@@ -53,8 +58,20 @@ test('a saved season fills the collection with stickers that can be hidden and m
  await page.reload();
  await page.getByRole('list', { name: 'Collected cards' }).getByRole('button', { name: new RegExp(hitterLabel) }).click();
  const reopened = page.getByRole('region', { name: hitterLabel });
- await expect(reopened.getByRole('listitem').filter({ hasText: '60 home runs' }).getByRole('button', { name: 'Show' })).toBeVisible();
- await reopened.getByRole('button', { name: 'Arrange stickers' }).click();
+ await expect(reopened.getByText('1 hidden')).toBeVisible();
+ await reopened.getByRole('button', { name: 'Edit stickers' }).click();
+ await expect(reopened.getByRole('button', { name: 'Show 60 home runs' })).toBeVisible();
  const moved = await reopened.getByRole('button', { name: /Move Team MVP sticker/ }).boundingBox();
  expect(Math.abs(moved!.y - before!.y)).toBeGreaterThan(5);
+
+ // The album lays out every family's ladder; an earned sticker leads back to the cards that hold it.
+ await page.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'Stickers' }).click();
+ const power = page.getByRole('list', { name: 'Home runs stickers' });
+ await expect(power.getByRole('img', { name: '70 home runs, not yet earned' })).toBeVisible();
+ await expect(page.getByRole('list', { name: 'Perfect games stickers' }).getByRole('img', { name: 'Secret sticker, not yet earned' })).toHaveCount(2);
+ await power.getByRole('button', { name: /^40 home runs: 1 card/ }).click();
+ await expect(page.getByText(/Cards holding 40 home runs, or better/)).toBeVisible();
+ await expect(page.getByRole('list', { name: 'Collected cards' }).getByRole('button')).toHaveCount(1);
+ await page.getByRole('button', { name: 'Show all cards' }).click();
+ await expect(page.getByRole('list', { name: 'Collected cards' }).getByRole('button')).toHaveCount(2);
 });

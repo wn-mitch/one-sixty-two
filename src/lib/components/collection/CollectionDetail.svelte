@@ -2,7 +2,8 @@
 	import Card from '../../cards/Card.svelte';
 	import type { CardViewModel } from '../../cards/view-model.ts';
 	import type { CollectedCard } from '../../collection/collection.ts';
-	import { faceStickers, STICKER_BY_KIND, type PlacedSticker, type StickerFamily } from '../../collection/stickers.ts';
+	import { nextTier } from '../../collection/album.ts';
+	import { faceStickers, STICKER_BY_KIND, STICKERS, type PlacedSticker, type StickerFamily } from '../../collection/stickers.ts';
 	import type { SavedBatter, SavedPitcher } from '../../game/library.ts';
 	import { innings, onBase, ra9, rate } from '../../game/library-stats.ts';
 	import StickerBadge from '../../collection/StickerBadge.svelte';
@@ -12,22 +13,26 @@
 	interface Props {
 		card: CollectedCard;
 		view: CardViewModel | null;
+		/** Sticker kinds earned since the last visit; they slap onto the card as it opens. */
+		fresh?: ReadonlySet<string>;
 		onMove: (seasonId: string, family: StickerFamily, x: number, y: number) => void | Promise<void>;
 		onHide: (seasonId: string, family: StickerFamily, hidden: boolean) => void | Promise<void>;
 		onClose: () => void;
 	}
-	let { card, view, onMove, onHide, onClose }: Props = $props();
+	let { card, view, fresh, onMove, onHide, onClose }: Props = $props();
 
-	let arranging = $state(false);
+	/** Edit stickers shows every family with Hide/Show and puts move handles over the face stickers. */
+	let editing = $state(false);
 	/** Placements being dragged before they are saved, by family. */
 	let drafts = $state<Partial<Record<StickerFamily, { x: number; y: number }>>>({});
 	let surface = $state<HTMLElement>();
 	let dragging: { family: StickerFamily; pointerId: number } | null = null;
 
-	// A different card starts fresh; a refresh of the same card keeps the arranging mode.
+	// A different card starts fresh; a refresh of the same card keeps the editing mode.
 	const seasonId = $derived(card.seasonId);
-	$effect(() => { void seasonId; drafts = {}; arranging = false; });
+	$effect(() => { void seasonId; drafts = {}; editing = false; });
 
+	/** Each family's top tier, in sticker order, with progress toward its next tier. */
 	const families = $derived.by(() => {
 		const byFamily = new Map<StickerFamily, PlacedSticker[]>();
 		for (const sticker of card.stickers) {
@@ -36,18 +41,29 @@
 		}
 		return [...byFamily].map(([family, stickers]) => {
 			const top = stickers.map(sticker => ({ sticker, definition: STICKER_BY_KIND.get(sticker.kind)! })).sort((a, b) => b.definition.tier - a.definition.tier)[0];
-			return { family, definition: top.definition, hidden: top.sticker.hidden, earnedAt: top.sticker.earnedAt };
-		});
+			return { family, definition: top.definition, hidden: top.sticker.hidden, earnedAt: top.sticker.earnedAt, next: nextTier(card, top.definition) };
+		}).sort((a, b) => STICKERS.indexOf(a.definition) - STICKERS.indexOf(b.definition));
 	});
+	const shownFamilies = $derived(editing ? families : families.filter(item => !item.hidden));
+	const hiddenCount = $derived(families.filter(item => item.hidden).length);
 	const placed = $derived(card.stickers.map(sticker => {
 		const family = STICKER_BY_KIND.get(sticker.kind)?.family;
 		const moved = family ? drafts[family] : undefined;
 		return moved ? { ...sticker, ...moved } : sticker;
 	}));
 	const handles = $derived(faceStickers(placed, { era: view?.era }));
-	const line = $derived(card.best.line);
-	const bestGrade = $derived(seasonGrade(card.best.wins, card.best.losses));
 	const isBatter = (value: SavedBatter | SavedPitcher): value is SavedBatter => 'PA' in value;
+	const line = $derived(card.best.line);
+	/** The best team's season line for this card, with its WAR where the save kept it. */
+	const seasonLine = $derived.by(() => {
+		if (!line) return '';
+		const parts = isBatter(line)
+			? [`${line.HR} HR`, `${line.H} H`, `${line.RBI} RBI`, `${line.SB} SB`, `${rate(onBase(line))} OBP`]
+			: [`${line.SO} K`, `${ra9(line).toFixed(2)} RA9`, `${innings(line.outs)} IP`];
+		if (Number.isFinite(line.war)) parts.push(`${line.war.toFixed(1)} WAR`);
+		return parts.join(' · ');
+	});
+	const bestGrade = $derived(seasonGrade(card.best.wins, card.best.losses));
 	const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 	const noDetails = () => {};
 
@@ -84,9 +100,10 @@
 
 <section class="detail" aria-labelledby="collection-detail-heading">
 	<div class="art">
-		<div class="surface" bind:this={surface}>
-			{#if view}<Card s={view} face="front" interactive={false} stickers={placed} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
-			{#if arranging}
+		<!-- The card tilts like the real thing, so foil stickers catch the light; it holds still while stickers are being moved. -->
+		<div class="surface" class:editing bind:this={surface}>
+			{#if view}<Card s={view} face="front" interactive={!editing} stickers={placed} freshStickers={fresh} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
+			{#if editing}
 				<div class="handles">
 					{#each handles as handle (handle.definition.family)}
 						<button
@@ -108,68 +125,81 @@
 	<div class="info">
 		<div class="head">
 			<h2 id="collection-detail-heading" tabindex="-1">{card.label}</h2>
-			<button type="button" class="close" onclick={onClose}>Close</button>
+			<button type="button" class="quiet close" onclick={onClose}>Close</button>
 		</div>
-		<dl>
-			<div><dt>Drafted</dt><dd>{card.times}×</dd></div>
-			<div><dt>First</dt><dd>{date(card.firstAt)}</dd></div>
-			<div><dt>Latest</dt><dd>{date(card.lastAt)}</dd></div>
-			<div><dt>Best team</dt><dd class="best">{card.best.wins}–{card.best.losses}{#if bestGrade}<GradeBadge grade={bestGrade} />{/if}</dd></div>
-		</dl>
-		{#if line}
-			<p class="line">
-				{#if isBatter(line)}
-					That season: {line.HR} HR · {line.H} H · {line.RBI} RBI · {line.SB} SB · {rate(onBase(line))} OBP
-				{:else}
-					That season: {line.SO} K · {ra9(line).toFixed(2)} RA9 · {innings(line.outs)} IP
-				{/if}
-			</p>
-		{/if}
+		<p class="meta">
+			<span>Drafted <strong>{card.times}×</strong> since {date(card.firstAt)}</span>
+			<span class="best">Best team <strong>{card.best.wins}–{card.best.losses}</strong>{#if bestGrade}<GradeBadge grade={bestGrade} />{/if}</span>
+		</p>
+		{#if seasonLine}<p class="line">That season: {seasonLine}</p>{/if}
 
-		<h3>Stickers</h3>
 		{#if families.length}
-			<ul class="stickers">
-				{#each families as item (item.family)}
-					<li>
+			<ul class="stickers" aria-label="Stickers">
+				{#each shownFamilies as item (item.family)}
+					<li class:hidden={item.hidden}>
 						<span class="badge" aria-hidden="true"><StickerBadge definition={item.definition} /></span>
-						<span class="what"><strong>{item.definition.title}</strong><small>Earned {date(item.earnedAt)}</small></span>
-						<button type="button" class="toggle" aria-pressed={!item.hidden} onclick={() => void onHide(card.seasonId, item.family, !item.hidden)}>{item.hidden ? 'Show' : 'Hide'}</button>
+						<span class="what">
+							<strong>{item.definition.title}</strong>
+							{#if editing}
+								<small>Earned {date(item.earnedAt)}</small>
+							{:else if item.next}
+								<span class="bar" aria-hidden="true"><i style={`width:${(item.next.fraction * 100).toFixed(0)}%`}></i></span>
+								<small>{item.next.value} of {item.next.target} {item.next.unit}</small>
+							{/if}
+						</span>
+						{#if editing}
+							<button type="button" class="toggle" aria-pressed={!item.hidden} aria-label={`${item.hidden ? 'Show' : 'Hide'} ${item.definition.title}`} onclick={() => void onHide(card.seasonId, item.family, !item.hidden)}>{item.hidden ? 'Show' : 'Hide'}</button>
+						{/if}
 					</li>
 				{/each}
 			</ul>
-			<button type="button" class="arrange" aria-pressed={arranging} disabled={!view || !handles.length} onclick={() => { arranging = !arranging; }}>{arranging ? 'Done arranging' : 'Arrange stickers'}</button>
+			<div class="actions">
+				<button type="button" class="edit" aria-pressed={editing} onclick={() => { editing = !editing; }}>{editing ? 'Done' : 'Edit stickers'}</button>
+				{#if editing}
+					<span class="hint">{view && handles.length ? 'Drag a sticker on the card, or focus it and use the arrow keys.' : 'Hidden stickers stay off the card face.'}</span>
+				{:else if hiddenCount}
+					<span class="hint">{hiddenCount} hidden</span>
+				{/if}
+			</div>
 		{:else}
-			<p class="muted">No stickers yet. Big seasons, team MVPs, 100-win teams, and drafting a card again earn them.</p>
+			<p class="muted">No stickers yet. Seasons on your teams earn them; the Stickers view shows what each one takes.</p>
 		{/if}
 	</div>
 </section>
 
 <style>
-	.detail { display: grid; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); gap: var(--space-6); padding: var(--space-5); border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
-	@media (max-width: 40rem) { .detail { grid-template-columns: minmax(0, 1fr); } .art { width: min(100%, 18rem); justify-self: center; } }
-	.surface { position: relative; touch-action: none; }
+	.detail { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: var(--space-8); padding: var(--space-6); border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
+	@media (max-width: 40rem) { .detail { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding: var(--space-4); } .art { width: min(100%, 15rem); justify-self: center; } }
+	.surface { position: relative; }
+	/* Dragging needs the touch gestures; browsing keeps page scroll over the card. */
+	.surface.editing { touch-action: none; }
 	.placeholder { display: block; aspect-ratio: 5 / 7; border-radius: .5rem; background: var(--surface-raised); }
 	.handles { position: absolute; inset: 0; z-index: 6; }
 	.handle { position: absolute; width: 19%; aspect-ratio: 1; translate: -50% -50%; border: 2px dashed var(--focus); border-radius: 50%; background: oklch(85% 0.12 230 / .12); cursor: grab; touch-action: none; }
 	.handle:active { cursor: grabbing; }
 	.handle:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-	.info { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
+	.info { display: grid; align-content: start; gap: var(--space-4); min-width: 0; }
 	.head { display: flex; align-items: start; justify-content: space-between; gap: var(--space-3); }
-	h2 { margin: 0; font-size: var(--text-2xl); line-height: 1.1; overflow-wrap: anywhere; }
-	h3 { margin: var(--space-2) 0 0; font-size: var(--text-lg); }
+	h2 { margin: 0; font-size: var(--text-xl); line-height: 1.2; overflow-wrap: anywhere; }
 	button { min-height: 2.75rem; padding-inline: var(--space-4); border: 1px solid var(--border); border-radius: .5rem; background: var(--surface-raised); color: var(--text); font: inherit; font-size: var(--text-sm); font-weight: 650; cursor: pointer; }
-	button:hover:not(:disabled) { background: var(--surface-hover); }
-	button:disabled { color: var(--muted); cursor: not-allowed; }
+	button.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+	button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
 	button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-	dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: var(--space-3); margin: 0; }
-	dt { color: var(--muted); font-size: var(--text-xs); }
-	dd { margin: var(--space-1) 0 0; font-weight: 750; }
-	dd.best { display: flex; align-items: center; gap: var(--space-2); }
-	.line { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-	.stickers { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-	.stickers li { display: flex; align-items: center; gap: var(--space-3); }
-	.badge { flex: none; font-size: .15rem; padding: .2rem; line-height: 0; }
-	.what { display: grid; min-width: 0; flex: 1; font-size: var(--text-sm); }
-	.what small { color: var(--muted); font-size: var(--text-xs); }
-	.arrange { justify-self: start; }
+	.meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin: 0; color: var(--muted); font-size: var(--text-sm); }
+	.meta strong { color: var(--text); }
+	.best { display: inline-flex; align-items: center; gap: var(--space-2); }
+	.line { margin: 0; color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+	.stickers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: var(--space-4) var(--space-5); margin: 0; padding: 0; list-style: none; }
+	.stickers li { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+	.stickers li.hidden .badge { opacity: .4; }
+	.stickers li.hidden .what strong { color: var(--muted); }
+	/* A badge is 21em of its font size: .19rem gives a sticker about 4rem across. */
+	.badge { flex: none; font-size: .19rem; padding: .3rem; line-height: 0; }
+	.what { display: grid; gap: var(--space-1); min-width: 0; flex: 1; font-size: var(--text-sm); line-height: 1.25; }
+	.what small { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+	.bar { display: block; height: 3px; max-width: 9rem; border-radius: 2px; background: var(--surface-raised); overflow: hidden; }
+	.bar i { display: block; height: 100%; background: var(--focus); }
+	.toggle { flex: none; min-width: 4.5rem; }
+	.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+	.hint { color: var(--muted); font-size: var(--text-xs); }
 </style>

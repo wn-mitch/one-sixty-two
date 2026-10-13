@@ -209,6 +209,22 @@ export const MIGRATIONS: readonly Migration[] = [
     db.exec({ sql: `UPDATE stickers SET x = ?, y = ? WHERE kind IN (${kinds.map(() => '?').join(', ')}) AND abs(x - ?) < 1e-6 AND abs(y - ?) < 1e-6`, bind: [...to, ...kinds, ...from] });
    }
   }
+ },
+ {
+  version: 8,
+  up(db) {
+   // Season WAR becomes a sticker family. Every rostering whose saved line reached a step earns that
+   // season's top step, dated from the rostering. Steps and the default spot are frozen as of this step.
+   db.exec({
+    sql: `INSERT OR IGNORE INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden)
+     SELECT season_id, CASE
+      WHEN war >= 22 THEN 'war-22' WHEN war >= 20 THEN 'war-20' WHEN war >= 18 THEN 'war-18'
+      WHEN war >= 16 THEN 'war-16' ELSE 'war-14' END,
+      rostered_at, season_key, 0.9, 0.9, 0
+     FROM (SELECT season_id, season_key, rostered_at, json_extract(line_json, '$.war') AS war FROM rostered WHERE line_json IS NOT NULL)
+     WHERE typeof(war) IN ('integer', 'real') AND war >= 14 ORDER BY rostered_at`
+   });
+  }
  }
 ];
 

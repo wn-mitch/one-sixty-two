@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { article } from '#lib/article.ts';
 	import { tick } from 'svelte';
 	import { dateGames, formatGameDate, opponentSeries, seasonMonths, streakEnds, venueRecords, type CalendarMonth } from '#lib/game/season-calendar.ts';
 	import type { GameResult } from '#lib/sim/types.ts';
@@ -45,7 +46,7 @@
 
 	function streakLabel(game: GameResult): string {
 		const streak = streaks.get(game.number);
-		return streak ? `, ends a ${streak.length}-game ${streak.win ? 'winning' : 'losing'} streak` : '';
+		return streak ? `, ends ${article(streak.length)} ${streak.length}-game ${streak.win ? 'winning' : 'losing'} streak` : '';
 	}
 
 	async function choose(game: GameResult): Promise<void> {

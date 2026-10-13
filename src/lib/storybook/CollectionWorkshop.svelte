@@ -47,10 +47,10 @@
 					for (const pick of entry.roster) {
 						const line = [...entry.batting, ...entry.pitching].find(item => item.seasonId === pick.seasonId) ?? null;
 						const existing = byCard.get(pick.seasonId);
-						if (existing) { existing.times++; continue; }
+						if (existing) { existing.times++; if (line) existing.lines.push(line); continue; }
 						byCard.set(pick.seasonId, {
 							seasonId: pick.seasonId, label: pick.label, slots: [pick.slot], times: 1, firstAt: entry.savedAt, lastAt: entry.savedAt,
-							best: { wins: entry.record.wins, losses: entry.record.losses, line },
+							best: { wins: entry.record.wins, losses: entry.record.losses, line }, lines: line ? [line] : [],
 							stickers: earned.filter(item => item.seasonId === pick.seasonId).map(item => ({ kind: item.kind, ...STICKER_SPOTS[STICKER_BY_KIND.get(item.kind)!.family], hidden: false, earnedAt: entry.savedAt }))
 						});
 					}
@@ -61,7 +61,7 @@
 				const first = example.library.at(-1)!;
 				byCard.set(bullpen.seasonId, {
 					seasonId: bullpen.seasonId, label: bullpen.displayName, slots: ['BP'], times: 1, firstAt: first.savedAt, lastAt: first.savedAt,
-					best: { wins: first.record.wins, losses: first.record.losses, line: null }, stickers: []
+					best: { wins: first.record.wins, losses: first.record.losses, line: null }, lines: [], stickers: []
 				});
 				saved = [...byCard.values()];
 				const bullpenCandidate = { seasonId: bullpen.seasonId, playerId: bullpen.playerId, franchiseId: bullpen.franchiseId, decade: Math.floor(bullpen.year / 10) * 10, eligibleSlots: bullpen.eligibleSlots };

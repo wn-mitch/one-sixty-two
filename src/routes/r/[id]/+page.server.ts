@@ -7,6 +7,7 @@ import {
 	ShareUnavailableError
 } from '#lib/server/share-images.ts';
 import { sitePreviewImage } from '#lib/share/site-preview.ts';
+import { article } from '#lib/article.ts';
 
 export const load: PageServerLoad = async ({ params, setHeaders }) => {
 	setHeaders({ 'cache-control': 'no-store' });
@@ -34,7 +35,7 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 				width: publication.images.field.width,
 				height: publication.images.field.height,
 				type: 'image/png',
-				alt: `162-0 share card for a ${wins}-${losses} season`
+				alt: `162-0 share card for ${article(wins)} ${wins}-${losses} season`
 			}
 		};
 	} catch (caught) {

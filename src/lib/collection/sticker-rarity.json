@@ -1,5 +1,5 @@
 {
- "rulesVersion": "stickers-v4",
+ "rulesVersion": "stickers-v5",
  "sample": {
   "policies": "random,best,vorp,packs",
   "drafts": "1-300",
@@ -31,6 +31,11 @@
   "wins-160": 0,
   "perfect": 0,
   "mvp": 12000,
+  "war-14": 10577,
+  "war-16": 2609,
+  "war-18": 463,
+  "war-20": 52,
+  "war-22": 3,
   "hr-20": 95197,
   "hr-30": 80257,
   "hr-40": 61160,

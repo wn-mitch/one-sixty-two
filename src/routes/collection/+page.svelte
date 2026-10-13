@@ -16,6 +16,8 @@
 	import { deviceDb } from '#lib/storage/db.ts';
 	import { HITTER_SLOTS } from '#lib/game/types.ts';
 
+	const LAST_VISIT_KEY = '162-zero:collection-visit:v1';
+
 	let manifest = $state.raw<Manifest | null>(null);
 	let cards = $state.raw<CollectedCard[]>([]);
 	const profiles = new SvelteMap<string, Profile>();
@@ -26,6 +28,23 @@
 	let loading = $state(true);
 	let error = $state('');
 	let status = $state('');
+	/** Sticker kinds earned since the last visit, by player-season; they slap on when their card first opens. */
+	let fresh = $state.raw<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
+	let lastVisit: string | null | undefined;
+
+	/** Reads the previous visit once and records this one; denied storage just means nothing is fresh. */
+	function noteVisit(loaded: readonly CollectedCard[]): void {
+		if (lastVisit !== undefined) return;
+		try {
+			lastVisit = localStorage.getItem(LAST_VISIT_KEY);
+			localStorage.setItem(LAST_VISIT_KEY, new Date().toISOString());
+		} catch { lastVisit = null; }
+		if (!lastVisit) return;
+		const since = lastVisit;
+		fresh = new Map(loaded
+			.map(card => [card.seasonId, new Set(card.stickers.filter(sticker => sticker.earnedAt > since).map(sticker => sticker.kind))] as const)
+			.filter(([, kinds]) => kinds.size > 0));
+	}
 
 	const views = $derived.by(() => {
 		const byCard = new Map<string, CardViewModel>();
@@ -51,6 +70,7 @@
 		try {
 			const device = await deviceDb();
 			cards = await loadCollection(device.db);
+			noteVisit(cards);
 			if (device.notice) status = device.notice;
 		} catch { status = STORAGE_NOTICE; }
 		void loadProfiles();
@@ -110,7 +130,7 @@
 	<header class="intro">
 		<div>
 			<h1>Collection</h1>
-			<p class="lede muted">Every player-season you put on a finished team is kept here, with the stickers it earned. Stickers follow the card into future drafts. They are decoration only and never change a draft or a season.</p>
+			<p class="lede muted">Every player-season you put on a finished team, with the stickers its seasons earned. Stickers are decoration and never change a draft or a season.</p>
 		</div>
 		<a class="side-link" href="/seasons">My seasons →</a>
 	</header>
@@ -119,7 +139,7 @@
 	{:else if error}
 		<p class="error" role="alert">{error}</p>
 	{:else if manifest}
-		<CollectionBinder {cards} {views} {war} candidates={manifest.candidates} franchises={manifest.franchises} {status} {onMove} {onHide} />
+		<CollectionBinder {cards} {views} {war} {fresh} candidates={manifest.candidates} franchises={manifest.franchises} {status} {onMove} {onHide} />
 	{/if}
 </main>
 

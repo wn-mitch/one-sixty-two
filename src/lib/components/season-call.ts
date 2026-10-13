@@ -1,4 +1,5 @@
 import type { MomentContact, SeasonMoment } from '../sim/types.ts';
+import { article } from '../article.ts';
 
 /** Keep compound names and suffixes intact; the dataset supplies display names, not surnames. */
 const name = (value: string) => value.trim();
@@ -112,8 +113,8 @@ function finish(moment: SeasonMoment, walkOff: boolean, choose: Choose): string 
  const against = forBatting(moment.opponentRunsAfter, moment.challengeRunsAfter);
  if (walkOff) return choose('finish', [`That wins it, ${after}–${against}!`, `And that’s the ballgame! ${after}–${against}.`, `It’s a walk-off! ${after}–${against}.`, `The winning run is home! ${after}–${against}, the final.`, `This one is over! They win it, ${after}–${against}.`]);
  if (moment.runsScored > 0) {
-  if (after === against) return choose('finish', [`We’re tied at ${after}!`, `That ties it, ${after}–${against}!`, `It’s a ${after}–${against} game!`, `All even at ${after}.`]);
-  if (before <= against && after > against) return choose('finish', [`That puts them ahead, ${after}–${against}!`, `They take the lead, ${after}–${against}!`, `It’s now ${after}–${against}, and they’re in front!`, `A ${after}–${against} lead!`]);
+  if (after === against) return choose('finish', [`We’re tied at ${after}!`, `That ties it, ${after}–${against}!`, `It’s ${article(after)} ${after}–${against} game!`, `All even at ${after}.`]);
+  if (before <= against && after > against) return choose('finish', [`That puts them ahead, ${after}–${against}!`, `They take the lead, ${after}–${against}!`, `It’s now ${after}–${against}, and they’re in front!`, `${article(after, true)} ${after}–${against} lead!`]);
   if (after < against) return choose('finish', [`They trail ${against}–${after}.`, `That makes it ${against}–${after}.`, `The deficit is down to ${against - after}.`]);
   return choose('finish', [`The lead is now ${after}–${against}.`, `That makes it ${after}–${against}.`, `They’re up ${after - against} now.`]);
  }

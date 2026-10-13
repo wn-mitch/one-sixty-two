@@ -34,6 +34,18 @@ describe('sticker rules', () => {
   expect(kinds(entry, 'old')).toEqual([]);
  });
 
+ it('awards season WAR to hitters and pitchers on one ladder, top step only', () => {
+  const entry = season(19, [batter('bat', { war: 16 }), batter('short', { war: 13.99 }), batter('old', { war: undefined as unknown as number })],
+   [pitcher('arm', { war: 14.4 }), pitcher('ace', { war: 21.99 }), pitcher('absurd', { war: 22 })]);
+  expect(kinds(entry, 'bat')).toEqual(['war-16']);
+  expect(kinds(entry, 'arm')).toEqual(['war-14']);
+  expect(kinds(entry, 'ace')).toEqual(['war-20']);
+  expect(kinds(entry, 'absurd')).toEqual(['war-22']);
+  // Under the first step, and lines saved before WAR was kept, earn nothing.
+  expect(kinds(entry, 'short')).toEqual([]);
+  expect(kinds(entry, 'old')).toEqual([]);
+ });
+
  it('awards counting stickers exactly at their thresholds', () => {
   const entry = season(19, [
    batter('at', { HR: 40, AB: 620, H: 200, BB: 10, RBI: 130, SB: 30 }),
@@ -81,6 +93,9 @@ describe('sticker rules', () => {
   expect(kinds(season(139, [batter('a', {})], []), 'a')).toEqual(['wins-130']);
   expect(kinds(season(149, [batter('a', {})], []), 'a')).toEqual(['wins-145']);
   expect(kinds(season(161, [batter('a', {})], []), 'a')).toEqual(['wins-160']);
+
+  // Titles read as English: an 80-win team.
+  expect(['wins-80', 'wins-100'].map(kind => STICKER_BY_KIND.get(kind)!.title)).toEqual(['On an 80-win team', 'On a 100-win team']);
  });
 
  it('gives every card on a complete season that season\'s grade, and shows the best grade earned', () => {

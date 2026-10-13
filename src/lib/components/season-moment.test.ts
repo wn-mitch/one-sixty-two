@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameResult, SeasonMoment, TeamBox } from '../sim/types.ts';
 import { createDefensiveRunComponents } from '../sim/value.ts';
 import { formatSeasonMoment, momentParticipant } from './season-moment.ts';
+import { radioCall } from './season-call.ts';
 
 const baseMoment: SeasonMoment = {
  gameNumber: 42,
@@ -205,5 +206,17 @@ describe('turning-point attribution', () => {
   expect(momentParticipant(moment({ outcome: 'strikeout', challengeBatting: false }))).toBe('pitcher-2000');
   // An opponent's steal belongs to their runner, not to the pitcher who allowed it.
   expect(momentParticipant(moment({ outcome: 'stolenBase', challengeBatting: false }))).toBe('batter-2000');
+ });
+ it('reads scores that start with a vowel sound with "an" in every call variant', () => {
+  // Tied at 8 and ahead 8–3 or 11–3: each seed can pick a different phrasing, so sweep enough to hit them all.
+  const scores = [{ before: 7, after: 8, against: 8 }, { before: 3, after: 8, against: 3 }, { before: 3, after: 11, against: 3 }];
+  const calls = scores.flatMap(({ before, after, against }) => Array.from({ length: 200 }, (_, seed) => radioCall(moment({
+   outcome: 'single', challengeBatting: true, runsScored: after - before, challengeRunsBefore: before, challengeRunsAfter: after,
+   opponentRunsBefore: against, opponentRunsAfter: against
+  }), false, seed)));
+  expect(calls.some(call => /\ban 8–8 game\b/.test(call))).toBe(true);
+  expect(calls.some(call => /\bAn 8–3 lead\b/.test(call))).toBe(true);
+  expect(calls.some(call => /\bAn 11–3 lead\b/.test(call))).toBe(true);
+  expect(calls.filter(call => /\b[Aa] (8|11|18)\b/.test(call))).toEqual([]);
  });
 });

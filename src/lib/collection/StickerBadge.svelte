@@ -33,6 +33,7 @@
  .sticker[data-long] b { font-size: 5.6em; }
  .sticker[data-family='team'] { --tone: oklch(70% 0.15 80); color: oklch(22% 0.03 80); text-shadow: none; }
  .sticker[data-family='mvp'] { --tone: oklch(58% 0.2 25); }
+ .sticker[data-family='war'] { --tone: oklch(52% 0.13 165); }
  .sticker[data-family='power'] { --tone: oklch(64% 0.19 45); }
  .sticker[data-family='contact'] { --tone: oklch(58% 0.12 190); }
  .sticker[data-family='production'] { --tone: oklch(52% 0.17 300); }
@@ -73,4 +74,11 @@
  .sticker[data-foil='silver'] { --foil: linear-gradient(115deg, #8f99a4 0%, #f4f6f8 16%, #aeb7c0 30%, #ffffff 44%, #a3adb7 58%, #e9edf1 74%, #8a949f 100%); }
  .sticker[data-foil='gold'] { --foil: linear-gradient(115deg, #9a6c22 0%, #f7df9a 15%, #c4953a 29%, #fff3c8 43%, #b5832d 57%, #f2d58a 73%, #8f6420 100%); }
  .sticker[data-foil='gem'] { --foil: linear-gradient(115deg, #ffd0ee 0%, #ffffff 9%, #8fe6ff 19%, #ffe07a 30%, #a8ffc0 41%, #e2b0ff 52%, #ffffff 62%, #ffc2a8 74%, #9fe0ff 87%, #ffd0ee 100%); }
+ /* The top WAR rung is video-game numbers: gem foil seen through CRT scanlines, its type split red and cyan like a glitching screen. */
+ .sticker[data-kind='war-22'] {
+  background: repeating-linear-gradient(0deg, oklch(0% 0 0 / .16) 0 .45em, transparent .45em .9em),
+   radial-gradient(circle at 34% 28%, oklch(100% 0 0 / .45), transparent 46%), var(--foil) var(--mx, 30%) var(--my, 20%) / 300% 300%;
+  text-shadow: -.28em 0 0 oklch(62% .25 25 / .9), .28em 0 0 oklch(70% .16 220 / .9);
+ }
+ .sticker[data-kind='war-22'] b { font-style: italic; font-weight: 900; }
 </style>

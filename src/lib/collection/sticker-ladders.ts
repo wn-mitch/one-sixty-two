@@ -62,6 +62,16 @@ export const SHUTOUT_STICKERS = feats('shutout', [1, 3, 5], ['Shut', 'out'], 'sh
 export const STRIKEOUT_GAME_STICKERS: readonly LadderStep[] = [
  { kind: 'k-game-20', at: 1, label: ['20 K', 'game'], title: 'Struck out 20 in one game' }
 ];
+/**
+ * Estimated WAR the card produced in one season on the player's team, hitters and starters on one
+ * ladder. Simulated teams win far more than real ones, so simulated WAR runs high. Measured on each
+ * season's best player across drafted teams, 14 is about the median, 16 the top fifth, 18 the top
+ * twenty-fifth and 20 about one season in 250. Relievers do not reach it.
+ */
+const WAR_STEPS = counting('war', [14, 16, 18, 20], 'WAR', value => `${value} WAR in one season on your team`);
+/** The top rung: under 0.1% of seasons for any drafting policy, so only a real outlier earns it. */
+const VIDEO_GAME_WAR: LadderStep = { kind: 'war-22', at: 22, label: ['22', 'WAR?!'], title: 'Video-game numbers: 22 WAR in one season on your team' };
+export const WAR_STICKERS: readonly LadderStep[] = [...WAR_STEPS, VIDEO_GAME_WAR];
 /** Times-drafted thresholds; the database awards these from its rostering history. */
 export const LOYALTY_STICKERS: readonly LadderStep[] = [3, 5, 10, 25, 50, 100].map(at => ({
  kind: `drafted-${at}`, at, label: [`${at}×`, 'drafted'], title: `Drafted onto ${at} of your teams`

@@ -4,9 +4,10 @@ import { seasonGrade } from '../game/grade.ts';
 import {
  ACE_STICKERS, CLOSER_STICKERS, CLUB_STICKERS, CONTACT_STICKERS, CYCLE_STICKERS, EYE_STICKERS, GRADE_STICKERS, GRAND_SLAM_STICKERS, HOMER_GAME_STICKERS,
  LOYALTY_STICKERS, NO_HITTER_STICKERS, PERFECT_CLOSER_OPPORTUNITIES, PERFECT_CLOSER_STICKERS, PERFECT_GAME_STICKERS, POWER_STICKERS, PRODUCTION_STICKERS,
- SAVE_STICKERS, SHUTOUT_STICKERS, SPEED_STICKERS, STRIKEOUT_GAME_STICKERS, STRIKEOUT_STICKERS, TEAM_WIN_STICKERS, WALK_OFF_STICKERS, type LadderStep
+ SAVE_STICKERS, SHUTOUT_STICKERS, SPEED_STICKERS, STRIKEOUT_GAME_STICKERS, STRIKEOUT_STICKERS, TEAM_WIN_STICKERS, WALK_OFF_STICKERS, WAR_STICKERS, type LadderStep
 } from './sticker-ladders.ts';
 import rarity from './sticker-rarity.json' with { type: 'json' };
+import { article } from '../article.ts';
 import type { CardEra } from '../cards/view-model.ts';
 import { ERA_STICKER_SLOTS } from './sticker-slots.ts';
 
@@ -18,9 +19,9 @@ export * from './sticker-ladders.ts';
  * per player-season and kind. Thresholds sit near the top decile and top two percent of simulated
  * Classic seasons.
  */
-export const STICKER_RULES_VERSION = 'stickers-v4';
+export const STICKER_RULES_VERSION = 'stickers-v5';
 
-export type StickerFamily = 'grade' | 'team' | 'mvp' | 'power' | 'contact' | 'production' | 'speed' | 'eye' | 'club' | 'cycle' | 'homerGame' | 'grandSlam' | 'walkOff'
+export type StickerFamily = 'grade' | 'team' | 'mvp' | 'war' | 'power' | 'contact' | 'production' | 'speed' | 'eye' | 'club' | 'cycle' | 'homerGame' | 'grandSlam' | 'walkOff'
  | 'strikeouts' | 'ace' | 'closer' | 'saves' | 'perfectCloser' | 'noHitter' | 'perfectGame' | 'shutout' | 'strikeoutGame' | 'loyalty';
 
 export interface StickerDefinition {
@@ -64,7 +65,9 @@ export const STICKER_SPOTS: Readonly<Record<StickerFamily, { x: number; y: numbe
  strikeoutGame: { x: 0.9, y: 0.7, tilt: -7 },
  grandSlam: { x: 0.1, y: 0.8, tilt: 4 },
  perfectCloser: { x: 0.1, y: 0.8, tilt: 4 },
- walkOff: { x: 0.9, y: 0.8, tilt: -4 }
+ walkOff: { x: 0.9, y: 0.8, tilt: -4 },
+ // Any card can hold WAR beside every other family; it shows through its rank's face slot.
+ war: { x: 0.9, y: 0.9, tilt: 5 }
 };
 
 const define = (kind: string, family: StickerFamily, tier: number, label: [string, string], title: string): StickerDefinition => ({ kind, family, tier, label, title });
@@ -74,9 +77,10 @@ const ladder = (steps: readonly LadderStep[], family: StickerFamily): StickerDef
 const PLAIN_STICKERS: readonly StickerDefinition[] = [
  ...GRADE_STICKERS.map(({ grade, kind }, index) => define(kind, 'grade', GRADE_STICKERS.length - index,
   grade === 'Perfect' ? ['162', '–0'] : [grade, 'grade'], grade === 'Perfect' ? 'Graded Perfect: a 162–0 season' : `Graded ${grade} on one of your teams`)),
- ...TEAM_WIN_STICKERS.map((wins, index) => define(`wins-${wins}`, 'team', index + 1, [String(wins), 'wins'], `On a ${wins}-win team`)),
+ ...TEAM_WIN_STICKERS.map((wins, index) => define(`wins-${wins}`, 'team', index + 1, [String(wins), 'wins'], `On ${article(wins)} ${wins}-win team`)),
  define('perfect', 'team', TEAM_WIN_STICKERS.length + 1, ['162', '–0'], 'On a team that went 162–0'),
  define('mvp', 'mvp', 1, ['Team', 'MVP'], 'Team MVP'),
+ ...ladder(WAR_STICKERS, 'war'),
  ...ladder(POWER_STICKERS, 'power'),
  ...ladder(CONTACT_STICKERS, 'contact'),
  ...ladder(PRODUCTION_STICKERS, 'production'),
@@ -146,6 +150,9 @@ function pitchingStickers(line: SavedPitcher): string[] {
  return kinds;
 }
 
+/** Season WAR, for hitters and pitchers alike; lines saved before WAR was kept have none. */
+const warStickers = (line: SavedBatter | SavedPitcher): string[] => Number.isFinite(line.war) ? reached(WAR_STICKERS, line.war) : [];
+
 /** Keeps only the highest tier of each family, so one season never awards 100, 120 and 162–0 side by side. */
 function topTiers(kinds: readonly string[]): string[] {
  const best = new Map<StickerFamily, StickerDefinition>();
@@ -167,8 +174,8 @@ export function seasonStickers(entry: Pick<LibraryEntry, 'record' | 'roster' | '
   const grade = GRADE_STICKERS.find(item => item.grade === seasonGrade(entry.record.wins, entry.record.losses));
   if (grade) kinds.push(grade.kind);
   if (entry.mvp?.seasonId === card.seasonId) kinds.push('mvp');
-  for (const line of entry.batting) if (line.seasonId === card.seasonId) kinds.push(...battingStickers(line));
-  for (const line of entry.pitching) if (line.seasonId === card.seasonId) kinds.push(...pitchingStickers(line));
+  for (const line of entry.batting) if (line.seasonId === card.seasonId) kinds.push(...battingStickers(line), ...warStickers(line));
+  for (const line of entry.pitching) if (line.seasonId === card.seasonId) kinds.push(...pitchingStickers(line), ...warStickers(line));
   for (const kind of topTiers(kinds)) earned.push({ seasonId: card.seasonId, kind });
  }
  return earned;

@@ -132,6 +132,31 @@ describe('device database migrations', () => {
   ]);
  });
 
+ it('awards season WAR stickers from saved lines, one top step per rostering', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 7));
+  const rostering = (seasonId: string, key: string, at: string, line: object | null) =>
+   ({ sql: 'INSERT INTO rostered (season_id, season_key, rostered_at, label, slot, wins, losses, line_json) VALUES (?, ?, ?, ?, ?, 130, 32, ?)', bind: [seasonId, key, at, seasonId, 'LF', line ? JSON.stringify(line) : null] });
+  await db.run([
+   rostering('a', 'k1', '2026-01-01', { war: 17.2 }),
+   rostering('a', 'k2', '2026-02-01', { war: 14 }),
+   rostering('b', 'k1', '2026-01-01', { war: 13.99 }),
+   rostering('f', 'k1', '2026-01-01', { war: 22.4 }),
+   // Lines saved before WAR was kept, and rosterings with no line, earn nothing.
+   rostering('c', 'k1', '2026-01-01', { HR: 40 }),
+   rostering('d', 'k1', '2026-01-01', null),
+   rostering('e', 'k1', '2026-01-01', { war: 25 }),
+   // A WAR sticker the player already placed and hid is left alone.
+   { sql: 'INSERT INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 1)', bind: ['e', 'war-22', 'earlier', 'k0', 0.3, 0.3] }
+  ]);
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 7, to: SCHEMA_VERSION });
+  expect(await db.all('SELECT season_id, kind, earned_at, season_key, x, y, hidden FROM stickers ORDER BY season_id, kind')).toEqual([
+   { season_id: 'a', kind: 'war-14', earned_at: '2026-02-01', season_key: 'k2', x: 0.9, y: 0.9, hidden: 0 },
+   { season_id: 'a', kind: 'war-16', earned_at: '2026-01-01', season_key: 'k1', x: 0.9, y: 0.9, hidden: 0 },
+   { season_id: 'e', kind: 'war-22', earned_at: 'earlier', season_key: 'k0', x: 0.3, y: 0.3, hidden: 1 },
+   { season_id: 'f', kind: 'war-22', earned_at: '2026-01-01', season_key: 'k1', x: 0.9, y: 0.9, hidden: 0 }
+  ]);
+ });
+
  it('leaves the database at the last good version when a migration fails', async () => {
   const failing: Migration[] = [...MIGRATIONS, {
    version: SCHEMA_VERSION + 1,

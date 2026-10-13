@@ -29,6 +29,7 @@
   filterToggle = 'Filters',
   onFilter,
   rail,
+  filterExtras,
   children,
   resultsId
  }: {
@@ -54,6 +55,8 @@
   onFilter?: (value: string) => void;
   /** Extra rail controls under the filters, such as a checkbox or a status line. */
   rail?: Snippet<[]>;
+  /** Controls that belong with the filters: beside them on wide screens, behind the filter toggle on phones. */
+  filterExtras?: Snippet<[]>;
   children: Snippet<[]>;
   resultsId?: string;
  } = $props();
@@ -80,7 +83,7 @@
     </button>
    {/if}
   </div>
-  <div class="sort-row" role="group" aria-labelledby="{uid}-sort-label">
+  <div class="sort-row" class:many={sorts.length > 4} role="group" aria-labelledby="{uid}-sort-label">
    <span id="{uid}-sort-label" class="sort-label">Sort by</span>
    <span class="sort-options" class:stacked={sorts.length > 2}>
     {#each sorts as option (option.value)}
@@ -106,6 +109,7 @@
       {/each}
      </div>
     </fieldset>
+    {@render filterExtras?.()}
    </div>
   {/if}
   {@render rail?.()}
@@ -143,6 +147,10 @@
  .sort-options button { flex: 1; min-height: 2.5rem; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--muted); font-size: var(--text-base); }
  .sort-options button[aria-pressed='true'] { background: var(--text); color: var(--background); }
  .direction { margin-left: .25em; }
+ /* Five or more sorts take the full width on phones, under their label. */
+ .sort-row.many { flex-wrap: wrap; gap: var(--space-2); }
+ .sort-row.many .sort-options { flex-basis: 100%; }
+ .sort-row.many .sort-options button { padding-inline: var(--space-1); white-space: nowrap; }
  @media (min-width: 48rem) {
   .wide { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 28px; align-items: start; }
   .wide .rail { position: sticky; top: 72px; max-height: calc(100dvh - 88px); overflow-y: auto; overscroll-behavior: contain; padding: 0 .25rem .25rem; }
