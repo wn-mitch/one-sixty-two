@@ -27,7 +27,8 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  expect(games).toEqual(Array(8).fill(27));
 
  // A reserve change is kept with the season and survives a reload.
- const firstReserve = page.getByRole('region', { name: 'Reserves' }).locator('li .who').first();
+ // The name and year identify the card; the form line beside it changes with the season.
+ const firstReserve = page.getByRole('region', { name: 'Reserves' }).locator('li .who .name > span').first();
  const before = await firstReserve.innerText();
  await page.getByLabel(/^Bring /).first().selectOption({ index: 1 });
  await expect(firstReserve).not.toHaveText(before);

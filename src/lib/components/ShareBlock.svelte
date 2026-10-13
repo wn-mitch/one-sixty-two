@@ -40,15 +40,35 @@
 	/** The model is rebuilt as media and rankings arrive; a drawing belongs to the content it shows. */
 	const modelKey = $derived(`${model.dataVersion}:${model.mediaVersion}:${model.rankingVersion}:${model.record.wins}-${model.record.losses}:${model.battingOrder.join(',')}`);
 	const imageKey = $derived(`${modelKey}|${format}`);
+	/**
+	 * Drawing clones the whole artwork and inlines its styles, so it waits until the panel is near
+	 * the screen and the content has stopped changing (media and rankings land after the results
+	 * appear), then runs while the browser is idle. Each content change would otherwise draw again.
+	 */
+	let near = $state(false);
+	const SETTLE_MS = 1000;
 	$effect(() => {
 		const key = imageKey;
 		const [current, wanted] = [model, format];
-		if (publishedImage || localImages[key] || drawing.has(key)) return;
-		drawing.add(key);
-		renderSharePng(current, wanted).then(blob => {
-			if (!destroyed) localImages = { ...localImages, [key]: URL.createObjectURL(blob) };
-		}).catch(() => {}).finally(() => drawing.delete(key));
+		if (!near || publishedImage || localImages[key] || drawing.has(key)) return;
+		let idle = 0;
+		const timer = setTimeout(() => {
+			const draw = () => {
+				drawing.add(key);
+				renderSharePng(current, wanted).then(blob => {
+					if (!destroyed) localImages = { ...localImages, [key]: URL.createObjectURL(blob) };
+				}).catch(() => {}).finally(() => drawing.delete(key));
+			};
+			if ('requestIdleCallback' in window) idle = requestIdleCallback(draw, { timeout: 2000 });
+			else draw();
+		}, SETTLE_MS);
+		return () => { clearTimeout(timer); if (idle) cancelIdleCallback(idle); };
 	});
+	function nearScreen(node: HTMLElement) {
+		const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) { near = true; observer.disconnect(); } }, { rootMargin: '600px 0px' });
+		observer.observe(node);
+		return { destroy: () => observer.disconnect() };
+	}
 	onDestroy(() => {
 		destroyed = true;
 		for (const url of Object.values(localImages)) URL.revokeObjectURL(url);
@@ -64,7 +84,7 @@
 	}
 </script>
 
-<section class="share-panel" aria-labelledby="share-art-heading" aria-busy={sharing}>
+<section class="share-panel" aria-labelledby="share-art-heading" aria-busy={sharing} use:nearScreen>
 	<header>
 		<div>
 			<h3 id="share-art-heading">Challenge a friend</h3>

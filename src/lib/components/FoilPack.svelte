@@ -411,8 +411,12 @@
 		content: '';
 		position: absolute;
 		inset: 0;
-		background: linear-gradient(105deg, transparent 30%, oklch(100% 0 0 / .55) 45%, transparent 60%) 0 0 / 250% 100%;
+		/* A strip 2.5 packs wide slides across; moving it by transform keeps the glint on the GPU. */
+		right: auto;
+		width: 250%;
+		background: linear-gradient(105deg, transparent 30%, oklch(100% 0 0 / .55) 45%, transparent 60%);
 		mix-blend-mode: soft-light;
+		translate: -72% 0;
 		animation: glint 3.2s ease-in-out infinite;
 		pointer-events: none;
 	}
@@ -497,15 +501,18 @@
 	.front strong { font: italic 900 13.5cqi / 1 'Barlow Condensed', sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
 	.years { font: italic 800 11cqi / 1 'Barlow Condensed', sans-serif; }
 	/* A jackpot deals face up in the gem holo foil, drifting so it reads as special at a glance. */
-	.front.jackpot { --mx: 50%; --my: 50%; color: oklch(22% .03 280); background: var(--foil); border-color: #fff; animation: holo-drift 3.2s ease-in-out infinite alternate; }
+	.front.jackpot { --mx: 0%; --my: 0%; color: oklch(22% .03 280); background: none; border-color: #fff; overflow: hidden; }
+	.front.jackpot > * { position: relative; z-index: 1; }
+	/* --foil resolves --mx/--my where it is set, so they live on the card. The holo sheet is three cards wide and tall and drifts by transform, so the shimmer never repaints. */
+	.front.jackpot::before { content: ''; position: absolute; z-index: 0; top: 0; left: 0; width: 300%; height: 300%; background: var(--foil); background-size: 100% 100%; background-position: 0 0; translate: 0 -20%; animation: holo-drift 3.2s ease-in-out infinite alternate; pointer-events: none; }
 	.jackpot-mark { width: 34cqi; height: 34cqi; background: oklch(22% .03 280); clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
-	@keyframes holo-drift { from { background-position: 0% 30%; } to { background-position: 100% 70%; } }
-	:global([data-motion='off']) .front.jackpot { animation: none; }
-	@media (prefers-reduced-motion: reduce) { .front.jackpot { animation: none; } }
+	@keyframes holo-drift { from { translate: 0 -20%; } to { translate: -66.667% -46.667%; } }
+	:global([data-motion='off']) .front.jackpot::before { animation: none; translate: -33.333% -33.333%; }
+	@media (prefers-reduced-motion: reduce) { .front.jackpot::before { animation: none; translate: -33.333% -33.333%; } }
 	.caption { margin: 0; color: var(--muted); font-size: var(--text-sm); font-weight: 650; letter-spacing: .02em; transition: opacity var(--motion-deal) var(--ease-out); }
 	/* The caption keeps its line while hidden so the hint appears without moving the stage. */
 	.caption.hidden { opacity: 0; }
-	@keyframes glint { 0%, 55% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+	@keyframes glint { 0%, 55% { translate: -72% 0; } 100% { translate: 72% 0; } }
 	:global([data-motion='off']) .pack::after { animation: none; }
 	@media (prefers-reduced-motion: reduce) { .pack::after { animation: none; } }
 </style>
