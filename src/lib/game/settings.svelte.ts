@@ -18,6 +18,8 @@ export interface AppPreferences {
 	showBlockedCards: boolean;
 	/** Tilt cards with the phone's motion sensor; null keeps the platform default (off where a permission prompt is needed). */
 	phoneTilt: boolean | null;
+	/** Idle cards drift half as far as the full swing. */
+	calmDrift: boolean;
 }
 
 export interface AppSettingsSnapshot extends AppPreferences {
@@ -59,7 +61,8 @@ function validStored(value: unknown): AppPreferences | null {
 			showStickers: typeof candidate.showStickers === 'boolean' ? candidate.showStickers : true,
 			playbackSpeed: PLAYBACK_SPEEDS.includes(candidate.playbackSpeed as PlaybackSpeed) ? candidate.playbackSpeed as PlaybackSpeed : 'normal',
 			showBlockedCards: typeof candidate.showBlockedCards === 'boolean' ? candidate.showBlockedCards : false,
-			phoneTilt: typeof candidate.phoneTilt === 'boolean' ? candidate.phoneTilt : null
+			phoneTilt: typeof candidate.phoneTilt === 'boolean' ? candidate.phoneTilt : null,
+			calmDrift: typeof candidate.calmDrift === 'boolean' ? candidate.calmDrift : false
 		}
 		: null;
 }
@@ -88,6 +91,7 @@ export class AppSettingsState {
 	playbackSpeed = $state<PlaybackSpeed>('normal');
 	showBlockedCards = $state(false);
 	phoneTilt = $state<boolean | null>(null);
+	calmDrift = $state(false);
 	reducedMotion = $state(false);
 	storageAvailable = $state(true);
 
@@ -121,6 +125,7 @@ export class AppSettingsState {
 			playbackSpeed: this.playbackSpeed,
 			showBlockedCards: this.showBlockedCards,
 			phoneTilt: this.phoneTilt,
+			calmDrift: this.calmDrift,
 			reducedMotion: this.reducedMotion,
 			effectiveEnabled: this.effectiveEnabled,
 			animateCards: this.animateCards,
@@ -172,6 +177,7 @@ export class AppSettingsState {
 				this.playbackSpeed = stored.playbackSpeed;
 				this.showBlockedCards = stored.showBlockedCards;
 				this.phoneTilt = stored.phoneTilt;
+				this.calmDrift = stored.calmDrift;
 			}
 		} catch {
 			this.storageAvailable = false;
@@ -230,7 +236,8 @@ export class AppSettingsState {
 				showStickers: this.showStickers,
 				playbackSpeed: this.playbackSpeed,
 				showBlockedCards: this.showBlockedCards,
-				phoneTilt: this.phoneTilt
+				phoneTilt: this.phoneTilt,
+				calmDrift: this.calmDrift
 			} satisfies AppPreferences));
 		} catch {
 			this.storageAvailable = false;
@@ -260,6 +267,13 @@ export class AppSettingsState {
 	setRosterFirstClick(rosterFirstClick: RosterClickBehavior): void {
 		if (rosterFirstClick === this.rosterFirstClick) return;
 		this.rosterFirstClick = rosterFirstClick;
+		this.#persist();
+		this.#notify();
+	}
+
+	setCalmDrift(calmDrift: boolean): void {
+		if (calmDrift === this.calmDrift) return;
+		this.calmDrift = calmDrift;
 		this.#persist();
 		this.#notify();
 	}

@@ -55,13 +55,11 @@
 
 	const labels: Record<ReliefProfile, string> = {
 		pillow: 'Pillow emboss',
-		ridge: 'Ridged rim',
 		groove: 'Engraved groove',
 		etched: 'Etched foil'
 	};
 	const notes: Record<ReliefProfile, string> = {
 		pillow: 'Pressed up from behind; soft rounded letters.',
-		ridge: 'A raised rim around each letter over a lower face.',
 		groove: 'Letters cut into the card, catching shade on the light side.',
 		etched: 'Raised letters with fine lines that streak as the light moves.'
 	};

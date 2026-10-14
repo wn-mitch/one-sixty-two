@@ -55,6 +55,28 @@ test.describe('Cards workshop', () => {
 		await expect(rendered).toHaveJSProperty('clientWidth', 410);
 	});
 
+	test('a lit card leaves its finish to the light canvas and keeps the tagged shapes it reads', async ({ page }) => {
+		await page.goto('/?path=/story/cards-states--interactive');
+		await page.locator('#control-finish').selectOption('emboss');
+		const canvas = page.frameLocator('#storybook-preview-iframe');
+		const rendered = canvas.locator('.card[data-finish="emboss"][data-face="front"]').first();
+		await expect(rendered).toHaveAttribute('data-shaded', 'true');
+		// The canvas fades in once it has drawn, so the card never sits under an empty light layer.
+		await expect(rendered.locator('canvas.light')).toHaveAttribute('data-presented', '', { timeout: 15000 });
+		const finish = await rendered.evaluate(root => {
+			const layers = [...root.querySelectorAll<HTMLElement>('[data-layer="material"] [data-layer]')];
+			return {
+				untagged: layers.filter(layer => !layer.dataset.surface).map(layer => layer.dataset.layer),
+				painted: layers.filter(layer => getComputedStyle(layer).backgroundImage !== 'none').map(layer => layer.dataset.layer),
+				corners: root.querySelectorAll('[data-layer="material.gold-corner"][data-surface-shape]').length,
+				rings: root.querySelectorAll('[data-layer="material.gold-ring"][data-surface="ring"]').length,
+				stamp: getComputedStyle(root).getPropertyValue('--stamp').trim(),
+				bevels: [...root.querySelectorAll<HTMLElement>('[data-layer="material.photo-bevel"]')].filter(bevel => getComputedStyle(bevel).display !== 'none').length
+			};
+		});
+		expect(finish).toEqual({ untagged: [], painted: [], corners: 4, rings: 1, stamp: '', bevels: 0 });
+	});
+
 	test('keeps the 1980s badge border clear of gem edging', async ({ page }) => {
 		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await page.goto('/?path=/story/cards-states--missing-photo');

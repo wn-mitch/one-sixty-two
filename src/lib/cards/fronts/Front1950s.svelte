@@ -9,11 +9,11 @@
 	let { s }: Front1950sProps = $props();
 </script>
 
-<div use:fit data-card="1950s" data-art={s.fin.tier} style="container-type:inline-size; contain:layout style; position:relative; width:100%; aspect-ratio:5/7;">
+<div use:fit data-card="1950s" style="container-type:inline-size; contain:layout style; position:relative; width:100%; aspect-ratio:5/7;">
 	<div data-layer="frame.stock" style={`position:absolute; inset:0; overflow:hidden; border-radius:1.8cqw; background:${s.k.stock}; color:${s.k.fieldOnStock}; font-family:'Barlow Condensed', sans-serif;`}>
 		<div data-layer="frame.rule" data-surface="frame" data-surface-shape="frame" aria-hidden="true" style={`position:absolute; inset:2.2cqw; border:0.35cqw solid ${s.k.fieldOnStock}; border-radius:1cqw;`}></div>
 		{#if s.fin.gem}
-			<div data-layer="material.gem-ring" aria-hidden="true" style="position:absolute; left:3.7cqw; right:3.7cqw; top:3.7cqw; height:95.6cqw; border-radius:1.6cqw; background:conic-gradient(from var(--ang, 200deg), #ff6fc1, #ffe27a, #8dffb0, #6fd6ff, #b48cff, #ff6fc1);"></div>
+			<div data-layer="material.gem-ring" data-surface="ring" data-surface-shape="box" aria-hidden="true" style="position:absolute; left:3.7cqw; right:3.7cqw; top:3.7cqw; height:95.6cqw; border-radius:1.6cqw; background:var(--gem-ring, transparent);"></div>
 		{/if}
 		{#if s.fin.emboss}
 			<div data-layer="material.photo-bevel" aria-hidden="true" style="position:absolute; left:5cqw; right:5cqw; top:5cqw; height:93cqw; border-radius:0.8cqw; box-shadow:calc(var(--lx, -0.45) * -0.8cqw) calc(var(--ly, -0.75) * -0.8cqw) 1cqw rgba(0,0,0,0.45), calc(var(--lx, -0.45) * 0.5cqw) calc(var(--ly, -0.75) * 0.5cqw) 0.6cqw rgba(255,255,255,0.6);"></div>
@@ -42,30 +42,30 @@
 				<div data-rt data-layer="name.full" data-surface="name" data-fit data-max="9.6" data-min="6.8" data-wrap-min="6" data-lines="2" data-max-h="13" style="text-shadow:var(--emb, 0 0 0 transparent); position:relative; max-width:76cqw; margin:0 auto; font-family:'Roboto Serif', serif; font-weight:700; font-style:italic; font-size:9.6cqw; line-height:1.02; letter-spacing:-0.01em; white-space:nowrap; text-wrap:balance;">{s.full}</div>
 				<div style="position:relative; margin-top:1.1cqw; display:flex; align-items:center; justify-content:center; gap:1.8cqw;">
 					<span aria-hidden="true" style={`flex:none; width:4cqw; height:0.3cqw; background:${s.k.onField};`}></span>
-					<span data-rt data-layer="team.name" data-fit data-max="3.6" data-min="3" style="max-width:60cqw; font-weight:700; font-size:3.6cqw; line-height:1; letter-spacing:0.18em; text-transform:uppercase; white-space:nowrap;">{s.team}</span>
+					<span data-rt data-layer="team.name" data-surface="team" data-fit data-max="3.6" data-min="3" style="max-width:60cqw; font-weight:700; font-size:4cqw; line-height:1; letter-spacing:0.18em; text-transform:uppercase; white-space:nowrap;">{s.team}</span>
 					<span aria-hidden="true" style={`flex:none; width:4cqw; height:0.3cqw; background:${s.k.onField};`}></span>
 				</div>
 			</div>
 		</div>
 
-		<div data-layer="stats" style="position:absolute; left:6cqw; right:6cqw; top:114.5cqw; display:grid; grid-template-columns:auto auto auto; justify-content:space-between; align-items:stretch;">
-			<div data-layer="stat.primary" style="display:flex; flex-direction:column; justify-content:flex-end; gap:0.8cqw;">
-				<div data-rt data-layer="stat.primary.label" style="font-weight:700; font-size:3.3cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase;">{s.st1.l}</div>
-				<div data-rt data-layer="stat.primary.value" style="font-family:'Roboto Serif', serif; font-weight:700; font-size:13.5cqw; line-height:0.86; font-variant-numeric:tabular-nums; letter-spacing:-0.02em;">{s.st1.v}</div>
+		<div data-layer="stats" style="position:absolute; left:6cqw; right:6cqw; top:114.5cqw; display:grid; grid-template-columns:minmax(0, max-content) auto auto; justify-content:space-between; align-items:stretch;">
+			<div data-layer="stat.primary" style="display:flex; flex-direction:column; justify-content:flex-end; gap:0.8cqw; min-width:0;">
+				<div data-rt data-layer="stat.primary.label" style="font-weight:700; font-size:3.9cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase;">{s.st1.l}</div>
+				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.primary.value" style="font-family:'Roboto Serif', serif; font-weight:700; font-size:13.5cqw; line-height:0.86; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; white-space:nowrap;">{s.st1.v}</div>
 			</div>
 			<div data-layer="stat.secondary" style={`display:flex; flex-direction:column; justify-content:flex-end; gap:0.8cqw; padding-left:3.4cqw; border-left:0.3cqw solid ${s.k.fieldOnStock};`}>
-				<div data-rt data-layer="stat.secondary.label" style="font-weight:700; font-size:3.3cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase;">{s.st2.l}</div>
+				<div data-rt data-layer="stat.secondary.label" style="font-weight:700; font-size:3.9cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase;">{s.st2.l}</div>
 				<div data-rt data-layer="stat.secondary.value" style="font-family:'Roboto Serif', serif; font-weight:700; font-size:9.6cqw; line-height:0.86; font-variant-numeric:tabular-nums; letter-spacing:-0.02em;">{s.st2.v}</div>
 			</div>
 			<div data-layer="stat.tertiary" style={`display:flex; flex-direction:column; justify-content:flex-end; gap:0.8cqw; padding-left:3.4cqw; border-left:0.3cqw solid ${s.k.fieldOnStock};`}>
-				<div data-rt data-layer="stat.tertiary.label" style="font-weight:700; font-size:3.3cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase;">{s.st3.l}</div>
+				<div data-rt data-layer="stat.tertiary.label" style="font-weight:700; font-size:3.9cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase;">{s.st3.l}</div>
 				<div data-rt data-layer="stat.tertiary.value" style="font-family:'Roboto Serif', serif; font-weight:700; font-size:9.6cqw; line-height:0.86; font-variant-numeric:tabular-nums; letter-spacing:-0.02em;">{s.st3.v}</div>
 			</div>
 		</div>
 
 		<div data-layer="footer" style="position:absolute; left:6cqw; right:6cqw; bottom:4.4cqw; display:flex; justify-content:space-between; align-items:baseline; gap:2cqw;">
-			<div data-layer="brand" style="font-weight:800; font-style:italic; font-size:3.6cqw; line-height:1;">162-0</div>
-			<div data-rt data-layer="photo.caption" style={`font-weight:600; font-size:3cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase; white-space:nowrap; color:${s.k.ink};`}>{s.caption}</div>
+			<div data-layer="brand" data-surface="brand" style="font-weight:600; letter-spacing:.03em; font-style:italic; font-size:4.2cqw; line-height:1;">162-0</div>
+			<div data-rt data-layer="photo.caption" style={`font-weight:600; font-size:3.8cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase; white-space:nowrap; color:${s.k.ink};`}>{s.caption}</div>
 		</div>
 	</div>
 </div>

@@ -210,17 +210,30 @@ export interface DriftRhythm {
 	frequencyX2: number;
 	frequencyY1: number;
 	frequencyY2: number;
+	/** A slow per-card sine that swells and shrinks each axis's swing, so cards don't all rock the same width. */
+	swellPhaseX: number;
+	swellPhaseY: number;
+	swellFrequencyX: number;
+	swellFrequencyY: number;
 }
+
+/** The swing scale a swell sine gives, between 0.45 and 1.35 of the base drift. */
+function swell(seconds: number, frequency: number, phase: number): number {
+	return 0.9 + 0.45 * Math.sin(seconds * frequency * Math.PI * 2 + phase);
+}
+
+/** The share of the full drift idle cards use when the player turns on Calm drift. */
+export const CALM_DRIFT = 0.5;
 
 /** Passive drift in degrees at time seconds, scaled by weight (0 while held). */
 export function idleDrift(seconds: number, rhythm: DriftRhythm, weight: number, tuning: TiltTuning = TILT): { rx: number; ry: number } {
 	const turn = Math.PI * 2;
 	return {
-		rx: 2.4 * tuning.idleAmount * weight * (
+		rx: 2.4 * tuning.idleAmount * weight * swell(seconds, rhythm.swellFrequencyX, rhythm.swellPhaseX) * (
 			0.62 * Math.sin(seconds * rhythm.frequencyX1 * turn + rhythm.phaseX1) +
 			0.38 * Math.sin(seconds * rhythm.frequencyX2 * turn + rhythm.phaseX2)
 		),
-		ry: 3.4 * tuning.idleAmount * weight * (
+		ry: 3.4 * tuning.idleAmount * weight * swell(seconds, rhythm.swellFrequencyY, rhythm.swellPhaseY) * (
 			0.62 * Math.sin(seconds * rhythm.frequencyY1 * turn + rhythm.phaseY1) +
 			0.38 * Math.sin(seconds * rhythm.frequencyY2 * turn + rhythm.phaseY2)
 		)

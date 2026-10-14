@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FACE_DEPTH, TILT_DEFAULTS, pointerTilt, restingTilt, stepTilt, tiltPose, type TiltPose } from './tilt-math.ts';
+import { FACE_DEPTH, TILT_DEFAULTS, idleDrift, pointerTilt, restingTilt, stepTilt, tiltPose, type DriftRhythm, type TiltPose } from './tilt-math.ts';
 
 const HALF_WIDTH = 140;
 const HALF_HEIGHT = 196;
@@ -100,5 +100,28 @@ describe('fulcrum', () => {
 		const [px, py] = project(pose, pose.pivotX, pose.pivotY, 0);
 		expect(Math.abs(px - pose.pivotX * pose.scale)).toBeLessThan(1e-6);
 		expect(Math.abs(py - pose.pivotY * pose.scale)).toBeLessThan(1e-6);
+	});
+});
+
+describe('idle drift', () => {
+	const rhythm: DriftRhythm = {
+		phaseX1: 0.3, phaseX2: 1.1, phaseY1: 2.2, phaseY2: 0.7,
+		frequencyX1: 0.11, frequencyX2: 0.07, frequencyY1: 0.09, frequencyY2: 0.13,
+		swellPhaseX: 0, swellPhaseY: Math.PI, swellFrequencyX: 0.02, swellFrequencyY: 0.02
+	};
+	const widest = (from: number, to: number, axis: 'rx' | 'ry') => {
+		let most = 0;
+		for (let t = from; t < to; t += 0.05) most = Math.max(most, Math.abs(idleDrift(t, rhythm, 1)[axis]));
+		return most;
+	};
+
+	it('swells and shrinks the swing over time instead of rocking at one width', () => {
+		// Swell peaks near 12.5s and bottoms near 37.5s at 0.02 Hz.
+		expect(widest(5, 20, 'rx')).toBeGreaterThan(widest(30, 45, 'rx') * 1.8);
+	});
+
+	it('keeps the swing inside the base drift range scaled by the swell ceiling', () => {
+		expect(widest(0, 120, 'rx')).toBeLessThanOrEqual(2.4 * TILT_DEFAULTS.idleAmount * 1.35 + 1e-9);
+		expect(widest(0, 120, 'ry')).toBeLessThanOrEqual(3.4 * TILT_DEFAULTS.idleAmount * 1.35 + 1e-9);
 	});
 });

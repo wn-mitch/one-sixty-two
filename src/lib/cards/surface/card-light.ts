@@ -1,8 +1,10 @@
 import type { Finish } from '../finish.ts';
 import { LightRenderer, type LightOptions } from './light-renderer.ts';
 import { SurfaceMapQueue } from './map-queue.ts';
+import { stableUnit } from '../stable-unit.ts';
 import type { SurfaceMapOptions } from './surface-map.ts';
 import type { ReliefProfile } from './surfaces.ts';
+import type { CardEra } from '../view-model.ts';
 
 /**
  * Lights individual cards. One shared WebGL2 context renders a card at its own size and hands the
@@ -17,6 +19,9 @@ export interface LightState {
 	lightY: number;
 	/** 0 is ambient light; 1 lifts a full glare. */
 	spotlight: number;
+	/** The viewer's offset across the face from the card's tilt, as sines of its lean; 0 faces straight on. */
+	viewX?: number;
+	viewY?: number;
 }
 
 /** Ambient light changes slowly, so it redraws at this interval rather than every frame. */
@@ -52,9 +57,10 @@ export class CardLight {
 
 	/** Moves the light; `direct` marks pointer-driven light, which redraws every frame. */
 	set(state: LightState, direct = false): void {
-		const { lightX, lightY, spotlight } = this.state;
+		const { lightX, lightY, spotlight, viewX = 0, viewY = 0 } = this.state;
 		this.direct = direct;
-		if (Math.abs(lightX - state.lightX) < 0.002 && Math.abs(lightY - state.lightY) < 0.002 && Math.abs(spotlight - state.spotlight) < 0.002) return;
+		const still = (a: number, b: number) => Math.abs(a - b) < 0.002;
+		if (still(lightX, state.lightX) && still(lightY, state.lightY) && still(spotlight, state.spotlight) && still(viewX, state.viewX ?? 0) && still(viewY, state.viewY ?? 0)) return;
 		this.state = { ...state };
 		LightEngine.shared()?.dirty(this);
 	}
@@ -122,8 +128,10 @@ export class LightEngine {
 			for (const entry of entries) {
 				const light = this.#byCard.get(entry.target);
 				if (!light?.card) continue;
-				light.width = light.card.offsetWidth;
-				light.height = light.card.offsetHeight;
+				// The observer's own border-box size, so a page mounting many cards never forces a layout per card.
+				const box = entry.borderBoxSize?.[0];
+				light.width = box ? Math.round(box.inlineSize) : light.card.offsetWidth;
+				light.height = box ? Math.round(box.blockSize) : light.card.offsetHeight;
 				this.#queue.invalidate(light.id);
 			}
 		});
@@ -143,8 +151,9 @@ export class LightEngine {
 		light.card = card;
 		light.canvas = canvas;
 		light.presenter = this.#mode === 'transfer' ? canvas.getContext('bitmaprenderer') : canvas.getContext('2d');
-		light.width = card.offsetWidth;
-		light.height = card.offsetHeight;
+		// Sized by the resize observer's first entry, delivered before the next paint.
+		light.width = 0;
+		light.height = 0;
 		this.#lights.set(light.id, light);
 		this.#byCard.set(card, light);
 		this.#visibility.observe(card);
@@ -217,10 +226,14 @@ export class LightEngine {
 			axisYx: 0,
 			axisYy: height,
 			...light.state,
-			tier: (light.card?.dataset.finish ?? 'base') as Finish
+			tier: (light.card?.dataset.finish ?? 'base') as Finish,
+			era: light.card?.dataset.card as CardEra | undefined,
+			pattern: stableUnit(light.card?.dataset.identity ?? '', 41)
 		}], this.#options);
 		const source = this.#renderer.canvas;
 		const canvas = light.canvas!;
+		// The card fades its light in on the first frame, so it never shows an empty canvas over unfoiled print.
+		canvas.dataset.presented = '';
 		if (this.#mode === 'transfer') {
 			(light.presenter as ImageBitmapRenderingContext).transferFromImageBitmap((source as OffscreenCanvas).transferToImageBitmap());
 			return;

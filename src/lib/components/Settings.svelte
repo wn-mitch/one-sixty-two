@@ -15,6 +15,7 @@
 	const cardSpeedId = `${uid}-card-speed`;
 	const rosterLabelId = `${uid}-roster-first-click`;
 	const stickersId = `${uid}-stickers`;
+	const driftId = `${uid}-drift`;
 	const blockedId = `${uid}-blocked`;
 	const phoneTiltId = `${uid}-phone-tilt`;
 	const phoneTiltNoticeId = `${uid}-phone-tilt-notice`;
@@ -176,6 +177,24 @@
 						><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
 					</div>
 				{/if}
+
+				<div class="setting-row">
+					<div class="setting-copy">
+						<label for={driftId}>Calm drift</label>
+						<p>Resting cards sway half as far.</p>
+					</div>
+					<button
+						id={driftId}
+						type="button"
+						class="settings-switch"
+						role="switch"
+						aria-checked={appSettings.calmDrift}
+						aria-label="Calm drift"
+						disabled={!ready || appSettings.reducedMotion}
+						aria-describedby={appSettings.reducedMotion ? systemNoticeId : undefined}
+						onclick={() => appSettings.setCalmDrift(!appSettings.calmDrift)}
+					><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
+				</div>
 
 				<div class="setting-row">
 					<div class="setting-copy">

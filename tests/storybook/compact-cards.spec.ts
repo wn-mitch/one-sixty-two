@@ -22,6 +22,10 @@ async function expectCompactGeometry(page: Page): Promise<void> {
 		const identity = node.querySelector<HTMLElement>('[data-compact-identity]');
 		if (!card || !plate || !identity) return false;
 		const cardRect = card.getBoundingClientRect();
+		// Desktop shows the printed front; only narrow screens lay the readable plate over it.
+		const desktop = window.matchMedia('(min-width: 48rem)').matches;
+		if (desktop !== (getComputedStyle(plate).display === 'none')) return false;
+		if (desktop) return card.dataset.compact === 'true' && card.style.transform === '' && identity.scrollWidth <= identity.clientWidth + 1;
 		const plateContent = plate.querySelectorAll<HTMLElement>('.name, .meta');
 		const name = plate.querySelector<HTMLElement>('.name')!;
 		const nameText = document.createRange();

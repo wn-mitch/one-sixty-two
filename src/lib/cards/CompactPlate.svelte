@@ -180,4 +180,8 @@
 	}
 	.plate-2020s .meta { padding-right: 7cqw; }
 	.plate-2020s .meta span:first-child { color: var(--tint); }
+	/* Desktop compact cards are large enough to read the printed front, so the plate stands down. */
+	@media (min-width: 48rem) {
+		.compact-plate { display: none; }
+	}
 </style>

@@ -441,6 +441,8 @@ test('preserves team groups and actual photo dates on remainder cards across all
 });
 
 test('keeps compact text readable above every era finish at its minimum width', async ({ page, request }, testInfo) => {
+	// The readable plate is the phone treatment; desktop compact cards show their printed front instead.
+	await page.setViewportSize({ width: 390, height: 844 });
 	const [manifest, media, rankings] = await Promise.all([
 		currentManifest(request), currentMedia(request), currentRankings(request)
 	]);

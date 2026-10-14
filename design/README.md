@@ -6,6 +6,7 @@ Status: decisions consolidated through Q59. These documents specify intended beh
 
 - [Shared simulation](simulation/README.md): contact profiles, flight, fielding, ordinary ballparks and Classic adoption.
 - [Draft Mode](draft-mode/README.md): shared cube, rosters, eight-team league, economy, development, franchise/decree catalog and metagame.
+- [Card print model](cards/README.md): how card fronts are printed and lit: plates, roles, tiers and the single renderer.
 - [Product policy](../PRODUCT.md): pre-release compatibility and product constraints.
 - [Interface design](../DESIGN.md): existing visual and interaction conventions, not a second gameplay specification.
 

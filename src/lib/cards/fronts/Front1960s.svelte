@@ -7,16 +7,16 @@
 	let { s }: { s: CardViewModel } = $props();
 </script>
 
-<div data-card="1960s" data-art={s.fin.tier} use:fit style="container-type:inline-size; contain:layout style; position:relative; width:100%; aspect-ratio:5/7;">
+<div data-card="1960s" use:fit style="container-type:inline-size; contain:layout style; position:relative; width:100%; aspect-ratio:5/7;">
 	<div data-layer="frame.field" style={`position:absolute; inset:0; overflow:hidden; border-radius:1.8cqw; background:${s.k.field}; color:${s.k.onField}; font-family:'Barlow Condensed', sans-serif; display:flex; flex-direction:column; padding:6cqw 6cqw 4.6cqw; box-sizing:border-box;`}>
 		<div data-layer="identity" style="flex:none;">
 			<div use:fit={{ max: 15.5, min: 10.5, wrapMin: 8.5, lines: 2, maxH: 20 }} data-rt data-layer="name.full" data-surface="name" data-fit data-max="15.5" data-min="10.5" data-wrap-min="8.5" data-lines="2" data-max-h="20" style="text-shadow:var(--emb, 0 0 0 transparent); width:100%; font-weight:800; font-size:15.5cqw; line-height:.86; letter-spacing:.005em; text-transform:uppercase; white-space:nowrap; text-wrap:balance;">{s.full}</div>
-			<div use:fit={{ max: 4.8, min: 3.4 }} data-rt data-layer="team.name" data-fit data-max="4.8" data-min="3.4" style="margin-top:1.8cqw; width:100%; font-weight:700; font-size:4.8cqw; line-height:1; letter-spacing:.1em; text-transform:uppercase; white-space:nowrap;">{s.team}</div>
+			<div use:fit={{ max: 4.8, min: 3.4 }} data-rt data-layer="team.name" data-surface="team" data-fit data-max="4.8" data-min="3.4" style="margin-top:1.8cqw; width:100%; font-weight:700; font-size:4.8cqw; line-height:1; letter-spacing:.1em; text-transform:uppercase; white-space:nowrap;">{s.team}</div>
 		</div>
 
 		<div data-layer="photo.area" style="flex:1 1 auto; min-height:0; margin-top:3.8cqw; position:relative;">
 			{#if s.fin.gem}
-				<div data-layer="material.gem-ring" style="position:absolute; inset:-1.3cqw; border-radius:3.9cqw; background:conic-gradient(from var(--ang, 200deg), #ff6fc1, #ffe27a, #8dffb0, #6fd6ff, #b48cff, #ff6fc1);"></div>
+				<div data-layer="material.gem-ring" data-surface="ring" data-surface-shape="box" style="position:absolute; inset:-1.3cqw; border-radius:3.9cqw; background:var(--gem-ring, transparent);"></div>
 			{/if}
 			{#if s.fin.emboss}
 				<div data-layer="material.photo-bevel" style="position:absolute; inset:0; border-radius:2.6cqw; box-shadow:calc(var(--lx, -.45) * -.8cqw) calc(var(--ly, -.75) * -.8cqw) 1cqw rgba(0,0,0,.45), calc(var(--lx, -.45) * .5cqw) calc(var(--ly, -.75) * .5cqw) .6cqw rgba(255,255,255,.6);"></div>
@@ -34,24 +34,24 @@
 			</div>
 		</div>
 
-		<div data-layer="stats" style="flex:none; margin-top:4.4cqw; display:grid; grid-template-columns:auto auto auto; justify-content:space-between; align-items:end;">
-			<div data-layer="stat.primary" style="display:flex; flex-direction:column; gap:.9cqw;">
-				<div data-rt data-layer="stat.primary.label" style="font-weight:700; font-size:3.4cqw; line-height:1; letter-spacing:.06em; text-transform:uppercase;">{s.st1.l}</div>
-				<div data-rt data-layer="stat.primary.value" style="font-weight:800; font-size:18.5cqw; line-height:.8; font-variant-numeric:tabular-nums;">{s.st1.v}</div>
+		<div data-layer="stats" style="flex:none; margin-top:4.4cqw; display:grid; grid-template-columns:minmax(0, max-content) auto auto; justify-content:space-between; align-items:end;">
+			<div data-layer="stat.primary" style="display:flex; flex-direction:column; gap:.9cqw; min-width:0;">
+				<div data-rt data-layer="stat.primary.label" style="font-weight:700; font-size:4cqw; line-height:1; letter-spacing:.06em; text-transform:uppercase;">{s.st1.l}</div>
+				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.primary.value" style="font-weight:800; font-size:18.5cqw; line-height:.8; font-variant-numeric:tabular-nums; white-space:nowrap;">{s.st1.v}</div>
 			</div>
 			<div data-layer="stat.secondary" style="display:flex; flex-direction:column; gap:.9cqw; padding-left:2cqw;">
-				<div data-rt data-layer="stat.secondary.label" style="font-weight:700; font-size:3.4cqw; line-height:1; letter-spacing:.06em; text-transform:uppercase;">{s.st2.l}</div>
+				<div data-rt data-layer="stat.secondary.label" style="font-weight:700; font-size:4cqw; line-height:1; letter-spacing:.06em; text-transform:uppercase;">{s.st2.l}</div>
 				<div data-rt data-layer="stat.secondary.value" style="font-weight:800; font-size:12.2cqw; line-height:.8; font-variant-numeric:tabular-nums;">{s.st2.v}</div>
 			</div>
 			<div data-layer="stat.tertiary" style="display:flex; flex-direction:column; gap:.9cqw; padding-left:2cqw;">
-				<div data-rt data-layer="stat.tertiary.label" style="font-weight:700; font-size:3.4cqw; line-height:1; letter-spacing:.06em; text-transform:uppercase;">{s.st3.l}</div>
+				<div data-rt data-layer="stat.tertiary.label" style="font-weight:700; font-size:4cqw; line-height:1; letter-spacing:.06em; text-transform:uppercase;">{s.st3.l}</div>
 				<div data-rt data-layer="stat.tertiary.value" style="font-weight:800; font-size:12.2cqw; line-height:.8; font-variant-numeric:tabular-nums;">{s.st3.v}</div>
 			</div>
 		</div>
 
 		<div data-layer="footer" style={`flex:none; margin-top:2.8cqw; padding-top:1.8cqw; border-top:.5cqw solid ${s.k.onField}; display:flex; justify-content:space-between; align-items:baseline; gap:2cqw;`}>
-			<div data-rt data-layer="photo.caption" style="font-weight:600; font-size:3cqw; line-height:1; letter-spacing:.07em; text-transform:uppercase; white-space:nowrap;">{s.caption}</div>
-			<div data-layer="brand" style="font-weight:800; font-style:italic; font-size:3.6cqw; line-height:1;">162-0</div>
+			<div data-rt data-layer="photo.caption" style="font-weight:600; font-size:3.8cqw; line-height:1; letter-spacing:.07em; text-transform:uppercase; white-space:nowrap;">{s.caption}</div>
+			<div data-layer="brand" data-surface="brand" style="font-weight:600; letter-spacing:.03em; font-style:italic; font-size:4.2cqw; line-height:1;">162-0</div>
 		</div>
 	</div>
 </div>

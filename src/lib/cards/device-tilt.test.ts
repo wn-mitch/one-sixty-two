@@ -331,3 +331,17 @@ describe('phone tilt preference', () => {
 		expect(restored.phoneTilt).toBe(false);
 	});
 });
+
+describe('calm drift preference', () => {
+	it('starts off, persists when turned on, and leaves older saves at the full swing', () => {
+		const old = fixture({ stored: { motionEnabled: true, cardAnimation: true, cardSpeed: 1, rosterFirstClick: 'move' } });
+		const release = old.settings.retain();
+		expect(old.settings.calmDrift).toBe(false);
+		old.settings.setCalmDrift(true);
+		expect(JSON.parse(old.storage.getItem(APP_SETTINGS_STORAGE_KEY)!).calmDrift).toBe(true);
+		release();
+		const restored = new AppSettingsState(() => ({ storage: old.storage, reducedMotion: old.media }));
+		restored.retain();
+		expect(restored.calmDrift).toBe(true);
+	});
+});

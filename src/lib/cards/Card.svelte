@@ -4,7 +4,8 @@
  import CompactPlate from './CompactPlate.svelte';
  import { fit } from './fit.ts';
  import { tilt } from './motion.ts';
- import { CardLight, lightCanvas } from './surface/card-light.ts';
+ import { CardLight, LightEngine, lightCanvas } from './surface/card-light.ts';
+ import { GEM_RING } from './finish.ts';
  import type { ReliefProfile } from './surface/surfaces.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import Front1950s from './fronts/Front1950s.svelte';
@@ -69,6 +70,11 @@
  const flat = $derived(capture || scene);
  // Compact cards and thumbnails are too small for relief to read, so they keep the static finish too.
  const lit = $derived(!flat && !compact && !thumbnail);
+ // A lit card on a browser that can run the light canvas prints ink only: the shader draws every foil, bevel and glint.
+ // Elsewhere the finish arrives through the CSS variables below and Material's paint.
+ const shaded = $derived(lit && LightEngine.shared() !== null);
+ // The photo ring takes the tier's foil; Gem's is the holo ring.
+ const finishPaint = $derived(shaded ? '' : `;--stamp:${s.fin.stamp};--emb:${s.fin.emb};--gem-ring:${s.fin.gem ? GEM_RING : s.fin.stamp}`);
  const light = new CardLight();
  $effect(() => light.setNameProfile(nameProfile));
  const motionFinish = $derived(s.fin.tier === 'foil' ? 'silver' : s.fin.tier === 'emboss' ? 'gold' : s.fin.tier);
@@ -80,12 +86,14 @@
  data-card={s.era}
  data-face={face}
  data-finish={s.fin.tier}
+ data-identity={`${s.full}|${s.year}|${s.team}|${s.pos}`}
  data-thumbnail={thumbnail}
  data-interactive={interactive}
  data-compact={compact}
  data-capture={capture}
  data-flat={flat}
- style="{colors};--stamp:{s.fin.stamp};--emb:{s.fin.emb}"
+ data-shaded={shaded}
+ style="{colors}{finishPaint}"
  use:fit
  use:tilt={{
   enabled: interactive && !thumbnail && !flat,
@@ -102,7 +110,7 @@
   {#if face === 'front'}<Front {s} />{:else}<Back {s} {onDetails} />{/if}
  </div>
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
- {#if face === 'front'}<Material {s} layer="over" />{/if}
+ {#if face === 'front'}<Material {s} layer="over" paint={!shaded} />{/if}
  <!-- Explicit stickers (the collection editor) always show; elsewhere the player's setting decides. -->
  {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer era={s.era} stickers={stickers ?? cardStickers(s.seasonId)} fresh={freshStickers} />{/if}
  {#if face === 'front' && lit}<canvas class="light" aria-hidden="true" use:lightCanvas={light}></canvas>{/if}
@@ -112,7 +120,13 @@
  /* The finish prints under one fixed light; its moving light, relief and foil come from the WebGL canvas. */
  .card { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 5 / 7; isolation: isolate; --mx: 68%; --my: 24%; --lx: .36; --ly: -.64; --ang: 218deg; --lift: .42; --glare: .08; --g1: .92; --g2: .38; --g3: .66; --k: 1; }
  .face { position: relative; width: 100%; height: 100%; }
- .light { position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%; border-radius: 1.8cqw; pointer-events: none; }
+ /* Above the tagged finish shapes, so relief, highlights and holo reach the ring too. It fades in on its first frame. */
+ .light { position: absolute; inset: 0; z-index: 101; width: 100%; height: 100%; border-radius: 1.8cqw; pointer-events: none; opacity: 0; transition: opacity 240ms ease-out; }
+ .light:global([data-presented]) { opacity: 1; }
+ /* The photo window's bevel is a light effect; a shaded card presses the window into the surface map instead. */
+ .card[data-shaded='true'] :global([data-layer='material.photo-bevel']) { display: none; }
+ /* The 2000s rail is the card's left edge, so the finish rim starts at its inner side. */
+ .card[data-card='2000s'] { --rim-left: 10cqw; --rim-left-radius: 0; }
  .card[data-compact='true'] { min-width: 72px; }
  .card[data-compact='true'] :global([data-layer='season.year']) { font-size: max(11cqw, 8px) !important; line-height: 1; }
  .card[data-compact='true'] :global([data-layer='season.year'] ~ span) { display: none; }

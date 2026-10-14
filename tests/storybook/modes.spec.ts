@@ -95,6 +95,8 @@ test('Collection lists every rostered card and arranges a card’s stickers', as
 	await expect(grid.getByRole('listitem').first()).toBeVisible();
 	expect(await grid.getByRole('listitem').count()).toBeGreaterThanOrEqual(14);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	// Phones keep the binder's filters behind their toggle.
+	await page.getByRole('button', { name: 'Filters' }).click();
 	await page.getByLabel('With stickers').check();
 	// Located by name: hiding its last sticker drops the card out of the With stickers filter.
 	const name = await grid.getByRole('button').first().locator('.name').innerText();
@@ -106,7 +108,7 @@ test('Collection lists every rostered card and arranges a card’s stickers', as
 	expect(before).toBeLessThanOrEqual(4);
 	await stickered.click();
 	const detail = page.locator('section.detail');
-	await detail.getByRole('button', { name: 'Arrange stickers' }).click();
+	await detail.getByRole('button', { name: 'Edit stickers' }).click();
 	await expect(detail.getByRole('button', { name: /^Move .* sticker/ })).toHaveCount(before);
 	// Hiding a family takes it off the face; the next rarest visible family, if any, takes its place.
 	const hidden = await detail.locator('.stickers li').filter({ has: page.getByRole('button', { name: 'Hide' }) }).first().locator('strong').innerText();
@@ -135,7 +137,7 @@ test('Collection groups cards by team or era with completion that leaves bullpen
 
 test('Collection explains an empty or blocked binder', async ({ page }) => {
 	await openStory(page, 'modes-collection--empty');
-	await expect(page.getByText('Finish a season and every card on that roster joins your collection.')).toBeVisible();
+	await expect(page.getByText(/Finish a season and every card on that roster joins your collection/)).toBeVisible();
 	await openStory(page, 'modes-collection--storage-blocked');
 	await expect(page.locator('[data-toast]')).toHaveText(/browser storage is blocked/);
 });

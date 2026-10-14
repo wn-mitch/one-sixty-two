@@ -20,7 +20,7 @@
 {/if}
 
 <style>
- .stickers { position: absolute; inset: 0; z-index: 4; pointer-events: none; font-size: .5cqw; }
+ .stickers { position: absolute; inset: 0; z-index: 102; pointer-events: none; font-size: .5cqw; }
  .spot { position: absolute; translate: -50% -50%; line-height: 0; }
  /* A just-earned sticker slaps on, then two glints twinkle across it a few times. --sparkle-delay comes from the surrounding surface. */
  .fresh { animation: slap 480ms cubic-bezier(.16, 1, .3, 1) var(--sparkle-delay, 0ms) both; }

@@ -1,10 +1,11 @@
 import { animate, type JSAnimation } from 'animejs';
 import { appSettings } from '../game/settings.svelte.ts';
+import { stableUnit } from './stable-unit.ts';
 import { MOTION } from '../motion-timing.ts';
 import { deviceTilt, type DeviceTiltValue } from './device-tilt.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
 import type { CardLight } from './surface/card-light.ts';
-import { TILT, easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
+import { CALM_DRIFT, TILT, easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
 
 export { TILT } from './tilt-math.ts';
 
@@ -56,15 +57,6 @@ interface FlipRect {
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
 const easeOutQuart = (value: number) => 1 - (1 - value) ** 4;
 
-/** A stable 0..1 value for a string, so per-card rhythms survive re-renders. */
-export function stableUnit(value: string, salt = 0): number {
-	let hash = 2166136261 ^ salt;
-	for (let index = 0; index < value.length; index++) {
-		hash ^= value.charCodeAt(index);
-		hash = Math.imul(hash, 16777619);
-	}
-	return (hash >>> 0) / 4294967296;
-}
 
 function snapshotStyle(node: HTMLElement): StyleSnapshot {
 	return { transform: node.style.transform };
@@ -88,7 +80,9 @@ function applyFixedPose(node: HTMLElement, light?: CardLight): void {
 function applyTilt(node: HTMLElement, state: VisualState, halfWidth: number, halfHeight: number, light: CardLight | undefined, direct: boolean): void {
 	const lightX = clamp(state.hotspotX ?? 0.5 + LIGHT.x * 0.6 - state.ry / 26, -0.2, 1.2);
 	const lightY = clamp(state.hotspotY ?? 0.5 + LIGHT.y * 0.6 + state.rx / 26, -0.2, 1.2);
-	light?.set({ lightX, lightY, spotlight: clamp(state.lift * 0.5, 0, 1) }, direct);
+	// A card leaning right faces left, so the viewer sits toward its right edge; leaning back puts the viewer toward its bottom.
+	const radians = Math.PI / 180;
+	light?.set({ lightX, lightY, spotlight: clamp(state.lift * 0.5, 0, 1), viewX: Math.sin(state.ry * radians), viewY: -Math.sin(state.rx * radians) }, direct);
 	node.style.transform = state.flat ? '' : tiltPose(state.rx, state.ry, state.envelope, halfWidth, halfHeight).transform;
 }
 
@@ -160,14 +154,19 @@ function driftRhythm(identity: string): DriftRhythm {
 		frequencyX1: 0.05 + stableUnit(identity, 21) * 0.12,
 		frequencyX2: 0.05 + stableUnit(identity, 22) * 0.12,
 		frequencyY1: 0.05 + stableUnit(identity, 23) * 0.12,
-		frequencyY2: 0.05 + stableUnit(identity, 24) * 0.12
+		frequencyY2: 0.05 + stableUnit(identity, 24) * 0.12,
+		swellPhaseX: stableUnit(identity, 31) * Math.PI * 2,
+		swellPhaseY: stableUnit(identity, 32) * Math.PI * 2,
+		swellFrequencyX: 0.015 + stableUnit(identity, 33) * 0.03,
+		swellFrequencyY: 0.015 + stableUnit(identity, 34) * 0.03
 	};
 }
 
 export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 	const snapshot = snapshotStyle(node);
 	let options = initialOptions;
-	let eventTarget = hitArea(options.eventTarget ?? node);
+	let requestedTarget = options.eventTarget ?? node;
+	let eventTarget = hitArea(requestedTarget);
 	let registration: MotionRegistration;
 	let unregisterWall: (() => void) | null = null;
 	let wallRecord: WallRecord | null = null;
@@ -352,7 +351,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 			let hotspotY: number | undefined;
 			const autonomousWeight = 1 - hoverBlend;
 			if (options.idle && autonomousWeight > 0) {
-				({ rx: offsetX, ry: offsetY } = idleDrift(time / 1000, rhythm, autonomousWeight));
+				({ rx: offsetX, ry: offsetY } = idleDrift(time / 1000, rhythm, autonomousWeight * (settings.calmDrift ? CALM_DRIFT : 1)));
 				lift = Math.max(lift, 0.12 * autonomousWeight);
 			} else if (options.wall && (options.finish ?? 'base') !== 'base' && autonomousWeight > 0) {
 				const phase = ((time + wallOffset) % 7000) / 7000;
@@ -397,7 +396,10 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 
 	return {
 		update(next: TiltOptions = {}) {
-			const nextTarget = hitArea(next.eventTarget ?? node);
+			// Resolving the hit area reads computed styles, so only a new event target pays for it.
+			const requested = next.eventTarget ?? node;
+			const nextTarget = requested === requestedTarget ? eventTarget : hitArea(requested);
+			requestedTarget = requested;
 			if (nextTarget !== eventTarget) {
 				detachEvents();
 				eventTarget = nextTarget;

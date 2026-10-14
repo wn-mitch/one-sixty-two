@@ -1,6 +1,6 @@
 import type { Finish } from '../cards/finish.ts';
 import { autonomousMotion, type MotionRegistration } from '../cards/motion-runtime.ts';
-import { stableUnit } from '../cards/motion.ts';
+import { stableUnit } from '../cards/stable-unit.ts';
 import { layoutOffset } from '../cards/surface/geometry.ts';
 import { LightRenderer, type LitCard } from '../cards/surface/light-renderer.ts';
 import { SurfaceMapQueue } from '../cards/surface/map-queue.ts';
@@ -226,7 +226,9 @@ export class WallLight {
 				lightX: 0.08 + (0.5 - 0.5 * Math.cos(phase * Math.PI * 2)) * 0.84,
 				lightY: 0.18 + Math.sin(phase * Math.PI * 2) * 0.08,
 				spotlight,
-				tier: card.tier
+				tier: card.tier,
+				era: card.era,
+				pattern: stableUnit(card.key.split('@')[0] ?? '', 41)
 			};
 		});
 		this.#renderer.draw(cards);

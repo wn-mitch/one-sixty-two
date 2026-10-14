@@ -89,7 +89,7 @@ export class SurfaceMapQueue {
 				const map = buildSurfaceMap(card, tier, card.dataset.card as CardEra, this.#scale, { ...this.#options, ...source.options });
 				if (!this.#renderer.add(key, map)) {
 					this.#evict();
-					this.#renderer.add(key, map);
+					if (!this.#renderer.add(key, map) && this.#renderer.grow()) this.#renderer.add(key, map);
 				}
 			}
 			this.#built();
