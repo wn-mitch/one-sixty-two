@@ -141,8 +141,9 @@ function toggle(): void {
 
 /** The raised reader's own turn control and surface. */
 function readerToggle(): void {
- if (!flipInPlace || raisedOnly || !readerOpen) return toggle();
- raisedFront = turned;
+ if (!flipInPlace || !readerOpen) return toggle();
+ // A raised-only reader stays open while `opened` holds, so turning it needs no raised front.
+ if (!raisedOnly) raisedFront = turned;
  turned = !turned;
 }
 

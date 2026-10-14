@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from 'cloudflare:workers';
 import type { RequestHandler } from './$types';
+import { uploadAllowed } from '#lib/server/rate-limit.ts';
 import { loadCurrentDataVersion, REPLAY_MAX_BYTES, safeReplayMessage, storeReplay } from '#lib/server/replays.ts';
 const boundedBody = async (request: Request): Promise<Uint8Array | null> => {
 	const reader = request.body?.getReader();
@@ -24,6 +25,7 @@ const boundedBody = async (request: Request): Promise<Uint8Array | null> => {
 };
 
 export const POST: RequestHandler = async ({ request, url }) => {
+	if (!(await uploadAllowed(env.UPLOAD_LIMIT, request))) return json({ message: 'Too many uploads. Please wait a minute and retry.' }, { status: 429, headers: { 'retry-after': '60' } });
 	const contentLength = request.headers.get('content-length');
 	if (contentLength && Number(contentLength) > REPLAY_MAX_BYTES) return json({ message: 'Replay is too large.' }, { status: 413 });
 	let body: unknown;

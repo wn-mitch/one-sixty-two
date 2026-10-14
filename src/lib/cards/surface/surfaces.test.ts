@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Finish } from '../finish.ts';
-import type { CardEra } from '../view-model.ts';
+import type { CardEra } from '../era.ts';
 import { bevelEdge, resolveLength } from './surface-map.ts';
 import { DEFAULT_TUNING, inkImpression, RELIEF_RANGE, SURFACE_KINDS, stockFor, surfaceFor } from './surfaces.ts';
 
@@ -27,6 +27,15 @@ describe('surfaceFor', () => {
 		expect(surfaceFor('name', 'emboss', stock).height).toBeGreaterThan(0);
 		expect(surfaceFor('name', 'emboss', stock).iridescence).toBe(0);
 		expect(surfaceFor('name', 'gem', stock).iridescence).toBeGreaterThan(0);
+	});
+
+	it('prints stat numbers on Base and Silver and foils them in colour from Gold up', () => {
+		const stock = stockFor('1970s');
+		expect(surfaceFor('stat', 'base', stock).metal).toBe(0);
+		expect(surfaceFor('stat', 'foil', stock).metal).toBe(0);
+		expect(surfaceFor('stat', 'emboss', stock)).toMatchObject({ metal: 1, iridescence: 0 });
+		expect(surfaceFor('stat', 'emboss', stock).silver).toBeUndefined();
+		expect(surfaceFor('stat', 'gem', stock).metal).toBe(1);
 	});
 
 	it('presses frames into the stock on every tier', () => {

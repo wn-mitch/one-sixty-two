@@ -78,6 +78,7 @@
 		"@sqlite.org/sqlite-wasm": "3.53.4-build1",
 		"animejs": "4.2.2",
 		"dialkit": "^2.0.2",
+		"mediabunny": "1.60.0",
 		"modern-screenshot": "4.7.0",
 		"motion": "^14.0.0"
 	}

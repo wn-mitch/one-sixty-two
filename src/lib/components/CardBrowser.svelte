@@ -15,6 +15,7 @@
   label,
   wide: wideOverride,
   busy = false,
+  searchable = true,
   query = $bindable(''),
   searchLabel = 'Find a card',
   onBeforeSearch,
@@ -38,6 +39,8 @@
   /** Rail beside the cards; defaults to screens at least 48rem wide. */
   wide?: boolean;
   busy?: boolean;
+  /** Without search, phones show the filters directly, since nothing else shares their row. */
+  searchable?: boolean;
   query?: string;
   searchLabel?: string;
   /** Runs before a keystroke changes the query, so an owner can measure the cards first. */
@@ -69,8 +72,9 @@
  const firstFilter = $derived(filters[0]?.value);
 </script>
 
-<section class="browser" class:wide aria-label={label} aria-busy={busy}>
+<section class="browser" class:wide class:unsearched={!searchable} aria-label={label} aria-busy={busy}>
  <div class="rail">
+  {#if searchable}
   <div class="search-row">
    <label for="{uid}-search" class="sr-only">{searchLabel}</label>
    <span class="search-field">
@@ -83,6 +87,7 @@
     </button>
    {/if}
   </div>
+  {/if}
   <div class="sort-row" class:many={sorts.length > 4} role="group" aria-labelledby="{uid}-sort-label">
    <span id="{uid}-sort-label" class="sort-label">Sort by</span>
    <span class="sort-options" class:stacked={sorts.length > 2}>
@@ -98,7 +103,7 @@
   </div>
   {#if filters.length}
    <!-- Phones keep the filters behind their toggle so the first cards sit near the top. -->
-   <div class="filter-panel" id="{uid}-filters" hidden={!wide && !filtersOpen}>
+   <div class="filter-panel" id="{uid}-filters" hidden={!wide && searchable && !filtersOpen}>
     <fieldset class="filters" disabled={busy}>
      <legend>{filterLegend}</legend>
      <div class="filter-options" role="group" aria-label={filterLegend}>
@@ -133,6 +138,10 @@
  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
  legend { margin-bottom: var(--space-2); }
  .filter-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+ /* Without search, phones keep the always-open filters to one swipeable row so the cards stay near the top. */
+ .unsearched:not(.wide) legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+ .unsearched:not(.wide) .filter-options { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin-inline: calc(-1 * var(--space-4)); padding-inline: var(--space-4); }
+ .unsearched:not(.wide) .filter { flex: none; }
  .filter { display: inline-flex; align-items: baseline; gap: .35rem; min-width: 2.75rem; min-height: 2.75rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); text-align: left; }
  .filter-count { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
  .filter[aria-pressed='true'] { color: var(--background); border-color: var(--text); background: var(--text); }

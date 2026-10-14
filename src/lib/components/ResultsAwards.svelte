@@ -19,6 +19,23 @@
 
 	function noCardDetails(): void {}
 
+	// Where the swipeable rail rests, for the dots under it on narrow screens.
+	let rail = $state<HTMLDivElement>();
+	let current = $state(0);
+	const shown = $derived(featured.filter(entry => cardViews.has(entry.card.seasonId) && entry.metrics[0]));
+	function entries(): HTMLElement[] {
+		return rail ? [...rail.querySelectorAll<HTMLElement>(':scope > .award-entry')] : [];
+	}
+	function trackRail(): void {
+		if (!rail) return;
+		const start = rail.getBoundingClientRect().left + parseFloat(getComputedStyle(rail).scrollPaddingInlineStart || '0');
+		const offsets = entries().map(entry => Math.abs(entry.getBoundingClientRect().left - start));
+		current = offsets.indexOf(Math.min(...offsets));
+	}
+	function showEntry(index: number): void {
+		entries()[index]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+	}
+
 	function cardLabel(card: ResultsCard): string {
 		return `${card.profile.displayName}, ${card.profile.year}, ${card.slot}`;
 	}
@@ -30,7 +47,7 @@
 			<h3 id="awards-heading">Season awards</h3>
 		</div>
 	</div>
-	<div class="award-rail">
+	<div class="award-rail" bind:this={rail} onscroll={trackRail}>
 		{#each featured as entry (entry.card.seasonId)}
 			{@const view = cardViews.get(entry.card.seasonId)}
 			{@const primaryMetric = entry.metrics[0]}
@@ -78,6 +95,13 @@
 			{/if}
 		{/each}
 	</div>
+	{#if shown.length > 1}
+		<div class="rail-dots" role="group" aria-label="Season awards">
+			{#each shown as entry, index (entry.card.seasonId)}
+				<button type="button" class="dot" aria-label={`Show ${entry.metrics[0]!.label}: ${entry.card.profile.displayName}`} aria-current={index === current ? 'true' : undefined} onclick={() => showEntry(index)}></button>
+			{/each}
+		</div>
+	{/if}
 </section>
 
 <style>
@@ -116,7 +140,13 @@
 		.primary-metric strong { font-size: var(--text-xl); white-space: nowrap; }
 		.section-heading { display: block; }
 	}
+	/* The rail swipes sideways only on narrower screens; there its dots show how many awards there are and which is in view. */
+	.rail-dots { display: none; }
 	@media (max-width: 64rem) {
+		.rail-dots { display: flex; justify-content: center; gap: 0; margin-top: calc(var(--space-2) * -1); }
+		.dot { position: relative; width: 1.75rem; min-width: 0; height: 1.75rem; min-height: 0; padding: 0; border: 0; background: transparent; }
+		.dot::after { content: ''; position: absolute; inset: 50% auto auto 50%; width: .5rem; height: .5rem; translate: -50% -50%; border-radius: 50%; background: var(--border); transition: background 160ms ease-out, width 160ms ease-out; }
+		.dot[aria-current='true']::after { width: 1.1rem; border-radius: 999px; background: var(--text); }
 		.award-rail { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(13rem, 16rem); justify-content: start; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline mandatory; }
 		.award-entry { scroll-snap-align: start; }
 	}

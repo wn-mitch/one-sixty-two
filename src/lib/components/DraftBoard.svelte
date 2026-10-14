@@ -82,9 +82,9 @@
    const grid = draftBoard?.querySelector<HTMLElement>('.candidates');
    const mark = draftBoard?.querySelector<HTMLElement>('[data-roll-mark]');
    if (grid) dealIntoGrid(grid, mark?.getBoundingClientRect() ?? null);
-   // Taking the dealt card removes it, so focus that fell to the page moves to the pool's search.
+   // Taking the dealt card removes it, so focus that fell to the page moves to the pool's cards.
    const active = document.activeElement;
-   if (!active || active === document.body) grid?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true });
+   if (!active || active === document.body) grid?.querySelector<HTMLElement>('.content')?.focus({ preventScroll: true });
   });
  });
  let fieldHeading = $state<HTMLHeadingElement>();

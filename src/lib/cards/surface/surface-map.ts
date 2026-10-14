@@ -1,20 +1,11 @@
 import type { Finish } from '../finish.ts';
-import type { CardEra } from '../view-model.ts';
+import type { CardEra } from '../era.ts';
 import { elementToRoot } from './geometry.ts';
+import type { SurfaceMap } from './light-renderer.ts';
 import { DEFAULT_TUNING, inkImpression, isSurfaceKind, RELIEF_RANGE, STOCKS, stockFor, surfaceFor, type ReliefProfile, type Stock, type Surface, type SurfaceTuning } from './surfaces.ts';
 
-/**
- * A card's surface map: RGBA rows of relief (R, 0.5 is the stock plane), metal (G), gloss (B) and
- * iridescence (A, signed: holo above 0.5, silver foil below). It is painted with Canvas2D from the card's laid-out DOM, so names, fitted text,
- * marks and stickers come out exactly where the card shows them.
- */
-export interface SurfaceMap {
-	width: number;
-	height: number;
-	data: Uint8Array;
-	/** The printed ink under each pixel as RGBA, so foil can replace, tint or keep the contrast of what it covers; A is ink coverage. */
-	ink: Uint8Array;
-}
+// Builds a card's surface map (the format is `SurfaceMap` in light-renderer.ts). It is painted with Canvas2D
+// from the card's laid-out DOM, so names, fitted text, marks and stickers come out exactly where the card shows them.
 
 export interface SurfaceMapOptions {
 	/** How raised names are shaped; pillow when unset. */
@@ -431,6 +422,61 @@ function paintImage(painter: Painter, image: HTMLImageElement, surface: Surface)
 	});
 }
 
+/** How far a sticker's vinyl side shows below it, as a fraction of its width. */
+const STICKER_SIDE = 0.06;
+
+/**
+ * Under a sticker: its vinyl side, a step lower and darker, showing below it so the sticker reads as thick, and
+ * the white die-cut border round its face. The face paints over both.
+ */
+function paintStickerBacking(painter: Painter, matrix: DOMMatrix, border: Path2D, face: Path2D, width: number, surface: Surface): void {
+	const { a, b, c, d, e, f } = matrix;
+	const side = new Path2D();
+	side.addPath(border, new DOMMatrix().translate(0, width * STICKER_SIDE));
+	const vinyl = { height: surface.height, metal: 0, gloss: 1, iridescence: 0 };
+	withTransform(painter, matrix, (ctx, channel) => {
+		ctx.fillStyle = gray(encode(channel, { ...vinyl, height: surface.height * 0.45, gloss: 0.5 }));
+		ctx.fill(side);
+		ctx.fillStyle = gray(encode(channel, vinyl));
+		ctx.fill(border);
+	});
+	painter.ink.setTransform(a * painter.scale, b * painter.scale, c * painter.scale, d * painter.scale, e * painter.scale, f * painter.scale);
+	painter.ink.fillStyle = '#8d949e';
+	painter.ink.fill(side);
+	painter.ink.fillStyle = '#f7f6f2';
+	painter.ink.fill(border);
+	// The face keeps its own print: cleared here, so a gradient face still shows its DOM colour.
+	painter.ink.globalCompositeOperation = 'destination-out';
+	painter.ink.fillStyle = '#000';
+	painter.ink.fill(face);
+	painter.ink.globalCompositeOperation = 'source-over';
+}
+
+/** A sticker's ribbons (`data-ribbon`): bands of solid colour across its face, clipped to the die cut, printed matte like its lettering. */
+function paintRibbons(painter: Painter, sticker: HTMLElement, style: CSSStyleDeclaration, surface: Surface): void {
+	const stickerMatrix = elementToRoot(sticker, painter.root);
+	if (!stickerMatrix) return;
+	const face = boxPath(sticker, style, sticker.offsetWidth, sticker.offsetHeight, false);
+	const scaled = (matrix: DOMMatrix): [number, number, number, number, number, number] =>
+		[matrix.a * painter.scale, matrix.b * painter.scale, matrix.c * painter.scale, matrix.d * painter.scale, matrix.e * painter.scale, matrix.f * painter.scale];
+	for (const ribbon of sticker.querySelectorAll<HTMLElement>('[data-ribbon]')) {
+		const matrix = elementToRoot(ribbon, painter.root);
+		const colour = getComputedStyle(ribbon).backgroundColor;
+		if (!matrix) continue;
+		const band = (ctx: Context, fill: string) => {
+			ctx.save();
+			ctx.setTransform(...scaled(stickerMatrix));
+			ctx.clip(face);
+			ctx.setTransform(...scaled(matrix));
+			ctx.fillStyle = fill;
+			ctx.fillRect(0, 0, ribbon.offsetWidth, ribbon.offsetHeight);
+			ctx.restore();
+		};
+		for (const channel of CHANNELS) band(painter.contexts[channel], gray(encode(channel, surface)));
+		band(painter.ink, colour);
+	}
+}
+
 function paintBox(painter: Painter, element: HTMLElement, style: CSSStyleDeclaration, surface: Surface, face?: Surface): void {
 	const matrix = elementToRoot(element, painter.root);
 	if (!matrix) return;
@@ -443,7 +489,11 @@ function paintBox(painter: Painter, element: HTMLElement, style: CSSStyleDeclara
 			ctx.fill(outline, 'evenodd');
 		});
 	}
-	const path = boxPath(element, style, element.offsetWidth, element.offsetHeight, !printedRing);
+	const ringed = boxPath(element, style, element.offsetWidth, element.offsetHeight, !printedRing);
+	// A sticker's ring is its white die-cut border; its face is the box inside it.
+	const sticker = element.dataset.surface === 'sticker';
+	const path = sticker ? boxPath(element, style, element.offsetWidth, element.offsetHeight, false) : ringed;
+	if (sticker) paintStickerBacking(painter, matrix, ringed, path, element.offsetWidth, surface);
 	withTransform(painter, matrix, (ctx, channel) => {
 		ctx.fillStyle = gray(encode(channel, surface));
 		ctx.fill(path, 'evenodd');
@@ -457,6 +507,12 @@ function paintBox(painter: Painter, element: HTMLElement, style: CSSStyleDeclara
 		return;
 	}
 	painter.ink.setTransform(a * painter.scale, b * painter.scale, c * painter.scale, d * painter.scale, e * painter.scale, f * painter.scale);
+	// A box can name the colour its foil prints in, as bronze and gold stickers do over their CSS gradients.
+	if (element.dataset.surfaceInk) {
+		painter.ink.fillStyle = element.dataset.surfaceInk;
+		painter.ink.fill(path, 'evenodd');
+		return;
+	}
 	// Solid fills print as ink; gradients and images keep their DOM rendering and stay unmapped here.
 	if (!visibleBackground(style) || (style.backgroundImage && style.backgroundImage !== 'none')) {
 		// Foil with no colour of its own, such as the card's rim, is bare metal: the print under it does not tint it.
@@ -492,8 +548,12 @@ function paintElement(painter: Painter, element: HTMLElement, surface: Surface, 
 	}
 	if (visibleBackground(style) || ringSpread(style) > 0 || element.dataset.surfaceShape) {
 		paintBox(painter, element, style, surface, { ...stock, height: inkImpression(stock) * tuning.inkDepth });
-		// Lettering printed on a box is ink pressed into the box.
-		for (const leaf of textLeaves(element)) paintText(painter, leaf, { ...stock, height: surface.height + inkImpression(stock) * tuning.inkDepth });
+		// Lettering printed on a box is ink pressed into the box; on a sticker it is matte ink on the vinyl, so glare never washes it out.
+		const lettering = element.dataset.surface === 'sticker'
+			? { height: surface.height, metal: 0, gloss: 0.2, iridescence: 0 }
+			: { ...stock, height: surface.height + inkImpression(stock) * tuning.inkDepth };
+		if (element.dataset.surface === 'sticker') paintRibbons(painter, element, style, lettering);
+		for (const leaf of textLeaves(element)) paintText(painter, leaf, lettering);
 		return;
 	}
 	for (const leaf of textLeaves(element)) paintText(painter, leaf, surface, profile, softness);
@@ -541,7 +601,7 @@ export function buildSurfaceMap(root: HTMLElement, tier: Finish, era: CardEra, s
 		}
 		if (!(element instanceof HTMLElement)) continue;
 		// Foil stickers are cut from metallic vinyl.
-		if (kind === 'sticker' && element.dataset.foil) Object.assign(surface, { metal: 1, iridescence: element.dataset.foil === 'gem' ? 1 : 0 });
+		if (kind === 'sticker' && element.dataset.foil) Object.assign(surface, { metal: 1, iridescence: element.dataset.foil === 'gem' ? 1 : 0, silver: element.dataset.foil === 'silver' ? 1 : 0 });
 		paintElement(painter, element, surface, stock, tuning, kind === 'name' ? options.nameProfile : undefined, kind === 'name' ? tuning.nameSoftness : 0);
 	}
 	const data = new Uint8Array(width * height * 4);

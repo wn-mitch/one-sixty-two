@@ -262,7 +262,8 @@
  .pick-track .locked { background: var(--text); }
  .field-card {
   container-type: inline-size;
-  width: min(100%, 30rem);
+  /* In the phone sheet the field also fits the height left to it (424 × 678 card units). */
+  width: min(100%, 30rem, calc(var(--sheet-field-height, 100000px) * 424 / 678));
   margin: 0 auto var(--space-2);
   perspective: 1400px;
  }

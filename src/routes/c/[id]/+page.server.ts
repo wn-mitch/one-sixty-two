@@ -7,6 +7,7 @@ import {
 	ShareUnavailableError
 } from '#lib/server/share-images.ts';
 import { sitePreviewImage } from '#lib/share/site-preview.ts';
+import { article } from '#lib/article.ts';
 
 export const load: PageServerLoad = async ({ params, setHeaders }) => {
 	setHeaders({ 'cache-control': 'no-store' });
@@ -19,7 +20,8 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 		description: 'Draft a historical roster, play 162 games, then take on this club in a best-of-five.',
 		canonical,
 		// Unpublished or unreadable seasons fall back to the site preview.
-		image: sitePreviewImage(env.PUBLIC_ORIGIN)
+		image: sitePreviewImage(env.PUBLIC_ORIGIN),
+		poster: null
 	};
 	try {
 		const publication = await readSharePublication(env, replayId);
@@ -32,11 +34,18 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 			description: `Draft your own club, play 162 games, then take on this ${wins}-${losses} club in a best-of-five.`,
 			canonical,
 			image: {
+				url: new URL(publication.images.og.url, env.PUBLIC_ORIGIN).href,
+				width: publication.images.og.width,
+				height: publication.images.og.height,
+				type: 'image/png',
+				alt: `162-0 preview of ${article(wins)} ${wins}-${losses} season, with the roster's best cards`
+			},
+			// The challenge card itself shows the season's portrait field image; unfurls use the landscape preview above.
+			poster: {
 				url: new URL(publication.images.field.url, env.PUBLIC_ORIGIN).href,
 				width: publication.images.field.width,
 				height: publication.images.field.height,
-				type: 'image/png',
-				alt: `162-0 share card for a ${wins}-${losses} season`
+				alt: `162-0 share card for ${article(wins)} ${wins}-${losses} season`
 			}
 		};
 	} catch (caught) {

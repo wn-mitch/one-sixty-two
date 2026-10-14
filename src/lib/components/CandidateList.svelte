@@ -65,7 +65,6 @@
  interface CandidateMotionState {
   draftKey: string;
   page: number;
-  query: string;
   filter: FilterSlot;
   sort: RankingSort;
   rankings: WarRankings | null;
@@ -73,7 +72,6 @@
  const uid = $props.id();
  const gridMotion = createCandidateGridMotion();
  let candidateMotionState: CandidateMotionState | null = null;
- let query = $state('');
  let filter = $state<FilterSlot>('All');
  let page = $state(0);
  let flippedPlayerId = $state<string | null>(null);
@@ -110,16 +108,13 @@
  const activeFilter = $derived(filterOptions.includes(filter) ? filter : 'All');
  const groupsBeforeFilter = $derived.by(() => {
   const entries: CandidateEntry[] = [];
-  const needle = query.trim().toLowerCase();
   for (const profile of profiles) {
    if (!candidateIndex.has(profile.seasonId)) continue;
-   if (needle && !`${profile.displayName} ${profile.year} ${profile.historicalTeam}`.toLowerCase().includes(needle)) continue;
    entries.push({ profile, slots: profile.eligibleSlots });
   }
   return rankGroups(entries, sort, rankings);
  });
  const visibleGroups = $derived.by(() => groupsBeforeFilter.filter(group =>
-  !wide ||
   showBlocked ||
   group.entries.some(entry => viableSeasonIds.has(entry.profile.seasonId)) ||
   group.entries.some(entry => entry.profile.seasonId === selectedSeasonId)
@@ -132,8 +127,9 @@
     .map(entry => ({ profile: entry.profile, slots: filterSlots(activeFilter as Exclude<FilterSlot, 'All'>) })));
    filtered = rankGroups(entries, sort, rankings);
   }
-  // Hitters and pitchers share one ranking, led by each player's shown season.
-  const mixed = mixGroups(filtered, sort, rankings, selectedEntry);
+  // Hitters and pitchers share one ranking, led by each player's default season, so choosing another exact
+  // season never moves the card out from under the player.
+  const mixed = mixGroups(filtered, sort, rankings, defaultEntry);
   // Phones keep blocked players in the grid but after every player who can still be placed.
   return wide ? mixed : [...mixed].sort((a, b) => Number(isBlocked(a)) - Number(isBlocked(b)));
  });
@@ -172,6 +168,10 @@
    const remembered = group.entries.find(entry => entry.profile.seasonId === preferred);
    if (remembered) return remembered;
   }
+  return defaultEntry(group);
+ }
+ /** The season a card shows before the player picks one. */
+ function defaultEntry(group: CandidateGroup): CandidateEntry {
   return (wide ? group.entries.find(entry => viableSeasonIds.has(entry.profile.seasonId)) : undefined) ?? group.entries[0];
  }
  function isBlocked(group: CandidateGroup): boolean {
@@ -241,11 +241,19 @@
  $effect(() => {
   if (!wide) flippedPlayerId = null;
  });
+ // Rankings arriving re-sort the pool; the selected player's card stays in view rather than moving to another page.
+ $effect(() => {
+  rankings;
+  untrack(() => {
+   if (!selectedSeasonId) return;
+   const index = rankedGroups.findIndex(group => group.entries.some(entry => entry.profile.seasonId === selectedSeasonId));
+   if (index >= 0) page = Math.floor(index / 20);
+  });
+ });
  $effect.pre(() => {
   const next: CandidateMotionState = {
    draftKey: draftBrowseKey,
    page: currentPage,
-   query,
    filter: activeFilter,
    sort,
    rankings
@@ -256,8 +264,7 @@
    gridMotion.skip();
    return;
   }
-  const reordered = next.query !== previous.query ||
-   next.filter !== previous.filter ||
+  const reordered = next.filter !== previous.filter ||
    next.sort !== previous.sort ||
    next.rankings !== previous.rankings;
   const gather = gatherNext;
@@ -308,7 +315,7 @@
 
 <svelte:window onpointerdown={handlePointerDown} onfocusin={handleFocusIn} />
 <div use:candidateGridMotion={gridMotion} class:candidates-wide={wide} class="candidates">
-<CardBrowser label="Choose a historical player season" {wide} {busy} bind:query searchLabel="Find your pick" onSearch={resetBrowse}
+<CardBrowser label="Choose a historical player season" {wide} {busy} searchable={false}
  sorts={[{ value: 'war', label: 'WAR' }, { value: 'metrics', label: 'OPS / ERA' }]} {sort} onSort={value => reshuffle(() => sort = value as RankingSort)}
  filters={filterOptions.map(option => ({ value: option, count: option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0 }))}
  filter={activeFilter} filterLegend="Qualifies for position" filterToggle="Positions" onFilter={value => reshuffle(() => filter = value as FilterSlot)}
@@ -328,14 +335,14 @@
 
   {#if !draft.currentRoll}
    <p class="notice">Roll a franchise and era to open your next player pool.</p>
-  {:else if groups.length === 0 && wide && !showBlocked && blockedGroupCount > 0}
+  {:else if groups.length === 0 && !showBlocked && blockedGroupCount > 0}
    <p class="notice">These players have no open position. Turn on Blocked players in Settings to select one and make room on your field.</p>
   {:else if groups.length === 0}
-   {#if query.trim() || activeFilter !== 'All'}
+   {#if activeFilter !== 'All'}
     <div class="empty">
-     <h3>No matches for this search.</h3>
-     <p class="muted">Try another name or browse all historical qualifications.</p>
-     <button type="button" class="secondary" disabled={busy} onclick={() => { query = ''; filter = 'All'; resetBrowse(); }}>Clear search and filters</button>
+     <h3>No players for this position.</h3>
+     <p class="muted">Browse all historical qualifications.</p>
+     <button type="button" class="secondary" disabled={busy} onclick={() => { filter = 'All'; resetBrowse(); }}>Show all positions</button>
     </div>
    {:else if busy}
     <Skeleton label="Loading the player pool…"><PoolSkeleton {wide} rail={false} /></Skeleton>
@@ -418,7 +425,8 @@
   .candidates-wide .section-heading h3 { font: italic 900 1.5rem/1 'Barlow Condensed', sans-serif; text-transform: uppercase; }
   .candidates-wide .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 20px; grid-auto-flow: dense; }
  }
- @media (min-width: 23.4375rem) and (max-width: 47.999rem) {
+ /* Phones in portrait keep two columns, so each card's game text stays readable; small tablets fit three. */
+ @media (min-width: 30rem) and (max-width: 47.999rem) {
   .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
  }
  @media (min-width: 48rem) and (max-width: 1099px) {

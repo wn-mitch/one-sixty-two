@@ -3,7 +3,8 @@
 	import { createDialKitController } from 'dialkit/svelte';
 	import { tilt } from '#lib/cards/motion.ts';
 	import { CardLight, LightEngine, lightCanvas } from '#lib/cards/surface/card-light.ts';
-	import { DEFAULT_LIGHT, ERA_HOLO, HOLO_PATTERNS, type HoloPattern } from '#lib/cards/surface/light-renderer.ts';
+	import { DEFAULT_LIGHT } from '#lib/cards/surface/light-renderer.ts';
+	import { ERA_HOLO, HOLO_PATTERNS, type HoloPattern } from '#lib/cards/surface/holo-films.ts';
 	import type { CardEra } from '#lib/cards/view-model.ts';
 	import StoryFrame from './StoryFrame.svelte';
 
@@ -14,6 +15,8 @@
 	type Range = [number, number, number, number];
 	const dials = createDialKitController('Holo gallery', untrack(() => ({
 		layout: { width: [260, 120, 480, 1] as Range, drift: true },
+		// How vivid every film prints: 1 as designed; higher saturates it and sinks a patterned film's ground.
+		vivid: [1, 0, 3, 0.05] as Range,
 		foil: {
 			holoScale: [DEFAULT_LIGHT.holoScale, 3, 40, 0.5] as Range,
 			shift: [DEFAULT_LIGHT.shift, 0, 10, 0.25] as Range,
@@ -47,6 +50,7 @@
 								data-finish="gem"
 								data-film={film}
 								data-identity={film}
+								data-plate-tuning={`1,1,0.6,${values.vivid}`}
 								use:tilt={{ enabled: true, idle: values.layout.drift, finish: 'gem', light, identity: film }}
 							>
 								<div class="film" data-surface="ring" data-surface-shape="box"></div>

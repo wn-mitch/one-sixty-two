@@ -6,6 +6,7 @@ import type { WarRankings } from '../rankings/types.ts';
 import { testSeason } from '../sim/test-fixtures.ts';
 import type { GameResult, SeasonResult } from '../sim/types.ts';
 import { createShareRenderModel, type CreateShareRenderModelInput } from './model.ts';
+import { previewCards } from './og-cards.ts';
 import type { ShareRenderModel } from './types.ts';
 
 function fixture(): CreateShareRenderModelInput {
@@ -99,6 +100,29 @@ describe('share render model', () => {
 		const input = fixture();
 		expect(createShareRenderModel(input)).toMatchObject({ mediaVersion: null, rankingVersion: null });
 		expect(createShareRenderModel({ ...input, ...publishedAssets(input.manifest.dataVersion) })).toMatchObject({ mediaVersion: 'media-pin', rankingVersion: 'ranking-pin' });
+	});
+
+	it('ranks the link preview cards by WAR/162 in each card\'s role, best in the middle', () => {
+		const input = fixture();
+		const assets = publishedAssets(input.manifest.dataVersion);
+		const bySlot = new Map(input.draft.picks.map(pick => [pick.slot, pick.seasonId]));
+		const seasons: WarRankings['seasons'] = {};
+		// The catcher's pitching WAR is off-role and must be ignored; the closer has no ranking at all.
+		seasons[bySlot.get('C')!] = { battingWAR162: 1, pitchingWAR162: 99 };
+		seasons[bySlot.get('SS')!] = { battingWAR162: 9, pitchingWAR162: null };
+		seasons[bySlot.get('SP1')!] = { battingWAR162: 50, pitchingWAR162: 8 };
+		seasons[bySlot.get('CF')!] = { battingWAR162: 7, pitchingWAR162: null };
+		seasons[bySlot.get('SP2')!] = { battingWAR162: null, pitchingWAR162: 6 };
+		seasons[bySlot.get('1B')!] = { battingWAR162: 5, pitchingWAR162: null };
+		seasons[bySlot.get('CL')!] = { battingWAR162: null, pitchingWAR162: null };
+		const model = createShareRenderModel({ ...input, ...assets, rankings: { ...assets.rankings, seasons } });
+		expect(model.cards.find(card => card.slot === 'C')!.war).toBe(1);
+		expect(model.cards.find(card => card.slot === 'SP1')!.war).toBe(8);
+		expect(model.cards.find(card => card.slot === 'CL')!.war).toBeNull();
+		expect(previewCards(model.cards).map(card => card.slot)).toEqual(['SP2', 'SP1', 'SS', 'CF', '1B']);
+		// Without rankings the earliest picks stand in for the best cards.
+		const unranked = createShareRenderModel(input);
+		expect(previewCards(unranked.cards).map(card => card.pickNumber)).toEqual([4, 2, 1, 3, 5]);
 	});
 
 	it('rejects duplicate slots and mismatched profile identities', () => {

@@ -7,7 +7,7 @@
  import { CardLight, LightEngine, lightCanvas } from './surface/card-light.ts';
  import { GEM_RING } from './finish.ts';
  import type { ReliefProfile } from './surface/surfaces.ts';
- import type { HoloPattern } from './surface/light-renderer.ts';
+ import type { HoloPattern } from './surface/holo-films.ts';
  import type { FoilPlate, PlateTuning } from './surface/foil-plates.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import Front1950s from './fronts/Front1950s.svelte';
@@ -86,6 +86,12 @@
  const finishPaint = $derived(shaded ? '' : `;--stamp:${s.fin.stamp};--emb:${s.fin.emb};--gem-ring:${s.fin.gem ? GEM_RING : s.fin.stamp}`);
  const light = new CardLight();
  $effect(() => light.setNameProfile(nameProfile));
+ const shownStickers = $derived(face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers) ? stickers ?? cardStickers(s.seasonId) : undefined);
+ // Stickers print under the light, so a lit card repaints its map when they are placed, moved or hidden.
+ $effect(() => {
+  void shownStickers;
+  LightEngine.shared()?.invalidate(light);
+ });
  const motionFinish = $derived(s.fin.tier === 'foil' ? 'silver' : s.fin.tier === 'emboss' ? 'gold' : s.fin.tier);
 </script>
 
@@ -98,7 +104,7 @@
  data-identity={`${s.full}|${s.year}|${s.team}|${s.pos}`}
  data-film={film}
  data-plate={plate}
- data-plate-tuning={plateTuning && `${plateTuning.scale},${plateTuning.tone},${plateTuning.stain}`}
+ data-plate-tuning={plateTuning && `${plateTuning.scale},${plateTuning.tone},${plateTuning.stain},${plateTuning.vivid ?? 1}`}
  data-thumbnail={thumbnail}
  data-interactive={interactive}
  data-compact={compact}
@@ -124,7 +130,7 @@
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
  {#if face === 'front'}<Material {s} layer="over" paint={!shaded} />{/if}
  <!-- Explicit stickers (the collection editor) always show; elsewhere the player's setting decides. -->
- {#if face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers)}<StickerLayer era={s.era} stickers={stickers ?? cardStickers(s.seasonId)} fresh={freshStickers} />{/if}
+ {#if shownStickers}<StickerLayer era={s.era} stickers={shownStickers} fresh={freshStickers} />{/if}
  {#if face === 'front' && lit}<canvas class="light" aria-hidden="true" use:lightCanvas={light}></canvas>{/if}
 </div>
 

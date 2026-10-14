@@ -199,7 +199,7 @@
    true;
   if (!componentReady) return;
   const choosing = phase === 'choosing' && !currentSession.loading;
-  const target = phase === 'stadium' ? '#stadium-heading' : phase === 'ready' ? '#roll-next' : choosing ? '.candidates input[type="search"]' : phase === 'lineup' ? '#lineup-heading' : phase === 'simulating' ? '#simulation-heading' : phase === 'results' ? '#results-heading' : null;
+  const target = phase === 'stadium' ? '#stadium-heading' : phase === 'ready' ? '#roll-next' : choosing ? '.candidates .content' : phase === 'lineup' ? '#lineup-heading' : phase === 'simulating' ? '#simulation-heading' : phase === 'results' ? '#results-heading' : null;
   if (target) void tick().then(() => {
    if (session !== currentSession || currentSession.phase !== phase || (phase === 'choosing' && currentSession.loading)) return;
    document.querySelector<HTMLElement>(target)?.focus({ preventScroll: phase === 'results' });
@@ -246,7 +246,6 @@
      <StadiumDeck manifest={currentSession.manifest} busy={currentSession.busy} onSelect={id => void currentSession.selectStadium(id)} />
     {:else if !phaseLoadError}<StadiumSkeleton />{/if}
    {:else if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
-    <div class="draft-top narrow-draft-top"><p class="eyebrow">Historical draft</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if DraftBoard}
      <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onAddPack={() => currentSession.addPack()} onChoosePack={pack => void currentSession.choosePack(pack)} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
     {:else if !phaseLoadError}<DraftSkeleton pool={currentSession.phase === 'choosing' && currentSession.draft.packs.length <= 1} />{/if}
@@ -274,7 +273,6 @@
 <style>
  main { min-height: 65vh; padding-block: var(--space-6); }
  main:has(:global(:is(.draft-board, .draft-skeleton).wide)) { padding-top: 0; }
- main:has(:global(:is(.draft-board, .draft-skeleton).wide)) .narrow-draft-top { display: none; }
  .home-start { position: relative; padding-block: 0; }
  .session-feedback:empty { display: none; }
  .home-start .session-feedback {

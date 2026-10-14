@@ -5,6 +5,8 @@
 		view?: StickersWorkshopView;
 		width?: number;
 		fresh?: boolean;
+		/** Cards drift and follow the pointer, as in the finish gallery, so stickers can be judged under moving light. */
+		drift?: boolean;
 	}
 </script>
 
@@ -18,7 +20,7 @@
 	import { createExampleFixtures, getExampleFinishRanking } from './fixtures.ts';
 	import StoryFrame from './StoryFrame.svelte';
 
-	let { view = 'sheet', width = 280, fresh = false }: StickersWorkshopProps = $props();
+	let { view = 'sheet', width = 280, fresh = false, drift = true }: StickersWorkshopProps = $props();
 
 	let instance = $state(0);
 	const cardWidth = $derived(Math.max(160, Math.min(410, Math.round(width))));
@@ -112,7 +114,7 @@
 					{#each view === 'cards' ? faces : tierCases.map(item => ({ ...item, slot: '2B' as const })) as face (face.title)}
 						<figure class="card-entry">
 							<div class="card-shell" style:width={`${cardWidth}px`}>
-								<Card s={cardFor(face.slot)} interactive={false} capture={false} stickers={face.stickers} freshStickers={freshKinds} onDetails={() => {}} />
+								<Card s={cardFor(face.slot)} interactive={drift} idle={drift} capture={false} stickers={face.stickers} freshStickers={freshKinds} onDetails={() => {}} />
 							</div>
 							<figcaption>
 								<strong>{face.title}</strong>
@@ -129,7 +131,7 @@
 							{#each [160, 280, 410] as size (size)}
 								<figure class="card-entry">
 									<div class="card-shell" style:width={`${size}px`}>
-										<Card s={cardFor('2B')} interactive={false} capture={false} stickers={faces[0].stickers} onDetails={() => {}} />
+										<Card s={cardFor('2B')} interactive={drift} idle={drift} capture={false} stickers={faces[0].stickers} onDetails={() => {}} />
 									</div>
 									<figcaption><strong>{size}px card</strong></figcaption>
 								</figure>

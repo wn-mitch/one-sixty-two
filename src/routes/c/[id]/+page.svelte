@@ -69,7 +69,7 @@
 		<p class="eyebrow">You've been challenged</p>
 		<h1>Beat {data.record.wins}–{data.record.losses}</h1>
 		<p class="lede muted">Draft your own club from baseball history and play its 162 games. Then take this club on in a best-of-five.</p>
-		{#if data.image}<img src={data.image.url} width={data.image.width} height={data.image.height} alt={data.image.alt} />{/if}
+		{#if data.poster}<img src={data.poster.url} width={data.poster.width} height={data.poster.height} alt={data.poster.alt} />{/if}
 		<div class="actions">
 			{#if inProgress}
 				<p class="in-progress">You have a draft in progress · {inProgress.label}</p>

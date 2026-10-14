@@ -59,6 +59,45 @@
 		backdropPointerId = event.target === event.currentTarget ? event.pointerId : null;
 	}
 
+	/**
+	 * Caps the field card to the height the sheet has left, so the whole field, bullpen included, shows
+	 * without scrolling on short phones. The card keeps its aspect ratio, so capping its height caps its width.
+	 */
+	function fitField(content: HTMLElement): { destroy(): void } {
+		let observed: HTMLElement | null = null;
+		const measure = () => {
+			const field = content.querySelector<HTMLElement>('.field-card');
+			if (field !== observed) {
+				if (observed) resize.unobserve(observed);
+				observed = field;
+				if (field) resize.observe(field);
+			}
+			const shell = content.parentElement;
+			if (!field || !shell || !dialog || field.getClientRects().length === 0) {
+				content.style.removeProperty('--sheet-field-height');
+				return;
+			}
+			const sheetHeight = parseFloat(getComputedStyle(dialog).maxHeight) || innerHeight;
+			const chrome = shell.offsetHeight - content.clientHeight;
+			const besideField = content.scrollHeight - field.offsetHeight;
+			content.style.setProperty('--sheet-field-height', `${Math.max(240, Math.floor(sheetHeight - chrome - besideField))}px`);
+		};
+		const resize = new ResizeObserver(measure);
+		const changes = new MutationObserver(measure);
+		resize.observe(content);
+		for (const part of content.parentElement?.children ?? []) if (part !== content) resize.observe(part);
+		changes.observe(content, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+		addEventListener('resize', measure);
+		measure();
+		return {
+			destroy() {
+				resize.disconnect();
+				changes.disconnect();
+				removeEventListener('resize', measure);
+			}
+		};
+	}
+
 	function handlePointerUp(event: PointerEvent): void {
 		const dismissed = event.target === event.currentTarget && event.pointerId === backdropPointerId;
 		backdropPointerId = null;
@@ -167,7 +206,7 @@
 			<header class="sheet-header">
 				{@render header()}
 			</header>
-			<div class="sheet-content">
+			<div class="sheet-content" use:fitField>
 				{@render children()}
 			</div>
 			{#if footer}

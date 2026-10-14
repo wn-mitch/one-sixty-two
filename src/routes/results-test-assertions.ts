@@ -18,11 +18,11 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 	await expect(trigger).toHaveAttribute('aria-controls', 'results-card-review');
 	await trigger.click();
+	// The inspected card exists only raised over the page; nothing opens inline below the results.
 	const review = page.locator('#results-card-review');
-	await expect(review).toBeVisible();
+	await expect(review.locator('.reader:popover-open')).toBeVisible();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-	await expect(review.getByRole('heading').first()).toBeFocused();
 	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(review.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
 	const simulatedBack = review.getByRole('region', { name: /^162-0 season statistics for / });
@@ -78,6 +78,8 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await expect(review.getByRole('button', { name: 'Turn over', exact: true }).last()).toBeVisible();
 	await expect.poll(async () => (await review.locator('.stack').boundingBox())?.y).toBe(raised?.y);
 	await page.keyboard.press('Escape');
+	await expect(review).toHaveCount(0);
+	await expect(trigger).toBeFocused();
 	const nextTrigger = page.locator('.hand-card').last();
 	await nextTrigger.click();
 	await expect(review).not.toHaveAttribute('data-season-id', firstSeasonId!);
@@ -88,8 +90,6 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
 	await review.getByRole('button', { name: /^Show text version for / }).click();
 	await page.keyboard.press('Escape');
-	await expect(review).toBeVisible();
-	await review.getByRole('button', { name: 'Hide card', exact: true }).click();
 	await expect(review).toHaveCount(0);
 	await expect(nextTrigger).toBeFocused();
 
@@ -97,8 +97,10 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	await expect(review.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
-	await review.getByRole('button', { name: 'Hide card', exact: true }).click();
-	await expect(nextTrigger).toBeFocused();
+	// A click off the raised card closes the inspection entirely, as Escape does.
+	await page.mouse.click(4, 4);
+	await expect(review).toHaveCount(0);
+	await expect(nextTrigger).toHaveAttribute('aria-expanded', 'false');
 	if (originalViewport) await page.setViewportSize(originalViewport);
 }
 

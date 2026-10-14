@@ -7,12 +7,17 @@
  let { stickers, era, fresh }: { stickers: readonly PlacedSticker[]; era: CardEra; fresh?: ReadonlySet<string> } = $props();
  const shown = $derived(faceStickers(stickers, { era }));
  const label = $derived(shown.map(item => item.definition.title).join(', '));
+ /** A slapped-on sticker has landed: the card's light repaints its map with the sticker where it now lies. */
+ function settled(event: AnimationEvent): void {
+  // The glints twinkle on the spot's pseudo-elements; only the spot's own slap moves the sticker.
+  if (event.target === event.currentTarget && !event.pseudoElement) (event.currentTarget as HTMLElement).dispatchEvent(new Event('cards:fitted', { bubbles: true }));
+ }
 </script>
 
 {#if shown.length}
  <div class="stickers" role="img" aria-label={`Stickers: ${label}`}>
   {#each shown as sticker (sticker.definition.family)}
-   <span class="spot" class:fresh={fresh?.has(sticker.kind)} style={`left:${sticker.x * 100}%;top:${sticker.y * 100}%`}>
+   <span class="spot" class:fresh={fresh?.has(sticker.kind)} onanimationend={settled} style={`left:${sticker.x * 100}%;top:${sticker.y * 100}%`}>
     <StickerBadge definition={sticker.definition} tilt={STICKER_SPOTS[sticker.definition.family].tilt} />
    </span>
   {/each}
@@ -20,7 +25,9 @@
 {/if}
 
 <style>
- .stickers { position: absolute; inset: 0; z-index: 102; pointer-events: none; font-size: .5cqw; }
+ /* Under the light canvas, so a lit card's shader lights the stickers with the rest of its face: foil stickers take the metal, gem ones the holo film. */
+ /* A sticker is 21em across: 14% of the card's width, large enough that its ribbon reads at phone size. */
+ .stickers { position: absolute; inset: 0; z-index: 100; pointer-events: none; font-size: calc(14cqw / 21); }
  .spot { position: absolute; translate: -50% -50%; line-height: 0; }
  /* A just-earned sticker slaps on, then two glints twinkle across it a few times. --sparkle-delay comes from the surrounding surface. */
  .fresh { animation: slap 480ms cubic-bezier(.16, 1, .3, 1) var(--sparkle-delay, 0ms) both; }

@@ -23,7 +23,7 @@ interface ExamplePublicationOptions {
 
 export function createExamplePublication(result: SeasonResult | null, options: ExamplePublicationOptions): SharePublication {
  return {
-  schemaVersion: 2,
+  schemaVersion: 3,
   replayId: options.replayId,
   replayUrl: options.replayUrl,
   record: {
@@ -36,7 +36,8 @@ export function createExamplePublication(result: SeasonResult | null, options: E
   },
   images: {
    field: { url: options.imageUrl, width: 1080, height: 1920, sha256: options.imageDigest },
-   fan: { url: options.imageUrl, width: 1080, height: 1920, sha256: options.imageDigest }
+   fan: { url: options.imageUrl, width: 1080, height: 1920, sha256: options.imageDigest },
+   og: { url: options.imageUrl, width: 1200, height: 630, sha256: options.imageDigest }
   }
  };
 }

@@ -10,6 +10,9 @@
   "compatibility_flags": ["nodejs_als"],
   "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
   "vars": { "PUBLIC_ORIGIN": "https://162-0.dev" },
+  "ratelimits": [
+    { "name": "UPLOAD_LIMIT", "namespace_id": "1620", "simple": { "limit": 30, "period": 60 } }
+  ],
   "r2_buckets": [
     { "binding": "REPLAYS", "bucket_name": "162-zero-replays" }
   ]

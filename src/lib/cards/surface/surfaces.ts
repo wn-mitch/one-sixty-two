@@ -1,5 +1,5 @@
 import type { Finish } from '../finish.ts';
-import type { CardEra } from '../view-model.ts';
+import type { CardEra } from '../era.ts';
 
 /**
  * What a tagged card element is made of. Templates declare the kind with `data-surface`; the finish
@@ -13,12 +13,13 @@ import type { CardEra } from '../view-model.ts';
  * - `ring`: the card's edge: a finish frame from the material layer, or a Gem photo ring.
  * - `sticker`: a die-cut vinyl sticker.
  * - `team`: the club name lettering.
+ * - `stat`: the stat numbers, printed ink unless the tuning foils them.
  * - `brand`: the 162-0 mark, foil-stamped on every card in the card's foil (silver on Base).
  * - `ink`: plain print on the stock. Untagged lettering is ink too.
  */
-export type SurfaceKind = 'stamp' | 'name' | 'mark' | 'frame' | 'photo' | 'ring' | 'sticker' | 'team' | 'brand' | 'ink';
+export type SurfaceKind = 'stamp' | 'name' | 'mark' | 'frame' | 'photo' | 'ring' | 'sticker' | 'team' | 'stat' | 'brand' | 'ink';
 
-export const SURFACE_KINDS: readonly SurfaceKind[] = ['stamp', 'name', 'mark', 'frame', 'photo', 'ring', 'sticker', 'team', 'brand', 'ink'];
+export const SURFACE_KINDS: readonly SurfaceKind[] = ['stamp', 'name', 'mark', 'frame', 'photo', 'ring', 'sticker', 'team', 'stat', 'brand', 'ink'];
 
 /**
  * Per-pixel surface description. Every channel blends meaningfully at antialiased edges, so the
@@ -55,6 +56,8 @@ export interface SurfaceTuning {
 	markFoil: Finish | 'off';
 	/** How much the foiled mark reflects; above about 0.5 it takes the foil's colour, below only its highlights. */
 	markMetal: number;
+	/** The lowest tier whose stat numbers are foil-stamped in colour over foil; `off` keeps them printed. */
+	statFoil: Finish | 'off';
 	/** Scales how deep printed lettering is pressed into the stock; 0 prints it flat. */
 	inkDepth: number;
 	/** Scales the raised name's height. */
@@ -72,7 +75,7 @@ export interface SurfaceTuning {
 }
 
 export const DEFAULT_TUNING: Readonly<SurfaceTuning> = {
-	markFoil: 'emboss', markMetal: 0.4, inkDepth: 1,
+	markFoil: 'emboss', markMetal: 0.4, statFoil: 'emboss', inkDepth: 1,
 	nameHeight: 1, nameSoftness: 0,
 	ringHeight: 0.3, ringMetal: 1, ringHolo: 1, gemRingMetal: 1
 };
@@ -139,14 +142,20 @@ export function surfaceFor(kind: SurfaceKind, tier: Finish, stock: Surface, tuni
 		// The edge takes the card's foil plate, like the name and stamps.
 		case 'ring':
 			return { height: (raised ? 0.7 : 0.35) * tuning.ringHeight, metal: holo ? tuning.gemRingMetal : tuning.ringMetal, gloss: 0.9, iridescence: holo * tuning.ringHolo };
+		// Vinyl: the only full-gloss surface, which the shader keeps clear of the card's plate and patterned film.
 		case 'sticker':
-			return { height: 0.6, metal: 0, gloss: 0.9, iridescence: 0 };
+			return { height: 0.6, metal: 0, gloss: 1, iridescence: 0 };
 		// The game's own mark is always foil: the card's foil, and silver where the card has none.
 		case 'brand':
 			return { height: -0.15, metal: 1, gloss: 0.9, iridescence: holo, silver: foil ? 0 : 1 };
 		// The club name is foil-stamped from Foil up, in the card's foil coloured by its ink.
 		case 'team':
 			return foil ? { height: -0.15, metal: 1, gloss: 0.85, iridescence: holo } : { ...stock, height: inkImpression(stock) * tuning.inkDepth };
+		// Stat numbers print as ink unless the tuning foils them, like the club name, in the card's foil coloured by their ink.
+		case 'stat':
+			return tuning.statFoil !== 'off' && rank >= TIER_RANK[tuning.statFoil]
+				? { height: -0.15, metal: 1, gloss: 0.85, iridescence: holo }
+				: { ...stock, height: inkImpression(stock) * tuning.inkDepth };
 		case 'ink':
 			return { ...stock, height: inkImpression(stock) * tuning.inkDepth };
 	}

@@ -1,8 +1,9 @@
 import { replayInput, validateReplay } from './draft.ts';
 import type { Draft, Manifest } from './types.ts';
 import {
+	PUBLISHED_FORMATS,
 	SHARE_DIMENSIONS,
-	SHARE_FORMATS,
+	type PublishedFormat,
 	type ShareFormat,
 	type SharePublication,
 	type SharePublicationImage,
@@ -106,7 +107,7 @@ function validRecord(value: unknown): value is SharePublication['record'] {
 	return typeof record.firstLoss === 'number' && Number.isInteger(record.firstLoss) && record.firstLoss >= 1 && record.firstLoss <= 162;
 }
 
-function validPublicationImage(value: unknown, replayId: string, format: ShareFormat, origin: string): value is SharePublicationImage {
+function validPublicationImage(value: unknown, replayId: string, format: PublishedFormat, origin: string): value is SharePublicationImage {
 	if (!value || typeof value !== 'object') return false;
 	const image = value as Record<string, unknown>;
 	const dimensions = SHARE_DIMENSIONS[format];
@@ -131,7 +132,7 @@ export function validateSharePublication(value: unknown, replayId: string, origi
 	const publication = value as Record<string, unknown>;
 	const canonicalOrigin = normalizedOrigin(origin);
 	if (
-		publication.schemaVersion !== 2
+		publication.schemaVersion !== 3
 		|| publication.replayId !== replayId
 		|| typeof publication.replayUrl !== 'string'
 		|| !validRecord(publication.record)
@@ -143,7 +144,7 @@ export function validateSharePublication(value: unknown, replayId: string, origi
 		throw new Error('Share preparation returned an invalid publication. Please retry.');
 	}
 	const images = publication.images as Record<string, unknown>;
-	if (!SHARE_FORMATS.every(format => validPublicationImage(images[format], replayId, format, canonicalOrigin))) {
+	if (!PUBLISHED_FORMATS.every(format => validPublicationImage(images[format], replayId, format, canonicalOrigin))) {
 		throw new Error('Share preparation returned an invalid publication. Please retry.');
 	}
 	return value as SharePublication;
@@ -206,14 +207,14 @@ export async function publishShare(
 	replayId: string,
 	origin: string,
 	record: ShareRecord,
-	images: Record<ShareFormat, Blob>,
+	images: Record<PublishedFormat, Blob>,
 	fetcher: FetchBoundary = fetch
 ): Promise<SharePublication> {
 	if (!ID_PATTERN.test(replayId)) throw new Error('Replay storage returned an invalid link. Please retry.');
 	const canonicalOrigin = normalizedOrigin(origin);
 	const body = new FormData();
 	body.set('record', JSON.stringify(record));
-	for (const format of SHARE_FORMATS) body.set(format, images[format], `${format}.png`);
+	for (const format of PUBLISHED_FORMATS) body.set(format, images[format], `${format}.png`);
 	let response: Response;
 	try {
 		response = await fetcher(`${canonicalOrigin}/api/replays/${replayId}/share`, { method: 'POST', body });
@@ -308,7 +309,7 @@ export function challengeUrl(publication: Pick<SharePublication, 'replayId' | 'r
 
 /** Opens the native share sheet with the season's challenge link. */
 export function requestNativeShare(
-	publication: SharePublication,
+	publication: Pick<SharePublication, 'replayId' | 'replayUrl' | 'record'>,
 	share: ((data: ShareData) => Promise<void>) | undefined = typeof navigator === 'undefined' ? undefined : navigator.share?.bind(navigator)
 ): Promise<void> {
 	if (!share) return Promise.reject(new ShareCapabilityError('native-share'));

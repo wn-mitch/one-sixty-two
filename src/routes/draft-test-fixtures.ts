@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { availableCandidates, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { isJackpot, type Candidate, type Draft, type Manifest, type Profile, type Roll, type Slot } from '../lib/game/types.ts';
 import type { MediaManifest, MediaPointer } from '../lib/media/types.ts';
@@ -8,6 +8,50 @@ import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 export const STORAGE_KEY = '162-zero:v1';
 
 type DeviceDb = { all(sql: string, bind?: unknown[]): Promise<Record<string, unknown>[]>; run(statements: { sql: string; bind?: unknown[] }[]): Promise<void> };
+
+/**
+ * Finds a player's group in the draft pool, which has no search: the pool pages twenty players at a time
+ * and folds players a full role cannot take into a closed section after the last page.
+ */
+export async function revealCandidate(page: Page, playerId: string): Promise<Locator> {
+ const group = page.locator(`.candidate-card[data-candidate-group="${playerId}"]`);
+ await expect(page.locator('.candidate-card').first()).toBeVisible();
+ const previous = page.locator('.pagination .page-button').first();
+ while (await previous.count() && await previous.isEnabled()) await previous.click();
+ for (;;) {
+  if (await group.count()) break;
+  const next = page.locator('.pagination .page-button').last();
+  if (!(await next.count()) || !(await next.isEnabled())) break;
+  await next.click();
+ }
+ const folded = page.locator('details.collapsed-role:not([open]) > summary');
+ if (!(await group.count()) && await folded.count()) await folded.click();
+ await expect(group).toHaveCount(1);
+ await group.scrollIntoViewIfNeeded();
+ return group;
+}
+
+/** Pages through the whole pool, folded roles included, and fails if the player appears anywhere. */
+export async function expectAbsentFromPool(page: Page, playerId: string): Promise<void> {
+ const group = page.locator(`.candidate-card[data-candidate-group="${playerId}"]`);
+ await expect(page.locator('.candidate-card').first()).toBeVisible();
+ const previous = page.locator('.pagination .page-button').first();
+ while (await previous.count() && await previous.isEnabled()) await previous.click();
+ for (;;) {
+  await expect(group).toHaveCount(0);
+  const next = page.locator('.pagination .page-button').last();
+  if (!(await next.count()) || !(await next.isEnabled())) break;
+  await next.click();
+ }
+ const folded = page.locator('details.collapsed-role:not([open]) > summary');
+ if (await folded.count()) await folded.click();
+ await expect(group).toHaveCount(0);
+}
+
+/** Waits for the draft pool's cards, the board's ready state now that the pool has no search box. */
+export async function expectPool(page: Page): Promise<void> {
+ await expect(page.locator('.candidate-card').first()).toBeVisible();
+}
 
 /** The page's application code installs the database hook once it has loaded. */
 function deviceHook(page: Page): Promise<unknown> {
@@ -122,7 +166,7 @@ export async function openSavedDraft(page: Page, draft: Draft): Promise<void> {
  }, { key: STORAGE_KEY, value: saved });
  await page.goto('/');
  await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
- await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+ await expectPool(page);
 }
 
 /** Picks the first stadium in the deck; the session rolls the first franchise right after. */

@@ -3,7 +3,7 @@
 
 	/** Starting values for the controls, so a link can carry a tuned look. */
 	export type FinishGalleryProps = Partial<Tuning> & { nameProfile?: Profile; relief?: number; lightHeight?: number; ringWidth?: number; glare?: number; shine?: number; foil?: number; coat?: number; holoPattern?: HoloChoice; holoScale?: number; waves?: number; brush?: number; foilMode?: FoilMode; shift?: number; paper?: number; wash?: number; foilPlate?: FoilPlate | 'era'; plateDepth?: number; plateScale?: number; plateTone?: number; stain?: number; width?: number; drift?: boolean };
-	import { HOLO_PATTERNS, type HoloPattern } from '#lib/cards/surface/light-renderer.ts';
+	import { HOLO_PATTERNS, type HoloPattern } from '#lib/cards/surface/holo-films.ts';
 	/** `era` lets each card's era pick its holo film. */
 	export type HoloChoice = HoloPattern | 'era';
 	export const HOLO_CHOICES: readonly HoloChoice[] = ['era', ...HOLO_PATTERNS];
@@ -17,27 +17,15 @@
 	import Card from '#lib/cards/Card.svelte';
 	import { materialFor, type Finish } from '#lib/cards/finish.ts';
 	import { LightEngine } from '#lib/cards/surface/card-light.ts';
-	import { DEFAULT_LIGHT, ERA_HOLO } from '#lib/cards/surface/light-renderer.ts';
+	import { DEFAULT_LIGHT } from '#lib/cards/surface/light-renderer.ts';
+	import { ERA_HOLO } from '#lib/cards/surface/holo-films.ts';
 	import { ERA_FOIL, ERA_PLATE_TUNING, FOIL_PLATES, type FoilPlate } from '#lib/cards/surface/foil-plates.ts';
 	import { DEFAULT_TUNING, RELIEF_PROFILES, STOCKS, type ReliefProfile, type Stock, type SurfaceTuning } from '#lib/cards/surface/surfaces.ts';
-	import { createCardViewModel, type CardEra, type CardViewModel } from '#lib/cards/view-model.ts';
-	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
-	import { isHitter } from '#lib/components/candidate-ranking.ts';
-	import { loadMedia } from '#lib/media/client.ts';
-	import { loadRankings } from '#lib/rankings/client.ts';
+	import type { CardEra, CardViewModel } from '#lib/cards/view-model.ts';
+	import { HEADLINE_SEASONS, loadHeadlineCards } from '#lib/cards/headline-seasons.ts';
 	import StoryFrame from './StoryFrame.svelte';
 
-	/** A headline season per era, so each row shows a real photo, team and stat line. */
-	const SEASONS: { era: CardEra; seasonId: string }[] = [
-		{ era: '1950s', seasonId: 'mantlmi01:1956:AL:NYA' },
-		{ era: '1960s', seasonId: 'mayswi01:1965:NL:SFN' },
-		{ era: '1970s', seasonId: 'benchjo01:1972:NL:CIN' },
-		{ era: '1980s', seasonId: 'schmimi01:1980:NL:PHI' },
-		{ era: '1990s', seasonId: 'griffke02:1997:AL:SEA' },
-		{ era: '2000s', seasonId: 'bondsba01:2001:NL:SFN' },
-		{ era: '2010s', seasonId: 'troutmi01:2016:AL:LAA' },
-		{ era: '2020s', seasonId: 'judgeaa01:2022:AL:NYA' }
-	];
+	const SEASONS = HEADLINE_SEASONS;
 	const finishes: { finish: Finish; label: string }[] = [
 		{ finish: 'base', label: 'Base' },
 		{ finish: 'foil', label: 'Foil' },
@@ -100,16 +88,19 @@
 			nameSoftness: [start.nameSoftness, 0, 3, 0.1] as Range
 		},
 		// Per-era picks, so each era's film and plate can be chosen on its own; the global selects above still override them all.
-		eras: Object.fromEntries(SEASONS.map(({ era }) => [era, { holo: select(HOLO_PATTERNS, ERA_HOLO[era]), plate: select(FOIL_PLATES, ERA_FOIL[era]), scale: [ERA_PLATE_TUNING[era].scale, 0.25, 4, 0.05] as Range, tone: [ERA_PLATE_TUNING[era].tone, 0, 3, 0.05] as Range, stain: [ERA_PLATE_TUNING[era].stain, 0, 1, 0.01] as Range }])),
+		eras: Object.fromEntries(SEASONS.map(({ era }) => [era, { holo: select(HOLO_PATTERNS, ERA_HOLO[era]), plate: select(FOIL_PLATES, ERA_FOIL[era]), scale: [ERA_PLATE_TUNING[era].scale, 0.25, 4, 0.05] as Range, tone: [ERA_PLATE_TUNING[era].tone, 0, 3, 0.05] as Range, stain: [ERA_PLATE_TUNING[era].stain, 0, 1, 0.01] as Range, vivid: [ERA_PLATE_TUNING[era].vivid ?? 1, 0, 3, 0.05] as Range }])),
 		mark: {
 			markFoil: select(['off', 'foil', 'emboss', 'gem'] as const, start.markFoil),
-			markMetal: [start.markMetal, 0, 1, 0.05] as Range
+			markMetal: [start.markMetal, 0, 1, 0.05] as Range,
+			// Experiment: foil the stat numbers in colour over foil from this tier up.
+			statFoil: select(['off', 'foil', 'emboss', 'gem'] as const, start.statFoil)
 		}
 	})));
 	const values = $derived(dials.values);
 	const tuning = $derived<SurfaceTuning>({
 		markFoil: values.mark.markFoil as SurfaceTuning['markFoil'],
 		markMetal: values.mark.markMetal,
+		statFoil: values.mark.statFoil as SurfaceTuning['statFoil'],
 		inkDepth: values.light.inkDepth,
 		nameHeight: values.name.nameHeight,
 		nameSoftness: values.name.nameSoftness,
@@ -158,20 +149,7 @@
 
 	async function load(): Promise<void> {
 		try {
-			const manifest = await loadManifest();
-			const [media, rankings] = await Promise.all([loadMedia().catch(() => null), loadRankings(manifest.dataVersion).catch(() => null)]);
-			const candidates = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
-			const picks = SEASONS.map(({ seasonId }) => {
-				const candidate = candidates.get(seasonId);
-				if (!candidate) throw new Error(`${seasonId} is not in the dataset`);
-				return { seasonId, franchiseId: candidate.franchiseId, decade: candidate.decade };
-			});
-			const profiles = await loadDraftProfiles(manifest, { picks } as Parameters<typeof loadDraftProfiles>[1]);
-			rows = SEASONS.map(({ era }, index) => {
-				const profile = profiles[index]!;
-				const slot = profile.eligibleSlots.find(isHitter) ?? profile.eligibleSlots[0]!;
-				return { era, model: createCardViewModel({ profile, slot, manifest, media, rankings, mediaStatus: media ? 'ready' : 'unavailable' }) };
-			});
+			rows = await loadHeadlineCards();
 		} catch (error) {
 			failure = error instanceof Error ? error.message : String(error);
 		}
@@ -179,7 +157,7 @@
 	void load();
 
 	// The real season keeps its stats and photo; only the finish is forced per column.
-	const eraPick = (era: CardEra) => (values.eras as Record<CardEra, { holo: HoloPattern; plate: FoilPlate; scale: number; tone: number; stain: number }>)[era];
+	const eraPick = (era: CardEra) => (values.eras as Record<CardEra, { holo: HoloPattern; plate: FoilPlate; scale: number; tone: number; stain: number; vivid: number }>)[era];
 	const withFinish = (model: CardViewModel, finish: Finish): CardViewModel => ({ ...model, fin: materialFor(finish) });
 </script>
 
@@ -196,7 +174,7 @@
 				{#each rows as row (row.era)}
 					<b class="era">{row.era}</b>
 					{#each finishes as column (column.finish)}
-						<div class="frame"><Card s={withFinish(row.model, column.finish)} film={eraPick(row.era).holo} plate={eraPick(row.era).plate} plateTuning={{ scale: eraPick(row.era).scale, tone: eraPick(row.era).tone, stain: eraPick(row.era).stain }} interactive idle={values.layout.drift} onDetails={() => {}} /></div>
+						<div class="frame"><Card s={withFinish(row.model, column.finish)} film={eraPick(row.era).holo} plate={eraPick(row.era).plate} plateTuning={{ scale: eraPick(row.era).scale, tone: eraPick(row.era).tone, stain: eraPick(row.era).stain, vivid: eraPick(row.era).vivid }} interactive idle={values.layout.drift} onDetails={() => {}} /></div>
 					{/each}
 				{/each}
 			</div>

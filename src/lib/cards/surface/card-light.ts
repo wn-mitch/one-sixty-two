@@ -1,11 +1,12 @@
 import type { Finish } from '../finish.ts';
 import type { FoilPlate, PlateTuning } from './foil-plates.ts';
-import { LightRenderer, type HoloPattern, type LightOptions } from './light-renderer.ts';
+import { ANIMATED_FILMS, ERA_HOLO, HOLO_PATTERNS, type HoloPattern } from './holo-films.ts';
+import { LightRenderer, type LightOptions } from './light-renderer.ts';
 import { SurfaceMapQueue } from './map-queue.ts';
 import { stableUnit } from '../stable-unit.ts';
 import type { SurfaceMapOptions } from './surface-map.ts';
 import type { ReliefProfile } from './surfaces.ts';
-import type { CardEra } from '../view-model.ts';
+import { CARD_ERAS, type CardEra } from '../era.ts';
 
 /**
  * Lights individual cards. One shared WebGL2 context renders a card at its own size and hands the
@@ -13,6 +14,12 @@ import type { CardEra } from '../view-model.ts';
  * card's CSS tilt need no syncing. Only cards whose light changed redraw: pointer-driven light every
  * frame, ambient light at a reduced rate, and resting cards once.
  */
+
+/**
+ * What a light canvas lights: its card, or another surface marked `data-light-root` (a pack), which carries
+ * the same `data-finish`, `data-card`, `data-film` and `data-plate` attributes a card does.
+ */
+const LIGHT_ROOT = '.card, [data-light-root]';
 
 /** Where the light sits over a card, in card fractions, and how strongly it catches. */
 export interface LightState {
@@ -27,6 +34,8 @@ export interface LightState {
 
 /** Ambient light changes slowly, so it redraws at this interval rather than every frame. */
 const AMBIENT_INTERVAL = 80;
+/** Films that move with time redraw at about 30 fps: smooth to the eye at half the GPU work of a 60 Hz screen. */
+const FILM_INTERVAL = 30;
 const MAX_PIXEL_RATIO = 2;
 const MAP_SCALE = 1.5;
 const REST: LightState = { lightX: 0.23, lightY: 0.05, spotlight: 0 };
@@ -102,14 +111,23 @@ export class LightEngine {
 	readonly #sizes: ResizeObserver;
 	#frame = 0;
 	#lastAmbient = Number.NEGATIVE_INFINITY;
+	#lastFilm = Number.NEGATIVE_INFINITY;
 	#options: LightOptions = {};
+	/** Cards given their own light or map settings instead of the scene's. */
+	readonly #own = new WeakMap<Element, { light?: LightOptions; map?: SurfaceMapOptions }>();
 
 	private constructor(renderer: LightRenderer, mode: 'transfer' | 'copy') {
 		this.#renderer = renderer;
 		this.#mode = mode;
+		// Each era's program compiles in the background once the page settles, before the first card of that era shows.
+		const warm = () => renderer.warm(CARD_ERAS, this.#options);
+		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
+		else setTimeout(warm, 200);
 		this.#queue = new SurfaceMapQueue(renderer, key => {
 			const light = this.#lights.get(key);
-			return light?.card ? { card: light.card, options: light.nameProfile ? { nameProfile: light.nameProfile } : undefined } : null;
+			if (!light?.card) return null;
+			const own = this.#own.get(light.card)?.map;
+			return { card: light.card, options: { ...own, ...(light.nameProfile ? { nameProfile: light.nameProfile } : {}) } };
 		}, () => {
 			for (const light of this.#lights.values()) if (light.visible) this.dirty(light);
 		}, MAP_SCALE, {}, () => {
@@ -141,7 +159,7 @@ export class LightEngine {
 	}
 
 	#onCardChanged = (event: Event) => {
-		const card = (event.target as Element | null)?.closest?.('.card');
+		const card = (event.target as Element | null)?.closest?.(LIGHT_ROOT);
 		const light = card && this.#byCard.get(card);
 		if (light) this.#queue.invalidate(light.id);
 	};
@@ -182,6 +200,20 @@ export class LightEngine {
 		for (const light of this.#lights.values()) this.dirty(light);
 	}
 
+	/**
+	 * Gives one light root its own light settings and, optionally, its own map settings in place of the scene's,
+	 * so cards can be compared side by side; null hands it back to the scene.
+	 */
+	configureCard(root: Element, light: LightOptions | null, map?: SurfaceMapOptions): void {
+		const before = this.#own.get(root)?.map;
+		if (light) this.#own.set(root, { light, map });
+		else this.#own.delete(root);
+		const card = this.#byCard.get(root);
+		if (!card) return;
+		if (JSON.stringify(before) !== JSON.stringify(light ? map : undefined)) this.#queue.invalidate(card.id);
+		this.dirty(card);
+	}
+
 	invalidate(light: CardLight): void {
 		if (light.card) this.#queue.invalidate(light.id);
 	}
@@ -190,6 +222,11 @@ export class LightEngine {
 		if (!light.card) return;
 		this.#dirty.add(light);
 		if (!this.#frame) this.#frame = requestAnimationFrame(this.#flush);
+	}
+
+	/** Restarts redraws for visible cards whose films move with time, after a hold is released. */
+	resumeFilms(): void {
+		for (const light of this.#lights.values()) if (light.visible && this.#animates(light)) this.dirty(light);
 	}
 
 	#flush = (time: number) => {
@@ -203,22 +240,45 @@ export class LightEngine {
 				this.#dirty.delete(light);
 				continue;
 			}
-			if (!light.direct && !ambientDue) {
+			if (!light.direct && !ambientDue && !this.#animates(light)) {
 				deferred = true;
 				continue;
 			}
 			this.#dirty.delete(light);
 			if (!this.#renderer.has(light.id)) continue;
-			this.#present(light, ratio);
+			// A card whose shader is still compiling stays dirty and tries again next frame.
+			if (!this.#present(light, ratio)) this.#dirty.add(light);
 		}
-		if (deferred) this.#frame = requestAnimationFrame(this.#flush);
+		// A film that moves with time keeps its card redrawing while the card is on screen, at most at FILM_INTERVAL.
+		let animating = false;
+		const filmDue = time - this.#lastFilm >= FILM_INTERVAL;
+		if (filmDue) this.#lastFilm = time;
+		for (const light of this.#lights.values()) {
+			if (!light.visible || !this.#animates(light)) continue;
+			animating = true;
+			if (filmDue) this.#dirty.add(light);
+		}
+		if (deferred || animating || this.#dirty.size) this.#frame = requestAnimationFrame(this.#flush);
 	};
 
-	#present(light: CardLight, ratio: number): void {
+	/** Whether this card shows a film that moves with time: its own, the scene's forced one, or its era's on a Gem card. */
+	#animates(light: CardLight): boolean {
+		const root = light.card;
+		if (!root || filmHolds > 0 || !motionAllowed()) return false;
+		const options = this.#own.get(root)?.light ?? this.#options;
+		const forced = options.holoPattern ?? -1;
+		const under = options.underFilm ?? -1;
+		if (under >= 0 && ANIMATED_FILMS.has(HOLO_PATTERNS[under]!)) return true;
+		const film = forced >= 0 ? HOLO_PATTERNS[forced] : root.dataset.film ?? (root.dataset.finish === 'gem' ? ERA_HOLO[root.dataset.card as CardEra] : undefined);
+		return film !== undefined && ANIMATED_FILMS.has(film);
+	}
+
+	/** Draws one card and copies it to its canvas; false when its shader is not ready yet. */
+	#present(light: CardLight, ratio: number): boolean {
 		const { width, height } = light;
-		if (!width || !height) return;
+		if (!width || !height) return true;
 		this.#renderer.resize(width, height, ratio);
-		this.#renderer.draw([{
+		const drawn = this.#renderer.draw([{
 			key: light.id,
 			originX: 0,
 			originY: 0,
@@ -233,14 +293,15 @@ export class LightEngine {
 			plate: light.card?.dataset.plate as FoilPlate | undefined,
 			plateTuning: plateTuning(light.card?.dataset.plateTuning),
 			pattern: stableUnit(light.card?.dataset.identity ?? '', 41)
-		}], this.#options);
+		}], (light.card && this.#own.get(light.card)?.light) ?? this.#options);
+		if (!drawn) return false;
 		const source = this.#renderer.canvas;
 		const canvas = light.canvas!;
 		// The card fades its light in on the first frame, so it never shows an empty canvas over unfoiled print.
 		canvas.dataset.presented = '';
 		if (this.#mode === 'transfer') {
 			(light.presenter as ImageBitmapRenderingContext).transferFromImageBitmap((source as OffscreenCanvas).transferToImageBitmap());
-			return;
+			return true;
 		}
 		if (canvas.width !== source.width || canvas.height !== source.height) {
 			canvas.width = source.width;
@@ -249,19 +310,44 @@ export class LightEngine {
 		const context = light.presenter as CanvasRenderingContext2D;
 		context.clearRect(0, 0, canvas.width, canvas.height);
 		context.drawImage(source as HTMLCanvasElement, 0, 0);
+		return true;
 	}
 }
 
-/** A card's `data-plate-tuning` ("scale,tone,stain"), or undefined to use its era's. */
+let filmHolds = 0;
+
+/**
+ * Holds every animated film on its current frame until the returned release is called, so heavy main-thread work
+ * such as a share capture does not compete with film redraws. Holds nest; tilt and pointer light still redraw.
+ */
+export function holdFilmMotion(): () => void {
+	filmHolds++;
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		filmHolds--;
+		if (!filmHolds) LightEngine.shared()?.resumeFilms();
+	};
+}
+
+/** The app's motion setting (`data-motion` on the root), or the system preference where the app sets none. */
+function motionAllowed(): boolean {
+	const setting = document.documentElement.dataset.motion;
+	if (setting) return setting !== 'off';
+	return !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** A card's `data-plate-tuning` ("scale,tone,stain[,vivid]"), or undefined to use its era's. */
 function plateTuning(value: string | undefined): PlateTuning | undefined {
-	const [scale, tone, stain] = (value ?? '').split(',').map(Number);
-	return value && [scale, tone, stain].every(Number.isFinite) ? { scale: scale!, tone: tone!, stain: stain! } : undefined;
+	const [scale, tone, stain, vivid = 1] = (value ?? '').split(',').map(Number);
+	return value && [scale, tone, stain, vivid].every(Number.isFinite) ? { scale: scale!, tone: tone!, stain: stain!, vivid } : undefined;
 }
 
 /** Svelte action for the light canvas inside a card: `<canvas use:lightCanvas={light}>`. */
 export function lightCanvas(canvas: HTMLCanvasElement, light: CardLight) {
 	const engine = LightEngine.shared();
-	const card = canvas.closest<HTMLElement>('.card');
+	const card = canvas.closest<HTMLElement>(LIGHT_ROOT);
 	if (engine && card) engine.attach(light, card, canvas);
 	return {
 		destroy() {

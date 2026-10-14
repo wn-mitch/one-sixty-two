@@ -231,7 +231,8 @@ export class WallLight {
 				pattern: stableUnit(card.key.split('@')[0] ?? '', 41)
 			};
 		});
-		this.#renderer.draw(cards);
+		// Cards whose shader is still compiling are skipped; draw again once it may be ready, even with motion held.
+		if (!this.#renderer.draw(cards)) requestAnimationFrame(() => this.#queueDraw());
 	}
 
 	destroy(): void {

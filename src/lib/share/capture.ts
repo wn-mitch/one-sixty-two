@@ -1,5 +1,5 @@
 import { SLOTS } from '../game/types.ts';
-import { SHARE_DIMENSIONS, type ShareFormat } from './types.ts';
+import { SHARE_DIMENSIONS, type PublishedFormat } from './types.ts';
 
 export interface ShareCaptureOptions {
 	timeoutMs?: number;
@@ -78,7 +78,7 @@ async function decodeImages(root: HTMLElement, deadline: number, signal?: AbortS
 	})).then(() => undefined), deadline, signal);
 }
 
-function assertDimensions(root: HTMLElement, format: ShareFormat): void {
+function assertDimensions(root: HTMLElement, format: PublishedFormat): void {
 	const expected = SHARE_DIMENSIONS[format];
 	const bounds = root.getBoundingClientRect();
 	if (Math.abs(bounds.width - expected.width) > DIMENSION_TOLERANCE ||
@@ -91,8 +91,8 @@ function assertDimensions(root: HTMLElement, format: ShareFormat): void {
 }
 
 function fittingIsSettled(root: HTMLElement): boolean {
-	// Every roster card is drawn once on the field.
-	const expectedCards = SLOTS.length;
+	// The share images draw every roster card once; the link preview declares how many it fans out.
+	const expectedCards = root.dataset.shareCards === undefined ? SLOTS.length : Number(root.dataset.shareCards);
 	const captureCards = root.querySelectorAll<HTMLElement>('[data-card][data-capture=\"true\"]');
 	const fittedRoots = [...root.querySelectorAll<HTMLElement>('[data-card]')];
 	return captureCards.length === expectedCards && fittedRoots.length >= captureCards.length &&
@@ -128,7 +128,7 @@ function failureMessage(error: unknown): string {
  */
 export async function waitForShareCapture(
 	root: HTMLElement,
-	format: ShareFormat,
+	format: PublishedFormat,
 	options: ShareCaptureOptions = {}
 ): Promise<void> {
 	const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -142,14 +142,18 @@ export async function waitForShareCapture(
 			throw new Error('Capture root does not match the requested share format');
 		}
 		await waitUntil(() => root.dataset.shareHydrated === 'true', deadline, options.signal);
+		performance.mark(`share:${format}:hydrated`);
 		if (document.fonts) {
 			await beforeDeadline(document.fonts.ready.then(() => undefined), deadline, options.signal);
 			for (const font of document.fonts) {
 				if (font.status === 'error') throw new Error('A required share font failed to load');
 			}
 		}
+		performance.mark(`share:${format}:fonts`);
 		await decodeImages(root, deadline, options.signal);
+		performance.mark(`share:${format}:images`);
 		await waitUntil(() => fittingIsSettled(root), deadline, options.signal);
+		performance.mark(`share:${format}:fitted`);
 		assertNoFitOverflow(root);
 		assertDimensions(root, format);
 		await beforeDeadline(nextFrame(options.signal), deadline, options.signal);

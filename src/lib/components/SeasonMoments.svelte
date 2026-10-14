@@ -60,8 +60,8 @@
    {#if view && !card}
     <!-- Not one of yours: the opponent's card shows in black and white. -->
     <figure class="participant-card outsider">
-     <span class="participant-art" aria-hidden="true" inert>
-      <Card s={view} face="front" interactive={false} onDetails={noDetails} />
+     <span class="participant-art" aria-hidden="true">
+      <Card s={view} face="front" interactive idle onDetails={noDetails} />
      </span>
      <figcaption>Opponent</figcaption>
     </figure>
@@ -74,8 +74,8 @@
      aria-controls={reviewId}
      onclick={event => onInspect(card.seasonId, event.currentTarget)}
     >
-     <span class="participant-art" aria-hidden="true" inert>
-      <Card s={view} face="front" interactive={false} onDetails={noDetails} />
+     <span class="participant-art" aria-hidden="true">
+      <Card s={view} face="front" interactive idle onDetails={noDetails} />
      </span>
     </button>
    {/if}

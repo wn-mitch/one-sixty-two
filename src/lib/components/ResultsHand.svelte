@@ -51,7 +51,7 @@
 						onclick={(event) => onInspect(card.seasonId, event.currentTarget)}
 					>
 						<span aria-hidden="true">
-							<Card s={view} face="front" thumbnail interactive={false} onDetails={noCardDetails} />
+							<Card s={view} face="front" interactive onDetails={noCardDetails} />
 						</span>
 						<b class="pick" aria-hidden="true">#{card.pickNumber}</b>
 					</button>

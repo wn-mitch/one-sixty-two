@@ -33,7 +33,7 @@
 			</div>
 		</div>
 
-		<div use:fit={{ max: 14, min: 9, wrapMin: 6.4, lines: 2, maxH: 13.5 }} data-rt data-layer="name.full" data-surface="name" data-fit data-max="14" data-min="9" data-wrap-min="6.4" data-lines="2" data-max-h="13.5" style="text-shadow:var(--emb, 0 0 0 transparent); flex:none; margin-top:2.8cqw; width:100%; font-weight:900; font-size:14cqw; line-height:0.86; text-transform:uppercase; white-space:nowrap; text-wrap:balance;">{s.full}</div>
+		<div use:fit={{ max: 14, min: 9, wrapMin: 6.4, lines: 2, maxH: 13.5 }} data-rt data-layer="name.full" data-surface="name" data-fit data-max="14" data-min="9" data-wrap-min="6.4" data-lines="2" data-max-h="13.5" style="text-shadow:var(--emb, 0 0 0 transparent); flex:none; margin-top:2.8cqw; width:100%; font-weight:800; font-size:14cqw; line-height:0.86; letter-spacing:0.03em; text-transform:uppercase; white-space:nowrap; text-wrap:balance;">{s.full}</div>
 		<div data-layer="team.row" style="flex:none; margin-top:1.4cqw; display:flex; align-items:center; gap:1.8cqw;">
 			<span aria-hidden="true" style={`flex:none; width:5cqw; height:1.1cqw; background:${s.k.tintOnDark}; transform:skewX(-30deg);`}></span>
 			<span use:fit={{ max: 4.4, min: 3.3 }} data-rt data-layer="team.name" data-surface="team" data-fit data-max="4.4" data-min="3.3" style={`min-width:0; max-width:84cqw; font-weight:700; font-size:4.4cqw; line-height:1; letter-spacing:0.1em; text-transform:uppercase; white-space:nowrap; color:${s.k.tintOnDark};`}>{s.team}</span>
@@ -42,21 +42,21 @@
 		<div data-layer="stats" style="flex:none; margin-top:3.4cqw; display:grid; grid-template-columns:40fr 35fr 25fr; gap:1.4cqw;">
 			<div data-layer="stat.primary" style={`display:flex; flex-direction:column; justify-content:flex-end; gap:0.8cqw; padding:1.8cqw 2.4cqw 2cqw; background:${s.k.field}; color:${s.k.onField}; clip-path:polygon(0 0, calc(100% - 2.6cqw) 0, 100% 2.6cqw, 100% 100%, 0 100%);`}>
 				<div data-rt data-layer="stat.primary.label" style="font-weight:700; font-size:3.8cqw; line-height:1; letter-spacing:0.06em; text-transform:uppercase;">{s.st1.l}</div>
-				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.primary.value" style="font-weight:800; font-size:14cqw; line-height:0.82; font-variant-numeric:tabular-nums; white-space:nowrap;">{s.st1.v}</div>
+				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.primary.value" data-surface="stat" style="font-weight:800; font-size:14cqw; line-height:0.82; font-variant-numeric:tabular-nums; white-space:nowrap;">{s.st1.v}</div>
 			</div>
 			<div data-layer="stat.secondary" style={`display:flex; flex-direction:column; justify-content:flex-end; gap:0.8cqw; padding:1.8cqw 2.4cqw 2cqw; background:${s.k.raised}; clip-path:polygon(0 0, calc(100% - 2.6cqw) 0, 100% 2.6cqw, 100% 100%, 0 100%);`}>
 				<div data-rt data-layer="stat.secondary.label" style="font-weight:700; font-size:3.8cqw; line-height:1; letter-spacing:0.06em; text-transform:uppercase;">{s.st2.l}</div>
-				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.secondary.value" style="font-weight:800; font-size:12cqw; line-height:0.82; font-variant-numeric:tabular-nums; white-space:nowrap;">{s.st2.v}</div>
+				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.secondary.value" data-surface="stat" style="font-weight:800; font-size:12cqw; line-height:0.82; font-variant-numeric:tabular-nums; white-space:nowrap;">{s.st2.v}</div>
 			</div>
 			<div data-layer="stat.tertiary" style={`display:flex; flex-direction:column; justify-content:flex-end; gap:0.8cqw; padding:1.8cqw 2.4cqw 2cqw; background:${s.k.raised}; clip-path:polygon(0 0, calc(100% - 2.6cqw) 0, 100% 2.6cqw, 100% 100%, 0 100%);`}>
 				<div data-rt data-layer="stat.tertiary.label" style="font-weight:700; font-size:3.8cqw; line-height:1; letter-spacing:0.06em; text-transform:uppercase;">{s.st3.l}</div>
-				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.tertiary.value" style="font-weight:800; font-size:12cqw; line-height:0.82; font-variant-numeric:tabular-nums; white-space:nowrap;">{s.st3.v}</div>
+				<div use:fit={{ auto: true }} data-rt data-fit="auto" data-layer="stat.tertiary.value" data-surface="stat" style="font-weight:800; font-size:12cqw; line-height:0.82; font-variant-numeric:tabular-nums; white-space:nowrap;">{s.st3.v}</div>
 			</div>
 		</div>
 
 		<div data-layer="footer" style="flex:none; margin-top:2.4cqw; display:flex; justify-content:space-between; align-items:baseline; gap:2cqw;">
-			<div data-rt data-layer="photo.caption" style={`font-weight:600; font-size:3.8cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase; white-space:nowrap; color:${s.k.mutedOnDark};`}>{s.caption}</div>
-			<div data-layer="brand" data-surface="brand" style="font-weight:600; letter-spacing:.03em; font-style:italic; font-size:4.2cqw; line-height:1;">162-0</div>
+			<div data-rt data-layer="photo.caption" style={`font-weight:600; font-size:3.8cqw; line-height:1; letter-spacing:0.07em; text-transform:uppercase; white-space:nowrap; min-width:0; overflow:hidden; text-overflow:ellipsis; color:${s.k.mutedOnDark};`}>{s.caption}</div>
+			<div data-layer="brand" data-surface="brand" style="flex:none; font-weight:600; letter-spacing:.03em; font-style:italic; font-size:4.2cqw; line-height:1;">162-0</div>
 		</div>
 	</div>
 </div>

@@ -1,5 +1,5 @@
 import type { Finish } from '../finish.ts';
-import type { CardEra } from '../view-model.ts';
+import type { CardEra } from '../era.ts';
 import type { LightRenderer } from './light-renderer.ts';
 import { buildSurfaceMap, type SurfaceMapOptions } from './surface-map.ts';
 

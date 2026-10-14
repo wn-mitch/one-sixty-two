@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-		import { GEMHOLO, SILVER } from '../cards/finish.ts';
+	import { GEMHOLO, SILVER } from '../cards/finish.ts';
+	import { tilt } from '../cards/motion.ts';
+	import { CardLight, LightEngine, lightCanvas } from '../cards/surface/card-light.ts';
+	import PackSeal from './PackSeal.svelte';
 	import { STOCK, roles } from '../cards/tokens.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
 	import { EASE_IN_OUT, EASE_OUT, MOTION } from '../motion-timing.ts';
 	import { isJackpot, type Roll } from '../game/types.ts';
 	import { rollKey } from '../game/draft.ts';
 	import TeamLogo from './TeamLogo.svelte';
+	import { eraForYear } from '../cards/view-model.ts';
 	import { loadMedia, selectLogo } from '../media/client.ts';
 
 	/** One open pack, a franchise or a jackpot, dealt face up as a card. */
@@ -66,6 +70,11 @@
 	/** The cards on the table: held while one is taken so the others can leave after the session keeps only it, or while a returning table shows the taken card alone before the added pack opens. */
 	let held = $state<readonly DealtPack[] | null>(untrack(() => adding ? [packs[0]] : null));
 	const shown = $derived(held ?? packs);
+	/**
+	 * How many cards the row is laid out for. A returning table already holds the added pack, so the taken card
+	 * waits at its final size and place instead of snapping smaller and aside when the added pack opens beside it.
+	 */
+	const planned = $derived(adding ? Math.max(shown.length, packs.length) : shown.length);
 	const packKey = (pack: DealtPack) => rollKey(pack.roll);
 	/**
 	 * A faded pack right of the dealt cards offers another while the draft has extras left and the roll has room.
@@ -88,7 +97,7 @@
 	 */
 	const layout = $derived.by(() => {
 		const full = stageWidth * .86;
-		const count = shown.length;
+		const count = planned;
 		// Half the row right of center is `perCard * size + fixed`, before the ghost and its lead-in. Lifted cards
 		// sit their overhang further apart, so every visible gap, card to card and card to ghost, is `GAP`.
 		const perCard = count * LIFT / 2 + (ghostShown && count > 1 ? (LIFT - 1) / 2 : 0);
@@ -103,7 +112,7 @@
 		return { size, ghost: Math.max(MIN_GHOST, Math.min(size, room - perCard * size)) };
 	});
 	/** Half the dealt cards' laid-out width, so the row centers on them. */
-	const anchor = $derived((shown.length * layout.size * LIFT - (LIFT - 1) * layout.size + Math.max(0, shown.length - 1) * GAP) / 2);
+	const anchor = $derived((planned * layout.size * LIFT - (LIFT - 1) * layout.size + Math.max(0, planned - 1) * GAP) / 2);
 	/** The caption names what to tap only after the player hesitates, so the pack and card teach themselves. */
 	let hinting = $state(false);
 	$effect(() => {
@@ -116,6 +125,16 @@
 	let pack = $state<HTMLElement>();
 	let hand = $state<HTMLElement>();
 	let seal = $state<HTMLElement>();
+	// Where the browser runs the card light, the sealed pack is lit silver foil, a jackpot gem holo and a franchise card's
+	// frame its decade's foil, all drifting and following the pointer like cards; elsewhere they keep their CSS foil.
+	const shaded = LightEngine.shared() !== null;
+	const packLight = new CardLight();
+	const dealtLights = new Map<string, CardLight>();
+	function dealtLight(key: string): CardLight {
+		let light = dealtLights.get(key);
+		if (!light) dealtLights.set(key, light = new CardLight());
+		return light;
+	}
 	const cards: Record<string, HTMLButtonElement | undefined> = $state({});
 	const flippers: Record<string, HTMLElement | undefined> = $state({});
 	const first = $derived(shown[0] ? cards[packKey(shown[0])] : undefined);
@@ -150,11 +169,18 @@
 
 	const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
+	/** A dealt card's light map was drawn mid-flip; once the cards lie face up, each repaints it where its print now sits. */
+	function relight(): void {
+		for (const plate of hand?.querySelectorAll<HTMLElement>('.front [data-light-root]') ?? []) plate.dispatchEvent(new Event('cards:fitted', { bubbles: true }));
+	}
+
 	async function open(): Promise<void> {
 		if (stage !== 'sealed' || disabled) return;
 		stage = 'opening';
 		onOpen();
 		await tick();
+		// The light map repaints without the torn seal.
+		pack?.dispatchEvent(new Event('cards:fitted', { bubbles: true }));
 		const card = first, flipper = firstFlipper;
 		if (!packs.length) {
 			// The roll could not be committed; the session reports the error.
@@ -180,6 +206,7 @@
 			stage = 'dealt';
 		}
 		packGone = true;
+		relight();
 		await tick();
 		card?.focus({ preventScroll: true });
 	}
@@ -253,6 +280,7 @@
 				flip
 			]);
 		}
+		relight();
 		if (!spentOut) ghostKey += 1;
 		spentOut = false;
 		adding = false;
@@ -377,17 +405,30 @@
 					tabindex={stage === 'dealt' ? 0 : -1}
 					disabled={stage !== 'dealt'}
 					onclick={() => void take(pack)}
+					use:tilt={{ enabled: shaded, idle: true, finish: isJackpot(pack.roll) ? 'gem' : 'silver', light: dealtLight(packKey(pack)), identity: packKey(pack) }}
 				>
 					<div class="flipper" bind:this={flippers[packKey(pack)]}>
 						<div class="face back"><span class="back-mark"></span></div>
 						{#if isJackpot(pack.roll)}
-							<div class="face front jackpot" style:--foil={GEMHOLO}>
+							<div class="face front jackpot" class:lit={shaded} style:--foil={GEMHOLO}>
+								{#if shaded}
+									<!-- The light covers only the holo sheet, which fades through every era's film; the lettering prints above it. -->
+									<span class="plate" data-light-root data-finish="gem" data-card="2020s" data-film="jackpot" data-identity={packKey(pack)} aria-hidden="true">
+										<span class="sheet" data-surface="ring" data-surface-shape="box"></span>
+										<canvas class="light" use:lightCanvas={dealtLight(packKey(pack))}></canvas>
+									</span>
+								{/if}
 								<span class="jackpot-mark" aria-hidden="true"></span>
 								<strong>Jackpot</strong>
 								<span class="years">{pack.roll.jackpot.length} elite seasons</span>
 							</div>
 						{:else}
+							<!-- The franchise's decade prints the card: its era's foil plate pressed into a silver frame. -->
 							<div class="face front">
+								<span class="plate" data-light-root={shaded || undefined} data-finish="foil" data-card={eraForYear(pack.roll.decade)} data-identity={packKey(pack)} aria-hidden="true">
+									<span class="era-frame" data-surface="ring" data-surface-shape="frame"></span>
+									{#if shaded}<canvas class="light" use:lightCanvas={dealtLight(packKey(pack))}></canvas>{/if}
+								</span>
 								<TeamLogo franchiseId={pack.roll.franchiseId} label={pack.name ?? pack.roll.franchiseId} size="large" />
 								<strong>{pack.name ?? pack.roll.franchiseId}</strong>
 								{#if pack.years}<span class="years">{pack.years.first}–{pack.years.last}</span>{/if}
@@ -397,22 +438,42 @@
 				</button>
 			{/each}
 			{#if ghostShown}
-				{#if shown.length === 1}<span class="divider" aria-hidden="true"></span>{/if}
+				{#if planned === 1}<span class="divider" aria-hidden="true"></span>{/if}
 				{#key ghostKey}
 					<button type="button" class="ghost-pack" bind:this={ghost} aria-label={`Add a franchise pack to choose from, ${extraPacks!.left} of ${extraPacks!.total} left`} disabled={!ghostReady} onclick={() => void addPack()} style:--foil={SILVER}>
-						<span class="seal" bind:this={ghostSeal} aria-hidden="true"></span>
+						<PackSeal bind:element={ghostSeal} />
 						<span class="ghost-face" aria-hidden="true">
 							<span class="ghost-plus">+</span>
 							<span class="ghost-title">Extra pack</span>
 							<span class="ghost-count">{extraPacks!.left} left</span>
 						</span>
-						<span class="seal bottom" aria-hidden="true"></span>
+						<PackSeal bottom />
 					</button>
 				{/key}
 			{/if}
 		</div>
-		<button id="roll-next" type="button" class="pack" bind:this={pack} aria-label="Roll next franchise" disabled={disabled || stage !== 'sealed'} onclick={open} style:--foil={SILVER}>
-			<span class="seal" bind:this={seal} aria-hidden="true"></span>
+		<button
+			id="roll-next"
+			type="button"
+			class="pack"
+			bind:this={pack}
+			aria-label="Roll next franchise"
+			disabled={disabled || stage !== 'sealed'}
+			onclick={open}
+			style:--foil={SILVER}
+			data-light-root={shaded || undefined}
+			data-finish="foil"
+			data-card="2020s"
+			data-plate="sunburst"
+			data-identity="franchise-pack"
+			use:tilt={{ enabled: shaded && stage === 'sealed', idle: true, finish: 'silver', light: packLight, identity: 'franchise-pack' }}
+		>
+			{#if shaded}
+				<span class="sheet" data-surface="ring" data-surface-shape="box" aria-hidden="true"></span>
+				<canvas class="light" aria-hidden="true" use:lightCanvas={packLight}></canvas>
+			{/if}
+			<!-- The torn seal leaves the light and flies off as print, so the canvas stops drawing it. -->
+			<PackSeal bind:element={seal} lit={shaded && stage === 'sealed'} />
 			<span class="pack-face" aria-hidden="true">
 				{#if frontMark && backMark}
 					<span class="coin" class:spinning={appSettings.effectiveEnabled} style:--mark-spin="{MOTION.markSpin}ms" bind:this={coin} onanimationiteration={advanceMarks}>
@@ -424,7 +485,7 @@
 				<span class="pack-title">Franchise pack</span>
 				<span class="pack-count">Pick {pickNumber} of {pickCount}</span>
 			</span>
-			<span class="seal bottom" aria-hidden="true"></span>
+			<PackSeal bottom lit={shaded} />
 		</button>
 	</div>
 	<p class="caption" class:hidden={!hinting} aria-hidden="true">{stage === 'sealed' ? 'Tap the pack' : shown.length > 1 ? 'Take one pack' : 'Take the card'}</p>
@@ -494,11 +555,12 @@
 	.pack:disabled { cursor: default; opacity: 1; }
 	.pack-gone .pack { visibility: hidden; }
 	.pack:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
-	.seal {
-		background: repeating-linear-gradient(90deg, oklch(70% .01 255) 0 4px, oklch(88% .01 255) 4px 8px);
-		mask: radial-gradient(circle at 50% 100%, transparent 3px, #000 3.5px) 0 0 / 8px 100% repeat-x;
-	}
-	.seal.bottom { transform: scaleY(-1); }
+	/* A lit pack's foil sheet and light canvas sit under its seals and face; the canvas brings its own glint. */
+	.sheet, .light { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+	.light { width: 100%; height: 100%; opacity: 0; transition: opacity 240ms ease-out; }
+	.light:global([data-presented]) { opacity: 1; }
+	.pack[data-light-root] > :not(.sheet, .light) { position: relative; z-index: 1; }
+	.pack[data-light-root]::after { display: none; }
 	.pack-face {
 		display: grid;
 		align-content: center;
@@ -575,6 +637,12 @@
 	/* A jackpot deals face up in the gem holo foil, drifting so it reads as special at a glance. */
 	.front.jackpot { --mx: 0%; --my: 0%; color: oklch(22% .03 280); background: none; border-color: #fff; overflow: hidden; }
 	.front.jackpot > * { position: relative; z-index: 1; }
+	.front > .plate { position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none; }
+	.front:not(.jackpot) > :not(.plate) { position: relative; z-index: 1; }
+	/* A silver frame inside the card's rule; the light canvas presses the era's plate into it. */
+	.era-frame { position: absolute; inset: 0; z-index: 0; padding: 4.5cqi; border-radius: inherit; background: var(--foil-frame, linear-gradient(115deg, #8f99a4, #f4f6f8 30%, #aeb7c0 55%, #ffffff 70%, #8a949f)); mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); pointer-events: none; }
+
+	.front.jackpot.lit::before { display: none; }
 	/* --foil resolves --mx/--my where it is set, so they live on the card. The holo sheet is three cards wide and tall and drifts by transform, so the shimmer never repaints. */
 	.front.jackpot::before { content: ''; position: absolute; z-index: 0; top: 0; left: 0; width: 300%; height: 300%; background: var(--foil); background-size: 100% 100%; background-position: 0 0; translate: 0 -20%; animation: holo-drift 3.2s ease-in-out infinite alternate; pointer-events: none; }
 	.jackpot-mark { width: 34cqi; height: 34cqi; background: oklch(22% .03 280); clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }

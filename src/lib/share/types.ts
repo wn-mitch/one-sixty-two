@@ -2,9 +2,13 @@ import type { CardViewModel } from '../cards/view-model.ts';
 import type { DEFENSE_METHOD_VERSION, MODEL_VERSION, ReplaySchemaVersion, RULES_VERSION, Slot, VALUATION_VERSION } from '../game/types.ts';
 import type { ENVIRONMENT_VERSION, GEOMETRY_VERSION, Vec2 } from '../sim/park-types.ts';
 
-/** Each published season carries both images: the roster on the home park's field, and a fan of large cards. */
+/** The player picks between two share images: the roster on the home park's field, and a fan of large cards. */
 export const SHARE_FORMATS = ['field', 'fan'] as const;
 export type ShareFormat = (typeof SHARE_FORMATS)[number];
+
+/** Every published season stores both share images plus a landscape link preview used only for `og:image`. */
+export const PUBLISHED_FORMATS = [...SHARE_FORMATS, 'og'] as const;
+export type PublishedFormat = (typeof PUBLISHED_FORMATS)[number];
 
 export function isShareFormat(value: unknown): value is ShareFormat {
 	return typeof value === 'string' && SHARE_FORMATS.includes(value as ShareFormat);
@@ -12,8 +16,9 @@ export function isShareFormat(value: unknown): value is ShareFormat {
 
 export const SHARE_DIMENSIONS = {
 	field: { width: 1080, height: 1920 },
-	fan: { width: 1080, height: 1920 }
-} as const satisfies Record<ShareFormat, { width: number; height: number }>;
+	fan: { width: 1080, height: 1920 },
+	og: { width: 1200, height: 630 }
+} as const satisfies Record<PublishedFormat, { width: number; height: number }>;
 
 export type ShareAction = 'challenge' | 'copy-link' | 'download' | 'copy-image';
 
@@ -48,6 +53,8 @@ export interface ShareRenderCard {
 	slot: Slot;
 	/** 1-based position in the order the card was drafted. */
 	pickNumber: number;
+	/** WAR per 162 games in the card's role from the current rankings, or null without them. */
+	war: number | null;
 	card: CardViewModel;
 }
 
@@ -81,9 +88,9 @@ export interface SharePublicationImage {
 }
 
 export interface SharePublication {
-	schemaVersion: 2;
+	schemaVersion: 3;
 	replayId: string;
 	replayUrl: string;
 	record: ShareRecord;
-	images: Record<ShareFormat, SharePublicationImage>;
+	images: Record<PublishedFormat, SharePublicationImage>;
 }

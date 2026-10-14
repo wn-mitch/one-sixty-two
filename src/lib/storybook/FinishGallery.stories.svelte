@@ -1,6 +1,8 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import FinishGallery from './FinishGallery.svelte';
+	import { HOLO_PATTERNS } from '#lib/cards/surface/holo-films.ts';
+	import { FOIL_PLATES } from '#lib/cards/surface/foil-plates.ts';
 
 	const { Story } = defineMeta({
 		title: 'Cards/Finish gallery',
@@ -11,8 +13,8 @@
 		argTypes: {
 			nameProfile: { control: 'select', options: ['pillow', 'groove', 'etched'] },
 			markFoil: { control: 'select', options: ['off', 'foil', 'emboss', 'gem'] },
-			holoPattern: { control: 'select', options: ['era', 'refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence'] },
-			foilPlate: { control: 'select', options: ['era', 'brushed', 'hammered', 'guilloche', 'sunburst', 'diamond-plate', 'pinstripe', 'spun', 'carbon', 'knurl', 'damascus', 'stain', 'weld'] }
+			holoPattern: { control: 'select', options: ['era', ...HOLO_PATTERNS] },
+			foilPlate: { control: 'select', options: ['era', ...FOIL_PLATES] }
 		}
 	});
 </script>

@@ -328,10 +328,11 @@ test.describe('Draft board browsing', () => {
 		await expect(confirmation).toHaveAttribute('data-selected-season', season!);
 		await page.locator('.field-panel [data-slot="2B"]').click();
 		await expect(confirmation).toHaveAttribute('data-pending-slot', '2B');
-		const search = page.getByRole('searchbox', { name: 'Find your pick', exact: true });
-		await search.click();
+		// The already active sort is a control outside the cards that leaves the selection alone.
+		const activeSort = page.getByRole('group', { name: 'Sort by', exact: true }).getByRole('button', { name: 'WAR', exact: true });
+		await activeSort.click();
 		await expect(page.locator('.field-footer')).toHaveCount(0);
-		await expect(search).toBeFocused();
+		await expect(activeSort).toBeFocused();
 		await expect(page.locator('.picked-count')).toHaveText('0 / 16');
 		await preview.click();
 		await confirmation.getByRole('button', { name: 'Draft at 2B', exact: true }).click();
@@ -443,16 +444,13 @@ test.describe('Draft board browsing', () => {
 		await expect.poll(() => candidateGroups(page)).not.toEqual(unavailableOrder);
 	});
 
-	test('resets search, pagination, and the initial selectable pool without leaving an overlay', async ({ page }) => {
+	test('resets pagination and the initial selectable pool without leaving an overlay', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openChoosing(page);
-		const search = page.getByRole('searchbox', { name: 'Find your pick', exact: true });
 		await page.getByRole('button', { name: 'Next', exact: true }).click();
-		await search.fill('Example Candidate 06');
-		await expect(candidate(page, '06')).toBeVisible();
-		await expect(page.getByRole('navigation', { name: 'Player card pages' })).toHaveCount(0);
+		await expect(page.getByRole('navigation', { name: 'Player card pages' })).toContainText('2 / 2');
+		await expect(candidate(page, '01')).toHaveCount(0);
 		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
-		await expect(search).toHaveValue('');
 		await expect(page.getByRole('navigation', { name: 'Player card pages' })).toContainText('1 / 2');
 		await expect(candidate(page, '01')).toBeVisible();
 		await page.setViewportSize({ width: 402, height: 874 });

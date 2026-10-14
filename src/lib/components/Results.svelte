@@ -77,7 +77,9 @@
 	let mediaUnavailable = $state(false);
 	let inspectedSeasonId = $state<string | null>(null);
 	let inspectionTrigger: HTMLButtonElement | null = null;
-	let review = $state<CardReview>();
+	// The inspected card exists only raised over the page; it flies from, and lands back on, the card that opened it.
+	let inspectionOpened = $state(false);
+	let inspectionSource = $state<HTMLElement | null>(null);
 	let turned = $state(true);
 	let textBack = $state(false);
 	let selectedMode = $state<'simulated' | 'actual'>('simulated');
@@ -121,9 +123,9 @@
 			selectedMode = 'simulated';
 		}
 		inspectionTrigger = trigger;
+		inspectionSource = trigger;
 		inspectedSeasonId = seasonId;
-		await tick();
-		review?.focusHeading();
+		inspectionOpened = true;
 	}
 
 	/** The full hand in draft order, so the raised card steps through every player. */
@@ -138,6 +140,9 @@
 		inspectedSeasonId = next.seasonId;
 		await tick();
 		({ turned, textBack, selectedMode } = face);
+		// The card lands back where this player sits on the page, not where the first card was opened.
+		inspectionSource = [...document.querySelectorAll<HTMLElement>(`button[aria-controls="${resultsReviewId}"][aria-expanded="true"]`)]
+			.find(button => button.getClientRects().length > 0) ?? inspectionSource;
 		document.querySelector<HTMLButtonElement>(`#${resultsReviewId} [data-hand-step="${direction}"]`)?.focus({ preventScroll: true });
 	}
 
@@ -154,6 +159,8 @@
 		const trigger = inspectionTrigger;
 		inspectedSeasonId = null;
 		inspectionTrigger = null;
+		inspectionSource = null;
+		inspectionOpened = false;
 		void tick().then(() => {
 			if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
 			else if (resultsHeading?.isConnected) resultsHeading.focus({ preventScroll: true });
@@ -265,12 +272,14 @@
 		{#key inspectedSeasonId}
 			<CardReview
 				id={resultsReviewId}
-				bind:this={review}
 				s={inspectedView}
 				inspection={inspectedCard.inspection}
 				bind:turned
 				bind:textBack
 				bind:selectedMode
+				bind:opened={inspectionOpened}
+				sourceElement={inspectionSource}
+				raisedOnly
 				flipInPlace
 				onClose={closeInspection}
 				readerNav={handOrder.length > 1 ? handNav : undefined}

@@ -13,7 +13,8 @@ import type { Roles } from './tokens.ts';
 import { finishFor, materialFor } from './finish.ts';
 import type { FinishMaterial, FinishRole } from './finish.ts';
 
-export type CardEra = '1950s' | '1960s' | '1970s' | '1980s' | '1990s' | '2000s' | '2010s' | '2020s';
+import type { CardEra } from './era.ts';
+export type { CardEra };
 export type CardRole = 'batting' | 'pitching' | 'bullpen';
 export type CardMediaStatus = 'loading' | 'ready' | 'unavailable';
 

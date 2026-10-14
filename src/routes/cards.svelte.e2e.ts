@@ -12,6 +12,7 @@ import {
 	currentMedia,
 	currentRankings,
 	openSavedDraft,
+	revealCandidate,
 	type CardScenario
 } from './draft-test-fixtures.ts';
 
@@ -49,8 +50,7 @@ function draftSheet(page: Page): Locator {
 }
 
 async function selectNarrowCard(page: Page, scenario: CardScenario) {
-	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(scenario.profile.displayName);
-	const group = page.locator(`[data-candidate-group="${scenario.candidate.playerId}"]`);
+	const group = await revealCandidate(page, scenario.candidate.playerId);
 	await expect(group).toBeVisible();
 	await group.getByRole('button', { name: /^Select / }).click();
 	const sheet = draftSheet(page);
@@ -65,8 +65,7 @@ async function selectNarrowCard(page: Page, scenario: CardScenario) {
 }
 
 async function selectWideCard(page: Page, scenario: CardScenario) {
-	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(scenario.profile.displayName);
-	const group = page.locator(`[data-candidate-group="${scenario.candidate.playerId}"]`);
+	const group = await revealCandidate(page, scenario.candidate.playerId);
 	const selector = group.getByRole('combobox', { name: `Exact season for ${scenario.profile.displayName}`, exact: true });
 	await expect(selector).toBeVisible();
 	await selector.selectOption(scenario.candidate.seasonId);
@@ -328,8 +327,7 @@ test('orders displayed exact seasons after a lower-ranked season is chosen', asy
 	await page.getByRole('combobox', { name: `Exact season for ${current!.displayName}`, exact: true }).selectOption(alternate.seasonId);
 	const orderedWars = async () => (await ranked()).map(card => rankings.seasons[card.id][card.pitcher ? 'pitchingWAR162' : 'battingWAR162']!);
 	await expect.poll(orderedWars).toEqual((await orderedWars()).sort((a, b) => b - a));
-	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(current!.displayName);
-	await expect(page.locator(`[data-candidate-group="${current!.playerId}"] .player-card`)).toHaveAttribute('data-season-id', alternate.seasonId);
+	await expect((await revealCandidate(page, current!.playerId)).locator('.player-card')).toHaveAttribute('data-season-id', alternate.seasonId);
 	const saved = await deviceDraft<Draft>(page);
 	expect(saved.picks).toEqual(draft.picks);
 	expect(saved.actions).toEqual(draft.actions);

@@ -25,8 +25,13 @@ import { appSettings, PLAYBACK_DURATION_MS } from './settings.svelte.ts';
 import type { Draft, HitterSlot, Manifest, Profile, ReliefAssignment, Slot } from './types.ts';
 import { prepareSeasonInput } from './season-input.ts';
 import type { SeasonInput, SeasonResult, WorkerResponse } from '../sim/types.ts';
-import type { ShareAction, ShareFormat, SharePublication, ShareRenderModel } from '../share/types.ts';
-import { renderSharePng } from '../share/render.ts';
+import { PUBLISHED_FORMATS, type ShareAction, type ShareFormat, type SharePublication, type ShareRenderModel } from '../share/types.ts';
+import { holdRasterization, renderSharePng, slowCaptureDevice, untilRasterAllowed, warmShareCapture } from '../share/render.ts';
+import { createShareRenderModel, shareImageUrls } from '../share/model.ts';
+import { loadMedia } from '../media/client.ts';
+import type { MediaManifest } from '../media/types.ts';
+import { loadRankings } from '../rankings/client.ts';
+import type { WarRankings } from '../rankings/types.ts';
 
 export type Phase = 'start' | 'stadium' | 'ready' | 'revealing' | 'choosing' | 'lineup' | 'simulating' | 'results';
 
@@ -65,6 +70,11 @@ export class Session {
  private runId = 0;
  private shareRequest = 0;
  private shareReplayId: string | null = null;
+ private replayRequest: { epoch: number; promise: Promise<{ replayId: string; replayUrl: string }> } | null = null;
+ private publicationRequest: { epoch: number; promise: Promise<SharePublication> } | null = null;
+ /** Releases the share renderer's drawing step once season playback stops animating. */
+ private releaseRaster: (() => void) | null = null;
+ private shareAssets: { epoch: number; assets: Promise<{ media: MediaManifest | null; rankings: WarRankings | null }> } | null = null;
  private worker: Worker | null = null;
  private revealTimer: number | undefined;
  private simulationInput: SeasonInput | null = null;
@@ -75,6 +85,9 @@ export class Session {
   ++this.shareRequest;
   this.publication = null;
   this.shareReplayId = null;
+  this.replayRequest = null;
+  this.publicationRequest = null;
+  this.shareAssets = null;
   this.shareLink = '';
   this.shareStatus = '';
   this.sharing = false;
@@ -87,20 +100,86 @@ export class Session {
   return request === this.shareRequest && epoch === this.epoch;
  }
 
- private async prepareCurrentPublication(draft: Draft, model: ShareRenderModel, request: number, epoch: number): Promise<SharePublication> {
-  let replayId = this.shareReplayId;
-  if (!replayId) {
-   const stored = await storeReplay(draft, location.origin);
-   if (!this.shareIsCurrent(request, epoch)) throw new Error('Share request was replaced');
-   replayId = stored.id;
-   this.shareReplayId = stored.id;
+ /** Stores the replay once per finished season; links need only its id, so they never wait on images. */
+ private replayLink(draft: Draft): Promise<{ replayId: string; replayUrl: string }> {
+  if (this.shareReplayId) {
+   return Promise.resolve({ replayId: this.shareReplayId, replayUrl: new URL(`/r/${this.shareReplayId}`, location.origin).href });
   }
-  // Both formats publish together, so the player can switch between them without another upload.
-  const field = await renderSharePng(model, 'field');
-  if (!this.shareIsCurrent(request, epoch)) throw new Error('Share request was replaced');
-  const fan = await renderSharePng(model, 'fan');
-  if (!this.shareIsCurrent(request, epoch)) throw new Error('Share request was replaced');
-  return publishShare(replayId, location.origin, model.record, { field, fan });
+  const epoch = this.epoch;
+  // A request from an earlier epoch (the player left and came back) is never reused.
+  if (this.replayRequest?.epoch !== epoch) {
+   const promise = storeReplay(draft, location.origin).then(stored => {
+    if (epoch === this.epoch) this.shareReplayId = stored.id;
+    return { replayId: stored.id, replayUrl: stored.replayUrl };
+   }).catch(error => {
+    if (this.replayRequest?.promise === promise) this.replayRequest = null;
+    throw error;
+   });
+   this.replayRequest = { epoch, promise };
+  }
+  return this.replayRequest.promise;
+ }
+
+ private async prepareCurrentPublication(draft: Draft, model: ShareRenderModel, epoch: number): Promise<SharePublication> {
+  const { replayId } = await this.replayLink(draft);
+  if (epoch !== this.epoch) throw new Error('Share request was replaced');
+  // Both share formats publish together, so the player can switch between them without another upload,
+  // with the landscape link preview that unfurls the season's links. The renderer runs their stages one
+  // at a time, each at an idle moment, and holds the long drawing step while playback animates.
+  const [field, fan, og] = await Promise.all(PUBLISHED_FORMATS.map(format => renderSharePng(model, format)));
+  if (epoch !== this.epoch) throw new Error('Share request was replaced');
+  return publishShare(replayId, location.origin, model.record, { field, fan, og });
+ }
+
+ /** Publishes the share images once; links already work without them, and gain the season preview when this lands. */
+ private publishImages(draft: Draft, model: ShareRenderModel): Promise<SharePublication> {
+  if (this.publication) return Promise.resolve(this.publication);
+  const epoch = this.epoch;
+  if (this.publicationRequest?.epoch !== epoch) {
+   const promise = this.prepareCurrentPublication(draft, model, epoch).then(publication => {
+    if (epoch === this.epoch) this.publication = publication;
+    return publication;
+   }).catch(error => {
+    if (this.publicationRequest?.promise === promise) this.publicationRequest = null;
+    throw error;
+   });
+   this.publicationRequest = { epoch, promise };
+  }
+  return this.publicationRequest.promise;
+ }
+
+ /**
+  * Starts fetching and decoding everything the share artwork needs as the season starts simulating:
+  * media, rankings, the rasterizer, fonts, and the roster's photos and marks.
+  */
+ private warmShare(draft: Draft, manifest: Manifest): void {
+  if (this.shared) return;
+  // Measured before playback starts, so the probe itself never costs a playback frame.
+  slowCaptureDevice();
+  const profiles = this.profiles;
+  const assets = Promise.all([
+   loadMedia().catch(() => null),
+   loadRankings(draft.dataVersion).catch(() => null)
+  ]).then(([media, rankings]) => ({ media, rankings }));
+  this.shareAssets = { epoch: this.epoch, assets };
+  void assets.then(({ media, rankings }) => warmShareCapture(shareImageUrls({ draft, profiles, manifest, media, rankings }))).catch(() => undefined);
+ }
+
+ /**
+  * Publishes the season's images as soon as its result exists, while playback is still running, so the
+  * Results screen and a link pasted from it already have them. Share actions reuse this work. A failure
+  * stays silent; the next image action retries it. Someone else's replay is never published here.
+  */
+ private publishSeason(result: SeasonResult): void {
+  if (this.shared || !this.draft || !this.manifest) return;
+  const [draft, manifest, profiles, epoch] = [this.draft, this.manifest, this.profiles, this.epoch];
+  if (this.shareAssets?.epoch !== epoch) this.warmShare(draft, manifest);
+  // A device too slow to prepare captures without dropping playback frames starts them after playback.
+  const ready = slowCaptureDevice() ? Promise.all([this.shareAssets!.assets, untilRasterAllowed()]).then(([assets]) => assets) : this.shareAssets!.assets;
+  void ready.then(({ media, rankings }) => {
+   if (epoch !== this.epoch) return;
+   return this.publishImages(draft, createShareRenderModel({ draft, result, profiles, manifest, media, rankings }));
+  }).catch(() => undefined);
  }
 
  async initialize(): Promise<void> {
@@ -443,6 +522,9 @@ export class Session {
   this.skipReveal = matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.save('simulating');
   const epoch = this.epoch;
+  performance.mark('season:simulate');
+  // The roster is final, so the share artwork's assets load while the season simulates.
+  if (!this.shared) this.warmShare(this.draft, this.manifest);
   try {
    if (!this.simulationInput) {
     const data = await loadSimulation(this.manifest);
@@ -464,6 +546,11 @@ export class Session {
      this.worker = null;
      this.save('results');
      void this.saveToLibrary(message.result, epoch);
+     performance.mark('season:result');
+     // Playback animates until Results, so the captures' long drawing step waits for it to end.
+     if (!this.skipReveal) this.releaseRaster = holdRasterization();
+     // The whole season exists before playback starts, so its images prepare while it plays.
+     this.publishSeason(message.result);
      if (this.skipReveal) this.showResults();
      else {
       const started = performance.now();
@@ -498,9 +585,13 @@ export class Session {
   if (!this.result) return;
   clearInterval(this.revealTimer);
   this.revealTimer = undefined;
+  this.endPlaybackHold();
   this.revealed = 162;
   this.phase = 'results';
+  performance.mark('season:results');
   this.announce = `Season complete: ${this.result.wins} wins, ${this.result.losses} losses.`;
+  // Store the replay now, so sharing the season's link is instant and stays inside the tap that asked for it.
+  if (this.draft && !this.shared) void this.replayLink(this.draft).catch(() => undefined);
  }
  skip(): void { this.skipReveal = true; if (this.result) this.showResults(); }
  /** The friend's season this finished draft was started to answer, if any. */
@@ -509,51 +600,87 @@ export class Session {
  }
  async share(action: ShareAction, format: ShareFormat, model: ShareRenderModel): Promise<void> {
   if (!this.draft || !this.result || this.loading || this.sharing) return;
+  const draft = this.draft;
   const epoch = this.epoch;
   const request = ++this.shareRequest;
-  const existingPublication = this.publication;
   this.sharing = true;
-  this.shareStatus = existingPublication ? 'Completing share action…' : 'Preparing the share image…';
   this.imageDownloadFallback = false;
   this.textCopyFallback = false;
+  try {
+   if (action === 'challenge' || action === 'copy-link') await this.shareLinkAction(action, draft, model, request, epoch);
+   else await this.shareImageAction(action, format, draft, model, request, epoch);
+  } catch (error) {
+   if (!this.shareIsCurrent(request, epoch)) return;
+   if (isShareIncompatibility(error)) {
+    this.incompatible = true;
+    this.error = error instanceof Error ? error.message : 'Replay is incompatible with this dataset.';
+    this.shareStatus = 'This replay cannot be published by the current model. Start a new draft.';
+   } else {
+    this.shareStatus = `${error instanceof Error ? error.message : 'Share images could not be prepared.'} Retry the same action.`;
+   }
+  } finally {
+   // Busy belongs to the gesture, not the screen: leaving mid-share must not leave the buttons disabled on return.
+   if (request === this.shareRequest) this.sharing = false;
+  }
+ }
 
-  if (action === 'challenge' && existingPublication) {
-   this.nativeShareReady = true;
+ /** Challenge and replay links need only the stored replay; the images publish while the season plays back (`publishSeason`). */
+ private async shareLinkAction(action: 'challenge' | 'copy-link', draft: Draft, model: ShareRenderModel, request: number, epoch: number): Promise<void> {
+  const stored = this.shareReplayId !== null;
+  if (!stored) this.shareStatus = 'Preparing your link…';
+  const replay = await this.replayLink(draft);
+  if (!this.shareIsCurrent(request, epoch)) return;
+  const link = { ...replay, record: model.record };
+  this.shareLink = action === 'challenge' ? challengeUrl(link) : link.replayUrl;
+  this.nativeShareReady = true;
+  if (action === 'copy-link') {
    try {
-    if (typeof navigator.share === 'function') {
-     await requestNativeShare(existingPublication);
-     if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Shared.';
-    } else {
-     await copyShareLink(challengeUrl(existingPublication));
-     if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Challenge link copied.';
-    }
+    await copyShareLink(link.replayUrl);
+    if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Replay link copied.';
+   } catch {
+    if (!this.shareIsCurrent(request, epoch)) return;
+    this.textCopyFallback = true;
+    this.shareStatus = 'Clipboard unavailable. Select and copy the replay link below.';
+   }
+   return;
+  }
+  if (typeof navigator.share === 'function') {
+   // Browsers open the share sheet only inside the tap itself, so a link that had to be fetched waits for the next tap.
+   if (!stored) {
+    this.shareStatus = 'Your link is ready. Tap Challenge a friend again to open the share sheet.';
+    return;
+   }
+   try {
+    await requestNativeShare(link);
+    if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Shared.';
+    return;
    } catch (error) {
     if (!this.shareIsCurrent(request, epoch)) return;
     const errorName = error && typeof error === 'object' && 'name' in error && typeof error.name === 'string' ? error.name : '';
     if (errorName === 'AbortError') {
      this.shareStatus = 'Share canceled.';
-    } else if (errorName === 'NotSupportedError') {
-     try {
-      await copyShareLink(challengeUrl(existingPublication));
-      if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Challenge link copied.';
-     } catch {
-      if (!this.shareIsCurrent(request, epoch)) return;
-      this.textCopyFallback = true;
-      this.shareStatus = 'Sharing is unavailable. Select and copy the challenge link below.';
-     }
-    } else {
+     return;
+    }
+    if (errorName !== 'NotSupportedError') {
      this.textCopyFallback = true;
      this.shareStatus = 'Sharing is unavailable. Select and copy the challenge link below.';
+     return;
     }
-   } finally {
-    if (this.shareIsCurrent(request, epoch)) this.sharing = false;
    }
-   return;
   }
+  try {
+   await copyShareLink(challengeUrl(link));
+   if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Challenge link copied.';
+  } catch {
+   if (!this.shareIsCurrent(request, epoch)) return;
+   this.textCopyFallback = true;
+   this.shareStatus = 'Clipboard unavailable. Select and copy the challenge link below.';
+  }
+ }
 
-  const publicationPromise = existingPublication
-   ? Promise.resolve(existingPublication)
-   : this.prepareCurrentPublication(this.draft, model, request, epoch);
+ private async shareImageAction(action: 'download' | 'copy-image', format: ShareFormat, draft: Draft, model: ShareRenderModel, request: number, epoch: number): Promise<void> {
+  this.shareStatus = this.publication ? 'Completing share action…' : 'Preparing the share image…';
+  const publicationPromise = this.publishImages(draft, model);
   let imageCopy: Promise<void> | null = null;
   let imageClipboardSupported = true;
   if (action === 'copy-image') {
@@ -567,63 +694,25 @@ export class Session {
     }
    }
   }
-
-  try {
-   const publication = await publicationPromise;
-   if (!this.shareIsCurrent(request, epoch)) return;
-   this.publication = publication;
-   this.shareLink = action === 'challenge' ? challengeUrl(publication) : publication.replayUrl;
-   this.nativeShareReady = true;
-
-   if (action === 'challenge') {
-    if (typeof navigator.share === 'function') {
-     this.shareStatus = 'Your share is ready. Tap Challenge a friend again to open the share sheet.';
-    } else {
-     try {
-      await copyShareLink(challengeUrl(publication));
-      if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Challenge link copied.';
-     } catch {
-      if (!this.shareIsCurrent(request, epoch)) return;
-      this.textCopyFallback = true;
-      this.shareStatus = 'Clipboard unavailable. Select and copy the challenge link below.';
-     }
-    }
-   } else if (action === 'copy-link') {
-    try {
-     await copyShareLink(publication.replayUrl);
-     if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Replay link copied.';
-    } catch {
-     if (!this.shareIsCurrent(request, epoch)) return;
-     this.textCopyFallback = true;
-     this.shareStatus = 'Clipboard unavailable. Select and copy the replay link below.';
-    }
-   } else if (action === 'download') {
-    await downloadPublishedImage(publication, format);
-    if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Season PNG downloaded.';
-   } else if (!imageClipboardSupported || !imageCopy) {
+  const publication = await publicationPromise;
+  if (!this.shareIsCurrent(request, epoch)) return;
+  this.shareLink = publication.replayUrl;
+  this.nativeShareReady = true;
+  if (action === 'download') {
+   await downloadPublishedImage(publication, format);
+   if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'Season PNG downloaded.';
+  } else if (!imageClipboardSupported || !imageCopy) {
+   this.imageDownloadFallback = true;
+   this.shareStatus = 'Image copy is unavailable. Use Download PNG instead.';
+  } else {
+   try {
+    await imageCopy;
+    if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'PNG copied.';
+   } catch {
+    if (!this.shareIsCurrent(request, epoch)) return;
     this.imageDownloadFallback = true;
-    this.shareStatus = 'Image copy is unavailable. Use Download PNG instead.';
-   } else {
-    try {
-     await imageCopy;
-     if (this.shareIsCurrent(request, epoch)) this.shareStatus = 'PNG copied.';
-    } catch {
-     if (!this.shareIsCurrent(request, epoch)) return;
-     this.imageDownloadFallback = true;
-     this.shareStatus = 'Image copy was denied or unavailable. Use Download PNG instead.';
-    }
+    this.shareStatus = 'Image copy was denied or unavailable. Use Download PNG instead.';
    }
-  } catch (error) {
-   if (!this.shareIsCurrent(request, epoch)) return;
-   if (isShareIncompatibility(error)) {
-    this.incompatible = true;
-    this.error = error instanceof Error ? error.message : 'Replay is incompatible with this dataset.';
-    this.shareStatus = 'This replay cannot be published by the current model. Start a new draft.';
-   } else {
-    this.shareStatus = `${error instanceof Error ? error.message : 'Share images could not be prepared.'} Retry the same action.`;
-   }
-  } finally {
-   if (this.shareIsCurrent(request, epoch)) this.sharing = false;
   }
  }
  async retry(): Promise<void> {
@@ -642,6 +731,11 @@ export class Session {
   ++this.runId;
   clearInterval(this.revealTimer);
   this.revealTimer = undefined;
+  this.endPlaybackHold();
+ }
+ private endPlaybackHold(): void {
+  this.releaseRaster?.();
+  this.releaseRaster = null;
  }
  dispose(): void { ++this.epoch; ++this.shareRequest; this.stopRun(); }
 }

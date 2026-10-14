@@ -157,6 +157,30 @@ function shareStadium(draft: Draft, manifest: Manifest, media: MediaManifest | n
 	};
 }
 
+/** Every image the season's share artwork draws, known as soon as the roster is final, so it can be decoded before the season is played. */
+export function shareImageUrls(input: Omit<CreateShareRenderModelInput, 'result'>): string[] {
+	const { draft, manifest, media, rankings } = input;
+	const profiles = new Map(input.profiles.map(profile => [profile.seasonId, profile]));
+	const urls: string[] = [];
+	for (const pick of draft.picks) {
+		const profile = profiles.get(pick.seasonId);
+		if (!profile) continue;
+		const card = createCardViewModel({ profile, slot: pick.slot, manifest, media, rankings, mediaStatus: media ? 'ready' : 'unavailable' });
+		for (const url of [card.photo, card.logo]) if (url) urls.push(url);
+	}
+	const stadium = manifest.stadiums.find(item => item.ref.id === draft.homeStadium?.id && item.ref.version === draft.homeStadium?.version);
+	const photo = stadium ? venuePhoto(media, stadium.franchiseId) : null;
+	if (photo) urls.push(photo.url);
+	return urls;
+}
+
+/** The season's WAR/162 in the slot's role: batting for hitters, pitching for the staff. */
+function roleWar(rankings: WarRankings | null, seasonId: string, slot: Slot): number | null {
+	const ranking = rankings?.seasons[seasonId];
+	const value = (HITTER_SLOTS as readonly Slot[]).includes(slot) ? ranking?.battingWAR162 : ranking?.pitchingWAR162;
+	return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 /** Build the sole render model used by local previews and trusted captures. */
 export function createShareRenderModel(input: CreateShareRenderModelInput): ShareRenderModel {
 	const { draft, result, manifest, media, rankings } = input;
@@ -184,6 +208,7 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 			seasonId: profile.seasonId,
 			slot,
 			pickNumber: pickNumbers.get(pick.seasonId)!,
+			war: roleWar(rankings, profile.seasonId, slot),
 			card: createCardViewModel({ profile, slot, manifest, media, rankings, mediaStatus: media ? 'ready' : 'unavailable' })
 		};
 	});

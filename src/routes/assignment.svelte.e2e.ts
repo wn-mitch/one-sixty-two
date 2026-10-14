@@ -12,7 +12,7 @@ import {
 	type LegalReassignment
 } from '../lib/game/draft.ts';
 import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, SLOTS, type Candidate, type Draft, type HitterSlot, type Manifest, type Profile } from '../lib/game/types.ts';
-import { currentManifest, openSavedDraft, deviceDraft, rollProfiles } from './draft-test-fixtures.ts';
+import { currentManifest, openSavedDraft, deviceDraft, expectPool, revealCandidate, rollProfiles } from './draft-test-fixtures.ts';
 
 const FIXTURE_SEED = 1;
 
@@ -96,10 +96,7 @@ async function targetProfile(request: APIRequestContext, manifest: Manifest, sce
 }
 
 async function selectExactTarget(page: Page, profile: Profile, seasonId: string) {
-	const search = page.getByRole('searchbox', { name: 'Find your pick' });
-	await search.fill(profile.displayName);
-	const group = page.locator('.candidate-card').filter({ has: page.getByText(profile.displayName, { exact: true }).first() });
-	await expect(group).toHaveCount(1);
+	const group = await revealCandidate(page, profile.playerId);
 	const select = group.getByRole('button', { name: /^Select / }).first();
 	await select.click();
 	const sheet = page.locator('dialog.draft-sheet[open]');
@@ -127,6 +124,11 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	const pitcherSlot = scenario.draft.picks.find(pick => !HITTER_SLOTS.includes(pick.slot as HitterSlot))?.slot;
 	if (!pitcherSlot) throw new Error('Assignment fixture does not include a pitcher');
 	await openSavedDraft(page, scenario.draft);
+	// Phones leave players with no open position out of the pool until the Blocked players setting is on.
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+	await settings.getByRole('switch', { name: 'Blocked players', exact: true }).click();
+	await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
 
 	let selected = await selectExactTarget(page, profile, scenario.target.seasonId);
 	const confirmation = selected.sheet.locator('.pick-confirmation');
@@ -239,7 +241,7 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	expect(saved.picks.find(pick => pick.seasonId === scenario.swap.swapWith)?.slot).toBe(scenario.swap.origin);
 
 	await page.reload();
-	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+	await expectPool(page);
 	const restored = await savedDraft(page);
 	expect(restored.currentRoll).toEqual(pendingRoll);
 	expect(restored.picks).toEqual(saved.picks);

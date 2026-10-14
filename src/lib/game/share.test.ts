@@ -17,7 +17,13 @@ import { Session } from './session.svelte.ts';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 // The session captures share art in the browser; Node tests stand in a PNG blob.
-vi.mock('../share/render.ts', () => ({ renderSharePng: vi.fn(async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' })) }));
+vi.mock('../share/render.ts', () => ({
+	renderSharePng: vi.fn(async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' })),
+	warmShareCapture: vi.fn(async () => undefined),
+	holdRasterization: vi.fn(() => () => undefined),
+	untilRasterAllowed: vi.fn(async () => undefined),
+	slowCaptureDevice: vi.fn(() => false)
+}));
 
 const replayId = 'abcdefghijklmnopqrstuv';
 const origin = 'https://play.example';
@@ -35,13 +41,14 @@ const model = { record } as ShareRenderModel;
 
 function publication(): SharePublication {
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		replayId,
 		replayUrl: `${origin}/r/${replayId}`,
 		record,
 		images: {
 			field: { url: `${origin}/api/replays/${replayId}/share/field.png`, width: 1080, height: 1920, sha256: 'b'.repeat(64) },
-			fan: { url: `${origin}/api/replays/${replayId}/share/fan.png`, width: 1080, height: 1920, sha256: 'c'.repeat(64) }
+			fan: { url: `${origin}/api/replays/${replayId}/share/fan.png`, width: 1080, height: 1920, sha256: 'c'.repeat(64) },
+			og: { url: `${origin}/api/replays/${replayId}/share/og.png`, width: 1200, height: 630, sha256: 'd'.repeat(64) }
 		}
 	};
 }
@@ -91,7 +98,7 @@ describe('explicit replay publication', () => {
 		expect(stored).toEqual({ id: replayId, replayUrl: `${origin}/r/${replayId}` });
 		expect(requests).toEqual([`${origin}/api/replays`]);
 
-		await expect(publishShare(stored.id, origin, record, { field: png, fan: png }, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(stored.id, origin, record, { field: png, fan: png, og: png }, fetcher)).resolves.toEqual(publication());
 		expect(requests).toEqual([
 			`${origin}/api/replays`,
 			`${origin}/api/replays/${replayId}/share`
@@ -110,8 +117,8 @@ describe('explicit replay publication', () => {
 		});
 
 		const stored = await storeReplay(draft(), origin, fetcher);
-		await expect(publishShare(stored.id, origin, record, { field: png, fan: png }, fetcher)).rejects.toThrow('Capture unavailable.');
-		await expect(publishShare(stored.id, origin, record, { field: png, fan: png }, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(stored.id, origin, record, { field: png, fan: png, og: png }, fetcher)).rejects.toThrow('Capture unavailable.');
+		await expect(publishShare(stored.id, origin, record, { field: png, fan: png, og: png }, fetcher)).resolves.toEqual(publication());
 		expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/api/replays'))).toHaveLength(1);
 		expect(prepareAttempts).toBe(2);
 	});
@@ -122,16 +129,17 @@ describe('explicit replay publication', () => {
 			sent = init?.body as FormData;
 			return Response.json(publication());
 		});
-		await expect(publishShare(replayId, origin, record, { field: png, fan: png }, fetcher)).resolves.toEqual(publication());
+		await expect(publishShare(replayId, origin, record, { field: png, fan: png, og: png }, fetcher)).resolves.toEqual(publication());
 		expect(fetcher).toHaveBeenCalledWith(`${origin}/api/replays/${replayId}/share`, expect.objectContaining({ method: 'POST' }));
 		expect(JSON.parse(String(sent!.get('record')))).toEqual(record);
 		expect((sent!.get('field') as Blob).type).toBe('image/png');
 		expect((sent!.get('fan') as Blob).type).toBe('image/png');
+		expect((sent!.get('og') as Blob).type).toBe('image/png');
 	});
 
 	it('classifies current-model incompatibility and rejects forged publication metadata', async () => {
 		const incompatible = vi.fn(async () => Response.json({ message: 'Replay is incompatible with this dataset.' }, { status: 409 }));
-		const error = await publishShare(replayId, origin, record, { field: png, fan: png }, incompatible).catch(value => value);
+		const error = await publishShare(replayId, origin, record, { field: png, fan: png, og: png }, incompatible).catch(value => value);
 		expect(isShareIncompatibility(error)).toBe(true);
 
 		const forged = publication();
@@ -204,17 +212,20 @@ describe('browser action boundaries', () => {
 });
 
 describe('Session share orchestration', () => {
-	it('prepares once, publishes the link only after the field artwork exists, and reuses the immutable publication', async () => {
+	it('copies the link from the stored replay without waiting for the share images, then reuses the publication', async () => {
 		const writeText = vi.fn(async () => undefined);
 		const requests: string[] = [];
+		let releasePublication!: () => void;
+		const published = new Promise<void>(resolve => { releasePublication = resolve; });
 		vi.stubGlobal('location', { origin });
 		vi.stubGlobal('navigator', { clipboard: { writeText } });
+		vi.stubGlobal('ClipboardItem', undefined);
 		vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
 			const url = String(input);
 			requests.push(url);
-			return url.endsWith('/api/replays')
-				? Response.json({ id: replayId }, { status: 201 })
-				: Response.json(publication());
+			if (url.endsWith('/api/replays')) return Response.json({ id: replayId }, { status: 201 });
+			await published;
+			return Response.json(publication());
 		}));
 		const session = sessionWithResult();
 
@@ -222,8 +233,17 @@ describe('Session share orchestration', () => {
 		expect(session.shareLink).toBe('');
 		await first;
 		expect(session.shareLink).toBe(publication().replayUrl);
+		expect(session.shareStatus).toBe('Replay link copied.');
+		// Copying a link never waits on, or starts, the images.
+		expect(requests).toEqual([`${origin}/api/replays`]);
+		const imageAction = session.share('copy-image', 'field', model);
+		await vi.waitFor(() => expect(requests).toHaveLength(2));
+		expect(session.publication).toBeNull();
+		releasePublication();
+		await imageAction;
 		expect(session.publication).toEqual(publication());
 		await session.share('copy-link', 'field', model);
+		await session.share('copy-image', 'field', model);
 
 		expect(requests).toEqual([
 			`${origin}/api/replays`,
@@ -232,7 +252,7 @@ describe('Session share orchestration', () => {
 		expect(writeText).toHaveBeenCalledTimes(2);
 	});
 
-	it('coalesces rapid repeat gestures into one local preparation request', async () => {
+	it('coalesces rapid repeat gestures into one request each', async () => {
 		let releaseStore!: (response: Response) => void;
 		const stored = new Promise<Response>(resolve => { releaseStore = resolve; });
 		const fetcher = vi.fn(async (input: RequestInfo | URL) => {
@@ -241,6 +261,7 @@ describe('Session share orchestration', () => {
 		});
 		vi.stubGlobal('location', { origin });
 		vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => undefined) } });
+		vi.stubGlobal('ClipboardItem', undefined);
 		vi.stubGlobal('fetch', fetcher);
 		const session = sessionWithResult();
 
@@ -250,8 +271,10 @@ describe('Session share orchestration', () => {
 		expect(fetcher).toHaveBeenCalledTimes(1);
 		releaseStore(Response.json({ id: replayId }, { status: 201 }));
 		await first;
-		expect(fetcher).toHaveBeenCalledTimes(2);
+		await session.share('copy-image', 'field', model);
+		await session.share('copy-image', 'fan', model);
 		expect(session.publication).toEqual(publication());
+		expect(fetcher).toHaveBeenCalledTimes(2);
 	});
 
 	it('retries failed capture with the already stored replay', async () => {
@@ -259,6 +282,7 @@ describe('Session share orchestration', () => {
 		const requests: string[] = [];
 		vi.stubGlobal('location', { origin });
 		vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => undefined) } });
+		vi.stubGlobal('ClipboardItem', undefined);
 		vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
 			const url = String(input);
 			requests.push(url);
@@ -270,13 +294,43 @@ describe('Session share orchestration', () => {
 		}));
 		const session = sessionWithResult();
 
+		await session.share('copy-image', 'field', model);
+		expect(session.shareStatus).toMatch(/^Capture unavailable\./);
+		// A failed publication never costs the player the link.
 		await session.share('copy-link', 'field', model);
+		expect(session.shareStatus).toBe('Replay link copied.');
 		expect(session.publication).toBeNull();
-		expect(session.shareStatus).toContain('Capture unavailable.');
-		await session.share('copy-link', 'field', model);
+		await session.share('copy-image', 'field', model);
 		expect(session.publication).toEqual(publication());
 		expect(requests.filter(url => url.endsWith('/api/replays'))).toHaveLength(1);
 		expect(preparations).toBe(2);
+	});
+
+	it('drops a publication that finishes after the player left, and publishes afresh on return', async () => {
+		let preparations = 0;
+		let releaseFirst!: () => void;
+		const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });
+		vi.stubGlobal('location', { origin });
+		vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => undefined) } });
+		vi.stubGlobal('ClipboardItem', undefined);
+		vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+			if (String(input).endsWith('/api/replays')) return Response.json({ id: replayId }, { status: 201 });
+			if (++preparations === 1) await firstHeld;
+			return Response.json(publication());
+		}));
+		const session = sessionWithResult();
+		session.phase = 'results';
+
+		const stale = session.share('copy-image', 'field', model);
+		await vi.waitFor(() => expect(preparations).toBe(1));
+		session.leave();
+		releaseFirst();
+		await stale;
+		expect(session.publication).toBeNull();
+		// The abandoned request is not reused: the season publishes again for the current screen.
+		await session.share('copy-image', 'field', model);
+		expect(preparations).toBe(2);
+		expect(session.publication).toEqual(publication());
 	});
 
 	it('requires a second native-share gesture after preparation and treats cancellation honestly', async () => {
@@ -354,15 +408,27 @@ describe('Session share orchestration', () => {
 	it('turns a publication 409 into the same incompatible new-draft state', async () => {
 		vi.stubGlobal('location', { origin });
 		vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn() } });
+		vi.stubGlobal('ClipboardItem', undefined);
 		vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/api/replays')
 			? Response.json({ id: replayId }, { status: 201 })
 			: Response.json({ message: 'Replay is incompatible with this dataset.' }, { status: 409 })));
 		const session = sessionWithResult();
 
-		await session.share('copy-link', 'field', model);
+		await session.share('copy-image', 'field', model);
 		expect(session.incompatible).toBe(true);
 		expect(session.error).toBe('Replay is incompatible with this dataset.');
 		expect(session.shareLink).toBe('');
 		expect(session.shareStatus).toContain('Start a new draft');
+	});
+
+	it('turns a replay 409 into the incompatible state before any link is shown', async () => {
+		vi.stubGlobal('location', { origin });
+		vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn() } });
+		vi.stubGlobal('fetch', vi.fn(async () => Response.json({ message: 'Replay is incompatible with this dataset.' }, { status: 409 })));
+		const session = sessionWithResult();
+
+		await session.share('copy-link', 'field', model);
+		expect(session.incompatible).toBe(true);
+		expect(session.shareLink).toBe('');
 	});
 });

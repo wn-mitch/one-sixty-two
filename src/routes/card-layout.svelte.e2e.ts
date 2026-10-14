@@ -191,7 +191,9 @@ function problemsFor(host) {
 			continue;
 		}
 		const css = getComputedStyle(node);
-		if (css.whiteSpace === 'nowrap' && node.clientWidth && node.scrollWidth > node.clientWidth + 1) {
+		// The photo credit is the one line that truncates by design, with an ellipsis, rather than fitting.
+		const truncates = node.dataset.layer === 'photo.caption' && css.textOverflow === 'ellipsis' && css.overflow === 'hidden';
+		if (css.whiteSpace === 'nowrap' && !truncates && node.clientWidth && node.scrollWidth > node.clientWidth + 1) {
 			problems.push({ kind: 'nowrap', layer: node.dataset.layer, text: node.textContent, width: node.clientWidth, scroll: node.scrollWidth,
 				font: css.font, fonts: document.fonts.status, fitted: node.dataset.fitted, fitState: node.closest('[data-card]')?.dataset.fitState });
 		}

@@ -31,11 +31,11 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 			description: `${resultSummary} Longest winning streak: ${streakGames}. Can you beat ${wins}-${losses}?`,
 			canonical: new URL(publication.replayUrl, env.PUBLIC_ORIGIN).href,
 			image: {
-				url: new URL(publication.images.field.url, env.PUBLIC_ORIGIN).href,
-				width: publication.images.field.width,
-				height: publication.images.field.height,
+				url: new URL(publication.images.og.url, env.PUBLIC_ORIGIN).href,
+				width: publication.images.og.width,
+				height: publication.images.og.height,
 				type: 'image/png',
-				alt: `162-0 share card for ${article(wins)} ${wins}-${losses} season`
+				alt: `162-0 preview of ${article(wins)} ${wins}-${losses} season, with the roster's best cards`
 			}
 		};
 	} catch (caught) {

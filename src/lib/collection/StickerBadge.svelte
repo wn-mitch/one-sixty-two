@@ -1,12 +1,14 @@
 <script lang="ts">
- import type { StickerDefinition } from './stickers.ts';
+ import type { StickerDefinition, StickerFoil } from './stickers.ts';
 
  /** One die-cut sticker. Its size is 21em of the parent's font size, so a card sets 1cqw and other surfaces set a rem size. */
  let { definition, tilt = 0 }: { definition: StickerDefinition; tilt?: number } = $props();
+ /** The colour a lit card's shader prints bronze and gold vinyl in; silver and gem are bare metal. */
+ const FOIL_INK: Partial<Record<StickerFoil, string>> = { bronze: '#b47a45', gold: '#d8ad55' };
 </script>
 
-<span class="sticker" data-surface="sticker" data-family={definition.family} data-kind={definition.kind} data-foil={definition.foil} data-long={definition.label[0].length > 6 || undefined} style={`--tilt:${tilt}deg`}>
- <b>{definition.label[0]}</b><small>{definition.label[1]}</small>
+<span class="sticker" data-surface="sticker" data-family={definition.family} data-kind={definition.kind} data-foil={definition.foil} data-surface-ink={definition.foil ? FOIL_INK[definition.foil] : undefined} data-long={definition.label[0].length > 6 || undefined} style={`--tilt:${tilt}deg`}>
+ <b>{definition.label[0]}</b><small data-ribbon>{definition.label[1]}</small>
 </span>
 
 <style>
@@ -16,22 +18,32 @@
   aspect-ratio: 1;
   rotate: var(--tilt);
   display: inline-grid;
-  place-content: center;
+  grid-template-columns: 100%;
+  align-content: center;
+  gap: .9em;
+  overflow: hidden;
   border-radius: 50%;
   background: radial-gradient(circle at 34% 28%, oklch(100% 0 0 / .35), transparent 46%), var(--tone);
-  box-shadow: 0 0 0 1.1em oklch(98% 0.004 95), 0 .9em 1.6em oklch(0% 0 0 / .45);
+  /* The white die-cut border, the vinyl's side showing below it, and its shadow on the card. */
+  box-shadow: 0 0 0 1.1em oklch(98% 0.004 95), 0 .7em 0 1.1em oklch(72% 0.01 255), 0 1.4em 1.8em oklch(0% 0 0 / .5);
   color: oklch(99% 0.004 95);
   font-family: 'Barlow Condensed', sans-serif;
   text-align: center;
   line-height: .9;
   text-transform: uppercase;
-  text-shadow: 0 .25em 0 oklch(0% 0 0 / .3);
+  /* A dark outline keeps light lettering legible on any vinyl colour. */
+  -webkit-text-stroke: .7em oklch(16% 0.02 255 / .55);
+  paint-order: stroke fill;
  }
- .sticker b { font-size: 7.4em; font-weight: 800; letter-spacing: -.02em; }
- .sticker small { font-size: 3.9em; font-weight: 700; letter-spacing: .04em; }
+ .sticker b { font-size: 8.2em; font-weight: 900; letter-spacing: -.02em; }
+ /* The second line prints white on a dark ribbon across the sticker, so it reads on any vinyl or foil. */
+ .sticker small {
+  font-size: 4.4em; font-weight: 800; letter-spacing: .04em; line-height: 1.25;
+  color: oklch(99% 0.004 95); background: oklch(18% 0.02 255); -webkit-text-stroke: 0;
+ }
  /* A first line longer than six characters steps down so it stays inside the die cut. */
- .sticker[data-long] b { font-size: 5.6em; }
- .sticker[data-family='team'] { --tone: oklch(70% 0.15 80); color: oklch(22% 0.03 80); text-shadow: none; }
+ .sticker[data-long] b { font-size: 6.2em; }
+ .sticker[data-family='team'] { --tone: oklch(70% 0.15 80); color: oklch(22% 0.03 80); -webkit-text-stroke: 0; }
  .sticker[data-family='mvp'] { --tone: oklch(58% 0.2 25); }
  .sticker[data-family='war'] { --tone: oklch(52% 0.13 165); }
  .sticker[data-family='power'] { --tone: oklch(64% 0.19 45); }
@@ -53,7 +65,7 @@
  .sticker[data-family='grandSlam'] { --tone: oklch(55% 0.21 350); }
  .sticker[data-family='walkOff'] { --tone: oklch(50% 0.16 165); }
  /* Grade stickers share the grade chip's tones. */
- .sticker[data-family='grade'] { color: oklch(16% .009 255); text-shadow: none; }
+ .sticker[data-family='grade'] { color: oklch(16% .009 255); -webkit-text-stroke: 0; }
  .sticker[data-family='grade'] b { font-style: italic; font-weight: 900; }
  .sticker[data-kind='grade-perfect'] { --tone: oklch(85% .15 110); }
  .sticker[data-kind='grade-s-plus'] { --tone: oklch(86% .16 88); }
@@ -64,11 +76,11 @@
  .sticker[data-kind='grade-c'] { --tone: oklch(72% .04 230); }
  .sticker[data-kind='grade-d'] { --tone: oklch(66% .06 55); }
  .sticker[data-kind='grade-f'] { --tone: oklch(68% .15 25); }
- .sticker[data-family='loyalty'] { --tone: oklch(80% 0.02 255); color: oklch(24% 0.02 255); text-shadow: none; }
+ .sticker[data-family='loyalty'] { --tone: oklch(80% 0.02 255); color: oklch(24% 0.02 255); -webkit-text-stroke: 0; }
  /* A laddered family's top four tiers are foil, as the top grades are: gem, gold, silver, bronze. On a card the sheen follows its tilt. */
  .sticker[data-foil] {
   background: radial-gradient(circle at 34% 28%, oklch(100% 0 0 / .45), transparent 46%), var(--foil) var(--mx, 30%) var(--my, 20%) / 300% 300%;
-  color: oklch(18% 0.02 70); text-shadow: none;
+  color: oklch(14% 0.02 70); -webkit-text-stroke: .5em oklch(100% 0 0 / .6);
  }
  .sticker[data-foil='bronze'] { --foil: linear-gradient(115deg, #6e4321 0%, #e0a872 16%, #96602f 30%, #f6cfa0 44%, #8a5629 58%, #d99c62 74%, #5f3a1b 100%); }
  .sticker[data-foil='silver'] { --foil: linear-gradient(115deg, #8f99a4 0%, #f4f6f8 16%, #aeb7c0 30%, #ffffff 44%, #a3adb7 58%, #e9edf1 74%, #8a949f 100%); }

@@ -198,13 +198,14 @@ describe('sticker rules', () => {
   expect(stickerFits(ERA_STICKER_SLOTS['1990s'].face[0], layout, STICKER_LAYOUT)).toBe(true);
  });
 
- it('splits the 1970s set into mirrored pairs in the top corners, grade top left', () => {
+ it('splits the 1970s set into mirrored pairs in the arch\'s upper corners, grade top left', () => {
   const slots = ERA_STICKER_SLOTS['1970s'];
   expect(slots.shape).toMatch(/^split/);
   const [grade, rarest, second, third] = [slots.grade, ...slots.face];
   expect(grade.x).toBeLessThan(0.5);
   expect(third.x).toBeGreaterThan(0.5);
-  expect(grade.y).toBeLessThan(STICKER_LAYOUT.eras['1970s'].photo.y);
+  const photo = STICKER_LAYOUT.eras['1970s'].photo;
+  expect(grade.y).toBeLessThan(photo.y + photo.h / 2);
   expect(grade.x + third.x).toBeCloseTo(rarest.x + second.x, 3);
  });
 });

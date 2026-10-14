@@ -61,8 +61,8 @@
 		<meta property="og:title" content="162-0 | The undefeated baseball challenge" />
 		<meta property="og:description" content="Roll a franchise and decade. Draft sixteen historical selections. Can your team survive 162 games without a loss?" />
 	{/if}
+	<meta property="og:site_name" content="162-0" />
 	{#if !rosterLink}
-		<meta property="og:site_name" content="162-0" />
 		<meta property="og:image" content={sitePreview.url} />
 		<meta property="og:image:width" content={String(sitePreview.width)} />
 		<meta property="og:image:height" content={String(sitePreview.height)} />

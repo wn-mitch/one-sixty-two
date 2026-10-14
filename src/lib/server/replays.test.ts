@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { uploadAllowed } from './rate-limit.ts';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import { availableCandidates, commitPick, createDraft, legalSlots, reassignPick, replayInput, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { SLOTS, type Manifest, type Replay } from '../game/types.ts';
@@ -145,5 +146,21 @@ describe('replay R2 storage', () => {
 		const bucket = new MemoryBucket();
 		await expect(loadReplay(bucket, 'not-an-id', dataVersion)).rejects.toThrow('not found');
 		expect(bucket.objects.size).toBe(0);
+	});
+});
+
+describe('upload rate limit', () => {
+	it('counts each client IP on its own and allows uploads without the binding', async () => {
+		const counts = new Map<string, number>();
+		const limiter = { limit: async ({ key }: { key: string }) => {
+			counts.set(key, (counts.get(key) ?? 0) + 1);
+			return { success: counts.get(key)! <= 2 };
+		} };
+		const from = (ip: string) => new Request('https://162-0.dev/api/replays', { method: 'POST', headers: { 'cf-connecting-ip': ip } });
+		expect(await uploadAllowed(limiter, from('1.1.1.1'))).toBe(true);
+		expect(await uploadAllowed(limiter, from('1.1.1.1'))).toBe(true);
+		expect(await uploadAllowed(limiter, from('1.1.1.1'))).toBe(false);
+		expect(await uploadAllowed(limiter, from('2.2.2.2'))).toBe(true);
+		expect(await uploadAllowed(undefined, from('1.1.1.1'))).toBe(true);
 	});
 });

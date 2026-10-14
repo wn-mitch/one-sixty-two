@@ -4,9 +4,9 @@ import { expect, test } from '@playwright/test';
 import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
 import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.ts';
 import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, SLOTS, type Draft, type Slot } from '../lib/game/types.ts';
-import { SHARE_DIMENSIONS, SHARE_FORMATS } from '../lib/share/types.ts';
+import { PUBLISHED_FORMATS, SHARE_DIMENSIONS } from '../lib/share/types.ts';
 import type { SharePublication } from '../lib/share/types.ts';
-import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, deviceDraft, deviceDraftText } from './draft-test-fixtures.ts';
+import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, deviceDraft, deviceDraftText, revealCandidate } from './draft-test-fixtures.ts';
 import { horizontalOverflow, verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
 
@@ -38,7 +38,7 @@ async function verifyPublication(
 	publication: SharePublication,
 	testInfo: TestInfo
 ): Promise<void> {
-	for (const format of SHARE_FORMATS) {
+	for (const format of PUBLISHED_FORMATS) {
 		const expected = SHARE_DIMENSIONS[format];
 		const image = publication.images[format];
 		expect(image).toMatchObject(expected);
@@ -86,12 +86,14 @@ async function verifyPublication(
 	const { wins, losses, firstLoss, longestWinningStreak } = publication.record;
 	expect(html).toContain(`<title>${wins}-${losses} season | 162-0</title>`);
 	expect(html).toContain(`property=\"og:url\" content=\"${publication.replayUrl}\"`);
-	expect(html).toContain(`property=\"og:image\" content=\"${publication.images.field.url}\"`);
-	expect(html).toContain(`property=\"og:image:width\" content=\"${SHARE_DIMENSIONS.field.width}\"`);
-	expect(html).toContain(`property=\"og:image:height\" content=\"${SHARE_DIMENSIONS.field.height}\"`);
+	// Unfurls use the landscape link preview, not the portrait share images.
+	expect(html).toContain(`property=\"og:image\" content=\"${publication.images.og.url}\"`);
+	expect(html).toContain(`property=\"og:image:width\" content=\"${SHARE_DIMENSIONS.og.width}\"`);
+	expect(html).toContain(`property=\"og:image:height\" content=\"${SHARE_DIMENSIONS.og.height}\"`);
 	expect(html).toContain('name=\"twitter:card\" content=\"summary_large_image\"');
-	// A published roster shows its own field image, never the site preview as well.
-	expect(html).not.toContain('/og.png');
+	expect(html).toContain('property="og:site_name" content="162-0"');
+	// A published roster shows its own link preview, never the site preview as well.
+	expect(html).not.toContain(`${new URL(publication.replayUrl).origin}/og.png`);
 	expect(html).toContain(firstLoss === null ? 'No losses.' : `First loss: Game ${firstLoss}.`);
 	expect(html).toContain(`Longest winning streak: ${longestWinningStreak} ${longestWinningStreak === 1 ? 'game' : 'games'}.`);
 }
@@ -119,10 +121,7 @@ async function firstLegalSeason(page: Page, request: APIRequestContext): Promise
 async function selectExactSeason(page: Page, request: APIRequestContext) {
 	await settlePool(page);
 	const target = await firstLegalSeason(page, request);
-	const search = page.getByRole('searchbox', { name: 'Find your pick' });
-	await search.fill(target.displayName);
-	const group = page.locator(`.candidate-card[data-candidate-group="${target.playerId}"]`);
-	await expect(group).toHaveCount(1);
+	const group = await revealCandidate(page, target.playerId);
 	await group.getByRole('button', { name: /^Select / }).first().click();
 	const sheet = page.locator('dialog.draft-sheet[open]');
 	await expect(sheet).toBeVisible();
@@ -204,7 +203,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await page.getByRole('button', { name: /Start draft/ }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
-	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeFocused();
+	await expect(page.locator('.candidates .content')).toBeFocused();
 	const savedRoll = (await deviceDraft(page)).currentRoll;
 	// A reload on `/classic` reopens the saved draft without the welcome screen.
 	await page.reload();
@@ -234,6 +233,15 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	await roles.nth(3).selectOption('long');
 	await expect(page.getByRole('combobox', { name: /^Backup role for / }).nth(3)).toHaveValue('');
 	expect((await deviceDraft<Draft>(page)).reliefRoles[3]).toEqual({ slot: 'RP3', primary: 'long', secondary: null });
+	// The replay is stored as soon as the results appear, so sharing its link waits on nothing, and the
+	// images publish in the background once Results settles, before any share action.
+	const uploadResponse = page.waitForResponse(response =>
+		new URL(response.url()).pathname === '/api/replays' && response.request().method() === 'POST'
+	);
+	const publicationResponse = page.waitForResponse(response =>
+		/^\/api\/replays\/[A-Za-z0-9_-]{22}\/share$/.test(new URL(response.url()).pathname) &&
+		response.request().method() === 'POST',
+	{ timeout: 120_000 });
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	const games = page.getByRole('region', { name: 'All 162 games', exact: true });
 	await expect(games.locator(SEASON_GAME)).toHaveCount(162);
@@ -254,13 +262,6 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	const scores = await gameLabels(games);
 	await games.locator(SEASON_GAME).first().click();
 	await expect(page.locator('#season-game-detail').getByRole('table').first()).toBeVisible();
-	const uploadResponse = page.waitForResponse(response =>
-		new URL(response.url()).pathname === '/api/replays' && response.request().method() === 'POST'
-	);
-	const publicationResponse = page.waitForResponse(response =>
-		/^\/api\/replays\/[A-Za-z0-9_-]{22}\/share$/.test(new URL(response.url()).pathname) &&
-		response.request().method() === 'POST'
-	);
 	await page.getByRole('button', { name: 'Copy link', exact: true }).first().click();
 	const [uploaded, published] = await Promise.all([uploadResponse, publicationResponse]);
 	expect(uploaded.status()).toBe(201);
@@ -369,6 +370,7 @@ test('previews the site with the card fan, and unpublished roster links fall bac
 		expect(html).toMatch(/property="og:image" content="https?:\/\/[^"]+\/og\.png"/);
 		expect(html).toContain('property="og:image:width" content="1200"');
 		expect(html.match(/property="og:image"/g)).toHaveLength(1);
+		expect(html.match(/property="og:site_name" content="162-0"/g)).toHaveLength(1);
 	}
 	const image = await request.get('/og.png');
 	expect(image.status()).toBe(200);

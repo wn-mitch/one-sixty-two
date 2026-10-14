@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { addPack, availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { HITTER_SLOTS, SLOTS, isJackpot, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
-import { deviceDraft, cardScenario, currentManifest, openSavedDraft, rollProfiles, STORAGE_KEY, type CardScenario } from './draft-test-fixtures.ts';
+import { deviceDraft, cardScenario, currentManifest, expectAbsentFromPool, expectPool, openSavedDraft, revealCandidate, rollProfiles, STORAGE_KEY, type CardScenario } from './draft-test-fixtures.ts';
 
 test.setTimeout(180000);
 
@@ -117,8 +117,7 @@ async function blockedScenario(request: APIRequestContext, manifest: Manifest): 
 }
 
 async function searchFor(page: Page, profile: Profile) {
-	await page.getByRole('searchbox', { name: 'Find your pick' }).fill(profile.displayName);
-	const group = page.locator(`[data-candidate-group="${profile.playerId}"]`);
+	const group = await revealCandidate(page, profile.playerId);
 	await expect(group).toBeVisible();
 	return group;
 }
@@ -177,7 +176,7 @@ test.describe('draft interaction boundaries', () => {
 		const group = page.locator(`[data-candidate-group="${scenario.profile.playerId}"]`);
 		await group.getByRole('button', { name: 'Turn over', exact: true }).click();
 		await expect(group.locator('.cardbox')).toHaveAttribute('data-face', 'back');
-		await page.locator('.search-row').click();
+		await page.locator('.sort-label').first().click();
 		await expect(group.locator('.cardbox')).toHaveAttribute('data-face', 'front');
 		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
 		await expectNoPersistenceChange(page, before);
@@ -200,14 +199,12 @@ test.describe('draft interaction boundaries', () => {
 		const manifest = await currentManifest(request);
 		const scenario = await blockedScenario(request, manifest);
 		await openSavedDraft(page, scenario.draft);
-		await page.getByRole('searchbox', { name: 'Find your pick' }).fill(scenario.profile.displayName);
-
-		const group = page.locator(`[data-candidate-group="${scenario.profile.playerId}"]`);
-		await expect(group).toHaveCount(0);
+		await expectAbsentFromPool(page, scenario.profile.playerId);
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
 		await settings.getByRole('switch', { name: 'Blocked players', exact: true }).click();
 		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
+		const group = await revealCandidate(page, scenario.profile.playerId);
 		await expect(group).toBeVisible();
 
 		// Every slot this blocked player qualifies for is filled, so none of them is offered as a filter.
@@ -354,7 +351,7 @@ test.describe('draft sheet interaction boundaries', () => {
 		const scenario = await cardScenario(request, manifest, () => true);
 		await openSavedDraft(page, scenario.draft);
 
-		for (const [width, height, columns] of [[320, 740, 2], [374, 740, 2], [375, 812, 3], [402, 874, 3], [820, 1180, 5]] as const) {
+		for (const [width, height, columns] of [[320, 740, 2], [375, 812, 2], [402, 874, 2], [480, 900, 3], [767, 1000, 3], [820, 1180, 5]] as const) {
 			await page.setViewportSize({ width, height });
 			await expect(page.locator('.card-grid').first()).toBeVisible();
 			expect(await page.locator('.card-grid').first().evaluate(element => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length)).toBe(columns);
@@ -386,6 +383,8 @@ test('a reload with packs still on the table deals them face up, and the taken o
 	await page.addInitScript(({ key, value }) => {
 		if (!localStorage.getItem(key)) localStorage.setItem(key, value);
 	}, { key: STORAGE_KEY, value: JSON.stringify({ ...draft, phase: 'draft' }) });
+	// Dealt cards drift like any card unless the system asks for reduced motion; a drifting card is never stable to click.
+	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
 	const cards = page.locator('.foil-pack .dealt-card');
@@ -394,7 +393,7 @@ test('a reload with packs still on the table deals them face up, and the taken o
 	if (isJackpot(chosen)) throw new Error('Seed 7 no longer adds a franchise pack');
 	const name = manifest.franchises.find(franchise => franchise.id === chosen.franchiseId)!.name;
 	await cards.nth(1).click();
-	await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+	await expectPool(page);
 	await expect(page.locator('.reveal h2')).toHaveText(name);
 	await expect.poll(async () => (await savedDraft(page)).currentRoll).toEqual(chosen);
 	expect((await savedDraft(page)).actions.at(-1)).toEqual({ type: 'choose-pack', pack: 1 });

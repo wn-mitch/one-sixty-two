@@ -3,7 +3,7 @@ import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, se
 import { publishShare, storeReplay } from '../lib/game/share.ts';
 import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
 import { solidPng } from './image-test-helpers.ts';
-import { currentManifest, deviceDraft, STORAGE_KEY, writeDeviceDraft } from './draft-test-fixtures.ts';
+import { currentManifest, deviceDraft, expectPool, STORAGE_KEY, writeDeviceDraft } from './draft-test-fixtures.ts';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(300000);
@@ -34,8 +34,8 @@ async function publishChallenger(manifest: Manifest, origin: string) {
  const { id } = await storeReplay(completeDraft(manifest, 7, 0), origin, sameOrigin);
  // The record and artwork come from the challenger's browser; any 162-game record is publishable.
  const record = { wins: 101, losses: 61, firstLoss: 2, longestWinningStreak: 11, runsFor: 812, runsAgainst: 640 };
- const png = () => new Blob([new Uint8Array(solidPng(1080, 1920))], { type: 'image/png' });
- return { id, publication: await publishShare(id, origin, record, { field: png(), fan: png() }, sameOrigin) };
+ const png = (width = 1080, height = 1920) => new Blob([new Uint8Array(solidPng(width, height))], { type: 'image/png' });
+ return { id, publication: await publishShare(id, origin, record, { field: png(), fan: png(), og: png(1200, 630) }, sameOrigin) };
 }
 
 test('a challenge link opens a challenge card, binds the next draft, and offers the series after its season', async ({ page, request, baseURL }) => {
@@ -44,13 +44,13 @@ test('a challenge link opens a challenge card, binds the next draft, and offers 
  const { id, publication } = await publishChallenger(manifest, origin);
  const { wins, losses } = publication.record;
 
- // Crawlers get challenge metadata with the published field image.
+ // Crawlers get challenge metadata with the published link preview.
  const crawler = await request.get(`/c/${id}`);
  expect(crawler.status()).toBe(200);
  const html = await crawler.text();
  expect(html).toContain(`<title>Beat ${wins}-${losses} | 162-0</title>`);
  expect(html).toContain(`property="og:url" content="${origin}/c/${id}"`);
- expect(html).toContain(`property="og:image" content="${publication.images.field.url}"`);
+ expect(html).toContain(`property="og:image" content="${publication.images.og.url}"`);
 
  await page.goto(`/c/${id}`);
  // The challenge card renders after its manifest and replay load, which can take seconds under a busy suite.
@@ -96,7 +96,7 @@ test('a draft in progress can answer the challenge instead of being replaced', a
  await expect(page.getByRole('button', { name: 'Draft your team', exact: true })).toHaveCount(0);
  await page.getByRole('button', { name: 'Answer with my current draft', exact: true }).click();
  // It resumes straight into the same draft rather than replacing it.
- await expect(page.getByRole('searchbox', { name: 'Find your pick' })).toBeVisible();
+ await expectPool(page);
  const stored = {
   challenge: await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CHALLENGE_KEY),
   draft: await deviceDraft(page)

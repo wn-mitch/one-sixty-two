@@ -1,9 +1,9 @@
-import { SHARE_DIMENSIONS, SHARE_FORMATS, type ShareFormat, type SharePublication, type SharePublicationImage, type ShareRecord } from '../share/types.ts';
+import { PUBLISHED_FORMATS, SHARE_DIMENSIONS, type PublishedFormat, type SharePublication, type SharePublicationImage, type ShareRecord } from '../share/types.ts';
 import { REPLAY_PREFIX, type ReplayBucket, type ReplayObject } from './replays.ts';
 
 /**
- * Share publication stores what the player's browser captured: the season PNG and the record it
- * shows, next to a stored replay. The server checks only the replay's existence and the image's
+ * Share publication stores what the player's browser captured: the season PNGs and the record they
+ * show, next to a stored replay. The server checks only the replay's existence and the image's
  * format, size, and dimensions. Sharing is friendly, not tamper-proof, so nothing is recomputed;
  * a viewer's own browser replays the season from the link.
  */
@@ -12,8 +12,8 @@ const REPLAY_ID = /^[A-Za-z0-9_-]{22}$/;
 const PUBLICATION_MAX_BYTES = 64 * 1024;
 export const PNG_MAX_BYTES = 8 * 1024 * 1024;
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
-const IMAGE_PREFIX = 'shares/v2/images/';
-const PUBLICATION_PREFIX = 'shares/v2/replays/';
+const IMAGE_PREFIX = 'shares/v3/images/';
+const PUBLICATION_PREFIX = 'shares/v3/replays/';
 type OwnedBytes = Uint8Array<ArrayBuffer>;
 
 export interface ShareServerBindings {
@@ -46,9 +46,9 @@ export class ShareUnavailableError extends Error {
 	constructor(message = 'Share publication is unavailable. Please retry.') { super(message); }
 }
 
-export function parseShareFormat(value: string): ShareFormat {
-	if (!SHARE_FORMATS.includes(value as ShareFormat)) throw new ShareNotFoundError('Share image format not found.');
-	return value as ShareFormat;
+export function parseShareFormat(value: string): PublishedFormat {
+	if (!PUBLISHED_FORMATS.includes(value as PublishedFormat)) throw new ShareNotFoundError('Share image format not found.');
+	return value as PublishedFormat;
 }
 
 export function validRecord(record: unknown): record is ShareRecord {
@@ -164,7 +164,7 @@ async function storeImmutable(
 	}
 }
 
-function publicationImageUrl(origin: string, id: string, format: ShareFormat): string {
+function publicationImageUrl(origin: string, id: string, format: PublishedFormat): string {
 	return `${origin}/api/replays/${id}/share/${format}.png`;
 }
 
@@ -172,12 +172,12 @@ function validatePublication(value: unknown, id: string, origin: string): assert
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ShareIncompatibleError('Stored share publication is invalid.');
 	const publication = value as SharePublication;
 	const recordValid = validRecord(publication.record);
-	if (publication.schemaVersion !== 2 || publication.replayId !== id ||
+	if (publication.schemaVersion !== 3 || publication.replayId !== id ||
 		publication.replayUrl !== `${origin}/r/${id}` || !recordValid || !publication.images ||
 		typeof publication.images !== 'object') {
 		throw new ShareIncompatibleError('Stored share publication is invalid.');
 	}
-	for (const format of SHARE_FORMATS) {
+	for (const format of PUBLISHED_FORMATS) {
 		const image = publication.images[format];
 		const dimensions = SHARE_DIMENSIONS[format];
 		if (!image || image.url !== publicationImageUrl(origin, id, format) || image.width !== dimensions.width ||
@@ -201,7 +201,7 @@ export async function readSharePublication(bindings: ShareServerBindings, id: st
  * Publishes the browser-captured images for a stored replay. Publication is write-once: a replay
  * that already has one keeps it, and a second upload returns the first.
  */
-export async function publishShare(bindings: ShareServerBindings, id: string, record: unknown, images: Partial<Record<ShareFormat, OwnedBytes>>): Promise<SharePublication> {
+export async function publishShare(bindings: ShareServerBindings, id: string, record: unknown, images: Partial<Record<PublishedFormat, OwnedBytes>>): Promise<SharePublication> {
 	if (!REPLAY_ID.test(id)) throw new ShareNotFoundError();
 	const existing = await readSharePublication(bindings, id);
 	if (existing) return existing;
@@ -210,8 +210,8 @@ export async function publishShare(bindings: ShareServerBindings, id: string, re
 	if (replay.body instanceof ReadableStream) await replay.body.cancel();
 	if (!validRecord(record)) throw new ShareInvalidError('The shared record is not a 162-game season.');
 	const origin = normalizedOrigin(bindings.PUBLIC_ORIGIN);
-	const published = {} as Record<ShareFormat, SharePublicationImage>;
-	for (const format of SHARE_FORMATS) {
+	const published = {} as Record<PublishedFormat, SharePublicationImage>;
+	for (const format of PUBLISHED_FORMATS) {
 		const bytes = images[format];
 		if (!bytes) throw new ShareInvalidError(`The ${format} share image is missing.`);
 		if (bytes.byteLength > PNG_MAX_BYTES) throw new ShareInvalidError('The share image is too large.');
@@ -224,7 +224,7 @@ export async function publishShare(bindings: ShareServerBindings, id: string, re
 		await storeImmutable(bindings.REPLAYS, imageKey(digest), bytes, 'image/png', PNG_MAX_BYTES);
 		published[format] = { url: publicationImageUrl(origin, id, format), ...dimensions, sha256: digest };
 	}
-	const publication: SharePublication = { schemaVersion: 2, replayId: id, replayUrl: `${origin}/r/${id}`, record, images: published };
+	const publication: SharePublication = { schemaVersion: 3, replayId: id, replayUrl: `${origin}/r/${id}`, record, images: published };
 	let stored: unknown | null;
 	try {
 		stored = await bindings.REPLAYS.put(publicationKey(id), new TextEncoder().encode(JSON.stringify(publication)), {
@@ -239,8 +239,8 @@ export async function publishShare(bindings: ShareServerBindings, id: string, re
 }
 
 /** Load and validate the exact published PNG bytes. */
-export async function loadPublishedShareImage(bindings: ShareServerBindings, id: string, format: ShareFormat): Promise<PublishedShareImage> {
-	if (!SHARE_FORMATS.includes(format)) throw new ShareNotFoundError('Share image format not found.');
+export async function loadPublishedShareImage(bindings: ShareServerBindings, id: string, format: PublishedFormat): Promise<PublishedShareImage> {
+	if (!PUBLISHED_FORMATS.includes(format)) throw new ShareNotFoundError('Share image format not found.');
 	const publication = await readSharePublication(bindings, id);
 	if (!publication) throw new ShareNotFoundError();
 	const image = publication.images[format];
