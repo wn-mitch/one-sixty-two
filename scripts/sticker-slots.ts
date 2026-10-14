@@ -18,7 +18,7 @@ const ERAS: readonly CardEra[] = ['1950s', '1960s', '1970s', '1980s', '1990s', '
 const LAYOUT_PATH = new URL('../src/lib/collection/sticker-layout.json', import.meta.url);
 const SLOTS_PATH = new URL('../src/lib/collection/sticker-slots.json', import.meta.url);
 const ASPECT = 1.4;
-/** The prism padding, the widest finish rim, as a fraction of the card width. */
+/** The widest finish rim (the 1960s, see Card.svelte), as a fraction of the card width. */
 const RIM = 0.032;
 
 const args = process.argv.slice(2);

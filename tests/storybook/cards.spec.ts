@@ -1,4 +1,4 @@
-import { test, expect, openStory } from './workshop-test';
+import { test, expect, openStory, openStoryByName } from './workshop-test';
 
 const card = (page: Parameters<typeof openStory>[0]) => page.locator('.card[data-face="front"]').first();
 
@@ -68,13 +68,12 @@ test.describe('Cards workshop', () => {
 			return {
 				untagged: layers.filter(layer => !layer.dataset.surface).map(layer => layer.dataset.layer),
 				painted: layers.filter(layer => getComputedStyle(layer).backgroundImage !== 'none').map(layer => layer.dataset.layer),
-				corners: root.querySelectorAll('[data-layer="material.gold-corner"][data-surface-shape]').length,
 				rings: root.querySelectorAll('[data-layer="material.gold-ring"][data-surface="ring"]').length,
 				stamp: getComputedStyle(root).getPropertyValue('--stamp').trim(),
 				bevels: [...root.querySelectorAll<HTMLElement>('[data-layer="material.photo-bevel"]')].filter(bevel => getComputedStyle(bevel).display !== 'none').length
 			};
 		});
-		expect(finish).toEqual({ untagged: [], painted: [], corners: 4, rings: 1, stamp: '', bevels: 0 });
+		expect(finish).toEqual({ untagged: [], painted: [], rings: 1, stamp: '', bevels: 0 });
 	});
 
 	test('keeps the 1980s badge border clear of gem edging', async ({ page }) => {
@@ -243,6 +242,82 @@ test.describe('Cards workshop', () => {
 		const availableWidth = await page.locator('.story-content').evaluate(node => node.clientWidth);
 		expect(size.width).toBeLessThanOrEqual(availableWidth);
 		expect(size.width / size.height).toBeCloseTo(5 / 7, 2);
+	});
+
+	test('the holo gallery prints each film on its own blank card', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 1800 });
+		await openStory(page, 'cards-holo-gallery--all-films');
+		const tiles = page.locator('.card[data-film]');
+		await expect(tiles).toHaveCount(15);
+		await expect(page.locator('canvas.light[data-presented]')).toHaveCount(15, { timeout: 15000 });
+		// Neither film belongs to an era, so without the per-card override both tiles would print the same fallback film.
+		// Cracked ice is hard-edged shards; the refractor is a smooth sweep, so far fewer of its neighbouring pixels jump.
+		// The tiles drift, so capture their boxes rather than waiting for them to hold still.
+		const edges = async (film: string) => {
+			const png = await page.screenshot({ clip: (await page.locator(`.card[data-film="${film}"]`).boundingBox())! });
+			return page.evaluate(async source => {
+				const image = new Image();
+				image.src = `data:image/png;base64,${source}`;
+				await image.decode();
+				const canvas = new OffscreenCanvas(image.width, image.height);
+				const context = canvas.getContext('2d')!;
+				context.drawImage(image, 0, 0);
+				const { data, width, height } = context.getImageData(0, 0, image.width, image.height);
+				let jumps = 0;
+				for (let y = height * 0.1 | 0; y < height * 0.9; y++) for (let x = width * 0.1 | 0; x < width * 0.9; x++) {
+					const i = (y * width + x) * 4;
+					if (Math.abs(data[i]! - data[i + 4]!) + Math.abs(data[i + 1]! - data[i + 5]!) + Math.abs(data[i + 2]! - data[i + 6]!) > 60) jumps++;
+				}
+				return jumps;
+			}, png.toString('base64'));
+		};
+		expect(await edges('cracked-ice')).toBeGreaterThan(3 * await edges('refractor'));
+	});
+
+	test('the finish gallery picks each era\'s holo film and foil plate on its own', async ({ page }) => {
+		await openStoryByName(page, 'Cards/Finish gallery', 'All eras');
+		const cards = (era: string) => page.locator(`.card[data-card="${era}"]`);
+		await expect(cards('1980s')).toHaveCount(4, { timeout: 15000 });
+		await expect(cards('1980s').first()).toHaveAttribute('data-plate', 'weld');
+		const root = page.locator('.dialkit-root');
+		await root.getByRole('button', { name: 'Finish gallery', exact: true }).press('Enter');
+		await root.getByRole('button', { name: 'Eras', exact: true }).press('Enter');
+		await root.getByRole('button', { name: '1980s', exact: true }).press('Enter');
+		// Every era folder has a Plate picker, in era order; the 1980s is the fourth.
+		await root.getByRole('button', { name: /^Plate / }).nth(3).click();
+		await page.getByRole('listbox', { name: 'Plate', exact: true }).getByRole('option', { name: 'Knurl', exact: true }).click();
+		for (const card of await cards('1980s').all()) await expect(card).toHaveAttribute('data-plate', 'knurl');
+		// Only that era changes.
+		await expect(cards('1990s').first()).toHaveAttribute('data-plate', 'spun');
+		await expect(cards('1980s').first()).toHaveAttribute('data-film', 'xfractor');
+	});
+
+	test('the foil gallery presses each plate into silver and gold', async ({ page }) => {
+		await page.setViewportSize({ width: 2400, height: 2600 });
+		await openStory(page, 'cards-foil-gallery--all-plates');
+		await expect(page.locator('.card[data-plate]')).toHaveCount(24);
+		await expect(page.locator('canvas.light[data-presented]')).toHaveCount(24, { timeout: 15000 });
+		// The pinstripe tile belongs to no era, so without the per-card override it would press its fallback 1960s brushed grain.
+		const edges = async (plate: string) => {
+			const png = await page.screenshot({ clip: (await page.locator(`.card[data-finish="foil"][data-plate="${plate}"]`).boundingBox())! });
+			return page.evaluate(async source => {
+				const image = new Image();
+				image.src = `data:image/png;base64,${source}`;
+				await image.decode();
+				const canvas = new OffscreenCanvas(image.width, image.height);
+				const context = canvas.getContext('2d')!;
+				context.drawImage(image, 0, 0);
+				const { data, width, height } = context.getImageData(0, 0, image.width, image.height);
+				let jumps = 0;
+				for (let y = height * 0.1 | 0; y < height * 0.9; y++) for (let x = width * 0.1 | 0; x < width * 0.9; x++) {
+					const i = (y * width + x) * 4;
+					// Across a row: brushed grain runs along the row, so only a pressed pattern jumps here.
+					if (Math.abs(data[i]! - data[i + 4]!) > 24) jumps++;
+				}
+				return jumps;
+			}, png.toString('base64'));
+		};
+		expect(await edges('pinstripe')).toBeGreaterThan(2 * await edges('brushed'));
 	});
 });
 

@@ -14,7 +14,7 @@ A card is built from passes over the same sheet, in this order. Each later pass 
 4. **Emboss and deboss.** A die raises or presses regions, usually in register with the foil: raised names and marks, pressed frames.
 5. **Coat.** Gloss, matte or spot UV across chosen areas. The coat decides how strongly ink-only areas catch highlights.
 
-Holographic film carries its colour in microscopic grooves rather than in ink. The groove layout makes the named looks: smooth grooves for a refractor sweep, small facets for prizm, irregular shards for cracked ice, circles for a spun rainbow. Each era has its own film: Atomic bubbles (1950s), a geodesic dome (1960s), a mojo swirl (1970s), Xfractor (1980s), a circuit board (1990s), the skeletal formula of human growth hormone (2000s; the `hgh-sequence` film prints its residues as dot-matrix microtext instead), prizm (2010s), and dollar signs in a diamond tile (2020s). Every card shifts its film by a seed from its identity, so two cards of one era never show the same cut. Under diffuse light holo film reads as plain silver.
+Holographic film carries its colour in microscopic grooves rather than in ink. The groove layout makes the named looks: smooth grooves for a refractor sweep, small facets for prizm, irregular shards for cracked ice, circles for a spun rainbow. Each era has its own film: Atomic bubbles (1950s), a mojo swirl (1960s), the Atlanta Marriott Marquis lobby carpet (1970s; `geodesic` keeps the earlier dome), Xfractor (1980s), a circuit board of long wires ending in ring pads (1990s), the amino-acid sequence of human growth hormone as dense dot-matrix microtext (2000s; the `hgh` film draws its skeletal formula instead), cracked ice (2010s), and double-barred dollar signs on a staggered lattice (2020s). Every card shifts its film by a seed from its identity, so two cards of one era never show the same cut. Under diffuse light holo film reads as plain silver. Silver and gold foil carry a pattern pressed into the metal, which shows as light and shade that move with the tilt: hammered dents (1950s), brushed grain (1960s), a sunburst (1970s), TIG weld beads with strong heat tint between them (1980s), spun lathe rings (1990s), Damascus steel (2000s), carbon-fibre twill (2010s) and a knurl (2020s). Carbon is cut finer than the other plates so it reads on narrow foil; Damascus, the weld and the sunburst are cut broader. Guilloche, diamond plate, a laser pinstripe and a heat-tint stain are also available in the foil gallery. Damascus shows many thin folded layers of light and dark steel, and the stain scatters many small oxide spots over the steel, each a muted temper colour from straw through bronze and purple to blue. The finish also reaches past its dies: a Gem card's whole face carries a faint refractor wash, and silver and gold cards catch a soft sheen band, both sliding with the light and the viewer.
 
 ## One renderer
 
@@ -27,7 +27,7 @@ Every lit card front goes through one pipeline:
 
 The DOM keeps the card body (thickness and drop shadow) and the ink. No lit card draws foil, sheen, glare or edge metal in CSS.
 
-Finish paint reaches the DOM only through CSS variables (`--stamp`, `--emb`, `--gem-ring`) and the material layer's paint, which `Card.svelte` sets only for cards without a light canvas. A template writes each finish surface as `var(--stamp, <ink>)`, so a lit card prints the ink and the shader adds the foil. The material layer keeps its tagged shapes (rings, corner protectors, keylines) unpainted on a lit card, because the surface map reads their geometry.
+Finish paint reaches the DOM only through CSS variables (`--stamp`, `--emb`, `--gem-ring`) and the material layer's paint, which `Card.svelte` sets only for cards without a light canvas. A template writes each finish surface as `var(--stamp, <ink>)`, so a lit card prints the ink and the shader adds the foil. The material layer keeps its tagged shapes (rings and keylines) unpainted on a lit card, because the surface map reads their geometry.
 
 The edge is stamped over the print. A band that runs off the card's side, such as the 2000s rail, is marked `data-over-edge` and prints over the edge instead. Foil with no printed colour of its own, such as the edge, is bare metal; colour-over foil takes its colour only from the ink printed for it.
 
@@ -42,7 +42,7 @@ A lit card shows its ink until its light canvas draws its first frame, then the 
 | `mark` | Team artwork, printed on its stamped badge |
 | `stamp` | Small printed devices: season chips, logo discs, keylines |
 | `frame` | Bands, rules and plates pressed into the stock |
-| `edge` | The card's outer border and corner protectors (the `ring` surface kind) |
+| `edge` | The card's outer border (the `ring` surface kind) |
 | `photo` | The photo window, flat under a gloss coat |
 | `brand` | The 162-0 mark, foil on every card |
 | `sticker` | Die-cut vinyl stickers applied after printing |

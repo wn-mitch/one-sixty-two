@@ -11,7 +11,8 @@
 		argTypes: {
 			nameProfile: { control: 'select', options: ['pillow', 'groove', 'etched'] },
 			markFoil: { control: 'select', options: ['off', 'foil', 'emboss', 'gem'] },
-			holoPattern: { control: 'select', options: ['era', 'refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence'] }
+			holoPattern: { control: 'select', options: ['era', 'refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence'] },
+			foilPlate: { control: 'select', options: ['era', 'brushed', 'hammered', 'guilloche', 'sunburst', 'diamond-plate', 'pinstripe', 'spun', 'carbon', 'knurl', 'damascus', 'stain', 'weld'] }
 		}
 	});
 </script>

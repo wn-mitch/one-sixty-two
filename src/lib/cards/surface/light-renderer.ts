@@ -1,6 +1,8 @@
 import type { Finish } from '../finish.ts';
 import type { CardEra } from '../view-model.ts';
 import { HGH_SEQUENCE } from '../hgh.ts';
+import { ERA_FOIL, ERA_PLATE_TUNING, FOIL_PLATE_GLSL, FOIL_PLATES, type FoilPlate, type PlateTuning } from './foil-plates.ts';
+import { CIRCUIT_CELLS, CIRCUIT_RANGE, CIRCUIT_TEXELS_PER_CELL, growWires, rasterizeWires } from './circuit-tile.ts';
 import { RELIEF_RANGE } from './surfaces.ts';
 import type { SurfaceMap } from './surface-map.ts';
 
@@ -32,7 +34,12 @@ export interface LitCard {
 	/** The card's era, which picks its holo pattern unless the options force one. */
 	era?: CardEra;
 	/** A stable 0..1 seed per card that shifts its holo film, so two cards of one era never print the same cut. */
-	pattern?: number;
+	pattern?: number;	/** Prints this holo film instead of the era's, as the holo gallery does. */
+	film?: HoloPattern;
+	/** Presses this foil plate instead of the era's, as the foil gallery does. */
+	plate?: FoilPlate;
+	/** Tunes the plate instead of its era's settings, as the finish workshop does. */
+	plateTuning?: PlateTuning;
 }
 
 /** Tuning a scene can change between draws. */
@@ -63,19 +70,31 @@ export interface LightOptions {
 	shift?: number;
 	/** How strongly uncoated stock shows paper: fiber in its relief and mottling in its tone. 0 prints it smooth. */
 	paper?: number;
+	/** How far a tier's finish reaches past its dies: Gem's holo wash and the metal sheen over the whole face. 0 keeps it to the foiled parts. */
+	wash?: number;
+	/** Forces one foil plate on every card by its index in FOIL_PLATES; -1 lets each card's era choose. */
+	foilPlate?: number;
+	/** Scales how deeply foil plates are pressed; 0 leaves the foil flat. */
+	plateDepth?: number;
+	/** Multiplies every card's plate scale: above 1 packs the patterns finer. */
+	plateScale?: number;
+	/** Multiplies every card's plate tone: Damascus's dark layers, carbon's black tows and the stain's tint. */
+	plateTone?: number;
+	/** Multiplies every card's stain coverage. */
+	stain?: number;
 }
 
 /** Holo film patterns, in the order the shader numbers them. */
 export const HOLO_PATTERNS = ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence'] as const;
 export type HoloPattern = (typeof HOLO_PATTERNS)[number];
 /**
- * Each era's holo film: Atomic Age bubbles for the 1950s, a geodesic dome for the 1960s, a psychedelic
- * mojo swirl for the 1970s, Xfractor grids for the 1980s, a circuit board for the 1990s, the
- * skeletal formula of human growth hormone for the 2000s, Prizm facets for the 2010s, and dollar signs for the 2020s.
+ * Each era's holo film: Atomic Age bubbles for the 1950s, a psychedelic mojo swirl for the 1960s, the Atlanta
+ * Marriott Marquis lobby carpet for the 1970s, Xfractor grids for the 1980s, a circuit board for the 1990s, the
+ * amino-acid sequence of human growth hormone as microtext for the 2000s, cracked ice for the 2010s, and dollar signs for the 2020s.
  */
 export const ERA_HOLO: Readonly<Record<CardEra, HoloPattern>> = {
-	'1950s': 'atomic', '1960s': 'geodesic', '1970s': 'mojo', '1980s': 'xfractor',
-	'1990s': 'circuit', '2000s': 'hgh', '2010s': 'prizm', '2020s': 'dollar'
+	'1950s': 'atomic', '1960s': 'mojo', '1970s': 'carpet', '1980s': 'xfractor',
+	'1990s': 'circuit', '2000s': 'hgh-sequence', '2010s': 'cracked-ice', '2020s': 'dollar'
 };
 /** The shipped light, used for every option a scene leaves unset; the finish gallery opens on it. */
 export const DEFAULT_LIGHT: Readonly<Required<LightOptions>> = {
@@ -83,15 +102,30 @@ export const DEFAULT_LIGHT: Readonly<Required<LightOptions>> = {
 	// -1 lets each card's era choose its film.
 	holoPattern: -1, holoScale: 8, waves: 3, brush: 0.6,
 	// 1 is colour-over: foil takes the tint of the ink it covers.
-	foilMode: 1, shift: 8.5, paper: 1
+	foilMode: 1, shift: 8.5, paper: 1, wash: 1,
+	foilPlate: -1, plateDepth: 1, plateScale: 1, plateTone: 1, stain: 1
 };
 type LightCanvas = HTMLCanvasElement | OffscreenCanvas;
+let circuitTile: Uint8Array<ArrayBuffer> | null = null;
+let circuitPending: Promise<Uint8Array<ArrayBuffer>> | null = null;
+/**
+ * The circuit film's wires, grown once per page in idle time so building them never stalls the first cards
+ * on screen, and reused when a context is restored.
+ */
+function circuitWires(): Promise<Uint8Array<ArrayBuffer>> {
+	if (circuitTile) return Promise.resolve(circuitTile);
+	return circuitPending ??= new Promise(resolve => {
+		const build = () => resolve(circuitTile = rasterizeWires(growWires()));
+		if (typeof requestIdleCallback === 'function') requestIdleCallback(build, { timeout: 1000 });
+		else setTimeout(build, 0);
+	});
+}
 
 const TIER_CODE: Record<Finish, number> = { base: 0, foil: 1, emboss: 2, gem: 3 };
 /** The atlas starts small for phones and doubles, up to the GPU's limit, when the cards on screen outgrow it. */
 const ATLAS_SIZE = 2048;
 const ATLAS_LIMIT = 4096;
-const FLOATS = 18;
+const FLOATS = 21;
 /** How far, in card units, a card's seed can shift its holo film. */
 const FILM_SHIFT = 2.5;
 
@@ -101,12 +135,14 @@ layout(location = 1) in vec4 a_axes;
 layout(location = 2) in vec4 a_tile;
 layout(location = 3) in vec4 a_light;
 layout(location = 4) in vec4 a_view;
+layout(location = 5) in vec3 a_plate;
 uniform vec2 u_resolution;
 out vec2 v_card;
 out vec2 v_atlas;
 flat out vec4 v_tile;
 flat out vec4 v_light;
 flat out vec4 v_view;
+flat out vec3 v_plate;
 void main() {
 	vec2 corner = vec2(gl_VertexID & 1, gl_VertexID >> 1);
 	vec2 position = a_origin + corner.x * a_axes.xy + corner.y * a_axes.zw;
@@ -115,6 +151,7 @@ void main() {
 	v_tile = a_tile;
 	v_light = a_light;
 	v_view = a_view;
+	v_plate = a_plate;
 	vec2 clip = position / u_resolution * 2.0 - 1.0;
 	gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
 }`;
@@ -146,12 +183,20 @@ in vec2 v_atlas;
 flat in vec4 v_tile;
 flat in vec4 v_light;
 flat in vec4 v_view;
+flat in vec3 v_plate;
 uniform sampler2D u_map;
 uniform sampler2D u_ink;
+uniform sampler2D u_circuit;
 uniform float u_foilMode;
 uniform float u_shift;
 uniform float u_time;
 uniform float u_paper;
+uniform float u_wash;
+uniform float u_foilPlate;
+uniform float u_plateDepth;
+uniform float u_plateScale;
+uniform float u_plateTone;
+uniform float u_stain;
 uniform float u_texel;
 uniform float u_relief;
 uniform float u_lightHeight;
@@ -209,6 +254,10 @@ float segment(vec2 p, vec2 a, vec2 b) { vec2 ab = b - a; return length(p - a - a
 // piece's grooves face the light.
 // Card units one screen pixel spans, set in main before any branch so its derivatives are defined.
 float footprint = 1.0;
+// This card's foil plate tuning, its own times the scene's, set in main.
+float plateScale = 1.0;
+float plateTone = 1.0;
+float plateStain = 0.6;
 vec3 holoFoil(vec2 p, vec3 normal, vec3 halfway, float band, float pattern, out float flash) {
 	flash = 0.0;
 	int film = int(pattern + 0.5);
@@ -338,61 +387,77 @@ vec3 holoFoil(vec2 p, vec3 normal, vec3 halfway, float band, float pattern, out 
 		seed = hash(vec2(panel, 9.0));
 		vivid = smoothstep(0.06, 0.02, strut);
 	} else if (film == 10) {
-		cellSize = 1.0 / (27.0 * u_holoScale * 0.05);
-		// Carpet: a Sierpinski carpet. Each generation of square holes is cut at its own groove angle, so the
-		// nested squares sweep through the rainbow out of step with one another.
-		vec2 q = fract(p * u_holoScale * 0.05 + 0.5);
-		float generation = 4.0;
-		for (int k = 0; k < 4; k++) {
-			q *= 3.0;
-			vec2 digit = floor(q);
-			q = fract(q);
-			if (generation > 3.5 && digit.x == 1.0 && digit.y == 1.0) generation = float(k);
+		cellSize = 0.1 / (u_holoScale * 0.06);
+		// Carpet: the Atlanta Marriott Marquis lobby carpet. Mosaic rosettes on a square grid, each a hub and rings of
+		// tiles cut by spokes that double outward, with gold grout between every tile. Where four rosettes meet, a
+		// diamond split in four sits in a field of small square tiles. Each ring flashes its own colour.
+		vec2 q = p * u_holoScale * 0.06;
+		vec2 t = fract(q) - 0.5;
+		float r = length(t);
+		float grout;
+		float field;
+		float tile;
+		if (r < 0.47) {
+			field = r < 0.06 ? 0.0 : r < 0.16 ? 1.0 : r < 0.27 ? 2.0 : r < 0.37 ? 3.0 : 4.0;
+			float spokes = field < 0.5 ? 1.0 : 8.0 * pow(2.0, min(field - 1.0, 2.0));
+			float a = (atan(t.y, t.x) / 6.28318 + 0.5) * spokes;
+			tile = floor(a);
+			float ringEdge = min(min(abs(r - 0.06), abs(r - 0.16)), min(min(abs(r - 0.27), abs(r - 0.37)), abs(r - 0.47)));
+			float spokeEdge = field < 0.5 ? 1.0 : (0.5 - abs(fract(a) - 0.5)) * 6.28318 * r / spokes;
+			grout = min(ringEdge, spokeEdge);
+		} else {
+			vec2 k = fract(q + 0.5) - 0.5;
+			float d = abs(k.x) + abs(k.y);
+			if (d < 0.2) {
+				field = 5.0;
+				tile = (k.x > 0.0 ? 1.0 : 0.0) + (k.y > 0.0 ? 2.0 : 0.0);
+				grout = min((0.2 - d) * 0.7071, min(abs(k.x), abs(k.y)));
+			} else {
+				field = 6.0;
+				vec2 m = k * 9.0;
+				tile = hash(floor(m) + floor(q + 0.5) * 17.0) * 8.0;
+				vec2 inTile = abs(fract(m) - 0.5);
+				grout = min(min((0.5 - inTile.x) / 9.0, (0.5 - inTile.y) / 9.0), (d - 0.2) * 0.7071);
+			}
+			grout = min(grout, r - 0.47);
 		}
-		float angle = generation * 0.9 + 0.2;
+		float aa = length(fwidth(q)) * 0.7;
+		float line = 1.0 - smoothstep(max(0.008 - aa, 0.0), 0.008 + aa, grout);
+		float angle = field * 0.9 + 0.3 + (hash(vec2(tile, field)) - 0.5) * 0.35;
 		groove = vec2(cos(angle), sin(angle));
-		seed = generation * 0.23;
-		vivid = 1.0;
+		seed = field * 0.14 + mod(tile, 2.0) * 0.05;
+		vivid = 0.9;
+		copper = line;
+		copperPad = line;
 	} else if (film == 11) {
-		cellSize = 0.2 / (u_holoScale * 0.6);
-		// Circuit: blocks of parallel bus traces, each block running across or down, its lanes jogging over at
-		// 45 degrees midway and ending in drilled pads, on a finely hatched silver mask. Rainbow runs along the copper.
-		vec2 q = p * u_holoScale * 0.22;
-		vec2 block = floor(q);
-		vec2 bf = fract(q);
-		bool down = hash(block + 17.0) < 0.5;
-		float along = down ? bf.y : bf.x;
-		float across = down ? bf.x : bf.y;
-		float lanes = 4.0 + floor(hash(block + 23.0) * 3.0);
-		float pitch = 1.0 / lanes;
-		// Half the blocks jog one lane over between 0.42 and 0.42 + pitch.
-		float jog = hash(block + 29.0) < 0.5 ? 1.0 : 0.0;
-		float shifted = across - jog * clamp(along - 0.42, 0.0, pitch);
-		float lane = floor(shifted * lanes);
-		float inLane = fract(shifted * lanes) - 0.5;
-		bool live = hash(block * 3.1 + lane) > 0.2 && lane >= 0.0 && lane < lanes - (jog > 0.5 ? 1.0 : 0.0);
-		float ends = 0.12 + hash(block + lane * 5.0) * 0.08;
-		float span = step(ends, along) * step(along, 1.0 - ends);
-		float trace = live ? smoothstep(0.32, 0.22, abs(inLane)) * span : 0.0;
-		vec2 endPoint = vec2(inLane * pitch, along - (along < 0.5 ? ends : 1.0 - ends));
-		float r = length(endPoint) / pitch;
-		float pad = live ? smoothstep(0.4, 0.32, r) * smoothstep(0.1, 0.16, r) : 0.0;
-		vec2 run = down ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
-		bool jogging = jog > 0.5 && along > 0.42 && along < 0.42 + pitch;
-		vec2 dir = jogging ? normalize(run + (down ? vec2(1.0, 0.0) : vec2(0.0, 1.0))) : run;
-		vec2 around = r > 1e-3 ? vec2(-endPoint.y, endPoint.x) / (r * pitch) : vec2(1.0, 0.0);
-		if (down) around = around.yx;
+		cellSize = 1.0 / (u_holoScale * 1.1);
+		// Circuit: long wires that run mostly straight and turn 45 degrees, packed edge to edge and ending in
+		// drilled ring pads, read from a pre-grown tile (circuit-tile.ts). Rainbow runs along the copper on a finely
+		// hatched silver mask. Units are wire cells.
+		vec2 q = p * u_holoScale * 1.1;
+		vec2 uv = q / ${CIRCUIT_CELLS.toFixed(1)};
+		vec4 wires = texture(u_circuit, uv);
+		ivec2 texel = ivec2(mod(floor(uv * ${(CIRCUIT_CELLS * CIRCUIT_TEXELS_PER_CELL).toFixed(1)}), ${(CIRCUIT_CELLS * CIRCUIT_TEXELS_PER_CELL).toFixed(1)}));
+		vec4 nearest = texelFetch(u_circuit, texel, 0);
+		float traceDistance = (1.0 - wires.r) * ${CIRCUIT_RANGE.toFixed(2)};
+		float padDistance = (1.0 - wires.g) * ${CIRCUIT_RANGE.toFixed(2)};
+		float aa = max(length(fwidth(q)) * 0.6, 0.01);
+		float trace = smoothstep(0.14 + aa, 0.14 - aa, traceDistance) * smoothstep(0.1, 0.1 + aa, padDistance);
+		float pad = smoothstep(0.1 + aa, 0.1 - aa, abs(padDistance - 0.22));
+		int direction = int(nearest.b * 4.0);
+		vec2 dir = direction == 0 ? vec2(1.0, 0.0) : direction == 1 ? vec2(0.7071, 0.7071) : direction == 2 ? vec2(0.0, 1.0) : vec2(0.7071, -0.7071);
+		vec2 radial = vec2(dFdx(wires.g), dFdy(wires.g));
+		vec2 around = length(radial) > 1e-5 ? normalize(vec2(-radial.y, radial.x)) : vec2(1.0, 0.0);
 		float metal = max(trace, pad);
 		copper = metal;
 		copperPad = pad;
 		groove = normalize(mix(mix(vec2(0.6, 0.8), dir, trace), around, pad) + 1e-4);
-		seed = mix(hash(block + 3.0) * 0.3, hash(block + lane + 5.0), metal);
+		seed = mix(0.1, nearest.a, metal);
 		vivid = mix(0.12, 1.0, metal);
 	} else if (film == 12) {
 		cellSize = 0.6 / (u_holoScale * 0.17);
-		// Dollar: a diamond tile. Every diamond is cut into four faint facets with bright seams between diamonds, and
-		// carries an upright dollar sign grooved along its stroke so the rainbow runs round the curves.
-		// Tall diamonds just clear the sign: half 0.27 wide and 0.42 high in sign units.
+		// Dollar: upright, double-barred gold dollar signs on a smooth ground, laid out on a diamond lattice so each
+		// row sits between the signs of the next. Lattice cells are half 0.27 wide and 0.42 high in sign units.
 		vec2 q = p * u_holoScale * 0.17;
 		vec2 g = q / vec2(0.27, 0.42);
 		vec2 r = vec2(g.x + g.y, g.y - g.x) * 0.5;
@@ -400,10 +465,7 @@ vec3 holoFoil(vec2 p, vec3 normal, vec3 halfway, float band, float pattern, out 
 		vec2 f = fract(r) - 0.5;
 		// Back to sign units, upright; card y runs down, so c flips it up.
 		vec2 c = vec2(f.x - f.y, -(f.x + f.y)) * vec2(0.27, 0.42);
-		float seamDistance = 0.5 - max(abs(f.x), abs(f.y));
-		float seam = smoothstep(0.04, 0.018, seamDistance);
-		float facet = (f.x > 0.0 ? 1.0 : 0.0) + (f.y > 0.0 ? 2.0 : 0.0);
-		float w = 0.045;
+		float w = 0.055;
 		vec2 top = c - vec2(0.0, 0.12);
 		vec2 bottom = c - vec2(0.0, -0.12);
 		float upper = abs(length(top) - 0.12);
@@ -411,21 +473,18 @@ vec3 holoFoil(vec2 p, vec3 normal, vec3 halfway, float band, float pattern, out 
 		// The top bowl opens at its lower right and the bottom bowl at its upper left, which makes the S.
 		if (top.x > 0.0 && top.y < 0.0 && top.x > -top.y * 0.3) upper = 1.0;
 		if (bottom.x < 0.0 && bottom.y > 0.0 && -bottom.x > bottom.y * 0.3) lower = 1.0;
-		float bar = abs(c.y) < 0.31 ? abs(c.x) : 1.0;
-		float stroke = min(min(upper, lower), bar * 1.4);
+		// Two bars through the S, the older double-struck dollar.
+		float bar = abs(c.y) < 0.31 ? abs(abs(c.x) - 0.065) : 1.0;
+		float stroke = min(min(upper, lower), bar * 1.8);
 		float ink = smoothstep(w, w * 0.6, stroke);
-		vec2 tangent = upper < lower ? vec2(-top.y, top.x) : vec2(-bottom.y, bottom.x);
-		vec2 dir = bar * 1.4 < min(upper, lower) ? vec2(0.0, 1.0) : normalize(tangent + 1e-4);
-		// One groove angle per diamond, close to its neighbours', so the ground sweeps in one colour and the signs stand out.
-		float facetAngle = 0.9 + (hash(cell + 11.0) - 0.5) * 0.5 + facet * 0.06;
-		vec2 ground = vec2(cos(facetAngle), sin(facetAngle));
-		vec2 seamRun = normalize(abs(f.x) > abs(f.y) ? vec2(0.27, -0.42) : vec2(0.27, 0.42));
-		groove = normalize(mix(mix(ground, seamRun, seam), dir, ink) + 1e-4);
-		// Facets share their diamond's colour, offset a little each, so the tile reads as diamonds rather than confetti.
-		seed = mix(hash(cell) * 0.15 + facet * 0.04, hash(cell + 5.0), max(ink, seam));
-		vivid = mix(0.15, 1.0, max(ink, seam));
-		copper = max(ink, seam * 0.35);
-		copperPad = ink * 0.55;
+		// The whole sign shares one groove, so it flashes as one solid shape rather than breaking up round its curves.
+		vec2 dir = vec2(0.0, 1.0);
+		// The ground is one continuous groove, so it sweeps in one colour and only the signs stand out.
+		groove = normalize(mix(vec2(0.62, 0.78), dir, ink) + 1e-4);
+		seed = mix(0.0, hash(cell + 5.0), ink);
+		vivid = mix(0.15, 1.0, ink);
+		copper = ink;
+		copperPad = ink * 0.9;
 	} else if (film == 13) {
 		cellSize = 0.87 / (u_holoScale * 0.9);
 		// HGH: the skeletal formula of human growth hormone, row after row of its backbone in sequence. Each residue
@@ -487,13 +546,14 @@ vec3 holoFoil(vec2 p, vec3 normal, vec3 halfway, float band, float pattern, out 
 		vivid = mix(0.12, 1.0, ink);
 		copper = ink;
 	} else if (film == 14) {
-		cellSize = 6.0 / (u_holoScale * 7.0);
+		cellSize = 1.0 / (u_holoScale * 3.5);
 		// HGH sequence: the hormone's 191 residues run line after line as dot-matrix microtext, each line picking
 		// up the sequence further along, every dot a tiny grooved disc that throws rainbow along the line.
-		vec2 q = p * u_holoScale * 7.0;
-		float line = floor(q.y / 8.0);
+		// Tightly set: a one-dot gap between letters and between lines.
+		vec2 q = p * u_holoScale * 3.5;
+		float line = floor(q.y / 7.0);
 		float column = floor(q.x / 6.0);
-		vec2 slot = vec2(mod(q.x, 6.0), mod(q.y, 8.0));
+		vec2 slot = vec2(mod(q.x, 6.0), mod(q.y, 7.0));
 		int dx_ = int(slot.x);
 		int dy_ = int(slot.y);
 		bool lit = dx_ < 5 && dy_ < 6 && microDot(column + line * 37.0, dx_, dy_);
@@ -528,16 +588,17 @@ vec3 holoFoil(vec2 p, vec3 normal, vec3 halfway, float band, float pattern, out 
 	// Patterned foil is mostly silver; a piece shows its colour as its grooves turn toward the light.
 	vec3 faceted = seed < 0.0 ? vec3(0.82, 0.84, 0.88) : mix(vec3(0.82, 0.84, 0.88), color, 0.35 + 0.65 * max(flash, pass * 0.6));
 	vec3 film_ = mix(faceted, color, vivid);
-	float detail = smoothstep(4.0, 12.0, cellSize / footprint);
-	// The circuit's mask and the dollar ground sit dim so the copper and the signs read; the circuit's drilled pads and the dollar signs shine gold.
-	if (film == 11 || film == 12 || film == 13 || film == 14) film_ = mix(mix(film_ * 0.62, min(film_ * 1.15, 1.0), copper), vec3(1.0, 0.82, 0.48) * (0.8 + 0.4 * pass), copperPad * 0.7);
+	float detail = smoothstep(2.5, 6.0, cellSize / footprint);
+	// The carpet's grout shines gold; the circuit's mask sits dim so the copper reads, the dollar ground only a little below full so the 2020s film stays bright; the circuit's drilled pads and the dollar signs shine gold.
+	float mask = film == 10 ? 1.0 : film == 12 ? 0.9 : 0.62;
+	if (film >= 10 && film <= 14) film_ = mix(mix(film_ * mask, min(film_ * 1.15, 1.0), copper), vec3(1.0, 0.82, 0.48) * (0.8 + 0.4 * pass), copperPad * 0.7);
 	// Too small to resolve, the pattern would alias into speckle; it settles into the plain refractor sweep instead.
 	vec3 smooth_ = mix(vec3(0.82, 0.84, 0.88), rainbow(band * 0.7 + p.x * 0.06 + p.y * 0.04 + dot(normal.xy, vec2(1.6, 1.1))), 0.6);
 	flash *= detail;
 	return mix(smooth_, film_, detail);
 }
 
-
+${FOIL_PLATE_GLSL}
 void over(inout vec4 target, vec3 color, float alpha) {
 	alpha = clamp(alpha, 0.0, 1.0);
 	target = vec4(color * alpha + target.rgb * (1.0 - alpha), alpha + target.a * (1.0 - alpha));
@@ -547,6 +608,9 @@ void main() {
 	// Rounded card corners, 1.8% of the width.
 	vec2 p = v_card * CARD;
 	footprint = max(length(fwidth(p)), 1e-5);
+	plateScale = u_plateScale * v_plate.x;
+	plateTone = u_plateTone * v_plate.y;
+	plateStain = clamp(u_stain * v_plate.z, 0.0, 1.0);
 	vec2 inner = clamp(p, vec2(0.09), CARD - 0.09);
 	if (length(p - inner) > 0.09) discard;
 
@@ -574,8 +638,15 @@ void main() {
 
 	vec4 result = vec4(0.0);
 	// The tier and the era's holo pattern share one slot: tier + 4 * pattern.
-	float tier = mod(v_light.w + 0.01, 4.0) - 0.01;
-	float pattern = u_holoPattern < -0.5 ? floor(v_light.w / 4.0 + 0.01) : u_holoPattern;
+	// The tier, the era's holo pattern and its foil plate share one slot: tier + 4 * pattern + 64 * plate.
+	float plateCode = floor(v_light.w / 64.0 + 0.001);
+	float packed = v_light.w - plateCode * 64.0;
+	float tier = mod(packed + 0.01, 4.0) - 0.01;
+	float pattern = u_holoPattern < -0.5 ? floor(packed / 4.0 + 0.01) : u_holoPattern;
+	int plate = int((u_foilPlate < -0.5 ? plateCode : u_foilPlate) + 0.5);
+	// The plate presses into silver and gold foil only; holo film keeps its own grooves.
+	float plated = smoothstep(0.45, 0.9, metal) * (1.0 - iridescence) * u_plateDepth;
+	if (plate > 0 && plated > 0.0) normal = normalize(normal + vec3(foilSlope(p, plate) * plated, 0.0));
 	// Each metal runs from its shadow colour through a saturated body to a near-white hot spot.
 	bool gold = tier > 1.5 && tier < 2.5;
 	vec3 deep = gold ? vec3(0.32, 0.19, 0.04) : tier > 2.5 ? vec3(0.34, 0.33, 0.4) : vec3(0.27, 0.29, 0.33);
@@ -593,9 +664,13 @@ void main() {
 	float glint = pow(band, 6.0);
 	// Brushed foil: streaks run across the card and shift the reflection along each one.
 	float grain = noise(vec2(p.x * 3.0, p.y * 140.0)) * 0.7 + noise(vec2(p.x * 9.0, p.y * 420.0)) * 0.3;
-	band = clamp(band + (grain - 0.5) * u_brush * (1.0 - iridescence) * 0.6, 0.0, 1.0);
+	band = clamp(band + (grain - 0.5) * (plate == 0 ? u_brush : 0.0) * (1.0 - iridescence) * 0.6, 0.0, 1.0);
 	vec3 foil = mix(deep, body, smoothstep(0.08, 0.6, band));
 	foil = mix(foil, hot, glint * (0.55 + 0.45 * intensity));
+	// Damascus darkens its dark layers and carbon its black tows; stain tints the steel with temper colours.
+	vec2 tone = plate > 0 ? plateShade(p, plate) * min(plated, 1.0) : vec2(0.0);
+	foil *= 1.0 - min(tone.x, 1.0) * 0.82;
+	foil *= mix(vec3(1.0), plateTint(p, plate), min(tone.y, 1.0));
 	float flash;
 	vec3 holo = holoFoil(p + v_view.zw, normal, normalize(toLight + view), band, pattern, flash);
 	holo = mix(holo, vec3(1.0), flash * 0.45) * (0.75 + 0.5 * flash);
@@ -630,7 +705,7 @@ void main() {
 	float shininess = mix(6.0, 140.0, gloss);
 	// Foil catches the full highlight; plain coat a fraction of it, so the two separate under the light.
 	float foiled = smoothstep(0.3, 0.9, metal);
-	float reflectance = mix(u_coat, 1.0, foiled);
+	float reflectance = mix(u_coat, 1.0, foiled) * (1.0 - min(tone.y, 1.0) * 0.15);
 	float specular = pow(max(dot(normal, halfway), 0.0), shininess) * mix(0.04, 0.85, gloss) * intensity * u_shine * reflectance;
 	// Metal reflects in its own colour, so coloured foil glints in its colour instead of washing to white.
 	vec3 shine = mix(vec3(1.0), mix(clamp(foil * 1.6, 0.0, 1.0), holo, iridescence), metal * 0.85);
@@ -639,6 +714,19 @@ void main() {
 	// A spotlight lifts a soft glare over the whole card.
 	float glare = exp(-dot(p - lightPosition.xy, p - lightPosition.xy) / 6.0) * v_light.z * u_glare * reflectance;
 	over(result, vec3(1.0), glare);
+
+	// The finish carries past its dies. Gem board is holo all over, so a faint refractor sweep rides across the
+	// whole face; silver and gold boards catch one soft sheen band. Both slide as the light and the viewer move.
+	float face = (1.0 - foiled) * u_wash * (0.7 + 0.3 * intensity);
+	float drift = dot(view.xy, vec2(2.2, 1.4)) - v_light.x * 2.4 - v_light.y * 1.2;
+	if (tier > 2.5) {
+		vec3 sweep = rainbow(p.x * 0.09 + p.y * 0.06 + drift * 0.35);
+		float swell = 0.5 + 0.5 * sin(p.x * 0.9 - p.y * 0.6 + drift * 1.7);
+		over(result, sweep, face * (0.08 + 0.14 * swell));
+	} else if (tier > 0.5) {
+		float sheen = pow(0.5 + 0.5 * sin(p.x * 0.7 - p.y * 0.45 + drift * 1.5), 5.0);
+		over(result, gold ? vec3(1.0, 0.86, 0.55) : vec3(0.92, 0.95, 1.0), face * sheen * 0.22);
+	}
 
 	// Uncoated paper is not an even sheet: fibers clump into a faint warm mottle, strongest where the coat is thinnest.
 	float unfoiled = 1.0 - smoothstep(0.3, 0.9, metal);
@@ -682,7 +770,9 @@ interface Resources {
 	atlas: WebGLTexture;
 	/** The printed ink, packed at the same tile positions as the surface maps. */
 	inkAtlas: WebGLTexture;
-	uniforms: { resolution: WebGLUniformLocation | null; texel: WebGLUniformLocation | null; relief: WebGLUniformLocation | null; lightHeight: WebGLUniformLocation | null; glare: WebGLUniformLocation | null; shine: WebGLUniformLocation | null; foil: WebGLUniformLocation | null; coat: WebGLUniformLocation | null; holoPattern: WebGLUniformLocation | null; holoScale: WebGLUniformLocation | null; waves: WebGLUniformLocation | null; brush: WebGLUniformLocation | null; foilMode: WebGLUniformLocation | null; shift: WebGLUniformLocation | null; time: WebGLUniformLocation | null; paper: WebGLUniformLocation | null };
+	/** The circuit film's wire tile. */
+	circuit: WebGLTexture;
+	uniforms: { resolution: WebGLUniformLocation | null; texel: WebGLUniformLocation | null; relief: WebGLUniformLocation | null; lightHeight: WebGLUniformLocation | null; glare: WebGLUniformLocation | null; shine: WebGLUniformLocation | null; foil: WebGLUniformLocation | null; coat: WebGLUniformLocation | null; holoPattern: WebGLUniformLocation | null; holoScale: WebGLUniformLocation | null; waves: WebGLUniformLocation | null; brush: WebGLUniformLocation | null; foilMode: WebGLUniformLocation | null; shift: WebGLUniformLocation | null; time: WebGLUniformLocation | null; paper: WebGLUniformLocation | null; wash: WebGLUniformLocation | null; foilPlate: WebGLUniformLocation | null; plateDepth: WebGLUniformLocation | null; plateScale: WebGLUniformLocation | null; plateTone: WebGLUniformLocation | null; stain: WebGLUniformLocation | null };
 }
 
 export class LightRenderer {
@@ -757,12 +847,28 @@ export class LightRenderer {
 		attribute(2, 4, 6);
 		attribute(3, 4, 10);
 		attribute(4, 4, 14);
+		attribute(5, 3, 18);
 		gl.bindVertexArray(null);
 		const atlas = this.#atlasTexture();
 		const inkAtlas = this.#atlasTexture();
 		gl.useProgram(program);
 		gl.uniform1i(gl.getUniformLocation(program, 'u_map'), 0);
 		gl.uniform1i(gl.getUniformLocation(program, 'u_ink'), 1);
+		gl.uniform1i(gl.getUniformLocation(program, 'u_circuit'), 2);
+		const circuit = gl.createTexture()!;
+		const circuitSide = CIRCUIT_CELLS * CIRCUIT_TEXELS_PER_CELL;
+		gl.bindTexture(gl.TEXTURE_2D, circuit);
+		// Blank until the wires are grown; circuit film then shows its mask alone for those first frames.
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, circuitSide, circuitSide, 0, gl.RGBA, gl.UNSIGNED_BYTE, circuitTile);
+		if (!circuitTile) void circuitWires().then(tile => {
+			if (this.#lost || this.#resources?.circuit !== circuit) return;
+			gl.bindTexture(gl.TEXTURE_2D, circuit);
+			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, circuitSide, circuitSide, gl.RGBA, gl.UNSIGNED_BYTE, tile);
+		});
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 		return {
@@ -771,6 +877,7 @@ export class LightRenderer {
 			instances,
 			atlas,
 			inkAtlas,
+			circuit,
 			uniforms: {
 				resolution: gl.getUniformLocation(program, 'u_resolution'),
 				texel: gl.getUniformLocation(program, 'u_texel'),
@@ -787,7 +894,13 @@ export class LightRenderer {
 				foilMode: gl.getUniformLocation(program, 'u_foilMode'),
 				shift: gl.getUniformLocation(program, 'u_shift'),
 				time: gl.getUniformLocation(program, 'u_time'),
-				paper: gl.getUniformLocation(program, 'u_paper')
+				paper: gl.getUniformLocation(program, 'u_paper'),
+				wash: gl.getUniformLocation(program, 'u_wash'),
+				foilPlate: gl.getUniformLocation(program, 'u_foilPlate'),
+				plateDepth: gl.getUniformLocation(program, 'u_plateDepth'),
+				plateScale: gl.getUniformLocation(program, 'u_plateScale'),
+				plateTone: gl.getUniformLocation(program, 'u_plateTone'),
+				stain: gl.getUniformLocation(program, 'u_stain')
 			}
 		};
 	}
@@ -905,13 +1018,18 @@ export class LightRenderer {
 			data[offset + 10] = card.lightX;
 			data[offset + 11] = card.lightY;
 			data[offset + 12] = card.spotlight;
-			data[offset + 13] = TIER_CODE[card.tier] + 4 * (card.era ? HOLO_PATTERNS.indexOf(ERA_HOLO[card.era]) : 0);
+			data[offset + 13] = TIER_CODE[card.tier] + 4 * HOLO_PATTERNS.indexOf(card.film ?? (card.era ? ERA_HOLO[card.era] : 'refractor'))
+				+ 64 * FOIL_PLATES.indexOf(card.plate ?? (card.era ? ERA_FOIL[card.era] : 'brushed'));
 			data[offset + 14] = card.viewX ?? 0;
 			data[offset + 15] = card.viewY ?? 0;
 			// The film's shift samples two sines of the card's seed, a pattern index the way a printed skin has one.
 			const seed = (card.pattern ?? 0) * Math.PI * 2;
 			data[offset + 16] = Math.sin(seed * 7.0) * FILM_SHIFT;
 			data[offset + 17] = Math.sin(seed * 11.0 + 1.3) * FILM_SHIFT;
+			const tuning = card.plateTuning ?? (card.era ? ERA_PLATE_TUNING[card.era] : ERA_PLATE_TUNING['1960s']);
+			data[offset + 18] = tuning.scale;
+			data[offset + 19] = tuning.tone;
+			data[offset + 20] = tuning.stain;
 			count += 1;
 		}
 		const gl = this.#gl;
@@ -936,6 +1054,14 @@ export class LightRenderer {
 		gl.uniform1f(resources.uniforms.shift, options.shift ?? DEFAULT_LIGHT.shift);
 		gl.uniform1f(resources.uniforms.time, performance.now() / 1000 % 3600);
 		gl.uniform1f(resources.uniforms.paper, options.paper ?? DEFAULT_LIGHT.paper);
+		gl.uniform1f(resources.uniforms.wash, options.wash ?? DEFAULT_LIGHT.wash);
+		gl.uniform1f(resources.uniforms.foilPlate, options.foilPlate ?? DEFAULT_LIGHT.foilPlate);
+		gl.uniform1f(resources.uniforms.plateDepth, options.plateDepth ?? DEFAULT_LIGHT.plateDepth);
+		gl.uniform1f(resources.uniforms.plateScale, options.plateScale ?? DEFAULT_LIGHT.plateScale);
+		gl.uniform1f(resources.uniforms.plateTone, options.plateTone ?? DEFAULT_LIGHT.plateTone);
+		gl.uniform1f(resources.uniforms.stain, options.stain ?? DEFAULT_LIGHT.stain);
+		gl.activeTexture(gl.TEXTURE2);
+		gl.bindTexture(gl.TEXTURE_2D, resources.circuit);
 		gl.activeTexture(gl.TEXTURE1);
 		gl.bindTexture(gl.TEXTURE_2D, resources.inkAtlas);
 		gl.activeTexture(gl.TEXTURE0);
@@ -955,6 +1081,7 @@ export class LightRenderer {
 			const gl = this.#gl;
 			gl.deleteTexture(resources.atlas);
 			gl.deleteTexture(resources.inkAtlas);
+			gl.deleteTexture(resources.circuit);
 			gl.deleteBuffer(resources.instances);
 			gl.deleteVertexArray(resources.vao);
 			gl.deleteProgram(resources.program);

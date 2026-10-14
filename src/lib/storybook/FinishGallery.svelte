@@ -2,7 +2,7 @@
 	import type { ReliefProfile as Profile, SurfaceTuning as Tuning } from '#lib/cards/surface/surfaces.ts';
 
 	/** Starting values for the controls, so a link can carry a tuned look. */
-	export type FinishGalleryProps = Partial<Tuning> & { nameProfile?: Profile; relief?: number; lightHeight?: number; ringWidth?: number; glare?: number; shine?: number; foil?: number; coat?: number; holoPattern?: HoloChoice; holoScale?: number; waves?: number; brush?: number; foilMode?: FoilMode; shift?: number; paper?: number; width?: number; drift?: boolean };
+	export type FinishGalleryProps = Partial<Tuning> & { nameProfile?: Profile; relief?: number; lightHeight?: number; ringWidth?: number; glare?: number; shine?: number; foil?: number; coat?: number; holoPattern?: HoloChoice; holoScale?: number; waves?: number; brush?: number; foilMode?: FoilMode; shift?: number; paper?: number; wash?: number; foilPlate?: FoilPlate | 'era'; plateDepth?: number; plateScale?: number; plateTone?: number; stain?: number; width?: number; drift?: boolean };
 	import { HOLO_PATTERNS, type HoloPattern } from '#lib/cards/surface/light-renderer.ts';
 	/** `era` lets each card's era pick its holo film. */
 	export type HoloChoice = HoloPattern | 'era';
@@ -17,7 +17,8 @@
 	import Card from '#lib/cards/Card.svelte';
 	import { materialFor, type Finish } from '#lib/cards/finish.ts';
 	import { LightEngine } from '#lib/cards/surface/card-light.ts';
-	import { DEFAULT_LIGHT } from '#lib/cards/surface/light-renderer.ts';
+	import { DEFAULT_LIGHT, ERA_HOLO } from '#lib/cards/surface/light-renderer.ts';
+	import { ERA_FOIL, ERA_PLATE_TUNING, FOIL_PLATES, type FoilPlate } from '#lib/cards/surface/foil-plates.ts';
 	import { DEFAULT_TUNING, RELIEF_PROFILES, STOCKS, type ReliefProfile, type Stock, type SurfaceTuning } from '#lib/cards/surface/surfaces.ts';
 	import { createCardViewModel, type CardEra, type CardViewModel } from '#lib/cards/view-model.ts';
 	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
@@ -48,9 +49,10 @@
 	const start = untrack(() => ({
 		...DEFAULT_TUNING,
 		...DEFAULT_LIGHT,
-		width: 310, drift: true, stock: 'era' as Stock | 'era', ringWidth: 1,
+		width: 417, drift: true, stock: 'era' as Stock | 'era', ringWidth: 1,
 		holoPattern: (HOLO_PATTERNS[DEFAULT_LIGHT.holoPattern] ?? 'era') as HoloChoice,
 		foilMode: FOIL_MODES[DEFAULT_LIGHT.foilMode],
+		foilPlate: (FOIL_PLATES[DEFAULT_LIGHT.foilPlate] ?? 'era') as FoilPlate | 'era',
 		nameProfile: 'pillow' as ReliefProfile,
 		...props
 	}));
@@ -68,7 +70,8 @@
 		},
 		stock: {
 			stock: select(['era', ...Object.keys(STOCKS)] as (Stock | 'era')[], start.stock),
-			paper: [start.paper, 0, 3, 0.05] as Range
+			paper: [start.paper, 0, 3, 0.05] as Range,
+			wash: [start.wash, 0, 3, 0.05] as Range
 		},
 		foil: {
 			foil: [start.foil, 0, 1, 0.05] as Range,
@@ -77,7 +80,12 @@
 			holoPattern: select(HOLO_CHOICES, start.holoPattern),
 			holoScale: [start.holoScale, 3, 40, 0.5] as Range,
 			waves: [start.waves, 0.5, 30, 0.5] as Range,
-			brush: [start.brush, 0, 2, 0.05] as Range
+			brush: [start.brush, 0, 2, 0.05] as Range,
+			foilPlate: select(['era', ...FOIL_PLATES] as (FoilPlate | 'era')[], start.foilPlate),
+			plateDepth: [start.plateDepth, 0, 3, 0.05] as Range,
+			plateScale: [start.plateScale, 0.25, 4, 0.05] as Range,
+			plateTone: [start.plateTone, 0, 2, 0.05] as Range,
+			stain: [start.stain, 0, 2, 0.05] as Range
 		},
 		edge: {
 			ringWidth: [start.ringWidth, 0.5, 2.5, 0.05] as Range,
@@ -91,6 +99,8 @@
 			nameHeight: [start.nameHeight, 0.2, 2, 0.05] as Range,
 			nameSoftness: [start.nameSoftness, 0, 3, 0.1] as Range
 		},
+		// Per-era picks, so each era's film and plate can be chosen on its own; the global selects above still override them all.
+		eras: Object.fromEntries(SEASONS.map(({ era }) => [era, { holo: select(HOLO_PATTERNS, ERA_HOLO[era]), plate: select(FOIL_PLATES, ERA_FOIL[era]), scale: [ERA_PLATE_TUNING[era].scale, 0.25, 4, 0.05] as Range, tone: [ERA_PLATE_TUNING[era].tone, 0, 3, 0.05] as Range, stain: [ERA_PLATE_TUNING[era].stain, 0, 1, 0.01] as Range }])),
 		mark: {
 			markFoil: select(['off', 'foil', 'emboss', 'gem'] as const, start.markFoil),
 			markMetal: [start.markMetal, 0, 1, 0.05] as Range
@@ -120,9 +130,15 @@
 		foilMode: FOIL_MODES.indexOf(values.foil.foilMode as FoilMode),
 		shift: values.foil.shift,
 		paper: values.stock.paper,
+		wash: values.stock.wash,
 		foil: values.foil.foil,
 		holoPattern: HOLO_PATTERNS.indexOf(values.foil.holoPattern as HoloPattern),
-		holoScale: values.foil.holoScale
+		holoScale: values.foil.holoScale,
+		foilPlate: FOIL_PLATES.indexOf(values.foil.foilPlate as FoilPlate),
+		plateDepth: values.foil.plateDepth,
+		plateScale: values.foil.plateScale,
+		plateTone: values.foil.plateTone,
+		stain: values.foil.stain
 	});
 	// Repaints every card's map once the controls settle, rather than on every slider step.
 	$effect(() => {
@@ -163,6 +179,7 @@
 	void load();
 
 	// The real season keeps its stats and photo; only the finish is forced per column.
+	const eraPick = (era: CardEra) => (values.eras as Record<CardEra, { holo: HoloPattern; plate: FoilPlate; scale: number; tone: number; stain: number }>)[era];
 	const withFinish = (model: CardViewModel, finish: Finish): CardViewModel => ({ ...model, fin: materialFor(finish) });
 </script>
 
@@ -179,12 +196,12 @@
 				{#each rows as row (row.era)}
 					<b class="era">{row.era}</b>
 					{#each finishes as column (column.finish)}
-						<div class="frame"><Card s={withFinish(row.model, column.finish)} interactive idle={values.layout.drift} onDetails={() => {}} /></div>
+						<div class="frame"><Card s={withFinish(row.model, column.finish)} film={eraPick(row.era).holo} plate={eraPick(row.era).plate} plateTuning={{ scale: eraPick(row.era).scale, tone: eraPick(row.era).tone, stain: eraPick(row.era).stain }} interactive idle={values.layout.drift} onDetails={() => {}} /></div>
 					{/each}
 				{/each}
 			</div>
 		{/key}
-		<details class="settings"><summary>Current settings</summary><pre>{JSON.stringify({ nameProfile, ...tuning, ringWidth: values.edge.ringWidth, ...light, holoPattern: values.foil.holoPattern, foilMode: values.foil.foilMode }, null, 1)}</pre></details>
+		<details class="settings"><summary>Current settings</summary><pre>{JSON.stringify({ nameProfile, ...tuning, ringWidth: values.edge.ringWidth, ...light, holoPattern: values.foil.holoPattern, foilMode: values.foil.foilMode, foilPlate: values.foil.foilPlate, eras: values.eras }, null, 1)}</pre></details>
 	{/if}
 </StoryFrame>
 

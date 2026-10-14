@@ -525,7 +525,7 @@ export function buildSurfaceMap(root: HTMLElement, tier: Finish, era: CardEra, s
 	const tuning = { ...DEFAULT_TUNING, ...options.tuning };
 	const ink = surfaceFor('ink', tier, stock, tuning);
 	for (const leaf of textLeaves(root)) if (!leaf.closest('[data-surface]')) paintText(painter, leaf, ink);
-	// The card's edge (ring, corners, keylines) is stamped over the print, except bands a template marks
+	// The card's edge (ring and keylines) is stamped over the print, except bands a template marks
 	// `data-over-edge`, such as a rail along the card's side, which print over the edge with everything in them.
 	const tagged = [...root.querySelectorAll<HTMLElement | SVGElement>('[data-surface]')];
 	const edge = (element: Element) => element.closest('[data-layer="material"]') !== null;
@@ -542,8 +542,6 @@ export function buildSurfaceMap(root: HTMLElement, tier: Finish, era: CardEra, s
 		if (!(element instanceof HTMLElement)) continue;
 		// Foil stickers are cut from metallic vinyl.
 		if (kind === 'sticker' && element.dataset.foil) Object.assign(surface, { metal: 1, iridescence: element.dataset.foil === 'gem' ? 1 : 0 });
-		// Corner protectors are separate metal pieces set on top of the ring, so they stand proud of it.
-		if (element.dataset.surfaceShape === 'corner') surface.height += CORNER_LIFT;
 		paintElement(painter, element, surface, stock, tuning, kind === 'name' ? options.nameProfile : undefined, kind === 'name' ? tuning.nameSoftness : 0);
 	}
 	const data = new Uint8Array(width * height * 4);
@@ -556,8 +554,6 @@ export function buildSurfaceMap(root: HTMLElement, tier: Finish, era: CardEra, s
 	return { width, height, data, ink: printed };
 }
 
-/** How far a corner protector stands above the ring it sits on, in relief units. */
-const CORNER_LIFT = 0.6;
 /** The card's corner radius and edge bevel, as fractions of its width (1.8cqw and 1.5cqw). */
 const CARD_RADIUS = 0.018;
 const BEVEL_WIDTH = 0.015;

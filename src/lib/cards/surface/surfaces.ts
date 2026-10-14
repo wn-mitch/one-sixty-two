@@ -10,7 +10,7 @@ import type { CardEra } from '../view-model.ts';
  * - `mark`: the team mark.
  * - `frame`: bands, keylines and borders pressed into the stock.
  * - `photo`: the photo window.
- * - `ring`: the card's edge: a finish frame or corner protector from the material layer, or a Gem photo ring.
+ * - `ring`: the card's edge: a finish frame from the material layer, or a Gem photo ring.
  * - `sticker`: a die-cut vinyl sticker.
  * - `team`: the club name lettering.
  * - `brand`: the 162-0 mark, foil-stamped on every card in the card's foil (silver on Base).

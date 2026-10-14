@@ -16,12 +16,6 @@
 	const GOLD_FOIL = 'linear-gradient(115deg, #9a6c22 0%, #f7df9a 15%, #c4953a 29%, #fff3c8 43%, #b5832d 57%, #f2d58a 73%, #8f6420 100%)';
 	/** A tagged shape's CSS paint, or nothing when the light canvas prints it. */
 	const fill = (css: string) => paint ? css : '';
-	const corners = [
-		{ at: 'left', edge: 'top', turn: 0 },
-		{ at: 'right', edge: 'top', turn: 90 },
-		{ at: 'right', edge: 'bottom', turn: 180 },
-		{ at: 'left', edge: 'bottom', turn: 270 }
-	];
 	const silver = $derived(s.fin.foil && !s.fin.emboss);
 	const gold = $derived(s.fin.emboss && !s.fin.gem);
 	const gem = $derived(s.fin.gem);
@@ -36,7 +30,7 @@
 		<div data-layer="material.slab" style="position:absolute; inset:0; border-radius:1.8cqw; background:#a9a397; opacity:var(--depth, 1);"></div>
 	</div>
 {:else}
-	<div class="material-root" data-layer="material" data-finish={s.fin.tier} style="container-type:inline-size; position:absolute; inset:0; pointer-events:none; border-radius:1.8cqw; --k:var(--finish-ring, 1);">
+	<div class="material-root" data-layer="material" data-finish={s.fin.tier} style="container-type:inline-size; position:absolute; inset:0; pointer-events:none; border-radius:1.8cqw; --k:calc(var(--finish-ring, 1) * var(--rim-era, 1));">
 		{#if paint}
 			<div data-layer="material.face-bevel" style="position:absolute; inset:0; border-radius:1.8cqw; box-shadow:inset calc(var(--lx) * -0.5cqw) calc(var(--ly) * -0.5cqw) 0.4cqw -0.1cqw rgba(255,255,255,0.35), inset calc(var(--lx) * 0.5cqw) calc(var(--ly) * 0.5cqw) 0.5cqw -0.1cqw rgba(0,0,0,0.35);"></div>
 		{/if}
@@ -59,10 +53,6 @@
 				<div data-layer="material.gold-bevel-out" style="position:absolute; inset:0; border-radius:1.8cqw; box-shadow:inset calc(var(--lx) * -0.7cqw) calc(var(--ly) * -0.7cqw) 0.5cqw -0.1cqw rgba(255,248,220,0.8), inset calc(var(--lx) * 0.7cqw) calc(var(--ly) * 0.7cqw) 0.5cqw -0.1cqw rgba(60,35,0,0.55); "></div>
 			{/if}
 			<div data-layer="material.gold-bevel-in" data-surface="frame" data-surface-shape="frame" style={`position:absolute; inset:calc(var(--k) * 2cqw - 0.3cqw) calc(var(--k) * 2cqw - 0.3cqw) calc(var(--k) * 2cqw - 0.3cqw) calc(var(--rim-left, 0px) + var(--k) * 2cqw - 0.3cqw); box-sizing:border-box; border:0.3cqw solid ${paint ? '#7a5216' : 'transparent'}; border-radius:0.9cqw; ${fill('box-shadow:calc(var(--lx) * 0.5cqw) calc(var(--ly) * 0.5cqw) 0.5cqw rgba(0,0,0,0.45);')}`}></div>
-			<!-- Corner protectors: raised foil pieces. The shape attribute keeps them in the surface map without a CSS fill. -->
-			{#each corners as corner (corner.turn)}
-				<div data-layer="material.gold-corner" data-surface="ring" data-surface-shape="corner" style={`position:absolute; ${corner.at}:calc(${corner.at === 'left' ? 'var(--rim-left, 0px) + ' : ''}var(--k) * 0.35cqw); ${corner.edge}:calc(var(--k) * 0.35cqw); width:calc(var(--k) * 6cqw); height:calc(var(--k) * 6cqw); transform:rotate(${corner.turn}deg); clip-path:polygon(0 0, 100% 0, 100% 26%, 26% 26%, 26% 100%, 0 100%); border-radius:1.2cqw 0 0 0; ${fill(`background:${GOLD_FOIL} var(--mx) var(--my) / 400% 400%; filter:drop-shadow(calc(var(--lx) * -0.25cqw) calc(var(--ly) * -0.25cqw) 0 rgba(255,255,255,0.6)) drop-shadow(calc(var(--lx) * 0.3cqw) calc(var(--ly) * 0.3cqw) 0.2cqw rgba(0,0,0,0.45));`)}`}></div>
-			{/each}
 			{#if paint}
 				<div data-layer="material.gold-sheen" style="position:absolute; inset:0; background:linear-gradient(115deg, rgba(255,230,150,0) 36%, rgba(255,236,170,0.7) 48%, rgba(255,230,150,0) 60%) var(--mx) 0 / 260% 100% no-repeat; opacity:calc(var(--lift) * 0.45 * var(--k)); "></div>
 			{/if}
@@ -115,6 +105,5 @@
 	.material-root [data-layer='material.prism-facets'] { z-index: 42; }
 	.material-root [data-layer='material.gem-lenticular'] { z-index: 45; }
 	.material-root [data-layer='material.gem-bevel'] { z-index: 46; }
-	.material-root [data-layer='material.gold-corner'] { z-index: 70; }
 	.material-root [data-layer='material.gem-spark'] { z-index: 100; }
 </style>

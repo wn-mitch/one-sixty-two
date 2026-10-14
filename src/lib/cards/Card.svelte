@@ -7,6 +7,8 @@
  import { CardLight, LightEngine, lightCanvas } from './surface/card-light.ts';
  import { GEM_RING } from './finish.ts';
  import type { ReliefProfile } from './surface/surfaces.ts';
+ import type { HoloPattern } from './surface/light-renderer.ts';
+ import type { FoilPlate, PlateTuning } from './surface/foil-plates.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import Front1950s from './fronts/Front1950s.svelte';
  import Front1960s from './fronts/Front1960s.svelte';
@@ -39,6 +41,9 @@
   wall = false,
   scene = false,
   nameProfile,
+  film,
+  plate,
+  plateTuning,
   capture = false,
   stickers,
   freshStickers,
@@ -55,6 +60,10 @@
   scene?: boolean;
   /** How a raised name is shaped under the WebGL light; the renderer's default when unset. */
   nameProfile?: ReliefProfile;
+  /** Prints this holo film and presses this foil plate, tuned so, instead of the era's, for the finish workshop. */
+  film?: HoloPattern;
+  plate?: FoilPlate;
+  plateTuning?: PlateTuning;
   capture?: boolean;
   /** Overrides the collection's stickers for this card, e.g. while they are being arranged. */
   stickers?: readonly PlacedSticker[];
@@ -87,6 +96,9 @@
  data-face={face}
  data-finish={s.fin.tier}
  data-identity={`${s.full}|${s.year}|${s.team}|${s.pos}`}
+ data-film={film}
+ data-plate={plate}
+ data-plate-tuning={plateTuning && `${plateTuning.scale},${plateTuning.tone},${plateTuning.stain}`}
  data-thumbnail={thumbnail}
  data-interactive={interactive}
  data-compact={compact}
@@ -125,6 +137,11 @@
  .light:global([data-presented]) { opacity: 1; }
  /* The photo window's bevel is a light effect; a shaded card presses the window into the surface map instead. */
  .card[data-shaded='true'] :global([data-layer='material.photo-bevel']) { display: none; }
+ /* Each era's finish rim is as wide as its layout allows, up to 3.2cqw, so the foil has room without crowding print. */
+ .card[data-card='1960s'] { --rim-era: 1.6; }
+ .card[data-card='1970s'], .card[data-card='2000s'], .card[data-card='2010s'], .card[data-card='2020s'] { --rim-era: 1.5; }
+ .card[data-card='1980s'] { --rim-era: 1.4; }
+ .card[data-card='1990s'] { --rim-era: 1.3; }
  /* The 2000s rail is the card's left edge, so the finish rim starts at its inner side. */
  .card[data-card='2000s'] { --rim-left: 10cqw; --rim-left-radius: 0; }
  .card[data-compact='true'] { min-width: 72px; }

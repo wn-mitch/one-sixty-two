@@ -525,7 +525,8 @@ test.describe('Draft board field sheet', () => {
 		await page.locator('.field-panel').getByRole('button', { name: 'Draft at 2B', exact: true }).click();
 		await expect(page.locator('dialog.error-dialog[open]')).toContainText('Example draft confirmation failed');
 		const settled = await page.locator('.candidates').evaluate(root => ({
-			running: root.getAnimations({ subtree: true }).length,
+			// A card's light canvas fades in on its own first frame, whenever that lands; only the grid's motion counts.
+			running: root.getAnimations({ subtree: true }).filter(animation => !(animation.effect as KeyframeEffect | null)?.target?.matches('canvas.light')).length,
 			opacity: getComputedStyle(root).opacity,
 			card: getComputedStyle(root.querySelector('[data-candidate-group]')!).opacity,
 			inert: root.closest('.draft-browser')!.hasAttribute('inert')

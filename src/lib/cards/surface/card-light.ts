@@ -1,5 +1,6 @@
 import type { Finish } from '../finish.ts';
-import { LightRenderer, type LightOptions } from './light-renderer.ts';
+import type { FoilPlate, PlateTuning } from './foil-plates.ts';
+import { LightRenderer, type HoloPattern, type LightOptions } from './light-renderer.ts';
 import { SurfaceMapQueue } from './map-queue.ts';
 import { stableUnit } from '../stable-unit.ts';
 import type { SurfaceMapOptions } from './surface-map.ts';
@@ -228,6 +229,9 @@ export class LightEngine {
 			...light.state,
 			tier: (light.card?.dataset.finish ?? 'base') as Finish,
 			era: light.card?.dataset.card as CardEra | undefined,
+			film: light.card?.dataset.film as HoloPattern | undefined,
+			plate: light.card?.dataset.plate as FoilPlate | undefined,
+			plateTuning: plateTuning(light.card?.dataset.plateTuning),
 			pattern: stableUnit(light.card?.dataset.identity ?? '', 41)
 		}], this.#options);
 		const source = this.#renderer.canvas;
@@ -246,6 +250,12 @@ export class LightEngine {
 		context.clearRect(0, 0, canvas.width, canvas.height);
 		context.drawImage(source as HTMLCanvasElement, 0, 0);
 	}
+}
+
+/** A card's `data-plate-tuning` ("scale,tone,stain"), or undefined to use its era's. */
+function plateTuning(value: string | undefined): PlateTuning | undefined {
+	const [scale, tone, stain] = (value ?? '').split(',').map(Number);
+	return value && [scale, tone, stain].every(Number.isFinite) ? { scale: scale!, tone: tone!, stain: stain! } : undefined;
 }
 
 /** Svelte action for the light canvas inside a card: `<canvas use:lightCanvas={light}>`. */
