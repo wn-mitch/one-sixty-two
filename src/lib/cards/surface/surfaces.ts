@@ -74,7 +74,7 @@ export interface SurfaceTuning {
 export const DEFAULT_TUNING: Readonly<SurfaceTuning> = {
 	markFoil: 'emboss', markMetal: 0.4, inkDepth: 1,
 	nameHeight: 1, nameSoftness: 0,
-	ringHeight: 1, ringMetal: 1, ringHolo: 1, gemRingMetal: 1
+	ringHeight: 0.3, ringMetal: 1, ringHolo: 1, gemRingMetal: 1
 };
 
 /** The card stock an era was printed on: uncoated fiber, then matte, glossy UV, and chrome. */

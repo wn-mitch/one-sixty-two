@@ -65,12 +65,6 @@ export interface LightOptions {
 	paper?: number;
 }
 
-const DEFAULT_RELIEF = 6;
-const DEFAULT_LIGHT_HEIGHT = 3.2;
-const DEFAULT_GLARE = 0.12;
-const DEFAULT_SHINE = 1;
-const DEFAULT_FOIL = 0.85;
-const DEFAULT_COAT = 0.35;
 /** Holo film patterns, in the order the shader numbers them. */
 export const HOLO_PATTERNS = ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence'] as const;
 export type HoloPattern = (typeof HOLO_PATTERNS)[number];
@@ -83,14 +77,14 @@ export const ERA_HOLO: Readonly<Record<CardEra, HoloPattern>> = {
 	'1950s': 'atomic', '1960s': 'geodesic', '1970s': 'mojo', '1980s': 'xfractor',
 	'1990s': 'circuit', '2000s': 'hgh', '2010s': 'prizm', '2020s': 'dollar'
 };
-/** -1 lets each card's era choose. */
-const DEFAULT_HOLO_PATTERN = -1;
-const DEFAULT_HOLO_SCALE = 9;
-const DEFAULT_WAVES = 1;
-const DEFAULT_BRUSH = 0.6;
-const DEFAULT_FOIL_MODE = 1;
-const DEFAULT_SHIFT = 3;
-const DEFAULT_PAPER = 1;
+/** The shipped light, used for every option a scene leaves unset; the finish gallery opens on it. */
+export const DEFAULT_LIGHT: Readonly<Required<LightOptions>> = {
+	relief: 6, lightHeight: 7.6, glare: 0.13, shine: 2.2, foil: 1, coat: 0.35,
+	// -1 lets each card's era choose its film.
+	holoPattern: -1, holoScale: 8, waves: 3, brush: 0.6,
+	// 1 is colour-over: foil takes the tint of the ink it covers.
+	foilMode: 1, shift: 8.5, paper: 1
+};
 type LightCanvas = HTMLCanvasElement | OffscreenCanvas;
 
 const TIER_CODE: Record<Finish, number> = { base: 0, foil: 1, emboss: 2, gem: 3 };
@@ -928,20 +922,20 @@ export class LightRenderer {
 		gl.useProgram(resources.program);
 		gl.uniform2f(resources.uniforms.resolution, this.#width, this.#height);
 		gl.uniform1f(resources.uniforms.texel, 1 / this.#atlasSize);
-		gl.uniform1f(resources.uniforms.relief, options.relief ?? DEFAULT_RELIEF);
-		gl.uniform1f(resources.uniforms.lightHeight, options.lightHeight ?? DEFAULT_LIGHT_HEIGHT);
-		gl.uniform1f(resources.uniforms.glare, options.glare ?? DEFAULT_GLARE);
-		gl.uniform1f(resources.uniforms.shine, options.shine ?? DEFAULT_SHINE);
-		gl.uniform1f(resources.uniforms.foil, options.foil ?? DEFAULT_FOIL);
-		gl.uniform1f(resources.uniforms.coat, options.coat ?? DEFAULT_COAT);
-		gl.uniform1f(resources.uniforms.holoPattern, options.holoPattern ?? DEFAULT_HOLO_PATTERN);
-		gl.uniform1f(resources.uniforms.holoScale, options.holoScale ?? DEFAULT_HOLO_SCALE);
-		gl.uniform1f(resources.uniforms.waves, options.waves ?? DEFAULT_WAVES);
-		gl.uniform1f(resources.uniforms.brush, options.brush ?? DEFAULT_BRUSH);
-		gl.uniform1f(resources.uniforms.foilMode, options.foilMode ?? DEFAULT_FOIL_MODE);
-		gl.uniform1f(resources.uniforms.shift, options.shift ?? DEFAULT_SHIFT);
+		gl.uniform1f(resources.uniforms.relief, options.relief ?? DEFAULT_LIGHT.relief);
+		gl.uniform1f(resources.uniforms.lightHeight, options.lightHeight ?? DEFAULT_LIGHT.lightHeight);
+		gl.uniform1f(resources.uniforms.glare, options.glare ?? DEFAULT_LIGHT.glare);
+		gl.uniform1f(resources.uniforms.shine, options.shine ?? DEFAULT_LIGHT.shine);
+		gl.uniform1f(resources.uniforms.foil, options.foil ?? DEFAULT_LIGHT.foil);
+		gl.uniform1f(resources.uniforms.coat, options.coat ?? DEFAULT_LIGHT.coat);
+		gl.uniform1f(resources.uniforms.holoPattern, options.holoPattern ?? DEFAULT_LIGHT.holoPattern);
+		gl.uniform1f(resources.uniforms.holoScale, options.holoScale ?? DEFAULT_LIGHT.holoScale);
+		gl.uniform1f(resources.uniforms.waves, options.waves ?? DEFAULT_LIGHT.waves);
+		gl.uniform1f(resources.uniforms.brush, options.brush ?? DEFAULT_LIGHT.brush);
+		gl.uniform1f(resources.uniforms.foilMode, options.foilMode ?? DEFAULT_LIGHT.foilMode);
+		gl.uniform1f(resources.uniforms.shift, options.shift ?? DEFAULT_LIGHT.shift);
 		gl.uniform1f(resources.uniforms.time, performance.now() / 1000 % 3600);
-		gl.uniform1f(resources.uniforms.paper, options.paper ?? DEFAULT_PAPER);
+		gl.uniform1f(resources.uniforms.paper, options.paper ?? DEFAULT_LIGHT.paper);
 		gl.activeTexture(gl.TEXTURE1);
 		gl.bindTexture(gl.TEXTURE_2D, resources.inkAtlas);
 		gl.activeTexture(gl.TEXTURE0);

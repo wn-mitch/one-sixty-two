@@ -17,6 +17,7 @@
 	import Card from '#lib/cards/Card.svelte';
 	import { materialFor, type Finish } from '#lib/cards/finish.ts';
 	import { LightEngine } from '#lib/cards/surface/card-light.ts';
+	import { DEFAULT_LIGHT } from '#lib/cards/surface/light-renderer.ts';
 	import { DEFAULT_TUNING, RELIEF_PROFILES, STOCKS, type ReliefProfile, type Stock, type SurfaceTuning } from '#lib/cards/surface/surfaces.ts';
 	import { createCardViewModel, type CardEra, type CardViewModel } from '#lib/cards/view-model.ts';
 	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
@@ -43,16 +44,14 @@
 		{ finish: 'gem', label: 'Gem' }
 	];
 	let props: FinishGalleryProps = $props();
-	// The gallery opens on the tuned look being evaluated; the shipped defaults live in surfaces.ts and light-renderer.ts.
+	// The gallery opens on the shipped look (surfaces.ts and light-renderer.ts), so what it shows is what the game draws.
 	const start = untrack(() => ({
 		...DEFAULT_TUNING,
-		width: 310, drift: true,
-		relief: 6, lightHeight: 7.6, glare: 0.13, shine: 2.2, coat: 0.35, paper: 1, stock: 'era' as Stock | 'era',
-		foil: 1, holoPattern: 'era' as HoloChoice, holoScale: 8, waves: 3, brush: 0.6, foilMode: 'colour-over' as FoilMode, shift: 8.5,
-		ringWidth: 1, ringHeight: 0.3, ringMetal: 1, gemRingMetal: 1, ringHolo: 1,
-		nameProfile: 'pillow' as ReliefProfile, nameHeight: 1, nameSoftness: 0,
-		markFoil: 'emboss' as SurfaceTuning['markFoil'], markMetal: 0.4,
-		inkDepth: 1,
+		...DEFAULT_LIGHT,
+		width: 310, drift: true, stock: 'era' as Stock | 'era', ringWidth: 1,
+		holoPattern: (HOLO_PATTERNS[DEFAULT_LIGHT.holoPattern] ?? 'era') as HoloChoice,
+		foilMode: FOIL_MODES[DEFAULT_LIGHT.foilMode],
+		nameProfile: 'pillow' as ReliefProfile,
 		...props
 	}));
 	type Range = [number, number, number, number];
