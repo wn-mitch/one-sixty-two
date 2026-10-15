@@ -3,6 +3,7 @@
 	import { appSettings, PLAYBACK_SPEEDS } from '#lib/game/settings.svelte.ts';
 	import { deviceTilt, type DeviceTiltState } from '#lib/cards/device-tilt.ts';
 
+	let { showTrigger = true }: { showTrigger?: boolean } = $props();
 	let dialog = $state<HTMLDialogElement>();
 	let trigger = $state<HTMLButtonElement>();
 	let ready = $state(false);
@@ -52,6 +53,13 @@
 		dialog.showModal();
 	}
 
+	/** Opens the dialog from another control, such as the site menu; focus returns to `returnTo` on close. */
+	export function open(returnTo?: HTMLElement): void {
+		returnFocus = returnTo ?? null;
+		openSettings();
+	}
+	let returnFocus: HTMLElement | null = null;
+
 	function closeSettings(): void {
 		dialog?.close();
 	}
@@ -61,12 +69,13 @@
 	}
 
 	function restoreFocus(): void {
-		trigger?.focus({ preventScroll: true });
+		(returnFocus ?? trigger)?.focus({ preventScroll: true });
+		returnFocus = null;
 	}
 </script>
 
 <div data-app-settings>
-	<button
+	{#if showTrigger}<button
 		bind:this={trigger}
 		type="button"
 		class="settings-trigger"
@@ -75,7 +84,7 @@
 		onclick={openSettings}
 	>
 		Settings
-	</button>
+	</button>{/if}
 
 	<dialog
 		bind:this={dialog}

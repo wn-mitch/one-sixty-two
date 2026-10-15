@@ -220,7 +220,7 @@
 	@media (max-width: 47.999rem) {
 		.wall-stage {
 			inset: 0 0 auto;
-			height: 300px;
+			height: 190px;
 		}
 		.wall-grid {
 			left: -30%;
@@ -238,7 +238,7 @@
 		.horizontal-scrim,
 		.top-scrim { display: none; }
 		.bottom-scrim {
-			height: 120px;
+			height: 90px;
 			background: linear-gradient(0deg, var(--background) 10%, oklch(16% .009 255 / 0));
 		}
 		.logo-strip {

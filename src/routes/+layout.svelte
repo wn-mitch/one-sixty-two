@@ -3,7 +3,8 @@
 	import './layout.css';
 	import '../lib/cards/fonts.css';
 	import favicon from '#lib/assets/favicon.svg';
-	import Settings from '#lib/components/Settings.svelte';
+	import SiteMenu from '#lib/components/SiteMenu.svelte';
+	import { showsExternalSupport } from '#lib/app/host.ts';
 	import Toaster from '#lib/components/Toaster.svelte';
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
 	import { refreshStickers } from '#lib/collection/store.svelte.ts';
@@ -15,16 +16,19 @@
 	let { children }: LayoutProps = $props();
 	const sitePreview = sitePreviewImage();
 	const destinations = [
-		{ href: '/', label: 'Play' }, { href: '/seasons', label: 'Team gallery' },
-		{ href: '/collection', label: 'Collection' },
-		{ href: '/shop', label: 'Shop' }
+		{ href: '/', label: 'Play' }, { href: '/seasons', label: 'My teams' },
+		{ href: '/collection', label: 'Collection' }
 	];
+	const balance = $derived(shopState.snapshot?.balance ?? null);
+	// The iOS app marks itself before the page runs; the website alone shows the external support link.
+	let externalSupport = $state(false);
 	const playing = $derived(['/', '/classic', '/draft'].includes(page.url.pathname) || /^\/(r|c)\//.test(page.url.pathname));
 	// Roster links (/r, /c) set their own preview from the published season image.
 	const rosterLink = $derived(/^\/(r|c)\//.test(page.url.pathname));
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
 
 	onMount(() => {
+		externalSupport = showsExternalSupport();
 		void refreshStickers();
 		void refreshShop();
 	});
@@ -92,12 +96,11 @@
 			{/each}
 		</nav>
 		<nav class="site-actions" aria-label="Site controls">
-			<a class="wallet-link" href="/shop" title={shopState.snapshot ? `Shop: ${shopState.snapshot.balance} unlock ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop: unlock token balance unavailable'}>
-				<span class="sr-only">{shopState.snapshot ? 'Shop:' : 'Shop: balance unavailable,'}</span>
-				<TokenAmount amount={shopState.snapshot?.balance ?? null} />
+			<a class="shop-link" href="/shop" aria-current={page.url.pathname === '/shop' ? 'page' : undefined}
+				aria-label={balance === null ? 'Shop' : `Shop, ${balance} ${balance === 1 ? 'token' : 'tokens'}`}>
+				<span>Shop</span><span class="shop-balance" aria-hidden="true"><TokenAmount amount={balance} /></span>
 			</a>
-			<Settings />
-			<a class="rules-link" href="/about" aria-label="Rules & model">Rules<span class="rules-model"> &amp; model</span></a>
+			<SiteMenu />
 		</nav>
 	</header>
 	{@render children()}
@@ -108,10 +111,9 @@
 				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/about#attribution">Full attribution &amp; data download</a>. <a href="/about#image-credits">Image credits</a>.</p>
 		</div>
 		<div class="footer-links">
-			<a class="kofi-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer">
-				<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M7.5 4.5 15 3.2l2.6 14.8"/><rect x="4" y="6" width="11" height="15" rx="1.5" fill="currentColor"/><path fill="var(--background)" d="m9.5 10 1.1 2.4 2.4 1.1-2.4 1.1-1.1 2.4-1.1-2.4L6 13.5l2.4-1.1Z"/></svg>
-				Buy me a card pack
-			</a>
+			{#if externalSupport}
+				<a class="support-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer">Support the developer <span aria-hidden="true">↗</span></a>
+			{/if}
 			<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
 		</div>
 	</footer>
@@ -152,9 +154,10 @@
 	.wordmark { flex: none; color: var(--text); text-decoration: none; font-size: var(--text-xl) !important; font-weight: 850; letter-spacing: -.04em; gap: var(--space-3); }
 	.mark { width: .75rem; height: .75rem; border: 2px solid var(--text); transform: rotate(45deg); }
 	.site-actions { position: relative; display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
-	.wallet-link { display: inline-flex; min-width: 2.75rem; min-height: 2.75rem; align-items: center; justify-content: center; padding-inline: var(--space-2); border-radius: var(--radius); color: var(--accent); font-size: var(--text-sm); font-weight: 750; text-decoration: none; }
-	.wallet-link:hover { color: var(--accent-hover); background: var(--surface); }
-	.primary-nav { order: 3; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; gap: var(--space-1); padding-block: var(--space-1); }
+	.shop-link { display: inline-flex; min-height: 2.75rem; align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: 650 var(--text-sm)/1 var(--font-control); text-decoration: none; white-space: nowrap; }
+	.shop-link:hover, .shop-link[aria-current='page'] { border-color: var(--accent); background: var(--surface); }
+	.shop-balance { color: var(--accent); font-weight: 750; }
+	.primary-nav { order: 3; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: var(--space-1); padding-block: var(--space-1); }
 	.primary-nav a { display: flex; align-items: center; justify-content: center; min-height: 3rem; padding: var(--space-2) var(--space-1); border-radius: var(--radius); color: var(--muted); font: 650 1rem/1.2 var(--font-control); text-align: center; text-decoration: none; }
 	.primary-nav a:hover { background: var(--surface); color: var(--text); }
 	.primary-nav a[aria-current='page'] { color: var(--accent); background: var(--surface); }
@@ -163,14 +166,11 @@
 		.primary-nav { order: 0; display: flex; width: auto; }
 		.primary-nav a { padding-inline: var(--space-3); }
 	}
-	.rules-link { min-height: 2.75rem; display: inline-flex; align-items: center; padding-inline: var(--space-3); border-radius: var(--radius); color: var(--muted); font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-	.rules-link:hover { color: var(--text); background: var(--surface); }
 	@media (max-width: 30rem) {
 		.site-header { column-gap: var(--space-2); }
 		.wordmark { gap: var(--space-2); }
-		.wallet-link, .rules-link { padding-inline: var(--space-2); }
-		.rules-model { display: none; }
-		.site-actions :global(.settings-trigger) { padding-inline: var(--space-2); }
+		.shop-link { padding-inline: var(--space-2); }
+		.site-actions :global(.menu-trigger) { padding-inline: var(--space-2); }
 		.primary-nav a { font-size: var(--text-sm); }
 	}
 	/* Home deals cards behind the header: no rule cutting across them, and a fade keeps the links legible. */
@@ -200,23 +200,8 @@
 	}
 	.studio-link span:first-child { color: var(--muted); font-weight: 500; }
 	.footer-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-6); }
-	.kofi-link {
-		display: inline-flex;
-		min-height: 2.75rem;
-		align-items: center;
-		gap: var(--space-2);
-		padding: 0 var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		color: var(--text);
-		font-size: .8125rem;
-		font-weight: 650;
-		text-decoration: none;
-		white-space: nowrap;
-		transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out);
-	}
-	.kofi-link svg { flex: none; color: var(--accent); }
-	.kofi-link:hover { border-color: var(--accent); background: var(--surface); }
+	.support-link { display: inline-flex; min-height: 2.75rem; align-items: center; gap: var(--space-1); color: var(--muted); font-size: .8125rem; font-weight: 650; }
+	.support-link:hover { color: var(--text); }
 	@media (min-width: 48rem) {
 		footer { display: flex; justify-content: space-between; align-items: center; gap: var(--space-12); }
 	}
@@ -236,6 +221,5 @@
 	@media (max-width: 23rem) {
 		.site-header { gap: var(--space-2); }
 		.site-actions { gap: var(--space-1); }
-		.rules-link { font-size: var(--text-xs); }
 	}
 </style>

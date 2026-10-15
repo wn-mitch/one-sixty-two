@@ -1,6 +1,6 @@
 import { replayInput } from './draft.ts';
 import { collectionStatements } from '../collection/collection.ts';
-import { completionReward } from '../cosmetics/ledger.ts';
+import { completionReward, firstSeasonBonus } from '../cosmetics/ledger.ts';
 import { seasonEntries, seasonStatements, type CardRow, type SeasonRow } from '../storage/season-rows.ts';
 import type { Db } from '../storage/sql.ts';
 import { decodeReplay, encodeReplay } from './share.ts';
@@ -148,14 +148,14 @@ export function libraryEntry(key: string, savedAt: string, draft: Draft, result:
  };
 }
 
-/** Saves an own season and its completion reward atomically; revisits keep the first save and reward. */
+/** Saves an own season and its completion reward (plus a device's one-time first-season bonus) atomically; revisits keep the first save and reward. */
 export async function saveSeason(db: Db, draft: Draft, result: SeasonResult, profiles: readonly Profile[], manifest: Manifest, now = new Date()): Promise<string | null> {
  try {
   const key = await libraryKey(draft);
   const entry = libraryEntry(key, now.toISOString(), draft, result, profiles, manifest);
   const stamp = now.toISOString();
   const complete = Number.isInteger(result.wins) && Number.isInteger(result.losses) && result.wins >= 0 && result.losses >= 0 && result.wins + result.losses === 162;
-  await db.run([...seasonStatements(entry, stamp), ...collectionStatements(entry, stamp), ...(complete ? completionReward(`classic:${key}`, stamp) : [])]);
+  await db.run([...seasonStatements(entry, stamp), ...collectionStatements(entry, stamp), ...(complete ? [...firstSeasonBonus(stamp), ...completionReward(`classic:${key}`, stamp)] : [])]);
   return null;
  } catch { return STORAGE_NOTICE; }
 }

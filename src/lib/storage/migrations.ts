@@ -265,6 +265,38 @@ export const MIGRATIONS: readonly Migration[] = [
      json_type(season_json, '$.chapters') = 'array' AND json_array_length(season_json, '$.chapters') >= 6
      ELSE 0 END`);
   }
+ },
+ {
+  version: 10,
+  up(db) {
+   // Colorways become their own unlocks; an owned row records what it cost.
+   exec(db, "ALTER TABLE shop_owned ADD COLUMN cost INTEGER NOT NULL DEFAULT 1 CHECK (typeof(cost) = 'integer' AND cost >= 0)");
+   exec(db, 'DROP TRIGGER shop_purchase_balance');
+   exec(db, `CREATE TRIGGER shop_purchase_balance BEFORE INSERT ON shop_owned
+    WHEN NOT EXISTS (SELECT 1 FROM shop_owned WHERE item_id = NEW.item_id)
+     AND (SELECT COALESCE(SUM(credit), 0) FROM shop_completions) - (SELECT COALESCE(SUM(cost), 0) FROM shop_owned) < NEW.cost
+    BEGIN SELECT RAISE(ABORT, 'Not enough tokens. Complete a new season to earn one.'); END`);
+   // Card factory: one era's finish for one tier, overriding the deck-wide choice. A null item keeps the
+   // era's own plate or holo film, which a colorway can still recolor.
+   exec(db, `CREATE TABLE shop_era_equipped (
+    tier TEXT NOT NULL CHECK (tier IN ('foil', 'emboss', 'gem')),
+    era TEXT NOT NULL CHECK (era IN ('1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s')),
+    item_id TEXT REFERENCES shop_owned (item_id),
+    colorway TEXT,
+    PRIMARY KEY (tier, era),
+    CHECK (tier = 'gem' OR colorway IS NULL)
+   )`);
+   for (const operation of ['INSERT', 'UPDATE']) {
+    exec(db, `CREATE TRIGGER shop_era_owned_${operation.toLowerCase()} BEFORE ${operation} ON shop_era_equipped
+     WHEN NEW.item_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM shop_owned WHERE item_id = NEW.item_id)
+     BEGIN SELECT RAISE(ABORT, 'Unlock this finish before equipping it.'); END`);
+    for (const table of ['shop_equipped', 'shop_era_equipped']) {
+     exec(db, `CREATE TRIGGER ${table}_colorway_${operation.toLowerCase()} BEFORE ${operation} ON ${table}
+      WHEN NEW.colorway IS NOT NULL AND NOT EXISTS (SELECT 1 FROM shop_owned WHERE item_id = 'colorway:' || NEW.colorway)
+      BEGIN SELECT RAISE(ABORT, 'Unlock this colorway before applying it.'); END`);
+    }
+   }
+  }
  }
 ];
 

@@ -254,8 +254,8 @@ export function createResultsModel(input: CreateResultsModelInput): ResultsModel
 
 	const simulatedRaw = internals.map(simulatedStats);
 	const actualRaw = internals.map(card => actualStats(card, rankings));
-	const simulatedViews = rankedViews(internals, simulatedRaw, '162-0 season');
-	const actualViews = rankedViews(internals, actualRaw, 'Actual season');
+	const simulatedViews = rankedViews(internals, simulatedRaw, 'Your simulated season');
+	const actualViews = rankedViews(internals, actualRaw, 'Historical season');
 	const participatingHitters = internals.filter(card => card.role === 'hitter' && hitterParticipated(card.batter!));
 	const participatingPitchers = internals.filter(card => card.role === 'pitcher' && pitcherParticipated(card.pitcher!));
 	const warCandidates = [...participatingHitters, ...participatingPitchers]

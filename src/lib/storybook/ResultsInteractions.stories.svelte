@@ -21,8 +21,8 @@
 			await userEvent.click(inspectable[0]);
 
 			const review = await canvas.findByRole('region', { name: /.+ · \d{4}/ });
-			const simulated = within(review).getByRole('button', { name: '162-0 season' });
-			const actual = within(review).getByRole('button', { name: 'Actual season' });
+			const simulated = within(review).getByRole('button', { name: 'Your simulated season' });
+			const actual = within(review).getByRole('button', { name: 'Historical season' });
 			if (mode === 'actual') await userEvent.click(actual);
 
 			await expect(simulated).toHaveAttribute('aria-pressed', mode === 'simulated' ? 'true' : 'false');
@@ -47,7 +47,7 @@
 />
 
 <Story
-	name="Actual season"
+	name="Historical season"
 	exportName="ActualSeason"
 	play={actualSeasonPlay}
 	{template}

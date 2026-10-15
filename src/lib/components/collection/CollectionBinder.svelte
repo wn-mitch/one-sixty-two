@@ -183,8 +183,8 @@
 {#if !cards.length}
 	<section class="empty">
 		<h2>No cards yet</h2>
-		<p class="muted">Finish a season and every card on that roster joins your collection, with the stickers its season earned.</p>
-		<a class="button" href="/">Start a draft</a>
+		<p class="muted">Finish a season and every card on that roster joins your collection on this device, with the stickers its season earned.</p>
+		<a class="button primary" href="/?build=1">Build my team</a>
 	</section>
 {:else}
 	<div class="summary" id="collection-views">

@@ -5,6 +5,7 @@ import { libraryKey, saveSeason } from './library.ts';
 import { newCards, newStickers, type NewCard, type NewSticker } from '../collection/collection.ts';
 import { refreshStickers } from '../collection/store.svelte.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
+import { grantedReward, type SeasonReward } from '../cosmetics/ledger.ts';
 import { clearCompletedDraft, persistDraft, restoreDraft, RESUME_NOTICE, type Restore, type SavedPhase } from './persistence.ts';
 import { deviceDb } from '../storage/db.ts';
 import { newSeed } from './random.ts';
@@ -61,6 +62,8 @@ export class Session {
  newStickers = $state.raw<NewSticker[]>([]);
  /** Player-seasons this season added to the collection for the first time. */
  newCards = $state.raw<NewCard[]>([]);
+ /** Tokens this season's save granted just now; null until saved, and nothing new on a revisit. */
+ reward = $state.raw<SeasonReward | null>(null);
  nativeShareReady = $state(false);
  imageDownloadFallback = $state(false);
  textCopyFallback = $state(false);
@@ -193,6 +196,8 @@ export class Session {
   this.error = '';
   const epoch = ++this.epoch;
   let resumeSaved = false;
+  // `?build=1` (Build my team from another page) starts a team unless one is in progress, which stays for Resume.
+  let buildRequested = false;
   try {
    const manifest = await loadManifest();
    if (epoch !== this.epoch) return;
@@ -201,6 +206,7 @@ export class Session {
    const classicPath = location.pathname === '/' || location.pathname === '/classic';
    const forceNew = classicPath && new URLSearchParams(location.search).get('new') === '1';
    resumeSaved = classicPath && new URLSearchParams(location.search).get('resume') === '1';
+   buildRequested = classicPath && new URLSearchParams(location.search).get('build') === '1';
    if (forceNew) {
     this.shared = false;
     this.draft = createDraft(manifest, newSeed());
@@ -264,6 +270,7 @@ export class Session {
   } finally { if (epoch === this.epoch) this.loading = false; }
   // `/classic?resume=1` (answering a challenge with the draft in progress) skips the Resume button.
   if (resumeSaved && epoch === this.epoch && this.savedDraft) await this.resume();
+  else if (buildRequested && epoch === this.epoch && !this.savedDraft && this.manifest && !this.error) await this.startNew();
  }
  /** Every completed season of the player's own draft joins the device library; viewed replays do not. */
  private async saveToLibrary(result: SeasonResult, epoch: number): Promise<void> {
@@ -277,6 +284,10 @@ export class Session {
    notice = await saveSeason(db, draft, result, profiles, manifest, now);
    if (!notice) {
     void refreshShop();
+    try {
+     const reward = await grantedReward(db, `classic:${await libraryKey(draft)}`, now.toISOString());
+     if (epoch === this.epoch) this.reward = reward;
+    } catch { /* the reward is saved; only its announcement is lost */ }
     if (this.draft === draft) this.archivedDraft = draft;
     if (this.savedDraft === draft) this.savedDraft = null;
     notice = await clearCompletedDraft(db, draft);
@@ -286,7 +297,7 @@ export class Session {
      if (epoch === this.epoch) { this.newStickers = earned; this.newCards = added; }
      void refreshStickers();
     } catch {
-     notice ??= 'Your season is in the team gallery, but its new collection items could not be loaded.';
+     notice ??= 'Your season is in My teams, but its new collection items could not be loaded.';
     }
    }
   }
@@ -397,6 +408,7 @@ export class Session {
   this.result = null;
   this.newStickers = [];
   this.newCards = [];
+  this.reward = null;
   this.simulationInput = null;
   this.error = '';
   this.incompatible = false;
@@ -540,6 +552,7 @@ export class Session {
   this.result = null;
   this.newStickers = [];
   this.newCards = [];
+  this.reward = null;
   this.skipReveal = matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.save('simulating');
   const epoch = this.epoch;

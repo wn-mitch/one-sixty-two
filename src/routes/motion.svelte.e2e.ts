@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function openSettings(page: Page) {
+	await page.getByRole('button', { name: 'Menu', exact: true }).click();
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Settings' });
 	await expect(dialog).toBeVisible();
@@ -26,7 +27,7 @@ test('opens the native Settings dialog and persists all preferences', async ({ p
 	await cards.click();
 	await dialog.getByRole('button', { name: 'Close settings', exact: true }).click();
 	await expect(dialog).toBeHidden();
-	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+	await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeFocused();
 
 	await page.reload();
 	const restored = await openSettings(page);
@@ -38,11 +39,11 @@ test('opens the native Settings dialog and persists all preferences', async ({ p
 	await expect(restoredSpeed).toBeDisabled();
 	await page.keyboard.press('Escape');
 	await expect(restored).toBeHidden();
-	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+	await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeFocused();
 	await openSettings(page);
 	await page.mouse.click(12, 12);
 	await expect(restored).toBeHidden();
-	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+	await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeFocused();
 });
 
 test('keeps the saved preference under a live reduced-motion override', async ({ page }) => {

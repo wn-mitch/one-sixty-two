@@ -43,14 +43,29 @@
 
 <article class="about">
 	<header class="intro">
-		<a class="back-link" href="/">← Back to the draft</a>
+		<a class="back-link" href="/">← Back to Play</a>
 		<p class="eyebrow">Rules, model, and data</p>
 		<h1>What happens under the hood</h1>
 		<p class="lede">162-0 turns real historical team-seasons into a transparent plate-appearance game. The choices are yours; the approximations are published here.</p>
 		<nav aria-label="About page sections">
-			<a href="#draft">Draft</a><a href="#season">Season</a><a href="#simulation">Simulation</a><a href="#head-to-head">Head-to-head</a><a href="#rankings">Rankings</a><a href="#attribution">Data and licence</a><a href="#image-credits">Image credits</a>
+			<a href="#how-to-play">How to play</a><a href="#draft">Draft</a><a href="#season">Season</a><a href="#simulation">Simulation</a><a href="#head-to-head">Head-to-head</a><a href="#rankings">Rankings</a><a href="#attribution">Data and licence</a><a href="#image-credits">Image credits</a>
 		</nav>
 	</header>
+
+	<section id="how-to-play">
+		<p class="section-number" aria-hidden="true">00</p>
+		<div>
+			<h2>How to play</h2>
+			<ol>
+				<li><strong>Choose a home stadium.</strong> You play 81 of your 162 games there. Its fences, walls and elevation change how far batted balls carry; it has no rating or bonus.</li>
+				<li><strong>Open a pack.</strong> Each pack is one franchise from one decade. Pick one exact player season from it and place him in an open position he qualifies for.</li>
+				<li><strong>Use extra packs wisely.</strong> Twice per draft you can add another franchise pack before picking, then keep one of the open packs. They do not refill.</li>
+				<li><strong>Fill all sixteen spots.</strong> Nine hitters (C, 1B, 2B, 3B, SS, LF, CF, RF, DH), three starters, a closer and three relievers. Position fit matters as much as the numbers on the card.</li>
+				<li><strong>Play the season.</strong> All 162 games are simulated. Your team is saved in My teams and its cards join your Collection.</li>
+				<li><strong>Earn tokens.</strong> Every completed season of your own earns one token, and your first season earns a bonus token. Spend them in the Shop on cosmetic card finishes; they never change statistics or strength.</li>
+			</ol>
+		</div>
+	</section>
 
 	<section id="draft">
 		<p class="section-number" aria-hidden="true">01</p>
@@ -174,12 +189,12 @@
 		<p class="section-number" aria-hidden="true">04</p>
 		<div>
 			<h2>Head-to-head series</h2>
-			<p>Choose two saved decks in the <a href="/seasons">team gallery</a> to play a best-of-five. The gallery also accepts replay links, either short <code>/r/</code> links or inline replay links from this site. Both replays must use the same game version. Each regular season is recomputed first to set seeds: more wins is seed 1. Equal records give seed 1 to the replay whose canonical link sorts first; two identical replays give it to Team A.</p>
+			<p>Choose two saved decks in <a href="/seasons">My teams</a> to play a best-of-five. My teams also accepts replay links, either short <code>/r/</code> links or inline replay links from this site. Both replays must use the same game version. Each regular season is recomputed first to set seeds: more wins is seed 1. Equal records give seed 1 to the replay whose canonical link sorts first; two identical replays give it to Team A.</p>
 			<p>The series follows a 2-2-1 format. Seed 1 hosts games 1, 2, and 5, which fall on calendar days 1, 2, 4, 5, and 7. Each game is played in the host’s chosen home stadium. Rotations cycle through the three drafted starters, and the closer’s rest and workload carry across days under the season rules. The random seed comes from the unordered pair of replay keys, so the same two links always produce the same games in either order (rules <code>h2h-bo5-v1</code>, seed policy <code>replay-pair-v1</code>).</p>
 			<p>Game and series MVP (<code>realized-runs-v1</code>) go to the individual on either team with the highest unrounded batting, baserunning, defense, and pitching runs above neutral. The pooled support bullpen is not a candidate. Ties go to the replay whose canonical link sorts first, then the season ID. Series superlatives (<code>realized-runs-awards-v1</code>) use the same tie rule on one component each: Top bat for batting runs, Ace for pitching runs, Glove for defensive runs, Wheels for baserunning runs, and LVP for the lowest total. Glove and Wheels are left out when no one reaches 0.05 runs. Highlights and lowlights are the largest win-expectancy swings from Team A’s side. A series link carries both replay links and optional team names, and recomputes the series when opened; nothing about a series is stored on the server.</p>
 
 			<h3>Your saved seasons</h3>
-			<p>Every season you complete is saved in this browser, separate from the draft in progress, and kept until you delete it. You can rename or delete a season, choose it for head-to-head in the team gallery, or copy a challenge link, which publishes the replay and copies its short link, or the inline replay link when publishing fails. A season from an older game version stays visible as retired, with its roster and record, but cannot play head-to-head.</p>
+			<p>Every season you complete is saved in this browser, separate from the draft in progress, and kept until you delete it. You can rename or delete a season, choose it for head-to-head in My teams, or copy a challenge link, which publishes the replay and copies its short link, or the inline replay link when publishing fails. A season from an older game version stays visible as retired, with its roster and record, but cannot play head-to-head.</p>
 		</div>
 	</section>
 

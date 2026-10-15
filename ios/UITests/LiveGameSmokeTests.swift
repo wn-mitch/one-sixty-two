@@ -12,7 +12,7 @@ final class LiveGameSmokeTests: XCTestCase {
     @MainActor
     func testLiveDraftStartsAndResumesAfterAppRestart() {
         let app = XCUIApplication()
-        app.launchEnvironment["GAME_URL"] = "https://162-0.dev/draft"
+        app.launchEnvironment["GAME_URL"] = "https://162-0.dev/draft?developer=on"
         app.launch()
         let webView = app.webViews["game-webview"]
         XCTAssertTrue(webView.waitForExistence(timeout: timeout))

@@ -13,6 +13,7 @@
 	import { deviceDb } from '#lib/storage/db.ts';
 	import { copyShareLink, decodeReplay, storeReplay } from '#lib/game/share.ts';
 	import { loadSeriesHistory, type SeriesRecord } from '#lib/game/series-history.ts';
+	import { draftModeEnabled } from '#lib/app/features.ts';
 	import type { Manifest, Profile } from '#lib/game/types.ts';
 
 	let manifest = $state.raw<Manifest | null>(null);
@@ -25,6 +26,10 @@
 	let replay = $state(false);
 	let selectedKeys = $state<string[]>([]);
 	let challenge = $state.raw(new SeriesSession());
+	let developerDraft = $state(false);
+	// A team carried in from a result or a saved selection; the setup then asks only for the opponent.
+	const carried = $derived(replay && !!challenge.clubs['team-a'] && !challenge.clubs['team-b']);
+	const opponents = $derived(entries.filter(entry => entry.status === 'playable' && challenge.clubs['team-a']?.canonical !== `/#replay=${entry.token}`));
 	const TEAMS: SeriesTeamId[] = ['team-a', 'team-b'];
 
 	function newChallenge(): SeriesSession {
@@ -58,6 +63,13 @@
 		const session = newChallenge();
 		replay = true;
 		await session.openHash(false);
+		if (session !== challenge || !replay) return;
+		// A carried team that is also saved here shows its saved record and name.
+		await Promise.all(TEAMS.map(id => {
+			const club = session.clubs[id];
+			const saved = club && !club.entry ? entries.find(entry => entry.status === 'playable' && club.canonical === `/#replay=${entry.token}`) : undefined;
+			return saved ? session.choose(id, saved) : undefined;
+		}));
 		if (session !== challenge || !replay) return;
 		selectedKeys = TEAMS.flatMap(id => {
 			const entry = entries.find(entry => session.clubs[id]?.canonical === `/#replay=${entry.token}`);
@@ -140,6 +152,7 @@
 	}
 
 	onMount(() => {
+		developerDraft = draftModeEnabled();
 		let live = true;
 		const onHash = () => { void restoreChallenge(); };
 		addEventListener('hashchange', onHash);
@@ -161,21 +174,24 @@
 </script>
 
 <svelte:head>
-	<title>{replay ? 'Replay challenge' : 'Team gallery'} | 162-0</title>
-	<meta name="description" content="Inspect saved 162-0 teams, choose two for a best-of-five, or challenge a replay link." />
+	<title>{replay ? 'Head-to-head' : 'My teams'} | 162-0</title>
+	<meta name="description" content="Your completed 162-0 teams, saved on this device. Pick two for a best-of-five, or challenge a replay link." />
 </svelte:head>
 
 <main class="page">
-	<header class="intro"><h1>Team gallery</h1></header>
+	<header class="intro">
+		<h1>My teams</h1>
+		{#if !replay}<p class="muted">Every season you complete is saved here automatically, on this device. Pick two for a head-to-head series.</p>{/if}
+	</header>
 	{#if loading}
 		<p class="muted" role="status">Loading your seasons…</p>
 	{:else if error}
 		<p class="error" role="alert">{error}</p>
 	{:else if replay}
 		<div class="replay-heading">
-			<button class="secondary" onclick={backToGallery}>Back to gallery</button>
-			<h2 id="replay-heading" tabindex="-1">Replay challenge</h2>
-			<p class="muted">Use two replay links, or add an opponent to your selected team. Both seasons replay for seeding.</p>
+			<button class="secondary" onclick={backToGallery}>Back to My teams</button>
+			<h2 id="replay-heading" tabindex="-1">Head-to-head</h2>
+			<p class="muted">{carried ? 'Your team is in. Choose an opponent: one of your saved teams or another replay link.' : 'Choose two teams by replay link. Both seasons replay for seeding.'}</p>
 		</div>
 		<SeriesSetup
 			fields={challenge.fields}
@@ -189,9 +205,19 @@
 			onChange={id => challenge.change(id)}
 			onSubmit={event => void play(event)}
 		/>
+		{#if carried && opponents.length}
+			<section class="opponents" aria-labelledby="opponents-heading">
+				<h3 id="opponents-heading">Or pick one of your saved teams</h3>
+				<ul>
+					{#each opponents as entry (entry.key)}
+						<li><button type="button" class="secondary" disabled={challenge.clubStatus['team-b'] === 'pending'} onclick={() => void challenge.choose('team-b', entry)}>{entry.nickname?.trim() || `${entry.record.wins}–${entry.record.losses}`}{entry.stadium ? ` · ${entry.stadium.name}` : ''}</button></li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 	{:else}
 		<SeasonLibrary {entries} {history} {profiles} {manifest} {status} initialSelection={selectedKeys} onReplay={selected => void useReplay(selected)} onCopy={entry => void copyChallenge(entry)} onRename={rename} onDelete={remove} />
-		{#if manifest}<DraftRunHistory {manifest} />{/if}
+		{#if manifest && developerDraft}<DraftRunHistory {manifest} />{/if}
 	{/if}
 </main>
 
@@ -200,4 +226,8 @@
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
 	.replay-heading { display: grid; justify-items: start; gap: var(--space-3); }
 	.replay-heading h2, .replay-heading p { margin: 0; }
+	.intro { display: grid; gap: var(--space-2); }
+	.intro p { margin: 0; max-width: 60ch; }
+	.opponents h3 { margin: 0 0 var(--space-2); font-size: var(--text-base); }
+	.opponents ul { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 </style>

@@ -179,7 +179,7 @@ describe('device database migrations', () => {
   const tables = ['draft', 'seasons', 'season_cards', 'rostered', 'stickers', 'series'] as const;
   const before = await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)));
   const runs = await db.all('SELECT * FROM draft_runs');
-  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 8, to: 9 });
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 8, to: SCHEMA_VERSION });
   expect(await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)))).toEqual(before);
   expect(await db.all('SELECT * FROM draft_runs')).toEqual(runs.map(run => ({ ...run, resume_state: 'active' })));
   expect(await db.all('SELECT key, credit FROM shop_completions ORDER BY key')).toEqual([
@@ -188,7 +188,7 @@ describe('device database migrations', () => {
    { key: 'classic:rostered-only', credit: 0 },
    { key: 'draft:complete', credit: 0 }
   ]);
-  expect(await readShop(db)).toEqual({ balance: 0, owned: [], equipped: {} });
+  expect(await readShop(db)).toMatchObject({ balance: 0, owned: [], equipped: {} });
   await db.run([
    ...completionReward('classic:deleted', 'later'),
    ...completionReward('classic:kept', 'later'),
@@ -198,7 +198,7 @@ describe('device database migrations', () => {
   expect((await readShop(db)).balance).toBe(0);
   await db.run(completionReward('draft:incomplete', 'later'));
   expect((await readShop(db)).balance).toBe(1);
-  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 9, to: 9 });
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: SCHEMA_VERSION, to: SCHEMA_VERSION });
   expect((await readShop(db)).balance).toBe(1);
  });
 

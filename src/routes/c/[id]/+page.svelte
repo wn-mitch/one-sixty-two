@@ -30,7 +30,7 @@
 	async function accept(useCurrent: boolean): Promise<void> {
 		if (!data.record) return;
 		if (!acceptChallenge({ replayId: data.replayId, ...data.record })) {
-			notice = 'This browser blocked storage, so the series offer will not appear after your season. You can still draft and use their replay link in the team gallery.';
+			notice = 'This browser blocked storage, so the series offer will not appear after your season. You can still draft and use their replay link in My teams.';
 			return;
 		}
 		if (useCurrent && inProgress) {

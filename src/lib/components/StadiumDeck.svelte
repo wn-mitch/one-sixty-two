@@ -10,6 +10,7 @@
  import { toasts } from '#lib/toast.svelte.ts';
  import { clearStage, stash } from './phase-motion.ts';
  import VenueCard from './VenueCard.svelte';
+ import GuideTip from './GuideTip.svelte';
 
  let { manifest, busy, initialSelected = '', onSelect }: { manifest: Manifest; busy: boolean; initialSelected?: string; onSelect: (stadiumId: string) => void } = $props();
  let selected = $state(untrack(() => initialSelected));
@@ -17,7 +18,13 @@
  const saved = loadStadiumPreferences();
  let sort = $state<StadiumSort>(saved.sort);
  const favorites = new SvelteSet(saved.favorites);
- const stadiums = $derived(orderStadiums(manifest.stadiums, sort, favorites, franchiseName));
+ const ordered = $derived(orderStadiums(manifest.stadiums, sort, favorites, franchiseName));
+ let query = $state('');
+ // Search narrows by park or team; the chosen park always stays in the deck.
+ const needle = $derived(query.trim().toLocaleLowerCase());
+ const matches = (stadium: Manifest['stadiums'][number]) => `${stadium.name} ${franchiseName(stadium.franchiseId)}`.toLocaleLowerCase().includes(needle);
+ const matchCount = $derived(needle ? ordered.filter(matches).length : ordered.length);
+ const stadiums = $derived(needle ? ordered.filter(stadium => stadium.ref.id === selected || matches(stadium)) : ordered);
  const reorder = () => ({ duration: appSettings.effectiveEnabled ? MOTION.deckReorder / (appSettings.snapshot.cardSpeed || 1) : 0, easing: cubicOut });
 
  function persist(): void {
@@ -34,7 +41,7 @@
   else favorites.add(id);
   persist();
  }
- const chosen = $derived(stadiums.find(stadium => stadium.ref.id === selected));
+ const chosen = $derived(ordered.find(stadium => stadium.ref.id === selected));
  let deck = $state<HTMLElement>();
  let leaving = $state(false);
 
@@ -58,8 +65,12 @@
 
 <section bind:this={deck} class="stadium-deck" aria-labelledby="stadium-heading" inert={leaving}>
  <h2 id="stadium-heading" tabindex="-1">Choose your home stadium</h2>
- <p class="intro muted">You play 81 home games here; road games use each opponent's 2025 park. Fences, wall heights and elevation change how far every batted ball carries.</p>
+ <p class="intro muted">You play 81 of your 162 games here; road games use each opponent's 2025 park. Fence distances, wall heights and elevation change how far batted balls carry, for both teams. No park has a rating or bonus.</p>
+ <GuideTip step="stadium" text="Pick any park to start. Your home park hosts half your season, so its shape affects every home game." />
  <div class="deck-tools">
+  <label class="search"><span class="sr-only">Find a stadium by park or team</span>
+   <input type="search" placeholder="Find a park or team" autocomplete="off" bind:value={query} />
+  </label>
   <div class="sort-toggle" role="group" aria-label="Sort stadiums by">
    <button type="button" aria-pressed={sort === 'stadium'} onclick={() => setSort('stadium')}>Stadium</button>
    <button type="button" aria-pressed={sort === 'team'} onclick={() => setSort('team')}>Team</button>
@@ -69,6 +80,7 @@
  <form onsubmit={event => { event.preventDefault(); void choose(); }}>
   <fieldset>
    <legend class="sr-only">Home stadium</legend>
+   {#if needle && !matchCount}<p class="muted no-match" role="status">No park or team matches “{query.trim()}”.</p>{/if}
    <div class="grid">
     {#each stadiums as stadium (stadium.ref.id)}
      {@const favorite = favorites.has(stadium.ref.id)}
@@ -102,6 +114,9 @@
  .grid { gap: var(--space-5) var(--space-4); }
  .deck-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
  .deck-tools p { margin: 0; font-size: var(--text-sm); }
+ .search { flex: 1 1 14rem; max-width: 22rem; }
+ .search input { position: static; width: 100%; height: auto; min-height: 2.75rem; opacity: 1; pointer-events: auto; padding-inline: var(--space-3); }
+ .no-match { margin: 0 0 var(--space-3); }
  .sort-toggle { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 999px; }
  .sort-toggle button { min-height: 2.5rem; padding: 0 var(--space-4); border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: var(--text-sm); }
  .sort-toggle button[aria-pressed='true'] { background: var(--text); color: var(--background); }

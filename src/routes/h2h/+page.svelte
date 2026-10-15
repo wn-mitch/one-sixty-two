@@ -57,7 +57,7 @@
 </script>
 
 <svelte:head>
-	<title>Best-of-five | Team gallery | 162-0</title>
+	<title>Best-of-five | My teams | 162-0</title>
 	<meta name="description" content="Replay a shared 162-0 best-of-five. Both teams' regular seasons determine home-field advantage." />
 </svelte:head>
 

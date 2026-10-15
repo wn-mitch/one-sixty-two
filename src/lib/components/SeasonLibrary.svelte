@@ -116,7 +116,9 @@
 
 	{#if !sorted.length}
 		<div class="empty">
-			<p class="muted">Finish a season and it is saved here automatically, on this device only.</p>
+			<h2>No teams yet</h2>
+			<p class="muted">Finish a season and your team appears here.</p>
+			<a class="button primary" href="/?build=1">Build my team</a>
 			{#if onReplay}<p class="muted">You can still play head-to-head with two replay links.</p>{/if}
 		</div>
 	{:else}
@@ -162,7 +164,8 @@
 	.head-to-head-toggle[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 10%, transparent); color: var(--accent); }
 	.replay { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
 	.hint { flex: 1 1 15rem; margin: 0; color: var(--muted); font-size: var(--text-xs); }
-	.empty { display: grid; gap: var(--space-1); }
+	.empty { display: grid; justify-items: start; gap: var(--space-3); }
+	.empty h2 { margin: 0; }
 	.empty p { margin: 0; }
 	.columns { display: grid; gap: var(--space-6); align-items: start; min-width: 0; }
 	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: var(--space-3); min-width: 0; margin: 0; padding: 0; list-style: none; }

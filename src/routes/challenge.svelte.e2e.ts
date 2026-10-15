@@ -69,7 +69,7 @@ test('a challenge link opens a challenge card, binds the next draft, and offers 
  await writeDeviceDraft(page, JSON.stringify({ ...answer, phase: 'lineup' }));
  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [CHALLENGE_KEY, JSON.stringify({ ...bound.challenge, seed: answer.seed })]);
  await page.goto('/');
- await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
+ await page.getByRole('button', { name: 'Resume my team', exact: true }).click();
  await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
  const offer = page.getByRole('complementary', { name: /They went/ });
  await expect(offer).toBeVisible({ timeout: 60000 });

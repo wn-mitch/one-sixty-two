@@ -3,8 +3,22 @@ import { expect, test } from '@playwright/test';
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(240_000);
 
-test('a Draft Mode run goes from franchise to a played chapter and resumes after a reload', async ({ page }) => {
+test('public visitors cannot enter unfinished Draft Mode; a developer opt-in can', async ({ page }) => {
+ await page.goto('/');
+ await expect(page.getByRole('link', { name: /Draft Mode/ })).toHaveCount(0);
  await page.goto('/draft');
+ await expect(page.getByRole('heading', { name: 'This mode isn’t available' })).toBeVisible();
+ await expect(page.locator('label.franchise')).toHaveCount(0);
+ await page.getByRole('link', { name: 'Back to Play' }).click();
+ await expect(page.getByRole('heading', { name: /Can you go/ })).toBeVisible();
+ await page.goto('/draft?developer=on');
+ await expect(page.locator('label.franchise').first()).toBeVisible({ timeout: 60_000 });
+ await page.goto('/draft?developer=off');
+ await expect(page.getByRole('heading', { name: 'This mode isn’t available' })).toBeVisible();
+});
+
+test('a Draft Mode run goes from franchise to a played chapter and resumes after a reload', async ({ page }) => {
+ await page.goto('/draft?developer=on');
  await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
  await page.getByRole('button', { name: 'Start draft' }).click();
  for (let pick = 1; pick <= 16; pick++) {
@@ -44,7 +58,7 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
   if (chapter < 6) await expect(page.getByRole('heading', { name: `After chapter ${chapter} of 6` })).toBeVisible({ timeout: 120_000 });
  }
  await expect(page.getByRole('heading', { name: 'Final standings' })).toBeVisible({ timeout: 120_000 });
- await expect(page.getByRole('link', { name: 'Shop: 1 unlock token', exact: true })).toBeVisible();
+ await expect(page.getByRole('link', { name: 'Shop, 1 token', exact: true })).toBeVisible();
  await page.goto('/shop');
  await expect(page.locator('.balance')).toHaveText('1 unlock token');
  await page.goto('/draft');

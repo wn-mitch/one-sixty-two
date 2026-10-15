@@ -32,7 +32,7 @@ export interface InspectionStat {
 }
 
 export interface InspectionSeasonView {
-	label: '162-0 season' | 'Actual season';
+	label: 'Your simulated season' | 'Historical season';
 	rows: readonly InspectionStat[];
 	awardChips: readonly AwardChip[];
 }

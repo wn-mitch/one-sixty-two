@@ -162,6 +162,7 @@ test.describe('draft interaction boundaries', () => {
 		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
 		await expectNoPersistenceChange(page, before);
 
+		await page.getByRole('button', { name: 'Menu', exact: true }).click();
 		const settingsTrigger = page.getByRole('button', { name: 'Settings', exact: true });
 		await expect(settingsTrigger).toHaveCount(1);
 		await settingsTrigger.click();
@@ -181,13 +182,13 @@ test.describe('draft interaction boundaries', () => {
 		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
 		await expectNoPersistenceChange(page, before);
 
-		await confirmation.getByRole('button', { name: 'Cancel selection', exact: true }).click();
+		await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
 		await expect(confirmation).toHaveCount(0);
 		await expectNoPersistenceChange(page, before);
 
 		await selectWideCandidate(page, scenario.profile);
 		await placeAt(page, scenario.slot, page.locator('.field-panel'));
-		await page.locator('.field-panel').getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true }).click();
+		await page.locator('.field-panel').getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.slot}$`) }).click();
 		const committed = await savedDraft(page);
 		expect(committed.picks).toHaveLength(before.picks.length + 1);
 		expect(committed.actions).toHaveLength((before.actions?.length ?? 0) + 1);
@@ -200,6 +201,7 @@ test.describe('draft interaction boundaries', () => {
 		const scenario = await blockedScenario(request, manifest);
 		await openSavedDraft(page, scenario.draft);
 		await expectAbsentFromPool(page, scenario.profile.playerId);
+		await page.getByRole('button', { name: 'Menu', exact: true }).click();
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
 		await settings.getByRole('switch', { name: 'Blocked players', exact: true }).click();
@@ -212,7 +214,7 @@ test.describe('draft interaction boundaries', () => {
 		await group.getByRole('combobox', { name: `Exact season for ${scenario.profile.displayName}`, exact: true }).selectOption(scenario.profile.seasonId);
 		await group.locator('button.select-front').click();
 		await expect(page.locator('.field-panel .pick-confirmation')).toHaveAttribute('data-selected-season', scenario.profile.seasonId);
-		await expect(page.locator('.field-panel').getByRole('button', { name: 'Draft player', exact: true })).toBeDisabled();
+		await expect(page.locator('.field-panel').getByRole('button', { name: /^Draft \S+$/ })).toBeDisabled();
 	});
 
 
@@ -257,7 +259,7 @@ test.describe('draft interaction boundaries', () => {
 		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
 		await expectNoPersistenceChange(page, before);
 
-		await confirmation.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true }).click();
+		await confirmation.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.slot}$`) }).click();
 		await expect.poll(async () => (await savedDraft(page)).picks.length).toBe(before.picks.length + 1);
 	});
 });
@@ -274,7 +276,7 @@ test.describe('draft sheet interaction boundaries', () => {
 		await selectNarrowCandidate(page, scenario.profile);
 		const sheet = page.locator('dialog.draft-sheet[open]');
 		await expect(sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', scenario.slot);
-		await expect(sheet.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true })).toBeEnabled();
+		await expect(sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.slot}$`) })).toBeEnabled();
 		await expectNoPersistenceChange(page, before);
 		await page.keyboard.press('Escape');
 		await expect(sheet).toHaveCount(0);
@@ -316,12 +318,12 @@ test.describe('draft sheet interaction boundaries', () => {
 		await selector.selectOption(scenario.legalAlternative.seasonId);
 		await expect(confirmation).toHaveAttribute('data-selected-season', scenario.legalAlternative.seasonId);
 		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
-		await expect(sheet.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true })).toBeEnabled();
+		await expect(sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.slot}$`) })).toBeEnabled();
 
 		await selector.selectOption(scenario.illegalAlternative.seasonId);
 		await expect(confirmation).toHaveAttribute('data-selected-season', scenario.illegalAlternative.seasonId);
 		await expect(confirmation).toHaveAttribute('data-pending-slot', '');
-		await expect(sheet.getByRole('button', { name: 'Draft player', exact: true })).toBeDisabled();
+		await expect(sheet.getByRole('button', { name: /^Draft \S+$/ })).toBeDisabled();
 		await expectNoPersistenceChange(page, before);
 	});
 
@@ -386,7 +388,7 @@ test('a reload with packs still on the table deals them face up, and the taken o
 	// Dealt cards drift like any card unless the system asks for reduced motion; a drifting card is never stable to click.
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.goto('/');
-	await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
+	await page.getByRole('button', { name: 'Resume my team', exact: true }).click();
 	const cards = page.locator('.foil-pack .dealt-card');
 	await expect(cards).toHaveCount(2);
 	const chosen = draft.packs[1];

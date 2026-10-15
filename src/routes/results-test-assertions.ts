@@ -23,9 +23,9 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await expect(review.locator('.reader:popover-open')).toBeVisible();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(review.getByRole('button', { name: 'Your simulated season', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(review.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
-	const simulatedBack = review.getByRole('region', { name: /^162-0 season statistics for / });
+	const simulatedBack = review.getByRole('region', { name: /^Your simulated season statistics for / });
 	await expect(simulatedBack).toBeVisible();
 	await expect(simulatedBack.getByRole('table')).toContainText('Team rank');
 	await expect(simulatedBack.getByRole('list', { name: 'Season awards', exact: true })).toBeVisible();
@@ -55,21 +55,21 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	});
 	for (const ratio of contrasts) expect(ratio).toBeGreaterThanOrEqual(4.5);
 
-	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
-	await expect(review.getByRole('button', { name: 'Actual season', exact: true })).toHaveAttribute('aria-pressed', 'true');
-	const actualBack = review.getByRole('region', { name: /^Actual season statistics for / });
+	await review.getByRole('button', { name: 'Historical season', exact: true }).click();
+	await expect(review.getByRole('button', { name: 'Historical season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	const actualBack = review.getByRole('region', { name: /^Historical season statistics for / });
 	await expect(actualBack).toBeVisible();
 	await expect(actualBack.getByRole('list', { name: 'Season awards', exact: true })).toHaveCount(0);
 	await expect(actualBack.locator('tbody tr')).toHaveCount(simulatedRows.length);
 	await expect(actualBack.locator('.rank [aria-label]')).toHaveCount(simulatedRows.length);
-	await review.getByRole('button', { name: '162-0 season', exact: true }).click();
-	await expect(review.getByRole('region', { name: /^162-0 season statistics for / }).locator('tbody tr')).toHaveText(simulatedRows);
+	await review.getByRole('button', { name: 'Your simulated season', exact: true }).click();
+	await expect(review.getByRole('region', { name: /^Your simulated season statistics for / }).locator('tbody tr')).toHaveText(simulatedRows);
 
 	await review.getByRole('button', { name: /^Show text version for / }).click();
 	await expect(simulatedBack.locator('tbody tr')).toHaveText(simulatedRows);
 	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator('[aria-controls="season-game-detail"]')).toHaveCount(162);
 
-	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
+	await review.getByRole('button', { name: 'Historical season', exact: true }).click();
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	const firstSeasonId = await review.getAttribute('data-season-id');
 	// The raised card turns to its front in place and stays raised until it is dismissed.
@@ -83,18 +83,18 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	const nextTrigger = page.locator('.hand-card').last();
 	await nextTrigger.click();
 	await expect(review).not.toHaveAttribute('data-season-id', firstSeasonId!);
-	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(review.getByRole('button', { name: 'Your simulated season', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	await expect(review.locator('.results-back.simplified')).toHaveCount(0);
 
-	await review.getByRole('button', { name: 'Actual season', exact: true }).click();
+	await review.getByRole('button', { name: 'Historical season', exact: true }).click();
 	await review.getByRole('button', { name: /^Show text version for / }).click();
 	await page.keyboard.press('Escape');
 	await expect(review).toHaveCount(0);
 	await expect(nextTrigger).toBeFocused();
 
 	await nextTrigger.click();
-	await expect(review.getByRole('button', { name: '162-0 season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(review.getByRole('button', { name: 'Your simulated season', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	await expect(review.getByRole('button', { name: 'Show front', exact: true })).toBeVisible();
 	// A click off the raised card closes the inspection entirely, as Escape does.

@@ -93,7 +93,7 @@
 
 	const rosterReviewPlay: Play = async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
-		const openField = canvas.queryByRole('button', { name: /Open your field 6 \/ 16/ });
+		const openField = canvas.queryByRole('button', { name: /Open your field, 6 of 16/ });
 		if (openField) await userEvent.click(openField);
 
 		const owner = openField

@@ -3,7 +3,7 @@ import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, se
 import { deleteSeason, gameFeats, loadLibrary, renameSeason, saveSeason } from './library.ts';
 import { persistDraft } from './persistence.ts';
 import { brokenDb, memoryDb } from '../storage/test-db.ts';
-import { readShop } from '../cosmetics/ledger.ts';
+import { grantedReward, readShop } from '../cosmetics/ledger.ts';
 import { SLOTS, type Candidate, type Draft, type Manifest } from './types.ts';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import type { SeasonResult } from '../sim/types.ts';
@@ -78,21 +78,33 @@ describe('season library', () => {
   expect((await loadLibrary(db, manifest)).entries).toEqual([]);
   expect(await db.all('SELECT * FROM season_cards')).toEqual([]);
  });
- it('rewards only a complete 162-game result and keeps its receipt after deleting and resaving', async () => {
+ it('rewards only a complete 162-game result, adds the first-season bonus once, and keeps receipts after deleting and resaving', async () => {
   const { db } = await memoryDb();
   const draft = complete(71);
   await saveSeason(db, draft, { ...result(100), losses: 61 }, [], manifest);
-  expect((await readShop(db)).balance).toBe(0);
-  await saveSeason(db, draft, result(100), [], manifest);
-  await saveSeason(db, draft, result(100), [], manifest);
-  expect((await readShop(db)).balance).toBe(1);
+  expect(await readShop(db)).toMatchObject({ balance: 0, firstSeasonBonus: true });
+  const first = new Date('2026-03-01');
+  await saveSeason(db, draft, result(100), [], manifest, first);
   const key = (await loadLibrary(db, manifest)).entries[0].key;
+  expect(await grantedReward(db, `classic:${key}`, first.toISOString())).toEqual({ season: 1, bonus: 1 });
+  const revisit = new Date('2026-03-02');
+  await saveSeason(db, draft, result(100), [], manifest, revisit);
+  expect(await grantedReward(db, `classic:${key}`, revisit.toISOString())).toEqual({ season: 0, bonus: 0 });
+  expect(await readShop(db)).toMatchObject({ balance: 2, firstSeasonBonus: false });
   await deleteSeason(db, key);
-  expect((await readShop(db)).balance).toBe(1);
-  await saveSeason(db, draft, result(100), [], manifest);
-  expect((await readShop(db)).balance).toBe(1);
-  await saveSeason(db, complete(72), result(90), [], manifest);
   expect((await readShop(db)).balance).toBe(2);
+  await saveSeason(db, draft, result(100), [], manifest);
+  expect((await readShop(db)).balance).toBe(2);
+  await saveSeason(db, complete(72), result(90), [], manifest);
+  expect((await readShop(db)).balance).toBe(3);
+ });
+ it('gives no first-season bonus to a profile with an earlier completion receipt', async () => {
+  const { db } = await memoryDb();
+  // Migrated history is recorded as zero-credit receipts.
+  await db.run([{ sql: "INSERT INTO shop_completions (key, completed_at, credit) VALUES ('classic:older', 'earlier', 0)" }]);
+  expect((await readShop(db)).firstSeasonBonus).toBe(false);
+  await saveSeason(db, complete(76), result(100), [], manifest);
+  expect((await readShop(db)).balance).toBe(1);
  });
  it('does not reward invalid records that happen to total 162', async () => {
   const { db } = await memoryDb();

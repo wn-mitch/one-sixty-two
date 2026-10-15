@@ -64,7 +64,7 @@
    <p>{s.pos} · {s.year} · {s.team}</p>
    <h3>{s.full}</h3>
   </header>
-  {#if view.label === '162-0 season' && view.awardChips.length > 0}
+  {#if view.label === 'Your simulated season' && view.awardChips.length > 0}
    <ul class="award-chips" aria-label="Season awards">
     {#each view.awardChips as award (award.key)}
      <li data-tone={award.tone}>{award.label}</li>

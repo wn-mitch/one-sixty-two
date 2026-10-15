@@ -1,4 +1,5 @@
 import type { Finish } from '../cards/finish.ts';
+import type { CardEra } from '../cards/era.ts';
 import { deviceDb } from '../storage/db.ts';
 import { appearanceFor, type CardAppearance } from './catalogue.ts';
 import { readShop, type ShopSnapshot } from './ledger.ts';
@@ -22,9 +23,13 @@ export function refreshShop(): Promise<void> {
 	return pending;
 }
 
-/** One choice per earned tier; Base cards always keep their original stock. */
-export function equippedAppearance(tier: Finish): CardAppearance {
+/**
+ * One deck-wide choice per earned tier, which a card factory choice for the card's era overrides.
+ * Base cards always keep their original stock.
+ */
+export function equippedAppearance(tier: Finish, era?: CardEra): CardAppearance {
 	if (tier === 'base') return ORIGINAL;
-	const equipped = shopState.snapshot?.equipped[tier];
-	return equipped ? appearanceFor(equipped.itemId, equipped.colorway) : ORIGINAL;
+	const snapshot = shopState.snapshot;
+	const choice = (era && snapshot?.eras[tier]?.[era]) || snapshot?.equipped[tier];
+	return choice ? appearanceFor(choice.itemId, choice.colorway) : ORIGINAL;
 }

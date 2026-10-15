@@ -45,6 +45,7 @@
 	<div class="section-heading">
 		<div>
 			<h3 id="awards-heading">Season awards</h3>
+			<p class="awards-note">Awards measure your simulated season. Card fronts show each player’s historical season, so the numbers can differ.</p>
 		</div>
 	</div>
 	<div class="award-rail" bind:this={rail} onscroll={trackRail}>
@@ -118,6 +119,7 @@
 	.award-copy { display: grid; gap: .1rem; }
 	.award-copy strong { overflow-wrap: anywhere; font-size: var(--text-lg); line-height: 1.15; }
 	.award-copy span { color: var(--muted); font-size: var(--text-xs); }
+	.awards-note { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
 	.primary-metric { display: grid; gap: .1rem; padding-top: var(--space-2); border-top: 1px solid var(--border); }
 	.primary-metric strong { color: var(--award-tone); font-size: var(--text-2xl); line-height: 1; letter-spacing: -.03em; }
 	.primary-metric.red strong { color: var(--error); }

@@ -19,6 +19,8 @@
  import type { MediaManifest } from '#lib/media/types.ts';
  import { loadRankings } from '#lib/rankings/client.ts';
  import { toasts } from '#lib/toast.svelte.ts';
+ import { shopState } from '#lib/cosmetics/store.svelte.ts';
+ import GuideTip from '#lib/components/GuideTip.svelte';
  import type { WarRankings } from '#lib/rankings/types.ts';
 
  type GameSession = import('#lib/game/session.svelte.ts').Session;
@@ -63,7 +65,7 @@
   untrack(() => {
    if (page.url.pathname !== '/') return;
    // A `?new=1` or `?resume=1` hand-off is replaced; Start and Resume add a history entry to go back to.
-   const handOff = page.url.searchParams.has('new') || page.url.searchParams.has('resume');
+   const handOff = page.url.searchParams.has('new') || page.url.searchParams.has('resume') || page.url.searchParams.has('build');
    void goto('/classic', { replace: handOff, reset: false });
   });
  });
@@ -75,7 +77,7 @@
   });
  });
  $effect(() => {
-  // Ordinary returns resume unfinished play only; completed seasons belong in the team gallery.
+  // Ordinary returns resume unfinished play only; completed seasons belong in My teams.
   const current = session;
   if (page.url.pathname !== '/classic' || !current || current.phase !== 'start') return;
   if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;
@@ -239,7 +241,7 @@
   </div>
 
   {#if currentSession.phase === 'start'}
-   <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
+   <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} firstSeasonBonus={shopState.snapshot?.firstSeasonBonus ?? false} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
   {:else if currentSession.draft && currentSession.manifest}
    {#if currentSession.phase === 'stadium'}
     <div class="draft-top"><p class="eyebrow">Home stadium</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
@@ -252,6 +254,7 @@
     {:else if !phaseLoadError}<DraftSkeleton pool={currentSession.phase === 'choosing' && currentSession.draft.packs.length <= 1} />{/if}
    {:else if currentSession.phase === 'lineup'}
     <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
+    <GuideTip step="roster" text="Your team is complete. Adjust the batting order and bullpen roles if you like, then play all 162 games." />
     {#if Lineup}
      <Lineup draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onReassign={(id, slot) => currentSession.reassign(id, slot)} onOrder={(kind, order) => currentSession.order(kind, order)} onRoles={reliefRoles => currentSession.roles(reliefRoles)} onsimulate={() => void currentSession.simulate()} />
     {:else if !phaseLoadError}<LineupSkeleton />{/if}
@@ -262,7 +265,8 @@
     {:else if !phaseLoadError}<ProgressSkeleton />{/if}
    {:else if currentSession.phase === 'results' && currentSession.result}
     {#if Results}
-     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} />
+     {#if !currentSession.shared}<GuideTip step="results" text="Card fronts show each player's historical season; awards and totals are your simulated one. Your team is saved in My teams, and season tokens unlock card finishes in the Shop." />{/if}
+     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} />
     {:else if !phaseLoadError}<ResultsSkeleton />{/if}
    {/if}
   {/if}

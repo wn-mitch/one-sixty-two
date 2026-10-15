@@ -1,80 +1,107 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import type { Db } from '../lib/storage/sql.ts';
-import { itemsForTier } from '../lib/cosmetics/catalogue.ts';
+import { finishName, itemsForTier } from '../lib/cosmetics/catalogue.ts';
 
-const palette = '.preview-card .card';
+const preview = '.preview-card .card';
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(120_000);
 
-test('owned finishes persist without changing tiers, and an empty wallet cannot buy', async ({ page }) => {
-	await page.goto('/shop');
-	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
-	await page.getByRole('button', { name: 'refractor 1 token', exact: true }).click();
-	await expect(page.getByRole('button', { name: 'Unlock · 1 token', exact: true })).toBeDisabled();
-	await expect(page.locator(palette)).toHaveAttribute('data-finish', 'gem');
-
+async function earnToken(page: Page): Promise<void> {
 	// Stage one earned receipt; completion and migration semantics run against real SQLite in unit tests.
+	await page.waitForFunction(() => '__deviceDb' in window);
 	await page.evaluate(async () => {
 		// The app exposes this device database hook for browser scenarios.
 		const device = window as unknown as { __deviceDb: Db };
 		await device.__deviceDb.run([{ sql: "INSERT INTO shop_completions (key, completed_at, credit) VALUES ('test-completed-run', 'example', 1)" }]);
 	});
 	await page.reload();
+}
+
+test('an empty wallet explains how to earn; unlocking applies the finish in one step and persists', async ({ page }) => {
+	await page.goto('/shop');
+	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
+	await expect(page.getByText('Cosmetic finishes · 1 token each.')).toBeVisible();
+	await expect(page.getByText(/No tokens yet/)).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Play a season' })).toBeVisible();
+	await expect(page.getByLabel('Show card')).toHaveCount(0);
+
+	await page.getByRole('button', { name: /^Holo patterns/ }).click();
+	await page.getByRole('button', { name: 'Refractor, 1 token', exact: true }).scrollIntoViewIfNeeded();
+	const scrolled = await page.evaluate(() => scrollY);
+	await page.getByRole('button', { name: 'Refractor, 1 token', exact: true }).click();
+	const sheet = page.getByRole('dialog', { name: 'Refractor' });
+	await expect(sheet).toBeVisible();
+	await expect(sheet.getByRole('button', { name: /^Unlock and apply/ })).toBeDisabled();
+	await expect(sheet.getByText(/You need a token/)).toBeVisible();
+	await expect(sheet.locator('.card')).toHaveAttribute('data-finish', 'gem');
+	await sheet.getByRole('button', { name: 'Close finish' }).click();
+	await expect(sheet).toBeHidden();
+	// Comparing finishes never moves the catalogue.
+	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+
+	await earnToken(page);
 	await expect(page.locator('.balance')).toHaveText('1 unlock token');
-	await page.getByRole('button', { name: 'refractor 1 token', exact: true }).click();
-	await page.getByLabel('Holo colorway').selectOption('ice');
-	await page.getByRole('button', { name: 'Unlock · 1 token', exact: true }).click();
+	await expect(page.getByText(/No tokens yet/)).toHaveCount(0);
+	await page.getByRole('button', { name: /^Holo patterns/ }).click();
+	await page.getByRole('button', { name: 'Refractor, 1 token', exact: true }).click();
+	await sheet.getByLabel(/Holo colorway/).selectOption('ice');
+	await sheet.getByRole('button', { name: 'Unlock and apply to Gem cards, 1 token', exact: true }).click();
 	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
-	await expect(page.locator('.site-header .wallet-link')).toHaveAccessibleName('Shop: 0 unlock tokens');
-	await page.getByRole('button', { name: 'Equip for all Gem cards', exact: true }).click();
-	await expect(page.locator('.commit').getByRole('button', { name: 'Equipped', exact: true })).toBeDisabled();
-	const equippedPalette = await page.locator(palette).getAttribute('data-palette');
-	await expect(page.locator(palette)).toHaveAttribute('data-film', 'refractor');
-	await expect(page.locator(`${palette} canvas[data-presented]`)).toBeVisible();
+	await expect(sheet.getByRole('button', { name: 'Applied to Gem cards', exact: true })).toBeDisabled();
+	await expect(sheet.locator('.card')).toHaveAttribute('data-film', 'refractor');
+	const appliedPalette = await sheet.locator('.card').getAttribute('data-palette');
+	await expect(page.locator('.site-header .shop-link')).toHaveAccessibleName('Shop, 0 tokens');
+	await sheet.getByRole('button', { name: 'Close finish' }).click();
 
 	await page.reload();
-	await expect(page.locator('.preview h2')).toHaveText('refractor');
-	await expect(page.getByLabel('Holo colorway')).toHaveValue('ice');
-	await expect(page.locator(palette)).toHaveAttribute('data-palette', equippedPalette!);
-	await expect(page.locator(palette)).toHaveAttribute('data-finish', 'gem');
+	await page.getByRole('button', { name: /^Holo patterns/ }).click();
+	await page.getByRole('button', { name: 'Refractor, Applied', exact: true }).click();
+	await expect(sheet.getByLabel(/Holo colorway/)).toHaveValue('ice');
+	await expect(sheet.locator('.card')).toHaveAttribute('data-palette', appliedPalette!);
+	await sheet.getByRole('button', { name: 'Close finish' }).click();
+	await page.getByRole('button', { name: /^Original finish/ }).click();
+	const original = page.getByRole('dialog', { name: 'Original finish' });
+	await original.getByRole('button', { name: 'Restore original Gem finish', exact: true }).click();
+	await expect(original.getByRole('button', { name: 'Applied to Gem cards', exact: true })).toBeDisabled();
+	await original.getByRole('button', { name: 'Close finish' }).click();
+	await expect(page.getByRole('button', { name: 'Refractor, Owned', exact: true })).toBeVisible();
 	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
-	await page.getByRole('link', { name: 'Play', exact: true }).click();
-	await page.getByRole('link', { name: 'Shop: 0 unlock tokens', exact: true }).click();
-	await expect(page).toHaveURL(/\/shop$/);
-
-	await page.getByRole('button', { name: 'Silver foil', exact: true }).click();
-	await expect(page.getByLabel('Holo colorway')).toHaveCount(0);
-	await expect(page.locator(palette)).toHaveAttribute('data-finish', 'foil');
-	await expect(page.locator(palette)).not.toHaveAttribute('data-film', 'refractor');
-	await page.getByRole('button', { name: 'Gem', exact: true }).click();
-	await page.getByRole('button', { name: 'Original by era', exact: true }).click();
-	await page.getByRole('button', { name: 'Equip for all Gem cards', exact: true }).click();
-	await page.reload();
-	await expect(page.locator('.preview h2')).toHaveText('Original by era');
-	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
-	await expect(page.getByRole('button', { name: 'refractor Owned', exact: true })).toBeVisible();
 });
 
-test('Base preview reports data failures and can retry without changing tiers', async ({ page }) => {
+test('one foil unlock applies to Silver and Gold cards without spending again', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/shop');
+	await earnToken(page);
+	const plate = itemsForTier('foil')[0]!;
+	await page.getByRole('button', { name: `${finishName(plate)}, 1 token`, exact: true }).click();
+	const detail = page.locator('.side');
+	await detail.getByRole('button', { name: 'Unlock and apply to Silver foil cards, 1 token', exact: true }).click();
+	await expect(detail.getByRole('button', { name: 'Applied to Silver foil cards', exact: true })).toBeDisabled();
+	await detail.getByRole('button', { name: 'Gold emboss cards', exact: true }).click();
+	await expect(detail.locator('.card')).toHaveAttribute('data-finish', 'emboss');
+	await detail.getByRole('button', { name: 'Apply to Gold emboss cards', exact: true }).click();
+	await expect(detail.getByRole('button', { name: 'Applied to Gold emboss cards', exact: true })).toBeDisabled();
+	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
+});
+
+test('the finish preview reports data failures and can retry', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.route('**/data/**', route => route.fulfill({ status: 503, body: 'Unavailable' }));
 	await page.goto('/shop');
-	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeEnabled();
-	await page.getByRole('button', { name: 'Base', exact: true }).click();
-	await expect(page.locator('.stock').getByRole('alert')).toBeVisible();
+	await expect(page.locator('.side').getByRole('alert')).toBeVisible();
 	await page.unroute('**/data/**');
 	await page.getByRole('button', { name: 'Retry preview', exact: true }).click();
-	await expect(page.locator('.stock .card')).toHaveAttribute('data-finish', 'base', { timeout: 60_000 });
+	await expect(page.locator(preview)).toHaveAttribute('data-finish', 'foil', { timeout: 60_000 });
 });
 
 for (const width of [390, 1440]) {
 	test(`Shop appends every finish without replacing earlier choices at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width, height: 900 });
 		await page.goto('/shop');
-		await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeEnabled();
+		await page.getByRole('button', { name: /^Holo patterns/ }).click();
 		const expected = itemsForTier('gem').map(item => item.id);
-		const choices = page.locator('.plate-choice');
-		const first = page.locator(`[data-finish-id="${expected[0]}"]`);
-		await first.click();
+		const choices = page.locator('.finish-choice[data-finish-id]');
+		await expect(choices.first()).toBeVisible();
 		for (;;) {
 			const count = await choices.count();
 			if (count === expected.length) break;
@@ -82,37 +109,35 @@ for (const width of [390, 1440]) {
 			await expect(page.locator(`[data-finish-id="${expected[count]}"]`)).toBeAttached();
 		}
 		expect(await choices.evaluateAll(buttons => buttons.map(button => button.getAttribute('data-finish-id')))).toEqual(expected);
-		await expect(first).toHaveAttribute('aria-pressed', 'true');
-		await expect(page.getByRole('button', { name: 'Load more finishes' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'More finishes' })).toHaveCount(0);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-
-		await page.getByRole('button', { name: 'Silver foil', exact: true }).click();
-		const silver = itemsForTier('foil').map(item => item.id);
-		await expect(page.locator(`[data-finish-id="${silver[0]}"]`)).toBeAttached();
-		const shown = await choices.evaluateAll(buttons => buttons.map(button => button.getAttribute('data-finish-id')));
-		expect(shown).toEqual(silver.slice(0, shown.length));
+		// Several choices are visible together on a phone, without a horizontal rail.
+		if (width === 390) {
+			await page.evaluate(() => scrollTo(0, 0));
+			const visible = await choices.evaluateAll(buttons => buttons.filter(button => button.getBoundingClientRect().top < innerHeight).length);
+			expect(visible).toBeGreaterThanOrEqual(2);
+		}
 	});
 }
 
-test('hiding card artwork previews the real finish without losing the selected pattern or colorway', async ({ page }) => {
-	await page.goto('/shop');
-	await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeEnabled();
-	await page.getByRole('button', { name: 'cracked-ice 1 token', exact: true }).click();
-	await page.getByLabel('Show card', { exact: true }).uncheck();
-	const sample = page.locator('.preview-card [data-finish-sample]');
-	await expect(sample).toHaveAttribute('data-film', 'cracked-ice');
-	await expect(sample.locator('canvas[data-presented]')).toBeVisible();
-	await expect(page.locator('.shop-layout .card')).toHaveCount(0);
-	await page.getByLabel('Holo colorway').selectOption('ice');
-	const selectedPalette = await sample.getAttribute('data-palette');
-	expect(selectedPalette).not.toBeNull();
-	await page.getByLabel('Show card', { exact: true }).check();
-	await expect(page.locator(palette)).toHaveAttribute('data-film', 'cracked-ice');
-	await expect(page.locator(palette)).toHaveAttribute('data-palette', selectedPalette!);
-	await expect(page.getByLabel('Holo colorway')).toHaveValue('ice');
-	await page.getByRole('button', { name: 'Silver foil', exact: true }).click();
-	await page.getByLabel('Show card', { exact: true }).uncheck();
-	await expect(sample).toHaveAttribute('data-finish', 'foil');
-	await expect(sample.locator('canvas[data-presented]')).toBeVisible();
-	await expect(page.getByLabel('Holo colorway')).toHaveCount(0);
+test('the card factory recolors one era’s own holo, reuses the colorway free, and keeps it after a reload', async ({ page }) => {
+	await page.goto('/factory');
+	await earnToken(page);
+	await page.getByRole('button', { name: /^1980s,/ }).click();
+	await page.getByLabel('Holo pattern').selectOption('');
+	await page.getByLabel('Colorway').selectOption('synthwave');
+	await page.getByRole('button', { name: /Unlock & apply/ }).click();
+	await expect(page.getByRole('button', { name: '1980s, Era original · Synthwave' })).toBeVisible();
+	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
+	await page.getByRole('button', { name: /^1990s,/ }).click();
+	await page.getByLabel('Holo pattern').selectOption('');
+	await page.getByLabel('Colorway').selectOption('synthwave');
+	await page.getByRole('button', { name: 'Apply to 1990s cards' }).click();
+	await expect(page.getByRole('button', { name: '1990s, Era original · Synthwave' })).toBeVisible();
+	await page.reload();
+	await expect(page.getByRole('button', { name: '1980s, Era original · Synthwave' })).toBeVisible();
+	await page.getByRole('button', { name: /^1980s,/ }).click();
+	await page.getByLabel('Holo pattern').selectOption('deck');
+	await page.getByRole('button', { name: 'Use deck default' }).click();
+	await expect(page.getByRole('button', { name: '1980s, Deck default' })).toBeVisible();
 });

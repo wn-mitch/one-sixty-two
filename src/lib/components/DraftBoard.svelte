@@ -17,7 +17,8 @@
  import Reveal from './Reveal.svelte';
  import DraftSheet from './DraftSheet.svelte';
  import FoilPack from './FoilPack.svelte';
- import Settings from './Settings.svelte';
+ import SiteMenu from './SiteMenu.svelte';
+ import GuideTip from './GuideTip.svelte';
  import TokenAmount from './TokenAmount.svelte';
  import { BOARD_WIDE_QUERY } from './skeletons/board.ts';
  import { shopState } from '../cosmetics/store.svelte.ts';
@@ -120,6 +121,17 @@
  const rollColor = $derived(roll && !isJackpot(roll) ? media?.teams[roll.franchiseId]?.color : undefined);
  const homeStadium = $derived(draft.homeStadium ? manifest.stadiums.find(stadium => stadium.ref.id === draft.homeStadium!.id) ?? null : null);
  const rollFranchise = $derived(roll ? isJackpot(roll) ? 'Jackpot' : manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name : undefined);
+ /** The name a short instruction uses: the surname, without a generational suffix. */
+ const shortName = (name: string) => name.split(' ').filter(part => !/^(Jr\.?|Sr\.?|II|III|IV)$/.test(part)).at(-1) ?? name;
+ const selectedName = $derived(selectedProfile ? shortName(selectedProfile.displayName) : '');
+ const pitcherOnly = $derived(destinations.length > 0 && destinations.every(slot => !HITTER_SLOTS.includes(slot as HitterSlot)));
+ /** The next step, always in words beside the Draft button, so a disabled button never needs explaining by colour. */
+ const placementGuide = $derived(!selectedProfile ? '' : !destinations.length
+  ? `No open spot fits ${selectedName}. Move a hitter to make room, or cancel.`
+  : !pendingSlot ? `Choose ${pitcherOnly ? 'a pitching slot' : 'a highlighted position'} for ${selectedName}.`
+  : `${selectedName} will fill ${pendingSlot}. This uses pick ${draft.picks.length + 1} of ${rosterSlots.length}.`);
+ const extraLeft = $derived(extraPacksLeft(draft));
+ let draftMenuOpen = $state(false);
  const canConfirm = $derived(phase === 'choosing' && !busy && !leaving && !movingSeasonId && !!selectedProfile && !!pendingSlot && destinations.includes(pendingSlot));
 
  function clearTransient(): void {
@@ -178,6 +190,7 @@
   }
  }
  function closeInspectionOnEscape(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && draftMenuOpen) { draftMenuOpen = false; return; }
   if (event.key !== 'Escape' || !inspectedSeasonId) return;
   if (document.activeElement?.closest('.settings-dialog[open], .error-dialog[open]')) return;
   preserveSheetCancel = true;
@@ -196,6 +209,7 @@
   preserveSheetCancel = false;
  }
  function deselectOutsideCard(event: MouseEvent): void {
+  if (draftMenuOpen && !(event.target instanceof Element && event.target.closest('.draft-menu'))) draftMenuOpen = false;
   if (preserveInspectionClick) {
    preserveInspectionClick = false;
    returningSourceClick = false;
@@ -207,7 +221,7 @@
   }
   if (!selectedProfile || busy) return;
   if (event.composedPath().some(node => node instanceof Element &&
-   node.matches('[data-app-settings], .error-dialog, [data-candidate-card], [data-slot], [data-pool-load], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
+   node.matches('[data-app-settings], .site-menu, .draft-menu, .error-dialog, [data-candidate-card], [data-slot], [data-pool-load], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
   clearTransient();
   sheetOpen = false;
  }
@@ -511,6 +525,17 @@
    inspectionOpening = false;
   }
  });
+ // Selecting a player brings the first slot he can fill into view, so a pitcher opens on the staff, not the batting field.
+ $effect(() => {
+  const seasonId = selectedSeasonId;
+  const first = destinations[0];
+  if (!seasonId || !first || (!wide && !sheetOpen)) return;
+  void tick().then(() => {
+   if (selectedSeasonId !== seasonId) return;
+   draftBoard?.querySelector<HTMLElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} [data-slot="${CSS.escape(first)}"]`)
+    ?.scrollIntoView({ block: 'nearest', behavior: appSettings.effectiveEnabled ? 'smooth' : 'auto' });
+  });
+ });
  onMount(() => {
   let disposed = false;
   const releaseSettings = appSettings.retain();
@@ -648,12 +673,13 @@
   </div>
  {:else if selectedProfile}
   <div class="pick-confirmation" data-pending-slot={pendingSlot ?? ''} data-selected-season={selectedSeasonId}>
-   <!-- The highlighted slots and the Draft button carry the pick; only a pick with nowhere to go needs words. -->
-   {#if !destinations.length}<p class="placement-hint">Reassign your roster to make room.</p>{/if}
+   <GuideTip step="place" text={`Fill all ${rosterSlots.length} spots. Where a player can play matters as much as his numbers, so the best card isn't always the best pick.`} />
+   <p class="selected-identity"><strong>{selectedProfile.displayName}</strong> · {selectedProfile.year} {selectedProfile.historicalTeam}</p>
+   <p class="placement-hint" id="{uid}-placement-hint" aria-live="polite">{placementGuide}</p>
    <div class="confirmation-actions">
-    <button type="button" class="primary" disabled={!canConfirm} onclick={() => void confirmPick()}>{pendingSlot ? `Draft at ${pendingSlot}` : 'Draft player'}</button>
-    {#if pendingSlot}<button type="button" class="secondary" onclick={() => pendingSlot = null}>Back</button>{/if}
-    <button type="button" class="quiet" onclick={cancelSelection}>Cancel selection</button>
+    <button type="button" class="primary" disabled={!canConfirm} aria-describedby="{uid}-placement-hint" onclick={() => void confirmPick()}>{pendingSlot ? `Draft ${selectedName} at ${pendingSlot}` : `Draft ${selectedName}`}</button>
+    {#if pendingSlot && destinations.length > 1}<button type="button" class="secondary" onclick={() => pendingSlot = null}>Change slot</button>{/if}
+    <button type="button" class="quiet" onclick={cancelSelection}>Cancel</button>
    </div>
   </div>
  {/if}
@@ -662,12 +688,11 @@
 <div bind:this={draftBoard} class="draft-board" class:wide>
 {#snippet rerollControl()}
  {#if showingCandidates}
-  {@const left = extraPacksLeft(draft)}
   {@const total = draftRules(draft.schemaVersion).extraPacks}
-  <button type="button" class="secondary reroll" disabled={busy || leaving || left <= 0} aria-label={`Add a franchise pack to choose from, ${left} of ${total} left`} title="Add a franchise pack" onclick={addPackFromPool}>
+  <button type="button" class="secondary reroll" disabled={busy || leaving || extraLeft <= 0} aria-label={`Extra pack: add another franchise pack to choose from, ${extraLeft} of ${total} left this draft`} onclick={addPackFromPool}>
    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>
-   <span class="reroll-word">Add pack</span>
-   <span class="reroll-count" aria-hidden="true">{left}/{total}</span>
+   <span class="reroll-word" aria-hidden="true">Extra pack</span>
+   <span class="reroll-count" aria-hidden="true">· {extraLeft} left</span>
   </button>
  {/if}
 {/snippet}
@@ -680,12 +705,10 @@
    {@render reveal()}
    {@render rerollControl()}
    {#if roll && !(dealing && !dealtArrived)}<p class="eyebrow header-pick">Pick {draft.picks.length + 1} of {rosterSlots.length}</p>{/if}
-   <a class="rules-link" href="/about">Rules &amp; model</a>
-   <a class="wallet-link" href="/shop" title={shopState.snapshot ? `Shop: ${shopState.snapshot.balance} unlock ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop: unlock token balance unavailable'}>
-    <span class="sr-only">{shopState.snapshot ? 'Shop:' : 'Shop: balance unavailable,'}</span>
-    <TokenAmount amount={shopState.snapshot?.balance ?? null} />
+   <a class="shop-link" href="/shop" aria-label={shopState.snapshot ? `Shop, ${shopState.snapshot.balance} ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop'}>
+    <span>Shop</span><span class="shop-balance" aria-hidden="true"><TokenAmount amount={shopState.snapshot?.balance ?? null} /></span>
    </a>
-   <Settings />
+   <SiteMenu />
    <button class="secondary new-draft" disabled={loading} onclick={onNew}>New draft</button>
   </header>
  {/if}
@@ -694,17 +717,29 @@
   {#if !wide}
    {@render reveal()}
    {@render rerollControl()}
-   <button type="button" class="secondary open-field" aria-label={`Open your field ${draft.picks.length} / ${rosterSlots.length}`} onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>
+   <button type="button" class="secondary open-field" aria-label={`Open your field, ${draft.picks.length} of ${rosterSlots.length} picked`} onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>
     Field
-    <span class="field-count">{draft.picks.length} / {rosterSlots.length}</span>
+    <span class="field-count">· {draft.picks.length}/{rosterSlots.length}</span>
    </button>
-   <button type="button" class="secondary toolbar-new" aria-label="New draft" title="New draft" disabled={loading} onclick={onNew}>
-    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>
-   </button>
+   <div class="draft-menu">
+    <button type="button" class="secondary draft-menu-trigger" aria-expanded={draftMenuOpen} aria-controls="{uid}-draft-menu" onclick={() => draftMenuOpen = !draftMenuOpen}>
+     <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="3.5" cy="8" r="1.2"></circle><circle cx="8" cy="8" r="1.2"></circle><circle cx="12.5" cy="8" r="1.2"></circle></svg>
+     <span class="sr-only">Draft options</span>
+    </button>
+    <div class="draft-menu-panel" id="{uid}-draft-menu" hidden={!draftMenuOpen}>
+     <button type="button" disabled={loading} onclick={() => { draftMenuOpen = false; onNew(); }}>New draft…</button>
+     <a href="/about#how-to-play">How to play</a>
+    </div>
+   </div>
   {/if}
  </div>
  <div class="board-columns">
   <section class="draft-browser" aria-label="Make your next pick" inert={leaving}>
+   {#if draft.picks.length === 0 && (phase === 'ready' || dealing)}
+    <GuideTip step="pack" text="Each pack is one franchise from one decade. Open it, then choose one exact player season from that pool." />
+   {:else if showingCandidates && draft.picks.length >= 1 && extraLeft > 0}
+    <GuideTip step="extra" text={`Extra pack adds another franchise to choose from before you pick. You have ${extraLeft} for the whole draft and they don't refill, so save them for a pack that doesn't fit.`} />
+   {/if}
    {#if phase === 'ready' || dealing || draft.packs.length > 1}
     <FoilPack
      packs={dealtPacks}
@@ -754,12 +789,18 @@
  @media (prefers-reduced-motion: reduce) { .reroll, .header-pick { animation: none; } }
  .header-pick { flex: none; margin: 0; white-space: nowrap; }
  .reroll-count { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
- /* Phones keep the toolbar to icons and counts so the roll identity keeps its room. */
- .draft-toolbar .reroll { min-height: 3rem; padding-inline: .5rem; gap: .3rem; }
- .draft-toolbar .reroll-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+ /* Phones give the roll identity its own row; the labelled pack, field and menu controls share the next. */
+ .draft-toolbar { flex-wrap: wrap; }
+ .draft-toolbar > :global(.reveal) { flex: 1 1 100%; min-width: 0; }
+ .draft-toolbar .reroll { min-height: 3rem; padding-inline: .6rem; gap: .3rem; margin-right: auto; }
  .reroll svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
- .toolbar-new { flex: none; display: grid; place-items: center; width: 3rem; min-height: 3rem; padding: 0; }
- .toolbar-new svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+ .draft-menu { position: relative; flex: none; }
+ .draft-menu-trigger { display: grid; place-items: center; width: 3rem; min-height: 3rem; padding: 0; }
+ .draft-menu-trigger svg { width: 1.1rem; height: 1.1rem; fill: currentColor; }
+ .draft-menu-panel { position: absolute; z-index: 20; right: 0; top: calc(100% + .25rem); display: grid; min-width: 12rem; padding: .25rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: 0 1rem 2.5rem oklch(0% 0 0 / .4); }
+ .draft-menu-panel[hidden] { display: none; }
+ .draft-menu-panel button, .draft-menu-panel a { display: flex; align-items: center; min-height: 2.75rem; padding: .5rem .75rem; border: 0; border-radius: var(--radius); background: transparent; color: var(--text); font: 600 var(--text-sm)/1.2 var(--font-control); text-align: left; text-decoration: none; }
+ .draft-menu-panel button:hover:not(:disabled), .draft-menu-panel a:hover { background: var(--surface-hover); }
  .board-columns { display: grid; min-width: 0; }
  .wide .board-columns { grid-template-columns: minmax(0, 1fr) 452px; gap: 28px; align-items: start; padding-top: 16px; }
  .wide .draft-toolbar { display: none; }
@@ -792,7 +833,8 @@
  .confirmation-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
  .confirmation-actions button, .move-controls button, .field-header button { min-height: 44px; }
  .pick-confirmation p, .move-controls p { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
- .placement-hint { color: var(--muted); font-size: .75rem; }
+ .placement-hint { color: var(--muted); font-size: .85rem; }
+ .selected-identity strong { color: var(--text); }
  .wide .move-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
  .wide .move-controls p { flex-basis: 100%; }
  .wide .confirmation-actions { gap: .4rem; }
@@ -802,9 +844,9 @@
  .wide .draft-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 20px; min-height: 64px; box-sizing: border-box; padding-block: 10px; border-bottom: 1px solid var(--border); background: var(--background); }
  .wordmark { flex: none; display: inline-flex; align-items: center; gap: .625rem; min-height: 44px; color: var(--text); text-decoration: none; font-size: 1.25rem; font-weight: 850; letter-spacing: -.04em; }
  .mark { width: .625rem; height: .625rem; border: 2px solid var(--text); transform: rotate(45deg); }
- .rules-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; min-height: 44px; font-size: .875rem; color: var(--muted); text-decoration: none; }
- .wallet-link { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding-inline: .5rem; border-radius: var(--radius); color: var(--accent); font-size: .875rem; font-weight: 750; text-decoration: none; }
- .wallet-link:hover { color: var(--accent-hover); background: var(--surface); }
+ .shop-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; padding-inline: .75rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: 650 .875rem/1 var(--font-control); text-decoration: none; }
+ .shop-link:hover { border-color: var(--accent); background: var(--surface); }
+ .shop-balance { color: var(--accent); font-weight: 750; }
  .new-draft { flex: none; padding-inline: .75rem; font-size: .875rem; }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 </style>

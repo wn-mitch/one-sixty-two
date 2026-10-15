@@ -84,7 +84,7 @@
  const colors = $derived(Object.entries(s.k).map(([role, color]) => `--${role}:${color}`).join(';'));
  const Front = $derived(fronts[s.era]);
  const Back = $derived(backs[s.era]);
- const equipped = $derived(appearance === undefined ? equippedAppearance(s.fin.tier) : {});
+ const equipped = $derived(appearance === undefined ? equippedAppearance(s.fin.tier, s.era) : {});
  const shownAppearance = $derived(resolveCardAppearance(s.fin.tier, equipped, appearance, film, plate));
  // Captures and lit scenes keep the static finish; every other front is lit by its own WebGL canvas.
  const flat = $derived(capture || scene);

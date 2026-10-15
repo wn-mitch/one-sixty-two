@@ -89,8 +89,8 @@ let heading = $state<HTMLHeadingElement>();
   {#snippet backControls()}
    {#if inspection}
     <div class="season-toggle" role="group" aria-label="Season statistics">
-     <button type="button" aria-label="162-0 season" aria-pressed={selectedMode === 'simulated'} onclick={() => selectMode('simulated')}>162-0</button>
-     <button type="button" aria-label="Actual season" aria-pressed={selectedMode === 'actual'} onclick={() => selectMode('actual')}>Actual</button>
+     <button type="button" aria-label="Your simulated season" aria-pressed={selectedMode === 'simulated'} onclick={() => selectMode('simulated')}>Your simulated season</button>
+     <button type="button" aria-label="Historical season" aria-pressed={selectedMode === 'actual'} onclick={() => selectMode('actual')}>Historical season</button>
     </div>
    {/if}
    {#if textBack}<button type="button" class="back-text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>{/if}

@@ -52,6 +52,12 @@ final class GameViewController: UIViewController {
     private func configureWebView() {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
+        // The game reads this mark to present the app surface: no external support links.
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: "document.documentElement.dataset.host = 'ios-app';",
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.translatesAutoresizingMaskIntoConstraints = false

@@ -1,0 +1,95 @@
+<script lang="ts">
+	import { onMount, tick } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
+	import Settings from './Settings.svelte';
+	import { draftModeEnabled } from '#lib/app/features.ts';
+
+	// Less frequent destinations live here so the header keeps Play, My teams, Collection and Shop legible.
+	let open = $state(false);
+	let developerDraft = $state(false);
+	let settings = $state<ReturnType<typeof Settings>>();
+	let trigger = $state<HTMLButtonElement>();
+	let panel = $state<HTMLElement>();
+	const uid = $props.id();
+	const panelId = `${uid}-menu`;
+
+	onMount(() => { developerDraft = draftModeEnabled(); });
+	afterNavigate(() => { open = false; });
+
+	async function toggle(): Promise<void> {
+		open = !open;
+		if (open) {
+			await tick();
+			panel?.querySelector<HTMLElement>('a, button')?.focus();
+		}
+	}
+	function close(returnFocus = true): void {
+		if (!open) return;
+		open = false;
+		if (returnFocus) trigger?.focus({ preventScroll: true });
+	}
+	function openSettings(): void {
+		open = false;
+		settings?.open(trigger);
+	}
+	function onWindowClick(event: MouseEvent): void {
+		if (!open) return;
+		const target = event.target as Node;
+		if (!panel?.contains(target) && !trigger?.contains(target)) close(false);
+	}
+</script>
+
+<svelte:window onclick={onWindowClick} onkeydown={event => { if (event.key === 'Escape') close(); }} />
+
+<div class="site-menu">
+	<button bind:this={trigger} type="button" class="menu-trigger" aria-expanded={open} aria-controls={panelId} onclick={() => void toggle()}>
+		<svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" /></svg>
+		Menu
+	</button>
+	<nav bind:this={panel} id={panelId} class="menu-panel" aria-label="More" hidden={!open}>
+		<a href="/about#draft">How to play</a>
+		<button type="button" onclick={openSettings}>Settings</button>
+		<a href="/about#simulation">Rules &amp; model</a>
+		<a href="/about#attribution">Data &amp; image credits</a>
+		{#if developerDraft}<a class="developer" href="/draft">Draft Mode <span>developer</span></a>{/if}
+	</nav>
+	<Settings bind:this={settings} showTrigger={false} />
+</div>
+
+<style>
+	.site-menu { position: relative; }
+	.menu-trigger { display: inline-flex; min-height: 2.75rem; align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border-color: transparent; background: transparent; color: var(--muted); font-size: var(--text-sm); }
+	.menu-trigger:hover:not(:disabled), .menu-trigger[aria-expanded='true'] { color: var(--text); background: var(--surface); }
+	.menu-panel {
+		position: absolute;
+		z-index: 20;
+		top: calc(100% + var(--space-1));
+		right: 0;
+		display: grid;
+		min-width: 14rem;
+		padding: var(--space-1);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--surface-raised);
+		box-shadow: 0 1rem 2.5rem oklch(0% 0 0 / .4);
+	}
+	.menu-panel[hidden] { display: none; }
+	.menu-panel a, .menu-panel button {
+		display: flex;
+		min-height: 2.75rem;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		border: 0;
+		border-radius: var(--radius);
+		background: transparent;
+		color: var(--text);
+		font: 600 var(--text-sm)/1.2 var(--font-control);
+		letter-spacing: normal;
+		text-align: left;
+		text-decoration: none;
+	}
+	.menu-panel a:hover, .menu-panel button:hover:not(:disabled) { background: var(--surface-hover); }
+	.developer span { color: var(--muted); font-size: var(--text-xs); }
+</style>

@@ -103,7 +103,7 @@ async function confirmNarrowPick(page: Page, scenario: CardScenario): Promise<Dr
 	const sheet = draftSheet(page);
 	await sheet.getByRole('tab', { name: 'Field', exact: true }).click();
 	await sheet.locator(`[data-slot="${scenario.slot}"]`).click();
-	await sheet.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true }).click();
+	await sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.slot}$`) }).click();
 	await expect(sheet).toHaveCount(0);
 	return deviceDraft<Draft>(page);
 }
@@ -158,7 +158,7 @@ test('keeps a changed exact season in the narrow designed-back sheet through ran
 		await sheet.getByRole('tab', { name: 'Card back', exact: true }).click();
 		await expect(sheet.locator('.inspection-back')).toBeVisible();
 		await expect(details).toBeVisible();
-		await expect(sheet.getByRole('button', { name: `Draft at ${slot}`, exact: true })).toBeVisible();
+		await expect(sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${slot}$`) })).toBeVisible();
 
 		const saved = await confirmNarrowPick(page, changedScenario);
 		expect(saved.picks.at(-1)?.seasonId).toBe(changedProfile!.seasonId);
@@ -191,7 +191,7 @@ test('keeps a no-photo card draftable through the wide in-place flip when rankin
 	await card.getByRole('button', { name: `Select ${scenario.profile.year} ${scenario.profile.displayName}`, exact: true }).click();
 	const field = page.locator('.field-panel');
 	await field.locator(`[data-slot="${scenario.slot}"]`).click();
-	await field.getByRole('button', { name: `Draft at ${scenario.slot}`, exact: true }).click();
+	await field.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.slot}$`) }).click();
 	const saved = await deviceDraft<Draft>(page);
 	expect(saved.picks.at(-1)?.seasonId).toBe(scenario.candidate.seasonId);
 });

@@ -163,7 +163,7 @@ export async function openSavedDraft(page: Page, draft: Draft): Promise<void> {
   if (!localStorage.getItem(key)) localStorage.setItem(key, value);
  }, { key: STORAGE_KEY, value: saved });
  await page.goto('/');
- await page.getByRole('button', { name: 'Resume draft', exact: true }).click();
+ await page.getByRole('button', { name: 'Resume my team', exact: true }).click();
  await expectPool(page);
 }
 

@@ -5,6 +5,7 @@
 	import { challengeSeriesPath, type Challenge } from '../game/challenge.ts';
 	import { createResultsModel } from '../game/results-model.ts';
 	import { encodeReplay } from '../game/share.ts';
+	import { seriesHash } from '../game/replay-link.ts';
 	import type { Draft, Manifest, Profile } from '../game/types.ts';
 	import { loadMedia } from '../media/client.ts';
 	import type { MediaManifest } from '../media/types.ts';
@@ -13,6 +14,8 @@
 	import type { ShareAction, ShareFormat, SharePublication, ShareRenderModel } from '../share/types.ts';
 	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
 	import type { NewCard, NewSticker } from '../collection/collection.ts';
+	import type { SeasonReward } from '../cosmetics/ledger.ts';
+	import TokenAmount from './TokenAmount.svelte';
 	import ResultsCollection from './ResultsCollection.svelte';
 	import ResultsGrades from './ResultsGrades.svelte';
 	import SeasonClipping from './SeasonClipping.svelte';
@@ -45,6 +48,8 @@
 		newStickers?: readonly NewSticker[];
 		/** Player-seasons this season added to the collection for the first time. */
 		newCards?: readonly NewCard[];
+		/** Tokens this season's save just granted; null or zero when nothing new was earned. */
+		reward?: SeasonReward | null;
 	}
 
 	let {
@@ -62,9 +67,16 @@
 		shareStatus,
 		challenge = null,
 		newStickers = [],
-		newCards = []
+		newCards = [],
+		reward = null
 	}: Props = $props();
+	const earned = $derived(reward ? reward.season + reward.bonus : 0);
 	const grade = $derived(seasonGrade(result.wins, result.losses));
+	// Head-to-head setup opens with this team already in place; only the opponent is left to choose.
+	const headToHeadHref = $derived(`/seasons${seriesHash({
+		'team-a': { link: `/#replay=${encodeReplay(draft)}`, name: `${result.wins}–${result.losses} team` },
+		'team-b': { link: '', name: '' }
+	})}`);
 	const runDifference = $derived(result.runsFor - result.runsAgainst);
 	const expected = $derived(expectedWins(draft.picks.map(pick => profiles.find(profile => profile.seasonId === pick.seasonId) ?? {})));
 	const rosterGrade = $derived(expected === null ? null : draftGrade(expected));
@@ -227,13 +239,23 @@
 				<button class="secondary" type="button" title="Copy link" disabled={sharing} onclick={() => onShare('copy-link', 'field', shareModel)}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg><span class="action-label">{sharing ? 'Preparing…' : 'Copy link'}</span></button>
 			</div>
 			<div class="more-actions">
-				<a class="button" href="/seasons"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5"></path></svg>Play head-to-head</a>
+				<a class="button" href={headToHeadHref}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5"></path></svg>Head-to-head with this team</a>
 				<button class="new-draft" type="button" onclick={onNew}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>New draft</button>
 			</div>
 		</div>
 
 	</header>
 
+
+	{#if reward && earned > 0}
+		<section class="reward" aria-labelledby="reward-heading">
+			<div>
+				<h3 id="reward-heading">{reward.bonus ? 'First season complete!' : 'Season complete'}</h3>
+				<p><TokenAmount amount={earned} /> {reward.bonus ? `${reward.season} season token + ${reward.bonus} first-season bonus` : `${earned} season token`} · Your team is saved in <a href="/seasons">My teams</a> and its cards joined your <a href="/collection">Collection</a>.</p>
+			</div>
+			<a class="button" href="/shop">Choose a card finish</a>
+		</section>
+	{/if}
 
 	<div class="awards-share">
 		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
@@ -428,6 +450,10 @@
 	.run-difference { color: var(--muted); font-size: var(--text-sm); }
 	.run-difference.up { color: var(--success); }
 	.run-difference.down { color: var(--error); }
+	.reward { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: var(--surface); }
+	.reward h3 { margin: 0 0 var(--space-1); font-size: var(--text-lg); }
+	.reward p { margin: 0; color: var(--muted); }
+	.reward :global(.token-amount) { color: var(--accent); font-weight: 750; }
 	/* Two equal columns: the share pair at full size, then the smaller head-to-head / new-draft pair. */
 	.score-actions { display: grid; align-content: center; gap: var(--space-2); width: min(100%, 24rem); }
 	.share-shortcuts, .more-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }

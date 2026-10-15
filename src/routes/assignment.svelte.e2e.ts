@@ -125,6 +125,7 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	if (!pitcherSlot) throw new Error('Assignment fixture does not include a pitcher');
 	await openSavedDraft(page, scenario.draft);
 	// Phones leave players with no open position out of the pool until the Blocked players setting is on.
+	await page.getByRole('button', { name: 'Menu', exact: true }).click();
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
 	await settings.getByRole('switch', { name: 'Blocked players', exact: true }).click();
@@ -135,9 +136,9 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await expect(confirmation).toHaveAttribute('data-selected-season', scenario.target.seasonId);
 	await expect(confirmation).toHaveAttribute('data-pending-slot', '');
 	await expect(confirmation).toContainText('Reassign your roster to make room.');
-	await expect(confirmation.getByRole('button', { name: 'Draft player', exact: true })).toBeDisabled();
+	await expect(confirmation.getByRole('button', { name: /^Draft \S+$/ })).toBeDisabled();
 
-	await confirmation.getByRole('button', { name: 'Cancel selection', exact: true }).click();
+	await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(page.locator('dialog.draft-sheet[open]')).toHaveCount(0);
 	await expect(selected.select).toBeFocused();
 	selected = await selectExactTarget(page, profile, scenario.target.seasonId);
@@ -253,8 +254,8 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	await restoredSheet.getByRole('button', { name: 'Close field', exact: true }).click();
 	selected = await selectExactTarget(page, profile, scenario.target.seasonId);
 	await fieldSlot(page, scenario.targetSlot).click();
-	await expect(selected.sheet.getByRole('button', { name: `Draft at ${scenario.targetSlot}`, exact: true })).toBeEnabled();
-	await selected.sheet.getByRole('button', { name: `Draft at ${scenario.targetSlot}`, exact: true }).click();
+	await expect(selected.sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.targetSlot}$`) })).toBeEnabled();
+	await selected.sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.targetSlot}$`) }).click();
 	await expect.poll(async () => (await savedDraft(page)).actions?.at(-1)).toEqual({ type: 'pick', seasonId: scenario.target.seasonId, slot: scenario.targetSlot });
 	const completed = await savedDraft(page);
 	expect(completed.picks.at(-1)?.seasonId).toBe(scenario.target.seasonId);
@@ -268,6 +269,7 @@ test('reviews a hitter before moving when Review first is selected', async ({ pa
 	const origin = scenario.draft.picks.find(pick => pick.seasonId === scenario.occupantSeasonId)?.slot;
 	if (!origin || !HITTER_SLOTS.includes(origin as HitterSlot)) throw new Error('Assignment fixture occupant is not a hitter');
 	await openSavedDraft(page, scenario.draft);
+	await page.getByRole('button', { name: 'Menu', exact: true }).click();
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
 	await settings.getByRole('button', { name: 'Review first', exact: true }).click();
