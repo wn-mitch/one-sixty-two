@@ -44,7 +44,14 @@ function flight(contact: MomentContact, B: string, choose: Choose): string {
  }
  return contact.launchAngleDeg >= 50
   ? choose('flight', [`${B} pops it up ${airborneDirection}.`, `A high pop fly ${airborneDirection} from ${B}.`, `${B} lifts a pop fly ${airborneDirection}.`])
-  : choose('flight', [`${B} hits one in the air ${airborneDirection}.`, `Fly ball ${airborneDirection} off the bat of ${B}.`, `${B} lifts one ${airborneDirection}.`]);
+  : choose('flight', [
+   `${B} hits one in the air ${airborneDirection}.`,
+   `Fly ball ${airborneDirection} off the bat of ${B}.`,
+   `${B} lifts one ${airborneDirection}.`,
+   `In the air ${airborneDirection}, hit by ${B}.`,
+   `There's a fly ball ${airborneDirection} from ${B}.`,
+   `${B} sends a fly ${airborneDirection}.`
+  ]);
 }
 
 function action(moment: SeasonMoment, choose: Choose): string {
@@ -56,7 +63,16 @@ function action(moment: SeasonMoment, choose: Choose): string {
   case 'homeRun': {
    const result = choose('result', ['It’s gone!', 'That ball is out of here!', 'And it clears the fence!', 'Home run!', 'Over the fence!']);
    const type = moment.runsScored === 4 ? 'A grand slam!' : moment.runsScored === 3 ? 'A three-run homer!' : moment.runsScored === 2 ? 'A two-run homer!' : 'A solo home run!';
-   return `${lead || `${B} hits it out! `}${c ? `${result} ` : ''}${type}`;
+   const flightCall = lead || `${B} hits it out! `;
+   // A whole-call shape varies the cadence, not just the word before the same homer description.
+   return choose('home-run-shape', [
+    `${flightCall}${c ? `${result} ` : ''}${type}`,
+    `${flightCall}${type} ${B} takes ${P} deep.`,
+    `${B} facing ${P}. ${flightCall}${type}`,
+    `${flightCall}No play for the defense. ${type}`,
+    `${flightCall}${result} ${P} gives up the long ball. ${type}`,
+    `${flightCall}${type} It's ${B} with the home run off ${P}.`
+   ]);
   }
   case 'single': return lead + (c
    ? choose('result', ['And that’s a base hit!', 'That’s a single.', 'A base hit!', 'That’ll be a single.'])
