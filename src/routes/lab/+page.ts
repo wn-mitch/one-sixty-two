@@ -1,2 +1,2 @@
-/** The foil lab draws with WebGL in the browser, so it renders on the client only. */
-export const ssr = false;
+/** Link metadata renders on the server; the WebGL workshop mounts only in the browser. */
+export const ssr = true;

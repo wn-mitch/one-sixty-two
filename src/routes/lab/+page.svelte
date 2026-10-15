@@ -21,9 +21,11 @@
 	let exporting = $state(false);
 	let videoProgress = $state<VideoProgress | null>(null);
 	let videoAbort: AbortController | undefined;
+	let mounted = $state(false);
 	const supported = LightEngine.shared() !== null;
 
 	onMount(() => {
+		mounted = true;
 		if (location.hash.length > 1 && !lab.restore(location.hash.slice(1))) {
 			toasts.show('This lab link is invalid or uses an unsupported version. Showing the default setup.', { tone: 'error' });
 		}
@@ -110,9 +112,16 @@
 
 <svelte:head>
 	<title>Foil lab | 162-0</title>
+	<meta name="description" content="Explore the 162-0 card renderer: tune foil patterns, colors and light, save a setup, or export a loop." />
+	<link rel="canonical" href="https://162-0.dev/lab" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://162-0.dev/lab" />
+	<meta property="og:title" content="Foil lab | 162-0" />
+	<meta property="og:description" content="Explore the 162-0 card renderer: tune foil patterns, colors and light, save a setup, or export a loop." />
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
+{#if mounted}
 <main class="lab">
 	<section class="stage-area" aria-label="Cards">
 		<div class="toolbar">
@@ -226,6 +235,7 @@
 		{/if}
 	</aside>
 </main>
+{/if}
 
 <style>
 	.lab { width: calc(100vw - 2rem); margin-left: calc(50% - 50vw + 1rem); box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem); gap: var(--space-4); padding: var(--space-4); align-items: start; }
