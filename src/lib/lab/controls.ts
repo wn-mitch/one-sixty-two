@@ -5,6 +5,7 @@ import { plateDials, type Plate } from '#lib/cards/surface/plates/plate.ts';
 import { ERA_HOLO, FILM_FINISHES, FILMS, PALETTES } from '#lib/cards/surface/holo-films.ts';
 import { ERA_FOIL, ERA_PLATE_TUNING, PLATES } from '#lib/cards/surface/foil-plates.ts';
 import { DEFAULT_LIGHT } from '#lib/cards/surface/light-renderer.ts';
+import { DEFAULT_CUSTOM_GRADIENT, normalizeGradient } from '#lib/cards/surface/palettes/custom.ts';
 import { STOCKS, type Stock } from '#lib/cards/surface/surfaces.ts';
 
 /**
@@ -28,6 +29,8 @@ export interface Setup {
 	/** Empty keeps the film's own finish, colourway or stock. */
 	finish: string;
 	palette: string;
+	/** Two to five RGB hex stops used when the custom colourway is selected. */
+	gradient: string[];
 	/** Empty keeps the film's own under film; `none` prints none. */
 	under: string;
 	plate: string;
@@ -202,8 +205,8 @@ export function eraPreset(setup: Setup, era: CardEra): Setup {
 }
 
 export const START: Setup = {
-	print: 'sheet', relief: 'flat', tier: 'gem', era: '2020s', film: 'galaxy', finish: '', palette: '', under: '', plate: 'brushed', stock: '',
-	tuned: {}, light: {}, drift: true
+	print: 'sheet', relief: 'flat', tier: 'gem', era: '2020s', film: 'galaxy', finish: '', palette: '',
+	gradient: [...DEFAULT_CUSTOM_GRADIENT], under: '', plate: 'brushed', stock: '', tuned: {}, light: {}, drift: true
 };
 
 /** Restores a setup from a link, keeping only what this version of the lab still has. */
@@ -217,6 +220,7 @@ export function parseSetup(saved: Partial<Setup>): Setup {
 		film: pick(saved.film, filmNames, START.film),
 		finish: pick(saved.finish, ['', ...finishNames], ''),
 		palette: pick(saved.palette, ['', ...paletteNames], ''),
+		gradient: normalizeGradient(saved.gradient),
 		under: pick(saved.under, ['', 'none', ...filmNames], ''),
 		plate: pick(saved.plate, plateNames, START.plate),
 		stock: pick(saved.stock, ['', ...stockNames], ''),

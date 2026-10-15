@@ -2,7 +2,10 @@ import {
 	dialOf, dialsOf, eraPreset, filmNames, finishInUse, finishNames, optionsOf, paletteNames,
 	plateNames, spread, START, valueOf, withValue, type ChoiceKey, type Setup, type Target
 } from './controls.ts';
-import { decodeLink, encodeLink, linkObject, type LinkState, type Stagger } from './link.ts';
+import {
+	decodeLink, encodeLink, labUrl, linkObject, saveLabLink,
+	type LinkState, type SaveLabLinkOptions, type SavedLabLink, type Stagger
+} from './link.ts';
 
 export { MAX_STAGGER, ZOOMS } from './link.ts';
 
@@ -95,6 +98,16 @@ export class Lab {
 	/** The state as a link fragment. */
 	save(): string {
 		return encodeLink(this.state);
+	}
+
+	/** Builds the full hash link used when short-link storage is unavailable. */
+	url(origin: string, pathname = '/lab'): string {
+		return labUrl(this.state, origin, pathname);
+	}
+
+	/** Stores the current semantic state, retaining the full-link fallback on failures. */
+	saveLink(options: SaveLabLinkOptions): Promise<SavedLabLink> {
+		return saveLabLink(this.state, options);
 	}
 
 	/** The state as the plain object a saved short link stores. */

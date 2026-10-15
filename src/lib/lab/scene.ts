@@ -53,6 +53,7 @@ export function sceneOf(setup: Setup): Scene {
 			foilPlate: plateNames.indexOf(setup.plate),
 			finish: setup.finish ? finishNames.indexOf(setup.finish) : -1,
 			palette: setup.palette ? paletteNames.indexOf(setup.palette) : -1,
+			customGradient: setup.palette === 'custom' ? setup.gradient : null,
 			filmTune: tune('film', setup.film, filmNames),
 			finishTune: tune('finish', finish, finishNames),
 			plateTune: tune('plate', setup.plate, plateNames)

@@ -6,6 +6,7 @@ import { ERA_HOLO, filmsFor, HOLO_PATTERNS, underOf, type HoloPattern } from './
 import type { ProgramSpec } from './light-shader.ts';
 import { LightPrograms, programKey, type Uniforms } from './light-programs.ts';
 import { TUNE_SLOTS, type ModuleTune } from './films/film.ts';
+import { gradientUniforms } from './palettes/custom.ts';
 
 /**
  * Draws the light on many cards in one WebGL2 pass over their DOM fronts. The DOM supplies colour;
@@ -103,6 +104,8 @@ export interface LightOptions {
 	finish?: number;
 	/** Prints every film in one colourway, by its index in PALETTES; -1 keeps each film's own. */
 	palette?: number;
+	/** Two to five RGB hex stops for the custom colourway; null keeps its shipped gradient. */
+	customGradient?: readonly string[] | null;
 	/** How far foil plates press through holo film too; 0 keeps the film smooth over the plate. */
 	plateUnderFilm?: number;
 	/** A second film, by its index in HOLO_PATTERNS, printed under every film and showing through its ground; -1 keeps each film's own, -2 prints none. */
@@ -121,7 +124,8 @@ export const DEFAULT_LIGHT: Readonly<Required<Omit<LightOptions, 'time'>>> = {
 	// 1 is colour-over: foil takes the tint of the ink it covers.
 	foilMode: 1, shift: 8.5, paper: 1, wash: 1,
 	foilPlate: -1, plateDepth: 1, plateScale: 1, plateTone: 1, stain: 1,
-	filmTune: null, finishTune: null, plateTune: null, finish: -1, palette: -1, plateUnderFilm: 0, underFilm: -1, underMix: 1
+	filmTune: null, finishTune: null, plateTune: null, finish: -1, palette: -1, customGradient: null,
+	plateUnderFilm: 0, underFilm: -1, underMix: 1
 };
 type LightCanvas = HTMLCanvasElement | OffscreenCanvas;
 /**
@@ -151,11 +155,20 @@ let circuitPending: Promise<Uint8Array<ArrayBuffer>> | null = null;
  */
 function circuitWires(): Promise<Uint8Array<ArrayBuffer>> {
 	if (circuitTile) return Promise.resolve(circuitTile);
-	return circuitPending ??= new Promise(resolve => {
-		const build = () => resolve(circuitTile = rasterizeWires(growWires()));
-		if (typeof requestIdleCallback === 'function') requestIdleCallback(build, { timeout: 1000 });
-		else setTimeout(build, 0);
-	});
+	if (circuitPending) return circuitPending;
+	const { promise, resolve, reject } = Promise.withResolvers<Uint8Array<ArrayBuffer>>();
+	circuitPending = promise;
+	const build = () => {
+		try {
+			resolve(circuitTile = rasterizeWires(growWires()));
+		} catch (error) {
+			circuitPending = null;
+			reject(error);
+		}
+	};
+	if (typeof requestIdleCallback === 'function') requestIdleCallback(build, { timeout: 1000 });
+	else setTimeout(build, 0);
+	return promise;
 }
 
 const TIER_CODE: Record<Finish, number> = { base: 0, foil: 1, emboss: 2, gem: 3 };
@@ -198,6 +211,7 @@ export class LightRenderer {
 	#width = 0;
 	#height = 0;
 	#lost = false;
+	#circuitReady: Promise<void> = Promise.resolve();
 
 	/** Returns null when this browser has no WebGL2; the caller keeps the static finish. */
 	static create(canvas: LightCanvas): LightRenderer | null {
@@ -211,6 +225,11 @@ export class LightRenderer {
 
 	get canvas(): LightCanvas {
 		return this.#canvas;
+	}
+
+	/** Waits until deferred renderer resources are uploaded for deterministic offscreen draws. */
+	async ready(): Promise<void> {
+		await this.#circuitReady;
 	}
 
 	private constructor(canvas: LightCanvas, gl: WebGL2RenderingContext) {
@@ -260,11 +279,15 @@ export class LightRenderer {
 		gl.bindTexture(gl.TEXTURE_2D, circuit);
 		// Blank until the wires are grown; circuit film then shows its mask alone for those first frames.
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, circuitSide, circuitSide, 0, gl.RGBA, gl.UNSIGNED_BYTE, circuitTile);
-		if (!circuitTile) void circuitWires().then(tile => {
-			if (this.#lost || this.#resources?.circuit !== circuit) return;
-			gl.bindTexture(gl.TEXTURE_2D, circuit);
-			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, circuitSide, circuitSide, gl.RGBA, gl.UNSIGNED_BYTE, tile);
-		});
+		if (circuitTile) {
+			this.#circuitReady = Promise.resolve();
+		} else {
+			this.#circuitReady = circuitWires().then(tile => {
+				if (this.#lost || this.#resources?.circuit !== circuit) return;
+				gl.bindTexture(gl.TEXTURE_2D, circuit);
+				gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, circuitSide, circuitSide, gl.RGBA, gl.UNSIGNED_BYTE, tile);
+			});
+		}
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -485,6 +508,9 @@ export class LightRenderer {
 		tune(uniforms.tunePlate, uniforms.plateTune, options.plateTune);
 		gl.uniform1i(uniforms.finish, options.finish ?? DEFAULT_LIGHT.finish);
 		gl.uniform1i(uniforms.palette, options.palette ?? DEFAULT_LIGHT.palette);
+		const gradient = gradientUniforms(options.customGradient ?? DEFAULT_LIGHT.customGradient);
+		gl.uniform1i(uniforms.customGradientCount, gradient.count);
+		gl.uniform3fv(uniforms.customGradient, gradient.colors);
 		gl.uniform1f(uniforms.plateUnderFilm, options.plateUnderFilm ?? DEFAULT_LIGHT.plateUnderFilm);
 		gl.uniform1i(uniforms.underFilm, options.underFilm ?? DEFAULT_LIGHT.underFilm);
 		gl.uniform1f(uniforms.underMix, options.underMix ?? DEFAULT_LIGHT.underMix);

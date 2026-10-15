@@ -1,5 +1,19 @@
 import { CHOICES, dialOf, parseSetup, type Relief, type Setup, type Target } from './controls.ts';
 
+export const LAB_LINK_VERSION = 1;
+
+export class LabLinkSaveError extends Error {
+	readonly fallback: string;
+	readonly status: number | null;
+
+	constructor(message: string, fallback: string, status: number | null = null) {
+		super(message);
+		this.name = 'LabLinkSaveError';
+		this.fallback = fallback;
+		this.status = status;
+	}
+}
+
 /**
  * The foil lab's shareable state: what a `#…` link and a saved short link carry. Everything is named (films, plates
  * and dials by name, never by index), so a link keeps working as modules are added, and anything a later lab no
@@ -21,9 +35,59 @@ export interface LinkState {
 export const ZOOMS = [1, 1.5, 2, 3, 4] as const;
 export const MAX_STAGGER = 8;
 
-/** The plain object a link stores: the setup's fields with the stagger and zoom beside them. */
+/** The plain object a link stores: the state's schema version, setup fields, stagger and zoom. */
 export function linkObject(state: LinkState): Record<string, unknown> {
-	return { ...state.setup, stagger: state.stagger, zoom: state.zoom };
+	return { v: LAB_LINK_VERSION, ...state.setup, stagger: state.stagger, zoom: state.zoom };
+}
+
+/** Builds the full hash link, which remains a useful fallback when R2 is unavailable. */
+export function labUrl(state: LinkState, origin: string, pathname = '/lab'): string {
+	const url = new URL(pathname, origin);
+	url.hash = encodeLink(state);
+	return url.href;
+}
+
+export interface SaveLabLinkOptions {
+	origin: string;
+	fetcher?: typeof fetch;
+	endpoint?: string;
+	pathname?: string;
+}
+
+export interface SavedLabLink {
+	url: string;
+	fallback: string;
+	short: boolean;
+}
+
+/** Saves a semantic state, exposing the full link on every failure so copy-link can degrade truthfully. */
+export async function saveLabLink(state: LinkState, options: SaveLabLinkOptions): Promise<SavedLabLink> {
+	const fallback = labUrl(state, options.origin, options.pathname);
+	const request = options.fetcher ?? globalThis.fetch;
+	if (!request) throw new LabLinkSaveError('Short lab links are unavailable. Copy the full link instead.', fallback);
+	let response: Response;
+	try {
+		response = await request(options.endpoint ?? '/api/lab', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(linkObject(state))
+		});
+	} catch {
+		throw new LabLinkSaveError('Short lab links are unavailable. Copy the full link instead.', fallback);
+	}
+	let payload: unknown = null;
+	try { payload = await response.json(); } catch { /* the status still tells us this failed */ }
+	if (!response.ok) {
+		const message = payload && typeof payload === 'object' && typeof (payload as Record<string, unknown>).message === 'string'
+			? (payload as Record<string, unknown>).message as string
+			: 'Short lab links are unavailable. Copy the full link instead.';
+		throw new LabLinkSaveError(message, fallback, response.status);
+	}
+	const saved = payload && typeof payload === 'object' ? payload as Record<string, unknown> : null;
+	if (!saved || typeof saved.url !== 'string' || saved.url.length === 0) {
+		throw new LabLinkSaveError('Short lab links are unavailable. Copy the full link instead.', fallback, response.status);
+	}
+	return { url: new URL(saved.url, options.origin).href, fallback, short: true };
 }
 
 /** A link fragment: the state as base64url JSON. */
@@ -49,6 +113,7 @@ export function decodeLink(hash: string): LinkState | null {
 export function readLink(saved: unknown): LinkState | null {
 	if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return null;
 	const record = saved as Record<string, unknown>;
+	if (record.v !== undefined && record.v !== LAB_LINK_VERSION) return null;
 	const setup = parseSetup((isToyState(record) ? fromToy(record) : record) as Partial<Setup>);
 	const stagger = record.stagger as Partial<Stagger> | null | undefined;
 	const target = typeof stagger?.target === 'string' ? stagger.target : '';

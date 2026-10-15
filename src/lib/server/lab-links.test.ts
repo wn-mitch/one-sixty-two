@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReplayBucket, ReplayPutOptions } from './replays.ts';
-import { LAB_LINK_ID_PATTERN, LAB_LINK_PREFIX, LabLinkInvalidError, labFragment, labLinkId, loadLabLink, storeLabLink } from './lab-links.ts';
+import { LAB_LINK_ID_PATTERN, LAB_LINK_PREFIX, LabLinkInvalidError, canonicalLabState, labFragment, labLinkId, loadLabLink, storeLabLink } from './lab-links.ts';
 import { decodeLink } from '../lab/link.ts';
 
 class MemoryBucket implements ReplayBucket {
@@ -18,7 +18,7 @@ class MemoryBucket implements ReplayBucket {
 }
 
 const STATE = {
-	print: 'sheet', relief: 'rim', tier: 'gem', era: '2020s', film: 'galaxy', finish: '', palette: '', under: '', plate: 'brushed', stock: '',
+	print: 'sheet', relief: 'rim', tier: 'gem', era: '2020s', film: 'galaxy', finish: '', palette: 'custom', gradient: ['#112233', '#445566'], under: '', plate: 'brushed', stock: '',
 	tuned: { 'film:galaxy': { speed: 0.4 } }, light: { spotlight: 0.35 }, drift: false, stagger: null, zoom: 2
 };
 
@@ -31,7 +31,7 @@ describe('lab links', () => {
 		const loaded = await loadLabLink(bucket, id);
 		expect(loaded).not.toHaveProperty('junk');
 		const opened = decodeLink(labFragment(loaded!));
-		expect(opened?.setup).toMatchObject({ film: 'galaxy', relief: 'rim', drift: false, tuned: { 'film:galaxy': { speed: 0.4 } }, light: { spotlight: 0.35 } });
+		expect(opened?.setup).toMatchObject({ film: 'galaxy', relief: 'rim', drift: false, gradient: ['#112233', '#445566'], tuned: { 'film:galaxy': { speed: 0.4 } }, light: { spotlight: 0.35 } });
 		expect(opened?.zoom).toBe(2);
 	});
 
@@ -53,6 +53,12 @@ describe('lab links', () => {
 		const huge = Object.fromEntries(Array.from({ length: 60 }, (_, index) => [`film:f${index}`, Object.fromEntries(Array.from({ length: 40 }, (_, dial) => [`dial${dial}`, 0.123456789]))]));
 		await expect(storeLabLink(bucket, { tuned: huge })).rejects.toBeInstanceOf(LabLinkInvalidError);
 		expect(bucket.objects.size).toBe(0);
+	});
+	it('preserves custom gradients and rejects incompatible explicit versions', () => {
+		const gradient = ['#112233', '#AaBbCc', '#445566'];
+		expect(canonicalLabState({ v: 1, palette: 'custom', gradient })).toMatchObject({ v: 1, palette: 'custom', gradient });
+		expect(() => canonicalLabState({ v: 2, palette: 'custom', gradient })).toThrow(LabLinkInvalidError);
+		expect(() => canonicalLabState({ palette: 'custom', gradient: ['#12345'] })).toThrow(LabLinkInvalidError);
 	});
 
 	it('draws ids from the full base62 alphabet', () => {

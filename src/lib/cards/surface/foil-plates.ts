@@ -18,6 +18,7 @@ import scales from './plates/scales.ts';
 import crackle from './plates/crackle.ts';
 import leaf from './plates/leaf.ts';
 import paisley from './plates/paisley.ts';
+import wallpaper from './plates/wallpaper.ts';
 
 /**
  * Foil plates: patterns pressed into silver and gold foil. Each is a height field; its slope tilts the
@@ -25,8 +26,8 @@ import paisley from './plates/paisley.ts';
  * `brushed` keeps the plain brushed grain. Damascus, carbon and stain also change the metal's tone (`plateShade`).
  */
 /** Every plate, in the order the shader numbers them. */
-export const PLATES = [brushed, hammered, guilloche, sunburst, diamondPlate, pinstripe, spun, carbon, knurl, damascus, stain, weld, perlage, scales, crackle, leaf, paisley] as const satisfies readonly Plate[];
-export const FOIL_PLATES = PLATES.map(plate => plate.name) as unknown as readonly ['brushed', 'hammered', 'guilloche', 'sunburst', 'diamond-plate', 'pinstripe', 'spun', 'carbon', 'knurl', 'damascus', 'stain', 'weld', 'perlage', 'scales', 'crackle', 'leaf', 'paisley'];
+export const PLATES = [brushed, hammered, guilloche, sunburst, diamondPlate, pinstripe, spun, carbon, knurl, damascus, stain, weld, perlage, scales, crackle, leaf, paisley, wallpaper] as const satisfies readonly Plate[];
+export const FOIL_PLATES = PLATES.map(plate => plate.name) as unknown as readonly ['brushed', 'hammered', 'guilloche', 'sunburst', 'diamond-plate', 'pinstripe', 'spun', 'carbon', 'knurl', 'damascus', 'stain', 'weld', 'perlage', 'scales', 'crackle', 'leaf', 'paisley', 'wallpaper'];
 export type FoilPlate = (typeof FOIL_PLATES)[number];
 
 /** Each era's plate: hand-hammered 1950s stamping, 1960s brushed metal to go with its mojo holo, a 1970s sunburst, 1980s weld beads, 1990s crumpled leaf, 2000s Damascus steel, 2010s carbon fibre and 2020s crackle. */

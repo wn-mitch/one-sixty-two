@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applies, eraPreset, parseSetup, spread, START, valueOf, withValue } from './controls.ts';
 import { sceneOf } from './scene.ts';
+import { DEFAULT_CUSTOM_GRADIENT } from '#lib/cards/surface/palettes/custom.ts';
 
 describe('foil lab controls', () => {
 	it('shows plate controls on holo only once the plate presses through the film', () => {
@@ -45,6 +46,15 @@ describe('foil lab controls', () => {
 		expect(valueOf('plate:scale', preset)).toBe(0.45);
 		const parsed = parseSetup({ film: 'lava-lamp', tier: 'platinum' as never, era: '1990s' });
 		expect(parsed).toMatchObject({ film: START.film, tier: START.tier, era: '1990s' });
+	});
+
+	it('validates saved gradients and passes custom stops to the scene only when selected', () => {
+		const gradient = ['#123456', '#abcdef', '#789abc'];
+		const custom = parseSetup({ ...START, palette: 'custom', gradient });
+		expect(custom.gradient).toEqual(gradient);
+		expect(sceneOf(custom).light.customGradient).toEqual(gradient);
+		expect(sceneOf({ ...custom, palette: 'sunset' }).light.customGradient).toBeNull();
+		expect(parseSetup({ ...START, palette: 'custom', gradient: ['#123456'] }).gradient).toEqual(DEFAULT_CUSTOM_GRADIENT);
 	});
 });
 

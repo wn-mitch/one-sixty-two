@@ -1,30 +1,35 @@
 <script lang="ts">
-	import { dialOf, optionsOf, spread, type ChoiceKey, type Target } from './controls.ts';
+	import { dialOf, optionsOf, type ChoiceKey, type Target } from './controls.ts';
 	import type { Lab } from './lab.svelte.ts';
 
 	/**
-	 * One lab control: a dial as a row of steps across its range with an exact value box, or a choice as
-	 * steps (few options) or a list with previous and next. Either can be staggered across the stage.
+	 * One lab control: a continuous numeric dial with exact entry, or a choice as
+	 * segments (few options) or a list with previous and next. Either can be staggered.
 	 */
 	let { lab, target, label }: { lab: Lab; target: Target; label?: string } = $props();
 
-	const STEPS = 7;
 	const dial = $derived(dialOf(target, lab.setup));
 	const options = $derived(dial ? [] : optionsOf(target as ChoiceKey));
 	const current = $derived(lab.value(target));
-	// The steps across the range, plus the current value when it sits between them.
-	const steps = $derived.by(() => {
-		if (!dial) return [];
-		const values = spread(dial, STEPS);
-		const value = Number(current);
-		if (values.some(step => Math.abs(step - value) < (dial.step ?? 0.01) / 2)) return values;
-		return [...values, value].sort((a, b) => a - b);
-	});
 	const name = $derived(label ?? (target.split(':')[1] ?? target).replace(/([A-Z])/g, ' $1').toLowerCase());
 	const staggered = $derived(lab.stagger?.target === target);
 	const id = $derived(`lab-${target.replace(':', '-')}`);
-	const decimals = (step = 0.01) => Math.max(0, Math.min(4, -Math.floor(Math.log10(step))));
-	const format = (value: number) => Number(value.toFixed(decimals(dial?.step)));
+	const discrete = $derived(dial?.step === 1 && Number.isInteger(dial.min) && Number.isInteger(dial.max));
+
+	function setNumber(value: number): void {
+		if (!dial || !Number.isFinite(value)) return;
+		lab.set(target, Math.min(dial.max, Math.max(dial.min, discrete ? Math.round(value) : value)));
+	}
+
+	function nudge(event: KeyboardEvent): void {
+		const direction = event.key === 'ArrowRight' || event.key === 'ArrowUp' ? 1
+			: event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? -1 : 0;
+		if (!dial || !direction) return;
+		event.preventDefault();
+		const amount = (dial.step ?? 0.01) / (event.shiftKey && !discrete ? 10 : 1);
+		// Strip arithmetic noise only when nudging; exact entry keeps the number supplied.
+		setNumber(Number((Number(current) + direction * amount).toFixed(12)));
+	}
 
 	function step(by: number): void {
 		const index = options.findIndex(option => option.value === current);
@@ -41,11 +46,12 @@
 				type="number"
 				min={dial.min}
 				max={dial.max}
-				step={dial.step ?? 0.01}
-				value={format(Number(current))}
+				step={discrete ? 1 : 'any'}
+				value={Number(current)}
+				onkeydown={nudge}
 				onchange={event => {
-					const value = Number(event.currentTarget.value);
-					if (Number.isFinite(value)) lab.set(target, Math.min(dial.max, Math.max(dial.min, value)));
+					setNumber(event.currentTarget.valueAsNumber);
+					event.currentTarget.value = String(lab.value(target));
 				}}
 			/>
 		{/if}
@@ -58,17 +64,18 @@
 		>
 	</div>
 	{#if dial}
-		<div class="steps" role="group" aria-label={name}>
-			{#each steps as value (value)}
-				<button
-					type="button"
-					aria-pressed={Math.abs(Number(current) - value) < (dial.step ?? 0.01) / 2}
-					class:shipped={value === dial.value}
-					title={value === dial.value ? 'Shipped value' : undefined}
-					onclick={() => lab.set(target, value)}>{format(value)}</button
-				>
-			{/each}
-		</div>
+		<input
+			class="dial"
+			type="range"
+			aria-label={`${name} dial`}
+			title={discrete ? 'Drag or use arrow keys to adjust' : 'Drag continuously; hold Shift with an arrow key for a fine adjustment'}
+			min={dial.min}
+			max={dial.max}
+			step={discrete ? 1 : 'any'}
+			value={Number(current)}
+			oninput={event => setNumber(event.currentTarget.valueAsNumber)}
+			onkeydown={nudge}
+		/>
 	{:else if options.length <= 4}
 		<div class="steps" role="radiogroup" aria-label={name}>
 			{#each options as option (option.value)}
@@ -91,14 +98,14 @@
 	.control.staggered { background: color-mix(in oklch, var(--accent) 12%, transparent); outline: 1px solid color-mix(in oklch, var(--accent) 45%, transparent); }
 	.head { display: flex; align-items: center; gap: 0.5rem; }
 	label { flex: 1; font-size: var(--text-sm); color: var(--text); }
-	input[type='number'] { width: 4.6rem; min-height: 0; height: 1.7rem; padding: 0.15rem 0.3rem; font: inherit; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+	input[type='number'] { width: 6.4rem; min-height: 0; height: 1.7rem; padding: 0.15rem 0.3rem; font: inherit; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+	.dial { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); cursor: ew-resize; }
 	button { min-height: 1.9rem; padding: 0.2rem 0.45rem; font-size: var(--text-sm); }
 	.stagger { min-height: 1.6rem; padding: 0.1rem 0.45rem; font-size: var(--text-xs); color: var(--muted); background: transparent; }
 	.stagger[aria-pressed='true'] { color: var(--background); background: var(--accent); border-color: var(--accent); }
 	.steps { display: flex; flex-wrap: wrap; gap: 2px; }
 	.steps button { flex: 1 1 0; min-width: 2.6rem; border-radius: 2px; font-variant-numeric: tabular-nums; }
-	.steps button[aria-pressed='true'], .steps button[aria-checked='true'] { color: var(--background); background: var(--text); border-color: var(--text); }
-	.steps button.shipped { box-shadow: inset 0 -2px 0 var(--accent); }
+	.steps button[aria-checked='true'] { color: var(--background); background: var(--text); border-color: var(--text); }
 	.list { display: flex; gap: 2px; }
 	.list select { flex: 1; min-width: 0; min-height: 1.9rem; font: inherit; font-size: var(--text-sm); color: var(--text); background: var(--surface-raised); border: 1px solid var(--border); border-radius: 2px; }
 	.list button { width: 2rem; }

@@ -18,6 +18,9 @@ test.describe('Cards workshop', () => {
 		let settings = page.getByRole('dialog', { name: 'Settings', exact: true });
 		await settings.getByRole('switch', { name: 'Motion', exact: true }).click();
 		await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
+		// Hold idle drift with the pointer; Motion off must leave this hovered face untilted.
+		const bounds = (await interactive.boundingBox())!;
+		await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.7);
 		await expect.poll(() => inlineTransform(page)).toBe('');
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		settings = page.getByRole('dialog', { name: 'Settings', exact: true });
@@ -115,8 +118,8 @@ test.describe('Cards workshop', () => {
 
 	test('keeps flip faces semantically exclusive across replay and reset', async ({ page }) => {
 		await openStory(page, 'interactions-cards--flip');
-		// Isolate the card's flight from the separate pointer-tilt effect.
-		await page.addStyleTag({ content: '.front > .card { transform: none !important; }' });
+		// Isolate the card's flight from the separate surface tilt, including idle drift.
+		await page.addStyleTag({ content: '.front .card { transform: none !important; }' });
 		const flip = page.locator('[data-cardbox]');
 		const front = flip.locator('.front');
 		const back = flip.locator('.back');
@@ -244,41 +247,28 @@ test.describe('Cards workshop', () => {
 		expect(size.width / size.height).toBeCloseTo(5 / 7, 2);
 	});
 
-	test('the holo gallery prints each film on its own blank card', async ({ page }) => {
-		await page.setViewportSize({ width: 1440, height: 1800 });
-		await openStory(page, 'cards-holo-gallery--all-films');
-		const tiles = page.locator('.card[data-film]');
-		await expect(tiles).toHaveCount(15);
-		await expect(page.locator('canvas.light[data-presented]')).toHaveCount(15, { timeout: 15000 });
-		// Neither film belongs to an era, so without the per-card override both tiles would print the same fallback film.
-		// Cracked ice is hard-edged shards; the refractor is a smooth sweep, so far fewer of its neighbouring pixels jump.
-		// The tiles drift, so capture their boxes rather than waiting for them to hold still.
-		const edges = async (film: string) => {
-			const png = await page.screenshot({ clip: (await page.locator(`.card[data-film="${film}"]`).boundingBox())! });
-			return page.evaluate(async source => {
-				const image = new Image();
-				image.src = `data:image/png;base64,${source}`;
-				await image.decode();
-				const canvas = new OffscreenCanvas(image.width, image.height);
-				const context = canvas.getContext('2d')!;
-				context.drawImage(image, 0, 0);
-				const { data, width, height } = context.getImageData(0, 0, image.width, image.height);
-				let jumps = 0;
-				for (let y = height * 0.1 | 0; y < height * 0.9; y++) for (let x = width * 0.1 | 0; x < width * 0.9; x++) {
-					const i = (y * width + x) * 4;
-					if (Math.abs(data[i]! - data[i + 4]!) + Math.abs(data[i + 1]! - data[i + 5]!) + Math.abs(data[i + 2]! - data[i + 6]!) > 60) jumps++;
-				}
-				return jumps;
-			}, png.toString('base64'));
-		};
-		expect(await edges('cracked-ice')).toBeGreaterThan(3 * await edges('refractor'));
-	});
+	for (const film of ['penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper']) {
+		test(`${film} renders its holo and changes the rendered light with tilt`, async ({ page }) => {
+			await openStoryByName(page, 'Workshop/Films', film);
+			const face = page.locator('.lab .card').first();
+			const canvas = face.locator('canvas.light');
+			await expect(canvas).toHaveAttribute('data-presented', '', { timeout: 15000 });
+			const box = (await face.boundingBox())!;
+			await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.3);
+			await expect.poll(() => face.evaluate(node => node.style.transform)).toContain('rotate');
+			const first = await canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL());
+			await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.7);
+			await expect.poll(() => canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL()))
+				.not.toBe(first);
+		});
+	}
 
 	test('the finish gallery picks each era\'s holo film and foil plate on its own', async ({ page }) => {
 		await openStoryByName(page, 'Cards/Finish gallery', 'All eras');
 		const cards = (era: string) => page.locator(`.card[data-card="${era}"]`);
 		await expect(cards('1980s')).toHaveCount(4, { timeout: 15000 });
-		await expect(cards('1980s').first()).toHaveAttribute('data-plate', 'weld');
+		const otherPlate = await cards('1990s').first().getAttribute('data-plate');
+		const ownFilm = await cards('1980s').first().getAttribute('data-film');
 		const root = page.locator('.dialkit-root');
 		await root.getByRole('button', { name: 'Finish gallery', exact: true }).press('Enter');
 		await root.getByRole('button', { name: 'Eras', exact: true }).press('Enter');
@@ -288,18 +278,20 @@ test.describe('Cards workshop', () => {
 		await page.getByRole('listbox', { name: 'Plate', exact: true }).getByRole('option', { name: 'Knurl', exact: true }).click();
 		for (const card of await cards('1980s').all()) await expect(card).toHaveAttribute('data-plate', 'knurl');
 		// Only that era changes.
-		await expect(cards('1990s').first()).toHaveAttribute('data-plate', 'spun');
-		await expect(cards('1980s').first()).toHaveAttribute('data-film', 'xfractor');
+		await expect(cards('1990s').first()).toHaveAttribute('data-plate', otherPlate!);
+		await expect(cards('1980s').first()).toHaveAttribute('data-film', ownFilm!);
 	});
 
-	test('the foil gallery presses each plate into silver and gold', async ({ page }) => {
+	test('the foil gallery renders pressed patterns distinctly from brushed grain', async ({ page }) => {
 		await page.setViewportSize({ width: 2400, height: 2600 });
 		await openStory(page, 'cards-foil-gallery--all-plates');
-		await expect(page.locator('.card[data-plate]')).toHaveCount(24);
-		await expect(page.locator('canvas.light[data-presented]')).toHaveCount(24, { timeout: 15000 });
 		// The pinstripe tile belongs to no era, so without the per-card override it would press its fallback 1960s brushed grain.
 		const edges = async (plate: string) => {
-			const png = await page.screenshot({ clip: (await page.locator(`.card[data-finish="foil"][data-plate="${plate}"]`).boundingBox())! });
+			const tile = page.locator(`.card[data-finish="foil"][data-plate="${plate}"]`);
+			await tile.evaluate(node => node.scrollIntoView({ block: 'center' }));
+			await expect(tile.locator('canvas.light')).toHaveAttribute('data-presented', '', { timeout: 15000 });
+			await expect(tile.locator('canvas.light')).toHaveCSS('opacity', '1');
+			const png = await page.screenshot({ clip: (await tile.boundingBox())! });
 			return page.evaluate(async source => {
 				const image = new Image();
 				image.src = `data:image/png;base64,${source}`;

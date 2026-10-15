@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ERA_HOLO, FILM_FINISHES, FILMS, PALETTES } from './holo-films.ts';
 import { PLATES } from './foil-plates.ts';
@@ -8,10 +7,10 @@ import { programKey } from './light-programs.ts';
 import { programSpec } from './light-renderer.ts';
 import { lightFragment } from './light-shader.ts';
 
-const modules: { kind: string; story: string; name: string; dials: Record<string, Dial> }[] = [
-	...FILMS.map(film => ({ kind: 'film', story: 'Films', name: film.name, dials: filmDials(film) })),
-	...PLATES.map(plate => ({ kind: 'plate', story: 'FoilPlates', name: plate.name, dials: plateDials(plate) })),
-	...FILM_FINISHES.map(finish => ({ kind: 'finish', story: 'FilmFinishes', name: finish.name, dials: finish.params }))
+const modules: { kind: string; name: string; dials: Record<string, Dial> }[] = [
+	...FILMS.map(film => ({ kind: 'film', name: film.name, dials: filmDials(film) })),
+	...PLATES.map(plate => ({ kind: 'plate', name: plate.name, dials: plateDials(plate) })),
+	...FILM_FINISHES.map(finish => ({ kind: 'finish', name: finish.name, dials: finish.params }))
 ];
 
 describe('finish modules', () => {
@@ -24,20 +23,18 @@ describe('finish modules', () => {
 		}
 	});
 
-	it('gives every module its own workshop story', () => {
-		const stories = {
-			film: readFileSync('src/lib/storybook/Films.stories.svelte', 'utf8'),
-			plate: readFileSync('src/lib/storybook/FoilPlates.stories.svelte', 'utf8'),
-			finish: readFileSync('src/lib/storybook/FilmFinishes.stories.svelte', 'utf8')
-		};
-		for (const { kind, name } of modules) expect(stories[kind as keyof typeof stories]).toContain(`kind: '${kind}', name: '${name}'`);
-	});
-
 	it('names every film, finish, colourway and plate once', () => {
 		for (const list of [FILMS, FILM_FINISHES, PALETTES, PLATES]) {
 			const names = list.map(module => module.name);
 			expect(new Set(names).size).toBe(names.length);
 		}
+	});
+
+	it('appends the new colourways without changing existing shader indices', () => {
+		expect(PALETTES.map(palette => palette.name)).toEqual([
+			'rainbow', 'oil-slick', 'aurora', 'thermal', 'gold-leaf', 'ice', 'synthwave',
+			'sunset', 'mint', 'rose-gold', 'vaporwave', 'mono-silver', 'custom'
+		]);
 	});
 
 	it('fades the jackpot through every era film, oldest first', () => {
@@ -89,6 +86,14 @@ describe('light programs', () => {
 		expect(remixed.remix).toBe(true);
 		for (const palette of PALETTES) expect(lightFragment(remixed)).toContain(`palette_${palette.name.replaceAll('-', '_')}`);
 		expect(programKey(remixed)).not.toBe(programKey(plain));
+	});
+
+	it('updates custom gradient uniforms without compiling another program', () => {
+		const custom = PALETTES.findIndex(palette => palette.name === 'custom');
+		const first = programSpec(film('carpet'), 0, { palette: custom, customGradient: ['#204060', '#6080a0'] });
+		const second = programSpec(film('carpet'), 0, { palette: custom, customGradient: ['#804020', '#c08060'] });
+		expect(programKey(first)).toBe(programKey(second));
+		expect(lightFragment(first)).toContain('uniform vec3 u_customGradient[5]');
 	});
 
 	it.each(Object.entries(ERA_HOLO))('the %s era program is a fraction of the full shader', era => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { LightEngine } from '#lib/cards/surface/card-light.ts';
 	import { loadHeadlineCards } from '#lib/cards/headline-seasons.ts';
 	import type { CardEra, CardViewModel } from '#lib/cards/view-model.ts';
@@ -8,17 +8,28 @@
 	import { applies, dialsOf, finishInUse, ownFinish, ownPalette, ownUnder, type Target } from '#lib/lab/controls.ts';
 	import { Lab, MAX_STAGGER, ZOOMS } from '#lib/lab/lab.svelte.ts';
 	import { sceneOf } from '#lib/lab/scene.ts';
+	import GradientControl from '#lib/lab/GradientControl.svelte';
+	import { LabLinkSaveError } from '#lib/lab/link.ts';
+	import type { VideoProgress } from '#lib/lab/video.ts';
+	import { toasts } from '#lib/toast.svelte.ts';
 
 	const lab = new Lab();
 	let fronts = $state.raw<Partial<Record<CardEra, CardViewModel>>>({});
 	let frontError = $state('');
-	let copied = $state(false);
+	let savingLink = $state(false);
+	let manualLink = $state('');
+	let exporting = $state(false);
+	let videoProgress = $state<VideoProgress | null>(null);
+	let videoAbort: AbortController | undefined;
 	const supported = LightEngine.shared() !== null;
 
 	onMount(() => {
-		if (location.hash.length > 1) lab.restore(location.hash.slice(1));
+		if (location.hash.length > 1 && !lab.restore(location.hash.slice(1))) {
+			toasts.show('This lab link is invalid or uses an unsupported version. Showing the default setup.', { tone: 'error' });
+		}
 	});
 
+	onDestroy(() => videoAbort?.abort());
 	// The era fronts load the first time a front is asked for.
 	let loading = false;
 	$effect(() => {
@@ -47,11 +58,53 @@
 	}
 
 	async function copyLink(): Promise<void> {
-		const url = `${location.origin}${location.pathname}#${lab.save()}`;
-		history.replaceState(history.state, '', url);
-		await navigator.clipboard?.writeText(url).catch(() => {});
-		copied = true;
-		setTimeout(() => (copied = false), 1600);
+		if (savingLink) return;
+		savingLink = true;
+		manualLink = '';
+		const fallback = lab.url(location.origin);
+		history.replaceState(history.state, '', fallback);
+		try {
+			const result = await lab.saveLink({ origin: location.origin });
+			try {
+				if (!navigator.clipboard) throw new Error('Clipboard is unavailable.');
+				await navigator.clipboard.writeText(result.url);
+				toasts.show('Lab link copied.', { id: 'lab-link' });
+			} catch {
+				manualLink = result.url;
+				toasts.show('Lab link saved. Copy it from the link field.', { id: 'lab-link' });
+			}
+		} catch (error) {
+			manualLink = error instanceof LabLinkSaveError ? error.fallback : fallback;
+			toasts.show(`${error instanceof Error ? error.message : 'Lab link could not be saved.'} The full setup link is available to copy.`, { id: 'lab-link', tone: 'error' });
+		} finally {
+			savingLink = false;
+		}
+	}
+
+	async function exportVideo(): Promise<void> {
+		if (exporting) return;
+		exporting = true;
+		videoProgress = null;
+		const controller = new AbortController();
+		videoAbort = controller;
+		try {
+			const scene = sceneOf(lab.state.setup);
+			const front = fronts[scene.era] ?? null;
+			const { exportLabVideo } = await import('#lib/lab/video.ts');
+			const result = await exportLabVideo({ scene, front, signal: controller.signal, onProgress: progress => videoProgress = progress });
+			const url = URL.createObjectURL(result.blob);
+			const anchor = document.createElement('a');
+			anchor.href = url;
+			anchor.download = 'foil-lab.mp4';
+			anchor.click();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			toasts.show('MP4 downloaded. Rendered loop endpoints match.', { id: 'lab-video' });
+		} catch (error) {
+			toasts.show(controller.signal.aborted ? 'MP4 export cancelled.' : error instanceof Error ? error.message : 'MP4 export failed.', { id: 'lab-video', tone: controller.signal.aborted ? 'info' : 'error' });
+		} finally {
+			exporting = false;
+			videoAbort = undefined;
+		}
 	}
 </script>
 
@@ -85,9 +138,17 @@
 				<label class="check"><input type="checkbox" checked={lab.setup.drift} onchange={event => (lab.setup = { ...lab.setup, drift: event.currentTarget.checked })} /> Drift</label>
 				<button type="button" onclick={() => lab.randomize()}>Go nuts</button>
 				<button type="button" onclick={() => lab.reset()}>Reset</button>
-				<button type="button" onclick={copyLink}>{copied ? 'Copied' : 'Copy link'}</button>
+				<button type="button" disabled={savingLink} onclick={copyLink}>{savingLink ? 'Saving link…' : 'Copy link'}</button>
+				<button type="button" disabled={exporting || !supported || (lab.setup.print === 'front' && !fronts[lab.setup.era])} onclick={exportVideo}>Export MP4</button>
+				{#if exporting}<button type="button" onclick={() => videoAbort?.abort()}>Cancel export</button>{/if}
 			</div>
 		</div>
+		{#if manualLink}
+			<label class="manual-link">Setup link<input readonly value={manualLink} onfocus={event => event.currentTarget.select()} onclick={event => event.currentTarget.select()} /></label>
+		{/if}
+		{#if exporting}
+			<p role="status">{videoProgress?.stage === 'rendering' ? `Rendering frame ${videoProgress.frames} of ${videoProgress.total}` : videoProgress?.stage === 'finalizing' ? 'Finishing MP4…' : 'Preparing MP4…'}</p>
+		{/if}
 		{#if !supported}
 			<p role="alert">This browser can't run WebGL2, so the foil can't be lit here.</p>
 		{/if}
@@ -135,6 +196,7 @@
 			<details open>
 				<summary>Colour and layers</summary>
 				<Control {lab} target="palette" label={`colourway${lab.setup.palette ? '' : ` (${ownPalette(lab.setup.film)})`}`} />
+				<GradientControl {lab} />
 				<Control {lab} target="under" label={`under film${lab.setup.under ? '' : ` (${ownUnder(lab.setup.film) || 'none'})`}`} />
 				{#each ['light:underMix', 'light:holoScale', 'light:vivid', 'light:plateUnderFilm'] as target (target)}
 					{#if shown(target)}<Control {lab} {target} />{/if}
@@ -170,6 +232,8 @@
 	.stage-area { position: sticky; top: var(--space-4); display: grid; gap: var(--space-3); min-width: 0; }
 	.toolbar { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
 	.group { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+	.manual-link { display: grid; gap: var(--space-2); font-size: var(--text-sm); }
+	.manual-link input { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; }
 	.toolbar button { min-height: 2rem; padding: 0.2rem 0.6rem; font-size: var(--text-sm); }
 	.toolbar [aria-checked='true'] { color: var(--background); background: var(--text); border-color: var(--text); }
 	.what { margin-right: 0.4rem; font-size: var(--text-sm); color: var(--muted); }

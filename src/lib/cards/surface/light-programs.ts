@@ -14,8 +14,8 @@ const UNIFORMS = {
 	wash: 'u_wash', foilPlate: 'u_foilPlate', plateDepth: 'u_plateDepth', plateScale: 'u_plateScale',
 	plateTone: 'u_plateTone', stain: 'u_stain', tuneFilm: 'u_tuneFilm', filmTune: 'u_filmTune',
 	tuneFinish: 'u_tuneFinish', finishTune: 'u_finishTune', tunePlate: 'u_tunePlate', plateTune: 'u_plateTune',
-	finish: 'u_finish', palette: 'u_palette', plateUnderFilm: 'u_plateUnderFilm', underFilm: 'u_underFilm',
-	underMix: 'u_underMix'
+	finish: 'u_finish', palette: 'u_palette', customGradientCount: 'u_customGradientCount',
+	customGradient: 'u_customGradient[0]', plateUnderFilm: 'u_plateUnderFilm', underFilm: 'u_underFilm', underMix: 'u_underMix'
 } as const;
 
 export type Uniforms = Record<keyof typeof UNIFORMS, WebGLUniformLocation | null>;

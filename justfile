@@ -80,12 +80,3 @@ feedback *args:
 feedback-doctor:
     npx --no-install agentation-mcp doctor --http-url http://127.0.0.1:4747
 
-# Copies the card light engine (renderer, films, finishes, colourways and plates) into another project, e.g. the
-# Foil Lab toy: `just foil-engine-export ~/alpacasoft/apps/foil-lab/src/lib/engine`. The copy keeps this tree's paths.
-foil-engine-export dest:
-    rm -rf "{{absolute_path(dest)}}/cards"
-    mkdir -p "{{absolute_path(dest)}}/cards/surface"
-    cp src/lib/cards/era.ts src/lib/cards/finish.ts src/lib/cards/hgh.ts "{{absolute_path(dest)}}/cards/"
-    cd src/lib/cards/surface && cp light-renderer.ts light-shader.ts holo-films.ts foil-plates.ts circuit-tile.ts surfaces.ts "{{absolute_path(dest)}}/cards/surface/"
-    cd src/lib/cards/surface && for dir in films finishes palettes plates; do mkdir -p "{{absolute_path(dest)}}/cards/surface/$dir" && cp $dir/*.ts "{{absolute_path(dest)}}/cards/surface/$dir/"; done
-    find "{{absolute_path(dest)}}/cards" -name '*.test.ts' -delete

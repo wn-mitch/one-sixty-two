@@ -83,6 +83,9 @@ uniform float u_plateTune[${TUNE_SLOTS}];
 // Swap every film's finish and colourway, by index; -1 keeps each film's own.
 uniform int u_finish;
 uniform int u_palette;
+// A custom colourway carries two to five evenly-spaced RGB stops without changing the program.
+uniform int u_customGradientCount;
+uniform vec3 u_customGradient[5];
 // How far the plate presses through holo film as well as bare foil; 0 keeps the film smooth over it.
 uniform float u_plateUnderFilm;
 // A film printed under every film, by number, showing through the top film's ground; -1 keeps each film's own, -2 prints none.

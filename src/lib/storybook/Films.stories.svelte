@@ -33,3 +33,8 @@
 <Story exportName="Galaxy" name="galaxy" args={{ kind: 'film', name: 'galaxy' }} />
 <Story exportName="Jackpot" name="jackpot" args={{ kind: 'film', name: 'jackpot' }} />
 <Story exportName="Paisley" name="paisley" args={{ kind: 'film', name: 'paisley' }} />
+<Story exportName="Penrose" name="penrose" args={{ kind: 'film', name: 'penrose' }} />
+<Story exportName="Pinwheel" name="pinwheel" args={{ kind: 'film', name: 'pinwheel' }} />
+<Story exportName="PoincareDisk" name="poincare-disk" args={{ kind: 'film', name: 'poincare-disk' }} />
+<Story exportName="Apollonian" name="apollonian" args={{ kind: 'film', name: 'apollonian' }} />
+<Story exportName="Gosper" name="gosper" args={{ kind: 'film', name: 'gosper' }} />

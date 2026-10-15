@@ -25,6 +25,11 @@ import oilPuddle from './films/oil-puddle.ts';
 import galaxy from './films/galaxy.ts';
 import jackpot from './films/jackpot.ts';
 import paisley from './films/paisley.ts';
+import penrose from './films/penrose.ts';
+import pinwheel from './films/pinwheel.ts';
+import poincareDisk from './films/poincare-disk.ts';
+import apollonian from './films/apollonian.ts';
+import gosper from './films/gosper.ts';
 import smooth from './finishes/smooth.ts';
 import bump from './finishes/bump.ts';
 import brushed from './finishes/brushed.ts';
@@ -38,10 +43,16 @@ import thermal from './palettes/thermal.ts';
 import goldLeaf from './palettes/gold-leaf.ts';
 import ice from './palettes/ice.ts';
 import synthwave from './palettes/synthwave.ts';
+import sunset from './palettes/sunset.ts';
+import mint from './palettes/mint.ts';
+import roseGold from './palettes/rose-gold.ts';
+import vaporwave from './palettes/vaporwave.ts';
+import monoSilver from './palettes/mono-silver.ts';
+import custom from './palettes/custom.ts';
 
 /** Every holo film, in the order the shader numbers them. */
-export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley] as const satisfies readonly Film[];
-export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley'];
+export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper] as const satisfies readonly Film[];
+export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper'];
 export type HoloPattern = (typeof HOLO_PATTERNS)[number];
 
 /** Films that move with time; the light engine keeps redrawing cards that show one. */
@@ -49,8 +60,8 @@ export const ANIMATED_FILMS: ReadonlySet<string> = new Set(FILMS.filter(film => 
 
 /** The surfaces a film can be pressed with; each film names its own, and a scene can swap it. */
 export const FILM_FINISHES = [smooth, bump, brushed, etched, sparkle, hammered] as const satisfies readonly FilmFinish[];
-/** The colourways a film can print in; rainbow unless a film or the scene picks another. */
-export const PALETTES = [rainbow, oilSlick, aurora, thermal, goldLeaf, ice, synthwave] as const satisfies readonly Palette[];
+/** The colourways a film can print in; rainbow unless a film or the scene picks another. Existing indices stay stable. */
+export const PALETTES = [rainbow, oilSlick, aurora, thermal, goldLeaf, ice, synthwave, sunset, mint, roseGold, vaporwave, monoSilver, custom] as const satisfies readonly Palette[];
 
 /**
  * Each era's holo film: Atomic Age bubbles for the 1950s, a psychedelic mojo swirl for the 1960s, the Atlanta

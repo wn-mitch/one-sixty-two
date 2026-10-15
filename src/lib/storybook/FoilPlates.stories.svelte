@@ -26,3 +26,4 @@
 <Story exportName="Crackle" name="crackle" args={{ kind: 'plate', name: 'crackle' }} />
 <Story exportName="Leaf" name="leaf" args={{ kind: 'plate', name: 'leaf' }} />
 <Story exportName="Paisley" name="paisley" args={{ kind: 'plate', name: 'paisley' }} />
+<Story exportName="Wallpaper" name="wallpaper" args={{ kind: 'plate', name: 'wallpaper' }} />

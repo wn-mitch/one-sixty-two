@@ -8,6 +8,7 @@ import type { ReplayBucket } from './replays.ts';
 
 export const LAB_LINK_MAX_BYTES = 8 * 1024;
 export const LAB_LINK_PREFIX = 'lab/v1/';
+export const LAB_LINK_VERSION = 1;
 export const LAB_LINK_ID_PATTERN = /^[A-Za-z0-9]{8}$/;
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const ID_ATTEMPTS = 4;
@@ -23,6 +24,7 @@ export class LabLinkUnavailableError extends Error {
 /** The plain choice names a setup holds: film, plate, era and so on. */
 const CHOICE_KEYS = ['print', 'relief', 'tier', 'era', 'film', 'finish', 'palette', 'under', 'plate', 'stock'] as const;
 const NAME = /^[a-z0-9-]{0,40}$/;
+const HEX = /^#[0-9a-fA-F]{6}$/;
 const DIAL = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
 const MODULE = /^(film|finish|plate):[a-z0-9-]{1,40}$/;
 const TARGET = /^[a-z]{1,12}(:[A-Za-z][A-Za-z0-9]{0,39})?$/;
@@ -48,12 +50,18 @@ function dials(value: unknown): Record<string, number> {
  */
 export function canonicalLabState(value: unknown): Record<string, unknown> {
 	if (!isRecord(value)) throw new LabLinkInvalidError();
-	const state: Record<string, unknown> = { v: 1 };
+	if (value.v !== undefined && value.v !== LAB_LINK_VERSION) throw new LabLinkInvalidError();
+	const state: Record<string, unknown> = { v: LAB_LINK_VERSION };
 	for (const key of CHOICE_KEYS) {
 		const entry = value[key];
 		if (entry === undefined) continue;
 		if (typeof entry !== 'string' || !NAME.test(entry)) throw new LabLinkInvalidError();
 		state[key] = entry;
+	}
+	if (value.gradient !== undefined) {
+		if (!Array.isArray(value.gradient) || value.gradient.length < 2 || value.gradient.length > 5
+			|| value.gradient.some(entry => typeof entry !== 'string' || !HEX.test(entry))) throw new LabLinkInvalidError();
+		state.gradient = [...value.gradient];
 	}
 	if (value.tuned !== undefined) {
 		if (!isRecord(value.tuned) || Object.keys(value.tuned).length > MAX_MODULES) throw new LabLinkInvalidError();
