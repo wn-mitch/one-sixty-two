@@ -6,14 +6,14 @@ const preview = '.preview-card .card';
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(120_000);
 
-async function earnToken(page: Page): Promise<void> {
+async function earnToken(page: Page, count = 1): Promise<void> {
 	// Stage one earned receipt; completion and migration semantics run against real SQLite in unit tests.
 	await page.waitForFunction(() => '__deviceDb' in window);
-	await page.evaluate(async () => {
+	await page.evaluate(async count => {
 		// The app exposes this device database hook for browser scenarios.
 		const device = window as unknown as { __deviceDb: Db };
-		await device.__deviceDb.run([{ sql: "INSERT INTO shop_completions (key, completed_at, credit) VALUES ('test-completed-run', 'example', 1)" }]);
-	});
+		await device.__deviceDb.run(Array.from({ length: count }, (_, index) => ({ sql: 'INSERT INTO shop_completions (key, completed_at, credit) VALUES (?, ?, 1)', bind: [`test-completed-run-${index}`, 'example'] })));
+	}, count);
 	await page.reload();
 }
 
@@ -39,13 +39,15 @@ test('an empty wallet explains how to earn; unlocking applies the finish in one 
 	// Comparing finishes never moves the catalogue.
 	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
 
-	await earnToken(page);
-	await expect(page.locator('.balance')).toHaveText('1 unlock token');
+	// The pattern and its colorway are separate unlocks.
+	await earnToken(page, 2);
+	await expect(page.locator('.balance')).toHaveText('2 unlock tokens');
 	await expect(page.getByText(/No tokens yet/)).toHaveCount(0);
 	await page.getByRole('button', { name: /^Holo patterns/ }).click();
 	await page.getByRole('button', { name: 'Refractor, 1 token', exact: true }).click();
 	await sheet.getByLabel(/Holo colorway/).selectOption('ice');
-	await sheet.getByRole('button', { name: 'Unlock and apply to Gem cards, 1 token', exact: true }).click();
+	await expect(sheet.getByText('Unlocks the pattern and the colorway.')).toBeVisible();
+	await sheet.getByRole('button', { name: 'Unlock and apply to Gem cards, 2 tokens', exact: true }).click();
 	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
 	await expect(sheet.getByRole('button', { name: 'Applied to Gem cards', exact: true })).toBeDisabled();
 	await expect(sheet.locator('.card')).toHaveAttribute('data-film', 'refractor');

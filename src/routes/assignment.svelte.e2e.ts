@@ -135,7 +135,7 @@ test('keeps a blocked season selected through moves and swaps, then restores the
 	const confirmation = selected.sheet.locator('.pick-confirmation');
 	await expect(confirmation).toHaveAttribute('data-selected-season', scenario.target.seasonId);
 	await expect(confirmation).toHaveAttribute('data-pending-slot', '');
-	await expect(confirmation).toContainText('Reassign your roster to make room.');
+	await expect(confirmation).toContainText('Move a hitter to make room, or cancel.');
 	await expect(confirmation.getByRole('button', { name: /^Draft \S+$/ })).toBeDisabled();
 
 	await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();

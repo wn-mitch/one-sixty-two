@@ -34,9 +34,10 @@
 		? 'Deck default'
 		: `${nameOf(choice.itemId)}${choice.colorway ? ` · ${finishName({ name: choice.colorway })}` : ''}`;
 
-	// Reset the editor to the saved choice whenever the era or tier changes.
+	// Reset the editor to the saved choice when the era, tier or that saved choice changes, not on every shop refresh.
+	const savedKey = $derived(JSON.stringify([tier, era, saved(tier, era) ?? null]));
 	$effect(() => {
-		const current = saved(tier, era);
+		const [, , current] = JSON.parse(savedKey) as [CustomTier, CardEra, EquippedFinish | null];
 		draft = current ? { itemId: current.itemId, colorway: current.colorway } : { itemId: DECK, colorway: null };
 	});
 
