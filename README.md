@@ -263,4 +263,4 @@ The game publishes runs allowed per nine innings (RA9) and outs-based baseball i
 
 Source: [SABR's Lahman database](https://sabr.org/lahman-database/). Transformed data is distributed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) with generated full attribution, pinned revision, changes notice, and a downloadable transformed-data archive. This data licence does not automatically determine an application-code licence.
 
-The `/about` route describes rules, eligibility, workload, and statistical assumptions, and displays the generated source notice.
+`/how-to-play` walks through a draft in six illustrated steps. The `/about` route describes rules, eligibility, workload, and statistical assumptions. `/credits` displays the generated source notice, the data download and the image credits.
