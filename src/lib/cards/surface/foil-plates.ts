@@ -127,7 +127,7 @@ vec2 foilSlope(vec2 p, int plate) {
 	float e = feature * 0.08;
 	float h = plateHeight(p, plate);
 	vec2 slope = vec2(plateHeight(p + vec2(e, 0.0), plate) - h, plateHeight(p + vec2(0.0, e), plate) - h) / e * feature * shape.z;
-	return slope * smoothstep(2.5, 6.0, feature / (footprint * plateScale));
+	return slope * smoothstep(1.5, 4.0, feature / (footprint * plateScale));
 }
 `;
 }

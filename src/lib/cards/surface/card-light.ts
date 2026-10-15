@@ -1,7 +1,7 @@
 import type { Finish } from '../finish.ts';
 import type { FoilPlate, PlateTuning } from './foil-plates.ts';
 import { ANIMATED_FILMS, ERA_HOLO, HOLO_PATTERNS, type HoloPattern } from './holo-films.ts';
-import { LightRenderer, type LightOptions } from './light-renderer.ts';
+import { LightRenderer, type LightOptions, type LitCard } from './light-renderer.ts';
 import { SurfaceMapQueue } from './map-queue.ts';
 import { stableUnit } from '../stable-unit.ts';
 import type { SurfaceMapOptions } from './surface-map.ts';
@@ -9,10 +9,10 @@ import type { ReliefProfile } from './surfaces.ts';
 import { CARD_ERAS, type CardEra } from '../era.ts';
 
 /**
- * Lights individual cards. One shared WebGL2 context renders a card at its own size and hands the
- * frame to that card's canvas, which lives inside the card, so layout, scrolling, stacking and the
- * card's CSS tilt need no syncing. Only cards whose light changed redraw: pointer-driven light every
- * frame, ambient light at a reduced rate, and resting cards once.
+ * Lights individual cards. One shared WebGL2 context packs every card whose light changed into one frame,
+ * draws them together, and copies each card's region to that card's canvas, which lives inside the card, so
+ * layout, scrolling, stacking and the card's CSS tilt need no syncing. Cards redraw only when their light
+ * moves, in the same frame as the tilt that moved it, so a card's pose and its light never drift apart.
  */
 
 /**
@@ -32,15 +32,22 @@ export interface LightState {
 	viewY?: number;
 }
 
-/** Ambient light changes slowly, so it redraws at this interval rather than every frame. */
-const AMBIENT_INTERVAL = 80;
-/** Films that move with time redraw at about 30 fps: smooth to the eye at half the GPU work of a 60 Hz screen. */
-const FILM_INTERVAL = 30;
+/**
+ * Films that move with time redraw at about 30 fps: smooth to the eye at half the GPU work of a 60 Hz screen.
+ * The slack lets the interval land on whole display frames (every 2nd at 60 Hz, every 4th at 120 Hz), so steps stay even.
+ */
+const FILM_INTERVAL = 33.4;
+const FILM_SLACK = 6;
 const MAX_PIXEL_RATIO = 2;
+/** Device pixels between packed cards, so no card's region picks up a neighbour's edge. */
+const PACK_GAP = 2;
+/** The widest frame the shared canvas packs before it starts a second batch. */
+const PACK_LIMIT = 4096;
 const MAP_SCALE = 1.5;
 const REST: LightState = { lightX: 0.23, lightY: 0.05, spotlight: 0 };
 
-type Presenter = ImageBitmapRenderingContext | CanvasRenderingContext2D;
+/** Counters for the `?perf` overlay: how much light work the page asks for. */
+export const lightStats = { flushes: 0, batches: 0, presents: 0, lights: 0, visible: 0, canvasWidth: 0, canvasHeight: 0 };
 
 let nextId = 0;
 
@@ -48,11 +55,9 @@ export class CardLight {
 	readonly id = `card-light-${nextId++}`;
 	card: HTMLElement | null = null;
 	canvas: HTMLCanvasElement | null = null;
-	presenter: Presenter | null = null;
+	presenter: CanvasRenderingContext2D | null = null;
 	state: LightState = { ...REST };
 	visible = false;
-	/** A pointer or focus is driving this card's light, so it redraws every frame. */
-	direct = false;
 	width = 0;
 	height = 0;
 	/** How this card's raised name is shaped; the scene default when unset. */
@@ -65,10 +70,9 @@ export class CardLight {
 		LightEngine.shared()?.invalidate(this);
 	}
 
-	/** Moves the light; `direct` marks pointer-driven light, which redraws every frame. */
-	set(state: LightState, direct = false): void {
+	/** Moves the light; the card redraws in the frame that moved it. */
+	set(state: LightState): void {
 		const { lightX, lightY, spotlight, viewX = 0, viewY = 0 } = this.state;
-		this.direct = direct;
 		const still = (a: number, b: number) => Math.abs(a - b) < 0.002;
 		if (still(lightX, state.lightX) && still(lightY, state.lightY) && still(spotlight, state.spotlight) && still(viewX, state.viewX ?? 0) && still(viewY, state.viewY ?? 0)) return;
 		this.state = { ...state };
@@ -92,33 +96,33 @@ export class LightEngine {
 	}
 
 	static #create(): LightEngine | null {
-		// Transferring frames needs WebGL on an offscreen canvas; otherwise copy from a detached canvas.
-		if (typeof OffscreenCanvas !== 'undefined' && typeof ImageBitmapRenderingContext !== 'undefined') {
-			const renderer = LightRenderer.create(new OffscreenCanvas(1, 1));
-			if (renderer) return new LightEngine(renderer, 'transfer');
-		}
-		const renderer = LightRenderer.create(document.createElement('canvas'));
-		return renderer ? new LightEngine(renderer, 'copy') : null;
+		const renderer = (typeof OffscreenCanvas !== 'undefined' ? LightRenderer.create(new OffscreenCanvas(1, 1)) : null)
+			?? LightRenderer.create(document.createElement('canvas'));
+		return renderer ? new LightEngine(renderer) : null;
 	}
 
 	readonly #renderer: LightRenderer;
-	readonly #mode: 'transfer' | 'copy';
 	readonly #lights = new Map<string, CardLight>();
 	readonly #byCard = new Map<Element, CardLight>();
 	readonly #dirty = new Set<CardLight>();
 	readonly #queue: SurfaceMapQueue;
 	readonly #visibility: IntersectionObserver;
 	readonly #sizes: ResizeObserver;
+	#scheduled = false;
+	/** The frame loop for films that move with time and for cards whose program is still compiling. */
 	#frame = 0;
-	#lastAmbient = Number.NEGATIVE_INFINITY;
+	#retry = false;
 	#lastFilm = Number.NEGATIVE_INFINITY;
+	/** The shared canvas's CSS size, which only grows, so packing a different set of cards never reallocates it. */
+	#canvasWidth = 1;
+	#canvasHeight = 1;
+	#ratio = 0;
 	#options: LightOptions = {};
 	/** Cards given their own light or map settings instead of the scene's. */
 	readonly #own = new WeakMap<Element, { light?: LightOptions; map?: SurfaceMapOptions }>();
 
-	private constructor(renderer: LightRenderer, mode: 'transfer' | 'copy') {
+	private constructor(renderer: LightRenderer) {
 		this.#renderer = renderer;
-		this.#mode = mode;
 		// Each era's program compiles in the background once the page settles, before the first card of that era shows.
 		const warm = () => renderer.warm(CARD_ERAS, this.#options);
 		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
@@ -169,7 +173,7 @@ export class LightEngine {
 		this.detach(light);
 		light.card = card;
 		light.canvas = canvas;
-		light.presenter = this.#mode === 'transfer' ? canvas.getContext('bitmaprenderer') : canvas.getContext('2d');
+		light.presenter = canvas.getContext('2d');
 		// Sized by the resize observer's first entry, delivered before the next paint.
 		light.width = 0;
 		light.height = 0;
@@ -221,7 +225,7 @@ export class LightEngine {
 	dirty(light: CardLight): void {
 		if (!light.card) return;
 		this.#dirty.add(light);
-		if (!this.#frame) this.#frame = requestAnimationFrame(this.#flush);
+		this.#schedule();
 	}
 
 	/** Restarts redraws for visible cards whose films move with time, after a hold is released. */
@@ -229,37 +233,158 @@ export class LightEngine {
 		for (const light of this.#lights.values()) if (light.visible && this.#animates(light)) this.dirty(light);
 	}
 
-	#flush = (time: number) => {
+	/**
+	 * Draws after the current task: a motion frame moves every card's pose and light, then this one pass lights them
+	 * all before the browser paints, so transform and light land in the same frame.
+	 */
+	#schedule(): void {
+		if (this.#scheduled) return;
+		this.#scheduled = true;
+		queueMicrotask(this.#flush);
+	}
+
+	#loop(): void {
+		if (!this.#frame) this.#frame = requestAnimationFrame(this.#tick);
+	}
+
+	#tick = (time: number) => {
 		this.#frame = 0;
-		const ambientDue = time - this.#lastAmbient >= AMBIENT_INTERVAL;
-		if (ambientDue) this.#lastAmbient = time;
-		const ratio = Math.min(globalThis.devicePixelRatio || 1, MAX_PIXEL_RATIO);
-		let deferred = false;
-		for (const light of [...this.#dirty]) {
-			if (!light.visible || !light.presenter || !light.canvas) {
-				this.#dirty.delete(light);
-				continue;
-			}
-			if (!light.direct && !ambientDue && !this.#animates(light)) {
-				deferred = true;
-				continue;
-			}
-			this.#dirty.delete(light);
-			if (!this.#renderer.has(light.id)) continue;
-			// A card whose shader is still compiling stays dirty and tries again next frame.
-			if (!this.#present(light, ratio)) this.#dirty.add(light);
+		if (this.#retry) {
+			this.#retry = false;
+			this.#schedule();
 		}
-		// A film that moves with time keeps its card redrawing while the card is on screen, at most at FILM_INTERVAL.
+		const filmDue = time - this.#lastFilm >= FILM_INTERVAL - FILM_SLACK;
 		let animating = false;
-		const filmDue = time - this.#lastFilm >= FILM_INTERVAL;
-		if (filmDue) this.#lastFilm = time;
 		for (const light of this.#lights.values()) {
 			if (!light.visible || !this.#animates(light)) continue;
 			animating = true;
-			if (filmDue) this.#dirty.add(light);
+			if (filmDue) this.dirty(light);
 		}
-		if (deferred || animating || this.#dirty.size) this.#frame = requestAnimationFrame(this.#flush);
+		if (filmDue && animating) this.#lastFilm = time;
+		if (animating) this.#loop();
 	};
+
+	#flush = () => {
+		this.#scheduled = false;
+		lightStats.flushes++;
+		lightStats.lights = this.#lights.size;
+		let visible = 0;
+		for (const light of this.#lights.values()) if (light.visible) visible++;
+		lightStats.visible = visible;
+		const due: CardLight[] = [];
+		for (const light of this.#dirty) {
+			if (light.visible && light.presenter && light.canvas && light.width && light.height && this.#renderer.has(light.id)) due.push(light);
+		}
+		this.#dirty.clear();
+		const ratio = Math.min(globalThis.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+		while (due.length) this.#batch(due, ratio);
+		// Films keep their cards redrawing while on screen.
+		for (const light of this.#lights.values()) {
+			if (light.visible && this.#animates(light)) {
+				this.#loop();
+				break;
+			}
+		}
+	};
+
+	/**
+	 * Shelf-packs as many of `due` as fit one frame of the shared canvas, removing them from `due`, draws them in one
+	 * pass per light setting, and copies each card's region to its canvas.
+	 */
+	#batch(due: CardLight[], ratio: number): void {
+		const placed: { light: CardLight; x: number; y: number; width: number; height: number }[] = [];
+		let x = 0;
+		let y = 0;
+		let shelf = 0;
+		let packedWidth = 0;
+		while (due.length) {
+			const light = due[due.length - 1]!;
+			const width = Math.max(1, Math.round(light.width * ratio));
+			const height = Math.max(1, Math.round(light.height * ratio));
+			if (x && x + width > PACK_LIMIT) {
+				x = 0;
+				y += shelf + PACK_GAP;
+				shelf = 0;
+			}
+			if (placed.length && y + height > PACK_LIMIT) break;
+			due.pop();
+			placed.push({ light, x, y, width, height });
+			x += width + PACK_GAP;
+			shelf = Math.max(shelf, height);
+			packedWidth = Math.max(packedWidth, x);
+		}
+		// The canvas only grows, in CSS pixels at this ratio; a ratio change (a window moved between screens) starts over.
+		if (ratio !== this.#ratio) {
+			this.#ratio = ratio;
+			this.#canvasWidth = this.#canvasHeight = 1;
+		}
+		this.#canvasWidth = Math.max(this.#canvasWidth, Math.ceil(packedWidth / ratio));
+		this.#canvasHeight = Math.max(this.#canvasHeight, Math.ceil((y + shelf) / ratio));
+		this.#renderer.resize(this.#canvasWidth, this.#canvasHeight, ratio);
+		lightStats.canvasWidth = this.#canvasWidth;
+		lightStats.canvasHeight = this.#canvasHeight;
+		// Cards with their own light settings draw in their own pass over the same frame.
+		const scenes = new Map<LightOptions, LitCard[]>();
+		for (const { light, x, y } of placed) {
+			const options = (light.card && this.#own.get(light.card)?.light) ?? this.#options;
+			let cards = scenes.get(options);
+			if (!cards) scenes.set(options, cards = []);
+			cards.push(this.#litCard(light, x / ratio, y / ratio));
+		}
+		let first = true;
+		const incomplete = new Set<string>();
+		for (const [options, cards] of scenes) {
+			if (!this.#renderer.draw(cards, options, first)) {
+				// Some program is still compiling; its cards stay dirty and try again next frame.
+				for (const card of cards) if (!this.#renderer.compiled(card, options)) incomplete.add(card.key);
+			}
+			first = false;
+		}
+		lightStats.batches++;
+		const source = this.#renderer.canvas;
+		for (const { light, x, y, width, height } of placed) {
+			if (incomplete.has(light.id)) {
+				this.#dirty.add(light);
+				this.#retry = true;
+				this.#loop();
+				continue;
+			}
+			const canvas = light.canvas!;
+			if (canvas.width !== width || canvas.height !== height) {
+				canvas.width = width;
+				canvas.height = height;
+			} else {
+				light.presenter!.clearRect(0, 0, width, height);
+			}
+			light.presenter!.drawImage(source, x, y, width, height, 0, 0, width, height);
+			// The card fades its light in on the first frame, so it never shows an empty canvas over unfoiled print.
+			canvas.dataset.presented = '';
+			lightStats.presents++;
+		}
+	}
+
+	#litCard(light: CardLight, originX: number, originY: number): LitCard {
+		const card = light.card!;
+		return {
+			key: light.id,
+			originX,
+			originY,
+			axisXx: light.width,
+			axisXy: 0,
+			axisYx: 0,
+			axisYy: light.height,
+			...light.state,
+			tier: (card.dataset.finish ?? 'base') as Finish,
+			era: card.dataset.card as CardEra | undefined,
+			film: card.dataset.film as HoloPattern | undefined,
+			plate: card.dataset.plate as FoilPlate | undefined,
+			plateTuning: plateTuning(card.dataset.plateTuning),
+			palette: palette(card.dataset.palette),
+			pattern: stableUnit(card.dataset.identity ?? '', 41),
+			// A swatch names the width it shows its pattern at; smaller swatches magnify to it.
+			zoom: Math.max(1, (Number(card.dataset.patternWidth) || 0) / light.width)
+		};
+	}
 
 	/** Whether this card shows a film that moves with time: its own, the scene's forced one, or its era's on a Gem card. */
 	#animates(light: CardLight): boolean {
@@ -271,47 +396,6 @@ export class LightEngine {
 		if (under >= 0 && ANIMATED_FILMS.has(HOLO_PATTERNS[under]!)) return true;
 		const film = forced >= 0 ? HOLO_PATTERNS[forced] : root.dataset.film ?? (root.dataset.finish === 'gem' ? ERA_HOLO[root.dataset.card as CardEra] : undefined);
 		return film !== undefined && ANIMATED_FILMS.has(film);
-	}
-
-	/** Draws one card and copies it to its canvas; false when its shader is not ready yet. */
-	#present(light: CardLight, ratio: number): boolean {
-		const { width, height } = light;
-		if (!width || !height) return true;
-		this.#renderer.resize(width, height, ratio);
-		const drawn = this.#renderer.draw([{
-			key: light.id,
-			originX: 0,
-			originY: 0,
-			axisXx: width,
-			axisXy: 0,
-			axisYx: 0,
-			axisYy: height,
-			...light.state,
-			tier: (light.card?.dataset.finish ?? 'base') as Finish,
-			era: light.card?.dataset.card as CardEra | undefined,
-			film: light.card?.dataset.film as HoloPattern | undefined,
-			plate: light.card?.dataset.plate as FoilPlate | undefined,
-			plateTuning: plateTuning(light.card?.dataset.plateTuning),
-			palette: palette(light.card?.dataset.palette),
-			pattern: stableUnit(light.card?.dataset.identity ?? '', 41)
-		}], (light.card && this.#own.get(light.card)?.light) ?? this.#options);
-		if (!drawn) return false;
-		const source = this.#renderer.canvas;
-		const canvas = light.canvas!;
-		// The card fades its light in on the first frame, so it never shows an empty canvas over unfoiled print.
-		canvas.dataset.presented = '';
-		if (this.#mode === 'transfer') {
-			(light.presenter as ImageBitmapRenderingContext).transferFromImageBitmap((source as OffscreenCanvas).transferToImageBitmap());
-			return true;
-		}
-		if (canvas.width !== source.width || canvas.height !== source.height) {
-			canvas.width = source.width;
-			canvas.height = source.height;
-		}
-		const context = light.presenter as CanvasRenderingContext2D;
-		context.clearRect(0, 0, canvas.width, canvas.height);
-		context.drawImage(source as HTMLCanvasElement, 0, 0);
-		return true;
 	}
 }
 

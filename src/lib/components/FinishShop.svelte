@@ -218,7 +218,7 @@
 	.commit { display: grid; gap: var(--space-2); }
 	.commit p { margin: 0; font-size: var(--text-sm); }
 	.catalogue { min-width: 0; }
-	.finish-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+	.finish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 	.finish-choice { display: grid; width: 100%; gap: var(--space-1); padding: var(--space-2); text-align: left; background: transparent; border-color: transparent; }
 	.finish-choice:hover:not(:disabled) { background: var(--surface); }
 	.finish-choice[aria-pressed='true'] { border-color: var(--accent); background: var(--surface); }
@@ -233,6 +233,7 @@
 	.sheet-body .close { position: absolute; top: var(--space-2); right: var(--space-2); width: 2.75rem; padding: 0; font-size: 1.5rem; }
 	.sheet-body h2 { padding-right: 3rem; }
 	.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+	@media (min-width: 30rem) { .finish-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 	@media (min-width: 40rem) { .finish-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4) var(--space-3); } }
 	@media (min-width: 64rem) {
 		.families { display: flex; }

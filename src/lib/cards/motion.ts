@@ -75,14 +75,14 @@ function applyFixedPose(node: HTMLElement, light?: CardLight): void {
 
 /**
  * Poses the card and moves its light. Only the transform is styled; the light is drawn by the card's
- * WebGL canvas. `direct` marks pointer or focus driven light, which redraws every frame.
+ * WebGL canvas in the same frame.
  */
-function applyTilt(node: HTMLElement, state: VisualState, halfWidth: number, halfHeight: number, light: CardLight | undefined, direct: boolean): void {
+function applyTilt(node: HTMLElement, state: VisualState, halfWidth: number, halfHeight: number, light: CardLight | undefined): void {
 	const lightX = clamp(state.hotspotX ?? 0.5 + LIGHT.x * 0.6 - state.ry / 26, -0.2, 1.2);
 	const lightY = clamp(state.hotspotY ?? 0.5 + LIGHT.y * 0.6 + state.rx / 26, -0.2, 1.2);
 	// A card leaning right faces left, so the viewer sits toward its right edge; leaning back puts the viewer toward its bottom.
 	const radians = Math.PI / 180;
-	light?.set({ lightX, lightY, spotlight: clamp(state.lift * 0.5, 0, 1), viewX: Math.sin(state.ry * radians), viewY: -Math.sin(state.rx * radians) }, direct);
+	light?.set({ lightX, lightY, spotlight: clamp(state.lift * 0.5, 0, 1), viewX: Math.sin(state.ry * radians), viewY: -Math.sin(state.rx * radians) });
 	node.style.transform = state.flat ? '' : tiltPose(state.rx, state.ry, state.envelope, halfWidth, halfHeight).transform;
 }
 
@@ -189,12 +189,11 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 	// Layout size, not the transformed box, so the footprint check measures the resting card.
 	let halfWidth = node.offsetWidth / 2;
 	let halfHeight = node.offsetHeight / 2;
-	const resized = new ResizeObserver(() => {
+	const unobserveSize = autonomousMotion.observeResize(node, () => {
 		halfWidth = node.offsetWidth / 2;
 		halfHeight = node.offsetHeight / 2;
 		dirty = true;
 	});
-	resized.observe(node);
 
 	const autonomousEnabled = () => Boolean(options.idle || (options.wall && (options.finish ?? 'base') !== 'base'));
 	let spotlightAngle = stableUnit(identity, 32) * Math.PI * 2;
@@ -335,6 +334,12 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				!settled(currentLift, targetLift, 0.001) ||
 				(pointerActive ? !settled(pose.envelope, pointerEnvelope(), 0.01) : !deviceActive && pose.envelope.value > 0.01);
 		},
+		rate() {
+			// A pointer, focus, or the spring back after one, follows every display frame; phone tilt follows the sensor.
+			if (hovering || focused) return 'frame';
+			if (interrupted()) return 'sensor';
+			return hoverBlend > 0.001 ? 'frame' : 'ambient';
+		},
 		frame({ time, delta, settings }) {
 			const desiredBlend = interrupted() ? 1 : 0;
 			const blendStep = delta / 1000;
@@ -373,7 +378,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 				if (settled(pose.x, 0, 0.01)) pose.x = rest();
 				if (settled(pose.y, 0, 0.01)) pose.y = rest();
 			}
-			applyTilt(node, { rx, ry, envelope, lift, hotspotX, hotspotY }, halfWidth, halfHeight, options.light, directInteraction || deviceActive || hoverBlend > 0.001);
+			applyTilt(node, { rx, ry, envelope, lift, hotspotX, hotspotY }, halfWidth, halfHeight, options.light);
 			dirty = false;
 		},
 		state(settings, visible) {
@@ -421,7 +426,7 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 		destroy() {
 			destroyed = true;
 			syncDevice();
-			resized.disconnect();
+			unobserveSize();
 			detachEvents();
 			unregisterWall?.();
 			registration.unregister();

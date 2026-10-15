@@ -251,7 +251,7 @@ vec3 holoFilm(vec2 p, vec3 normal, vec3 halfway, float band, int film, out float
 	// Patterned foil is mostly silver; a piece shows its colour as its grooves turn toward the light.
 	vec3 faceted = seed < 0.0 ? vec3(0.82, 0.84, 0.88) : mix(vec3(0.82, 0.84, 0.88), color, 0.35 + 0.65 * max(flash, pass * 0.6));
 	vec3 film_ = mix(faceted, color, vivid) * shade;
-	float detail = smoothstep(2.5, 6.0, cellSize / footprint);
+	float detail = smoothstep(1.5, 4.0, cellSize / footprint);
 	if (ground >= 0.0) {
 		feature = mix(1.0, max(copper, copperPad), detail);
 		// A vivid film sinks its ground further, so the traces, signs and letters stand out of it; copper features shine, and pads shine gold.

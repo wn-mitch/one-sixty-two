@@ -544,8 +544,8 @@
 		/* A strip 2.5 packs wide slides across; moving it by transform keeps the glint on the GPU. */
 		right: auto;
 		width: 250%;
-		background: linear-gradient(105deg, transparent 30%, oklch(100% 0 0 / .55) 45%, transparent 60%);
-		mix-blend-mode: soft-light;
+		/* A plain translucent sheen: a blend mode would recomposite everything under the strip on every frame. */
+		background: linear-gradient(105deg, transparent 30%, oklch(100% 0 0 / .22) 45%, transparent 60%);
 		translate: -72% 0;
 		animation: glint 3.2s ease-in-out infinite;
 		pointer-events: none;

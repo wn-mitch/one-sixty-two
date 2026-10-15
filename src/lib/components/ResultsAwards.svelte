@@ -115,7 +115,9 @@
 	.award-kicker { margin: 0; color: var(--award-tone); font-size: var(--text-xs); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 	.award-card { width: 100%; min-height: 0; padding: 0; border: 0; background: transparent; border-radius: .55rem; text-align: inherit; }
 	.award-card:hover, .award-card:focus-visible { background: transparent; transform: translateY(-.35rem); }
-	.award-art { display: block; width: 100%; filter: drop-shadow(0 .9rem 1.15rem oklch(8% .01 255 / .36)); }
+	/* A static shadow under the card, not a filter over it, which would re-rasterize the drifting card every frame. */
+	.award-art { position: relative; display: block; width: 100%; isolation: isolate; }
+	.award-art::before { content: ''; position: absolute; inset: 2% 3% 0; z-index: -1; border-radius: .5rem; box-shadow: 0 .9rem 1.6rem oklch(8% .01 255 / .4); pointer-events: none; }
 	.award-copy { display: grid; gap: .1rem; }
 	.award-copy strong { overflow-wrap: anywhere; font-size: var(--text-lg); line-height: 1.15; }
 	.award-copy span { color: var(--muted); font-size: var(--text-xs); }
