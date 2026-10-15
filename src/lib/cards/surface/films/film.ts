@@ -15,7 +15,7 @@ export interface Dial {
 }
 
 /** How many dials one module can expose, including its scale and, for films, its ground. */
-export const TUNE_SLOTS = 12;
+export const TUNE_SLOTS = 13;
 
 /** Live values for one module: its index in its registry and a value per dial, in declaration order. */
 export interface ModuleTune {
@@ -83,12 +83,15 @@ export function defineFilm(film: Film): Film {
 	return film;
 }
 
-/** Every dial a film exposes: its scale, its ground when it has one, then its own. */
+/** Every dial: scale, optional ground, module settings, then tilt travel for patterned films without their own. */
 export function filmDials(film: Film): Record<string, Dial> {
 	return {
 		scale: { value: film.scale ?? 1, min: 0.2, max: 4, step: 0.01, note: 'Pattern size; above 1 is finer.' },
 		...(film.ground === undefined ? {} : { ground: { value: film.ground, min: 0, max: 1.5, step: 0.01, note: 'Brightness of the ground between features.' } }),
-		...film.params
+		...film.params,
+		...(film.glsl && !film.blend && !('slideWithTilt' in film.params) ? {
+			slideWithTilt: { value: 0, min: 0, max: 4, step: 0.05, note: 'Slide the pattern with tilt on both axes. 0 fixes it; a held pose holds its position.' }
+		} : {})
 	};
 }
 

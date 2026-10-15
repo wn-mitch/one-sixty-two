@@ -38,3 +38,6 @@
 <Story exportName="PoincareDisk" name="poincare-disk" args={{ kind: 'film', name: 'poincare-disk' }} />
 <Story exportName="Apollonian" name="apollonian" args={{ kind: 'film', name: 'apollonian' }} />
 <Story exportName="Gosper" name="gosper" args={{ kind: 'film', name: 'gosper' }} />
+<Story exportName="Matrix" name="matrix" args={{ kind: 'film', name: 'matrix' }} />
+<Story exportName="SpiralMoire" name="spiral-moire" args={{ kind: 'film', name: 'spiral-moire' }} />
+<Story exportName="Wallpaper" name="wallpaper" args={{ kind: 'film', name: 'wallpaper' }} />

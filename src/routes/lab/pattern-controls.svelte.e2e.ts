@@ -6,20 +6,20 @@ import { DEFAULT_LIGHT, programSpec } from '../../lib/cards/surface/light-render
 import { parseSetup } from '../../lib/lab/controls.ts';
 import { encodeLink } from '../../lib/lab/link.ts';
 
-type Pose = { dials?: Record<string, number>; view?: [number, number] };
+type Pose = { dials?: Record<string, number>; view?: [number, number]; time?: number };
 
 // Read the production pattern before lighting: a colour sweep alone must not count as geometry moving.
-async function geometry(page: Page, name: string, poses: Pose[]) {
+async function geometry(page: Page, name: string, poses: Pose[], inspectGrooves = false) {
 	const index = FILMS.findIndex(film => film.name === name);
 	const dials = filmDials(FILMS[index]!);
 	const source = lightFragment(programSpec(index, 0, {}));
 	const fragment = source.slice(0, source.indexOf('\nvoid main() {')) + `
 void main() {
-	vec2 groove;
-	float seed, vivid, copper, copperPad, shade, cellSize, ground;
+	vec2 groove = vec2(1.0, 0.0);
+	float seed = 0.0, vivid = 0.0, copper = 0.0, copperPad = 0.0, shade = 1.0, cellSize = 100.0, ground = -1.0;
 	footprint = max(length(fwidth(v_card * CARD)), 1e-5);
 	filmPattern(${index}, v_card * CARD + v_view.zw, groove, seed, vivid, copper, copperPad, shade, cellSize, ground);
-	o_color = vec4(seed < 0.0 ? 0.0 : 0.5 + seed * 0.5, copper, vivid, 1.0);
+	o_color = ${inspectGrooves ? 'vec4(groove * 0.5 + 0.5, copper, 1.0)' : 'vec4(seed < 0.0 ? 0.0 : 0.5 + seed * 0.5, copper, vivid, 1.0)'};
 }`;
 	return page.evaluate(({ vertex, fragment, index, values, shift }) => {
 		const canvas = document.createElement('canvas');
@@ -48,8 +48,9 @@ void main() {
 		gl.uniform1i(gl.getUniformLocation(program, 'u_tuneFilm'), index);
 		gl.vertexAttrib2f(0, 0, 0);
 		gl.vertexAttrib4f(1, canvas.width, 0, 0, canvas.height);
-		const result = values.map(({ tune, view }) => {
+		const result = values.map(({ tune, view, time }) => {
 			gl.uniform1fv(gl.getUniformLocation(program, 'u_filmTune[0]'), tune);
+			gl.uniform1f(gl.getUniformLocation(program, 'u_time'), time);
 			// Keep the same seeded crop while changing only the viewer's tilt.
 			gl.vertexAttrib4f(4, view[0], view[1], 0.37, -0.21);
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -73,7 +74,7 @@ void main() {
 		return result;
 	}, {
 		vertex: LIGHT_VERTEX, fragment, index, shift: DEFAULT_LIGHT.shift,
-		values: poses.map(pose => ({ tune: dialValues(Object.fromEntries(Object.entries(dials).map(([key, dial]) => [key, { ...dial, value: pose.dials?.[key] ?? dial.value }]))), view: pose.view ?? [0, 0] }))
+		values: poses.map(pose => ({ tune: dialValues(Object.fromEntries(Object.entries(dials).map(([key, dial]) => [key, { ...dial, value: pose.dials?.[key] ?? dial.value }]))), view: pose.view ?? [0, 0], time: pose.time ?? 0 }))
 	});
 }
 
@@ -131,22 +132,45 @@ test('Apollonian zoom fills the card and focus reaches either rim without follow
 	expect(held!.image).toBe(filled!.image);
 });
 
-test('double helix walking is optional, responds to both tilt axes, and restores the same geometry', async ({ page }) => {
+for (const name of ['double-helix', 'paisley', 'poincare-disk', 'cracked-ice', 'spun', 'matrix', 'spiral-moire', 'wallpaper']) {
+	test(`${name} tilt travel can be disabled, follows both axes, holds without a clock, and returns exactly`, async ({ page }) => {
+		await page.goto('/lab');
+		const [fixed, fixedTilt, resting, horizontal, vertical, held, returned] = await geometry(page, name, [
+			{ dials: { slideWithTilt: 0 } }, { dials: { slideWithTilt: 0 }, view: [0.2, -0.15] },
+			{ dials: { slideWithTilt: 1 } },
+			{ dials: { slideWithTilt: 1 }, view: [0.2, 0] },
+			{ dials: { slideWithTilt: 1 }, view: [0, 0.2] },
+			{ dials: { slideWithTilt: 1 }, view: [0, 0.2], time: 37 },
+			{ dials: { slideWithTilt: 1 }, time: 74 }
+		], true);
+		expect(fixedTilt!.image).toBe(fixed!.image);
+		expect(resting!.image).toBe(fixed!.image);
+		expect(horizontal!.image).not.toBe(resting!.image);
+		expect(vertical!.image).not.toBe(resting!.image);
+		expect(held!.image).toBe(vertical!.image);
+		expect(returned!.image).toBe(resting!.image);
+	});
+}
+
+test('concentric spirals keep their origin, bend independently, and can wind in opposite directions', async ({ page }) => {
 	await page.goto('/lab');
-	const [fixed, fixedTilt, resting, horizontal, vertical, held, returned] = await geometry(page, 'double-helix', [
-		{}, { view: [0.2, -0.15] },
-		{ dials: { slideWithTilt: 1 } },
-		{ dials: { slideWithTilt: 1 }, view: [0.2, 0] },
-		{ dials: { slideWithTilt: 1 }, view: [0, 0.2] },
-		{ dials: { slideWithTilt: 1 }, view: [0, 0.2] },
-		{ dials: { slideWithTilt: 1 } }
-	]);
-	expect(fixedTilt!.image).toBe(fixed!.image);
-	expect(resting!.image).toBe(fixed!.image);
-	expect(horizontal!.image).not.toBe(resting!.image);
-	expect(vertical!.image).not.toBe(resting!.image);
-	expect(held!.image).toBe(vertical!.image);
-	expect(returned!.image).toBe(resting!.image);
+	const concentric = { lockCenters: 1, pitchOffset: 0, bendA: 1, bendB: 1.25 };
+	const [base, offsetIgnored, bendA, bendB, reversed, tilted, held, returned, unlocked] = await geometry(page, 'spiral-moire', [
+		{ dials: concentric },
+		{ dials: { ...concentric, offset: 0.75 } },
+		{ dials: { ...concentric, bendA: 0.75 } },
+		{ dials: { ...concentric, bendB: 0.75 } },
+		{ dials: { ...concentric, counterWound: 1 } },
+		{ dials: concentric, view: [0.2, 0.1] },
+		{ dials: { ...concentric, offset: 0.75 }, view: [0.2, 0.1], time: 37 },
+		{ dials: concentric, time: 74 },
+		{ dials: { ...concentric, lockCenters: 0, offset: 0.75 } }
+	], true);
+	expect(offsetIgnored!.image).toBe(base!.image);
+	for (const changed of [bendA, bendB, reversed, tilted, unlocked]) expect(changed!.image).not.toBe(base!.image);
+	expect(bendA!.image).not.toBe(bendB!.image);
+	expect(held!.image).toBe(tilted!.image);
+	expect(returned!.image).toBe(base!.image);
 });
 
 test('film framing and walking dials update the live lab renderer', async ({ page }) => {

@@ -30,6 +30,9 @@ import pinwheel from './films/pinwheel.ts';
 import poincareDisk from './films/poincare-disk.ts';
 import apollonian from './films/apollonian.ts';
 import gosper from './films/gosper.ts';
+import matrix from './films/matrix.ts';
+import spiralMoire from './films/spiral-moire.ts';
+import wallpaper from './films/wallpaper.ts';
 import smooth from './finishes/smooth.ts';
 import bump from './finishes/bump.ts';
 import brushed from './finishes/brushed.ts';
@@ -51,8 +54,8 @@ import monoSilver from './palettes/mono-silver.ts';
 import custom from './palettes/custom.ts';
 
 /** Every holo film, in the order the shader numbers them. */
-export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper] as const satisfies readonly Film[];
-export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper'];
+export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper, matrix, spiralMoire, wallpaper] as const satisfies readonly Film[];
+export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper', 'matrix', 'spiral-moire', 'wallpaper'];
 export type HoloPattern = (typeof HOLO_PATTERNS)[number];
 
 /** Films that move with time; the light engine keeps redrawing cards that show one. */
@@ -91,10 +94,13 @@ const FULL_SPEC: FilmSpec = { films: ALL_FILMS, remix: true, under: true };
 const OUTPUTS = 'inout vec2 groove, inout float seed, inout float vivid, inout float copper, inout float copperPad, inout float shade, inout float cellSize, inout float ground';
 
 function filmFunction(film: Film, index: number): string {
+	const dials = filmDials(film);
+	const slide = 'slideWithTilt' in dials && !('slideWithTilt' in film.params);
 	return `${film.helpers ?? ''}
 void ${glslName('film', film.name)}(vec2 p, ${OUTPUTS.replace('inout float ground', 'inout float groundOut')}) {
-${dialLocals('film', index, filmDials(film))}
+${dialLocals('film', index, dials)}
 	float filmScale = u_holoScale * scale;${film.ground === undefined ? '' : '\n\tgroundOut = ground;'}
+${slide ? '\tp -= v_view.xy * u_shift * slideWithTilt;' : ''}
 ${film.glsl}
 }`;
 }
