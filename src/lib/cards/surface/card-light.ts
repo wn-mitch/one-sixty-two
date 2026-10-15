@@ -17,7 +17,7 @@ import { CARD_ERAS, type CardEra } from '../era.ts';
 
 /**
  * What a light canvas lights: its card, or another surface marked `data-light-root` (a pack), which carries
- * the same `data-finish`, `data-card`, `data-film` and `data-plate` attributes a card does.
+ * the same `data-finish`, `data-card`, `data-film`, `data-plate` and `data-palette` attributes a card does.
  */
 const LIGHT_ROOT = '.card, [data-light-root]';
 
@@ -292,6 +292,7 @@ export class LightEngine {
 			film: light.card?.dataset.film as HoloPattern | undefined,
 			plate: light.card?.dataset.plate as FoilPlate | undefined,
 			plateTuning: plateTuning(light.card?.dataset.plateTuning),
+			palette: palette(light.card?.dataset.palette),
 			pattern: stableUnit(light.card?.dataset.identity ?? '', 41)
 		}], (light.card && this.#own.get(light.card)?.light) ?? this.#options);
 		if (!drawn) return false;
@@ -342,6 +343,12 @@ function motionAllowed(): boolean {
 function plateTuning(value: string | undefined): PlateTuning | undefined {
 	const [scale, tone, stain, vivid = 1] = (value ?? '').split(',').map(Number);
 	return value && [scale, tone, stain, vivid].every(Number.isFinite) ? { scale: scale!, tone: tone!, stain: stain!, vivid } : undefined;
+}
+
+/** A preset colourway index, or undefined to keep the scene/film default. */
+function palette(value: string | undefined): number | undefined {
+	const index = Number(value);
+	return value !== undefined && Number.isInteger(index) && index >= 0 ? index : undefined;
 }
 
 /** Svelte action for the light canvas inside a card: `<canvas use:lightCanvas={light}>`. */

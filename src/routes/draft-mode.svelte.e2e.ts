@@ -37,4 +37,28 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  await expect(page.getByRole('heading', { name: 'After chapter 1 of 6' })).toBeVisible({ timeout: 60_000 });
  await expect(firstReserve).toHaveText(benched);
  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+
+ // Completed reports stay in history; starting again from one clears its URL selection.
+ for (let chapter = 2; chapter <= 6; chapter++) {
+  await page.getByRole('button', { name: `Play chapter ${chapter}`, exact: true }).click();
+  if (chapter < 6) await expect(page.getByRole('heading', { name: `After chapter ${chapter} of 6` })).toBeVisible({ timeout: 120_000 });
+ }
+ await expect(page.getByRole('heading', { name: 'Final standings' })).toBeVisible({ timeout: 120_000 });
+ await expect(page.getByRole('link', { name: 'Shop: 1 unlock token', exact: true })).toBeVisible();
+ await page.goto('/shop');
+ await expect(page.locator('.balance')).toHaveText('1 unlock token');
+ await page.goto('/draft');
+ await expect(page.getByRole('button', { name: 'Start draft', exact: true })).toBeVisible();
+ await page.goto('/seasons');
+ await page.getByRole('link', { name: /^Full season results for / }).click();
+ await expect(page).toHaveURL(/\/draft\?run=/);
+ await expect(page.getByRole('heading', { name: 'Final standings' })).toBeVisible({ timeout: 60_000 });
+ await page.locator('.scoreboard').getByRole('button', { name: 'New draft', exact: true }).click();
+ await expect(page).toHaveURL(/\/draft$/);
+ await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
+ await page.getByRole('button', { name: 'Start draft', exact: true }).click();
+ await page.getByRole('button', { name: 'Pick', exact: true }).first().click();
+ await expect(page.getByRole('heading', { name: 'Pick 2 of 16' })).toBeVisible({ timeout: 60_000 });
+ await page.reload();
+ await expect(page.getByRole('heading', { name: 'Pick 2 of 16' })).toBeVisible({ timeout: 60_000 });
 });

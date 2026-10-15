@@ -177,8 +177,8 @@ const filmPalette = (film: Film) => PALETTES.findIndex(palette => palette.name =
 
 /**
  * GLSL for the holo films, in card units (the card is 5 by 7). Needs `CARD`, `hash`, `hash2`, `noise`, the
- * `footprint` and `holoVivid` globals, the `u_holoScale`, `u_time`, `u_circuit`, `u_finish`, `u_palette` and tuning
- * uniforms and the `v_view` varying, and defines `holoFoil`.
+ * `footprint` and `holoVivid` globals, the `u_holoScale`, `u_time`, `u_circuit`, `u_finish`, `u_palette`,
+ * per-card `cardPalette`, CSS-pixel quad size `v_cardSize`, tuning uniforms and the `v_view` varying, and defines `holoFoil`.
  */
 export function holoFilmGlsl(spec: FilmSpec = FULL_SPEC): string {
 	const { films, remix, under } = spec;
@@ -231,7 +231,7 @@ vec3 holoFilm(vec2 p, vec3 normal, vec3 halfway, float band, int film, out float
 	filmPattern(film, p, groove, seed, vivid, copper, copperPad, shade, cellSize, ground);
 	float sweepShift = 0.0;
 	filmFinish(u_finish >= 0 ? u_finish : FILM_FINISH[film], p, groove, normal, sweepShift);
-	int palette = u_palette >= 0 ? u_palette : FILM_PALETTE[film];
+	int palette = cardPalette >= 0 ? cardPalette : u_palette >= 0 ? u_palette : FILM_PALETTE[film];
 	vec3 sweepColor = paint(palette, band * 0.7 + p.x * 0.06 + p.y * 0.04 + dot(normal.xy, vec2(1.6, 1.1)) + sweepShift);
 	if (film == 0) return sweepColor;
 	// Gratings are far more angle-sensitive than a mirror, so a small tilt sweeps the colour a long way.

@@ -126,14 +126,7 @@
 </svelte:head>
 
 <main class="page">
-	<a class="back-link" href="/">← Back to the draft</a>
-	<header class="intro">
-		<div>
-			<h1>Collection</h1>
-			<p class="lede muted">Every player-season you put on a finished team, with the stickers its seasons earned. Stickers are decoration and never change a draft or a season.</p>
-		</div>
-		<a class="side-link" href="/seasons">My seasons →</a>
-	</header>
+	<header class="intro"><h1>Collection</h1></header>
 	{#if loading}
 		<p class="muted" role="status">Loading your collection…</p>
 	{:else if error}
@@ -145,10 +138,5 @@
 
 <style>
 	.page { display: grid; gap: var(--space-4); width: min(100%, 84rem); padding-block: var(--space-8); }
-	.back-link { color: var(--muted); font-weight: 700; text-decoration: none; }
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
-	.lede { margin: 0; max-width: 60ch; }
-	.intro { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-2) var(--space-6); }
-	.side-link { color: var(--muted); font-size: var(--text-sm); font-weight: 650; }
-	.side-link:hover { color: var(--text); }
 </style>

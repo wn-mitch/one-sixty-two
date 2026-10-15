@@ -19,7 +19,7 @@ class MemoryBucket implements ReplayBucket {
 
 const STATE = {
 	print: 'sheet', relief: 'rim', tier: 'gem', era: '2020s', film: 'galaxy', finish: '', palette: 'custom', gradient: ['#112233', '#445566'], under: '', plate: 'brushed', stock: '',
-	tuned: { 'film:galaxy': { speed: 0.4 } }, light: { spotlight: 0.35 }, drift: false, stagger: null, zoom: 2
+	tuned: { 'film:galaxy': { speed: 0.4 } }, light: { spotlight: 0.35 }, drift: false, stagger: null, width: 480
 };
 
 describe('lab links', () => {
@@ -32,7 +32,7 @@ describe('lab links', () => {
 		expect(loaded).not.toHaveProperty('junk');
 		const opened = decodeLink(labFragment(loaded!));
 		expect(opened?.setup).toMatchObject({ film: 'galaxy', relief: 'rim', drift: false, gradient: ['#112233', '#445566'], tuned: { 'film:galaxy': { speed: 0.4 } }, light: { spotlight: 0.35 } });
-		expect(opened?.zoom).toBe(2);
+		expect(opened?.width).toBe(480);
 	});
 
 	it('never overwrites a taken id and draws another', async () => {
@@ -59,6 +59,9 @@ describe('lab links', () => {
 		expect(canonicalLabState({ v: 1, palette: 'custom', gradient })).toMatchObject({ v: 1, palette: 'custom', gradient });
 		expect(() => canonicalLabState({ v: 2, palette: 'custom', gradient })).toThrow(LabLinkInvalidError);
 		expect(() => canonicalLabState({ palette: 'custom', gradient: ['#12345'] })).toThrow(LabLinkInvalidError);
+		expect(canonicalLabState({ width: 517 })).toMatchObject({ width: 517 });
+		expect(() => canonicalLabState({ width: 'wide' })).toThrow(LabLinkInvalidError);
+		expect(() => canonicalLabState({ width: Infinity })).toThrow(LabLinkInvalidError);
 	});
 
 	it('draws ids from the full base62 alphabet', () => {

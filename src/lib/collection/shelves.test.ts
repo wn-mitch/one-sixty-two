@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Candidate, Franchise } from '../game/types.ts';
 import type { CollectedCard } from './collection.ts';
-import { completionPercent, shelveCollection } from './shelves.ts';
+import { completionPercent, shelveCollection, stackCollection } from './shelves.ts';
 
 const candidate = (seasonId: string, franchiseId: string, decade: number): Candidate => ({ seasonId, playerId: seasonId.split(':')[0], franchiseId, decade, eligibleSlots: seasonId.startsWith('bullpen:') ? ['BP'] : ['LF'] });
 const CANDIDATES = [
@@ -37,5 +37,32 @@ describe('collection shelves', () => {
   expect(completionPercent(5, 43_632)).toBe('0.01%');
   expect(completionPercent(1, 3)).toBe('33.3%');
   expect(completionPercent(0, 0)).toBe('—');
+ });
+});
+
+describe('collection stacks', () => {
+ it('groups real player identity across seasons and franchises', () => {
+  const collected = [card('same:2001:AL:BOS'), card('same:1998:NL:ATL'), card('other:2000:AL:BOS')];
+  const candidates = [
+   candidate('same:2001:AL:BOS', 'BOS', 2000),
+   candidate('same:1998:NL:ATL', 'ATL', 1990),
+   candidate('other:2000:AL:BOS', 'BOS', 2000)
+  ];
+  expect(stackCollection(collected, candidates).map(stack => [stack.key, stack.cards.map(item => item.seasonId)])).toEqual([
+   ['same', ['same:2001:AL:BOS', 'same:1998:NL:ATL']],
+   ['other', ['other:2000:AL:BOS']]
+  ]);
+ });
+
+ it('keeps bullpen units season-specific instead of merging generic labels', () => {
+  const first = card('bullpen:2001:AL:BOS', 'BP');
+  const second = card('bullpen:2000:AL:BOS', 'BP');
+  const candidates = [
+   candidate(first.seasonId, 'BOS', 2000),
+   candidate(second.seasonId, 'BOS', 2000)
+  ];
+  expect(stackCollection([first, second], candidates).map(stack => stack.cards.map(item => item.seasonId))).toEqual([
+   [first.seasonId], [second.seasonId]
+  ]);
  });
 });

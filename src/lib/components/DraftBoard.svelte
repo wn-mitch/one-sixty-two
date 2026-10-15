@@ -18,7 +18,9 @@
  import DraftSheet from './DraftSheet.svelte';
  import FoilPack from './FoilPack.svelte';
  import Settings from './Settings.svelte';
+ import TokenAmount from './TokenAmount.svelte';
  import { BOARD_WIDE_QUERY } from './skeletons/board.ts';
+ import { shopState } from '../cosmetics/store.svelte.ts';
  import PoolSkeleton from './skeletons/PoolSkeleton.svelte';
  import Skeleton from './skeletons/Skeleton.svelte';
  let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onAddPack, onChoosePack, onDraft, onReassign, onNew }: {
@@ -679,6 +681,10 @@
    {@render rerollControl()}
    {#if roll && !(dealing && !dealtArrived)}<p class="eyebrow header-pick">Pick {draft.picks.length + 1} of {rosterSlots.length}</p>{/if}
    <a class="rules-link" href="/about">Rules &amp; model</a>
+   <a class="wallet-link" href="/shop" title={shopState.snapshot ? `Shop: ${shopState.snapshot.balance} unlock ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop: unlock token balance unavailable'}>
+    <span class="sr-only">{shopState.snapshot ? 'Shop:' : 'Shop: balance unavailable,'}</span>
+    <TokenAmount amount={shopState.snapshot?.balance ?? null} />
+   </a>
    <Settings />
    <button class="secondary new-draft" disabled={loading} onclick={onNew}>New draft</button>
   </header>
@@ -797,6 +803,8 @@
  .wordmark { flex: none; display: inline-flex; align-items: center; gap: .625rem; min-height: 44px; color: var(--text); text-decoration: none; font-size: 1.25rem; font-weight: 850; letter-spacing: -.04em; }
  .mark { width: .625rem; height: .625rem; border: 2px solid var(--text); transform: rotate(45deg); }
  .rules-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; min-height: 44px; font-size: .875rem; color: var(--muted); text-decoration: none; }
+ .wallet-link { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding-inline: .5rem; border-radius: var(--radius); color: var(--accent); font-size: .875rem; font-weight: 750; text-decoration: none; }
+ .wallet-link:hover { color: var(--accent-hover); background: var(--surface); }
  .new-draft { flex: none; padding-inline: .75rem; font-size: .875rem; }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 </style>

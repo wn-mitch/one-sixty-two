@@ -62,7 +62,7 @@ describe('foil lab links', () => {
 	it('round-trips the whole lab state through a link fragment', async () => {
 		const { decodeLink, encodeLink } = await import('./link.ts');
 		const setup = withValue({ ...START, film: 'julia', relief: 'star' as const, drift: false }, 'light:spotlight', 0.5);
-		const state = { setup, stagger: { target: 'film:speed', count: 4, page: 0 }, zoom: 3 };
+		const state = { setup, stagger: { target: 'film:speed', count: 4, page: 0 }, width: 480 };
 		expect(decodeLink(encodeLink(state))).toEqual(state);
 	});
 

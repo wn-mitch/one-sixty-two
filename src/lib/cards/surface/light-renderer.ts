@@ -52,6 +52,8 @@ export interface LitCard {
 	plate?: FoilPlate;
 	/** Tunes the plate instead of its era's settings, as the finish workshop does. */
 	plateTuning?: PlateTuning;
+	/** Prints this Gem card in one preset colourway; unset keeps the film's own or the scene's override. */
+	palette?: number;
 }
 
 /** Tuning a scene can change between draws. */
@@ -130,9 +132,9 @@ export const DEFAULT_LIGHT: Readonly<Required<Omit<LightOptions, 'time'>>> = {
 type LightCanvas = HTMLCanvasElement | OffscreenCanvas;
 /**
  * The program a card needs: its film (or the scene's forced one) with what that film draws through, and its plate
- * (or the scene's). Remixing scenes carry every finish and colourway.
+ * (or the scene's). Remixing scenes and cards with a chosen colourway carry every finish and colourway.
  */
-export function programSpec(film: number, plate: number, options: LightOptions): ProgramSpec {
+export function programSpec(film: number, plate: number, options: LightOptions, cardPalette = -1): ProgramSpec {
 	const forcedFilm = options.holoPattern ?? DEFAULT_LIGHT.holoPattern;
 	const forcedPlate = options.foilPlate ?? DEFAULT_LIGHT.foilPlate;
 	const sceneUnder = options.underFilm ?? DEFAULT_LIGHT.underFilm;
@@ -141,7 +143,7 @@ export function programSpec(film: number, plate: number, options: LightOptions):
 	return {
 		films,
 		plates: new Set([forcedPlate >= 0 ? forcedPlate : plate]),
-		remix: (options.finish ?? DEFAULT_LIGHT.finish) >= 0 || (options.palette ?? DEFAULT_LIGHT.palette) >= 0,
+		remix: (options.finish ?? DEFAULT_LIGHT.finish) >= 0 || (options.palette ?? DEFAULT_LIGHT.palette) >= 0 || cardPalette >= 0,
 		// The fading film's films may carry their own under films too.
 		under: [...films].some(index => underOf(index, sceneUnder) >= 0)
 	};
@@ -407,7 +409,7 @@ export class LightRenderer {
 			if (!tile) continue;
 			const film = HOLO_PATTERNS.indexOf(card.film ?? (card.era ? ERA_HOLO[card.era] : 'refractor'));
 			const plate = FOIL_PLATES.indexOf(card.plate ?? (card.era ? ERA_FOIL[card.era] : 'brushed'));
-			const spec = programSpec(film, plate, options);
+			const spec = programSpec(film, plate, options, card.palette);
 			const key = programKey(spec);
 			let group = groups.get(key);
 			if (!group) groups.set(key, group = { spec, cards: [] });
@@ -459,7 +461,8 @@ export class LightRenderer {
 		data[offset + 10] = card.lightX;
 		data[offset + 11] = card.lightY;
 		data[offset + 12] = card.spotlight;
-		data[offset + 13] = TIER_CODE[card.tier] + 4 * film + 128 * plate;
+		// The colourway is packed one-based above the existing tier/film/plate code; zero keeps scene/film defaults.
+		data[offset + 13] = TIER_CODE[card.tier] + 4 * film + 128 * plate + 4096 * ((card.palette ?? -1) + 1);
 		data[offset + 14] = card.viewX ?? 0;
 		data[offset + 15] = card.viewY ?? 0;
 		// The film's shift samples two sines of the card's seed, a pattern index the way a printed skin has one.

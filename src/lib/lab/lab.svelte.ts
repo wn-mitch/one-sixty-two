@@ -3,11 +3,11 @@ import {
 	plateNames, spread, START, valueOf, withValue, type ChoiceKey, type Setup, type Target
 } from './controls.ts';
 import {
-	decodeLink, encodeLink, labUrl, linkObject, saveLabLink,
+	DEFAULT_WIDTH, decodeLink, encodeLink, labUrl, linkObject, saveLabLink,
 	type LinkState, type SaveLabLinkOptions, type SavedLabLink, type Stagger
 } from './link.ts';
 
-export { MAX_STAGGER, ZOOMS } from './link.ts';
+export { DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH, MAX_STAGGER } from './link.ts';
 
 /** One card the stage shows: the setup it draws and, when staggered, the value that sets it apart. */
 export interface Variant {
@@ -16,12 +16,12 @@ export interface Variant {
 	label?: string;
 }
 
-/** The lab's state: one setup, the control being staggered across cards, and the stage's zoom. */
+/** The lab's state: one setup, the control being staggered across cards, and preview width in CSS pixels. */
 export class Lab {
 	setup = $state<Setup>(structuredClone(START));
 	/** The control spread across the stage, how many cards it spreads over, and which page of a choice's options shows. */
 	stagger = $state<Stagger | null>(null);
-	zoom = $state(1);
+	width = $state(DEFAULT_WIDTH);
 
 	value(target: Target): string | number {
 		return valueOf(target, this.setup);
@@ -88,11 +88,12 @@ export class Lab {
 	reset(): void {
 		this.setup = structuredClone(START);
 		this.stagger = null;
+		this.width = DEFAULT_WIDTH;
 	}
 
 	/** Everything a link carries. */
 	get state(): LinkState {
-		return { setup: $state.snapshot(this.setup), stagger: $state.snapshot(this.stagger), zoom: this.zoom };
+		return { setup: $state.snapshot(this.setup), stagger: $state.snapshot(this.stagger), width: this.width };
 	}
 
 	/** The state as a link fragment. */
@@ -125,6 +126,6 @@ export class Lab {
 	load(state: LinkState): void {
 		this.setup = state.setup;
 		this.stagger = state.stagger;
-		this.zoom = state.zoom;
+		this.width = state.width;
 	}
 }

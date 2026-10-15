@@ -19,7 +19,7 @@
 	import Card from '#lib/cards/Card.svelte';
 	import { createCardViewModel, type CardViewModel } from '#lib/cards/view-model.ts';
 	import { faceStickers, LEGACY_FACE_SLOTS, STICKER_BY_KIND, STICKER_SPOTS, type PlacedSticker } from '#lib/collection/stickers.ts';
-	import { PROTECTED_LAYER_SELECTOR, STICKER_LAYOUT, STICKER_MARGIN } from '#lib/collection/sticker-slots.ts';
+	import { ERA_PLACEMENT, PROTECTED_LAYER_SELECTOR, STICKER_LAYOUT, STICKER_MARGIN } from '#lib/collection/sticker-slots.ts';
 	import type { Profile, RosterSlot } from '#lib/game/types.ts';
 	import { createExampleMedia } from './media-fixtures.ts';
 	import { createExampleFixtures, getExampleFinishRanking, type ExampleCardFinish, type ExampleCardRole } from './fixtures.ts';
@@ -154,6 +154,7 @@
 <StoryFrame wide onReset={() => {}}>
 	<div class="slots" bind:this={host} style={`--w:${width}px`} data-sticker-slots-mode={mode}>
 		{#each variants as variant (variant.id)}
+			{@const identityMargin = ERA_PLACEMENT[variant.era]?.identityMargin ?? STICKER_MARGIN}
 			<figure data-variant={variant.id} data-era={variant.era} data-role={variant.role} data-finish={variant.finish} data-name={variant.nameKey} data-photo={variant.photo}>
 				<div class="card-slot">
 					<Card s={variant.view} face="front" interactive={false} idle={false} capture={false} stickers={variant.stickers} onDetails={() => {}} />
@@ -162,7 +163,7 @@
 							<rect class="frame" x={FRAME} y={FRAME / ASPECT} width={1 - 2 * FRAME} height={1 - 2 * FRAME / ASPECT}><title>inner frame less the sticker margin</title></rect>
 							{#each boxes[variant.id] as box, index (index)}
 								<rect x={box.x} y={box.y} width={box.w} height={box.h}><title>{box.layer}</title></rect>
-								<rect class="margin" x={box.x - STICKER_MARGIN} y={box.y - STICKER_MARGIN / ASPECT} width={box.w + 2 * STICKER_MARGIN} height={box.h + 2 * STICKER_MARGIN / ASPECT}></rect>
+								<rect class="margin" x={box.x - identityMargin} y={box.y - identityMargin / ASPECT} width={box.w + 2 * identityMargin} height={box.h + 2 * identityMargin / ASPECT}></rect>
 							{/each}
 							{#each spots[variant.id] ?? [] as spot, index (index)}
 								<ellipse cx={spot.x} cy={spot.y} rx={spot.r + STICKER_MARGIN} ry={(spot.r + STICKER_MARGIN) / ASPECT}><title>sticker margin</title></ellipse>

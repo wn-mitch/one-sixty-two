@@ -3,12 +3,13 @@ import type { Manifest, Profile, SimulationData } from '../game/types.ts';
 import { LEAGUE_CHAPTERS, type LeagueChapterResult, type LeagueWorkerResponse } from '../sim/league-types.ts';
 import { deviceDb } from '../storage/db.ts';
 import type { Db } from '../storage/sql.ts';
+import { refreshShop } from '../cosmetics/store.svelte.ts';
 import type { StackRole } from './cleanup.ts';
 import { seatTable } from './franchises.ts';
-import { chapterInput, LineupError, recordChapter, setLineup, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
+import { chapterInput, LEAGUE_VERSION, LineupError, recordChapter, setLineup, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
-import { applyAction, newRunSetup, RunActionError, startRun, type DraftRun, type RunAction, type RunData, type RunSetup } from './run.ts';
-import { deleteRun, latestRun, resumeRun, saveRun } from './saves.ts';
+import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup } from './run.ts';
+import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
 import type { Difficulty } from './scouting.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
 import { DRAFT_RULES } from './rules.ts';
@@ -67,20 +68,31 @@ export class DraftModeSession {
     const { db, notice } = await deviceDb();
     this.#db = db;
     if (notice) this.storageNotice = notice;
-    const saved = await latestRun(db);
+    const historyId = new URLSearchParams(location.search).get('run');
+    const saved = historyId ? await getRun(db, historyId) : await latestRun(db);
+    if (historyId && !saved) this.refused = 'This saved draft could not be found on this device.';
     if (saved) {
-     const data = await this.#runData(manifest, saved.setup);
-     const resumed = resumeRun(saved, data, manifest.dataVersion);
+     const stale = unsupportedVersion(saved.setup, manifest.dataVersion);
+     const reason = stale
+      ? `This draft was saved with ${stale} that this version of the game no longer uses. Start a new draft.`
+      : saved.season && saved.season.version !== LEAGUE_VERSION
+       ? 'This season was saved with league rules this version of the game no longer uses. Start a new draft.' : null;
+     const resumed = reason ? { ok: false as const, reason }
+      : resumeRun(saved, await this.#runData(manifest, saved.setup), manifest.dataVersion);
      if (resumed.ok) {
       this.#runId = saved.id;
       this.run = resumed.run;
       this.season = resumed.season ?? (resumed.run.phase === 'season' ? startLeague(resumed.run) : null);
      } else {
       this.refused = resumed.reason;
+      if (!historyId) {
+       try { await archiveRun(db, saved); }
+       catch { this.storageNotice = 'The older draft is still saved because browser storage could not retire its resume slot.'; }
+      }
      }
     }
    } catch {
-    this.storageNotice = 'Your draft could not be loaded from this browser. A new draft will not be saved.';
+    this.storageNotice = 'Your saved draft could not be loaded. Its stored history has not been changed.';
    }
    this.manifest = manifest;
   } catch (error) {
@@ -102,7 +114,7 @@ export class DraftModeSession {
   };
  }
 
- /** Replaces any saved run with a new one at `franchiseId`. */
+ /** Starts a new run while retaining the previous run as history. */
  async start(franchiseId: string, difficulty: Difficulty): Promise<void> {
   const manifest = this.manifest;
   if (!manifest || this.busy) return;
@@ -111,7 +123,15 @@ export class DraftModeSession {
    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
    const setup = newRunSetup(seed, franchiseId, manifest.dataVersion, difficulty);
    const run = startRun(setup, await this.#runData(manifest, setup));
-   if (this.#db && this.#runId) await deleteRun(this.#db, this.#runId).catch(() => undefined);
+   if (this.#db && this.#runId) {
+    try {
+     const saved = await getRun(this.#db, this.#runId);
+     if (saved) await archiveRun(this.#db, saved);
+    } catch {
+     this.storageNotice = 'A new draft could not replace the current resume slot. Your current draft is still available.';
+     return;
+    }
+   }
    this.#runId = crypto.randomUUID();
    this.run = run;
    this.season = null;
@@ -122,10 +142,20 @@ export class DraftModeSession {
   } finally { this.busy = false; }
  }
 
- /** Leaves the current run; the next start replaces its save. */
+ /** Leaves the current run as history without making it the next automatic resume. */
  async abandon(): Promise<void> {
   this.#stopWorker();
-  if (this.#db && this.#runId) await deleteRun(this.#db, this.#runId).catch(() => undefined);
+  // A failed final history write must remain recoverable before leaving the report.
+  if ((this.season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS && !await this.#save()) return;
+  if (this.#db && this.#runId) {
+   try {
+    const saved = await getRun(this.#db, this.#runId);
+    if (saved) await archiveRun(this.#db, saved);
+   } catch {
+    this.storageNotice = 'Your draft could not be left because browser storage is unavailable. It is still available to resume.';
+    return;
+   }
+  }
   this.#runId = null;
   this.run = null;
   this.season = null;
@@ -184,7 +214,8 @@ export class DraftModeSession {
    const result = await this.#simulate(input);
    recordChapter(season, result);
    this.lastChapter = result;
-   await this.#save();
+   const saved = await this.#save();
+   if (saved && season.chapters.length >= LEAGUE_CHAPTERS) void refreshShop();
    this.revision++;
   } catch (error) {
    this.failure = error instanceof Error ? error.message : 'The chapter could not be played.';
@@ -217,10 +248,14 @@ export class DraftModeSession {
   this.#worker = null;
  }
 
- async #save(): Promise<void> {
-  if (!this.#db || !this.#runId || !this.run) return;
+ async #save(): Promise<boolean> {
+  if (!this.#db || !this.#runId || !this.run) {
+   this.storageNotice = 'Your draft could not be saved. It continues in this tab.';
+   return false;
+  }
   const notice = await saveRun(this.#db, this.#runId, this.run, this.season);
   if (notice) this.storageNotice = notice;
+  return notice === null;
  }
 
  dispose(): void { this.#stopWorker(); }

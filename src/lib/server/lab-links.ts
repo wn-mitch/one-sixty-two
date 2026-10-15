@@ -83,9 +83,9 @@ export function canonicalLabState(value: unknown): Record<string, unknown> {
 			|| Math.abs(count as number) > 64 || Math.abs(page as number) > 10_000) throw new LabLinkInvalidError();
 		state.stagger = { target, count, page };
 	} else if (value.stagger !== undefined && value.stagger !== null) throw new LabLinkInvalidError();
-	if (value.zoom !== undefined) {
-		if (typeof value.zoom !== 'number' || !Number.isFinite(value.zoom)) throw new LabLinkInvalidError();
-		state.zoom = value.zoom;
+	if (value.width !== undefined) {
+		if (typeof value.width !== 'number' || !Number.isFinite(value.width)) throw new LabLinkInvalidError();
+		state.width = value.width;
 	}
 	return state;
 }

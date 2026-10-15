@@ -16,10 +16,12 @@ export default defineFilm({
 		dotSize: { value: 0.77, min: 0.1, max: 0.98, step: 0.01, note: 'Width of each dot\'s solid core, as a share of its square.' }
 	},
 	glsl: `
-	// The fade keys on a pair of dots: letters still read as gold texture down to a couple of pixels a dot.
-	cellSize = 2.0 / (filmScale * density);
+	// Keep each dot at least 5.56 CSS pixels wide: small cards show fewer residues, not disappearing microtext.
+	// The quad axes are in CSS pixels, so a denser display sharpens the letters without shrinking them.
+	float dotsPerUnit = min(filmScale * density, min(v_cardSize.x / CARD.x, v_cardSize.y / CARD.y) / 5.56);
+	cellSize = 2.0 / dotsPerUnit;
 	// Each letter is 5 dots wide and 6 high, with tracking and leading blank dots after it.
-	vec2 q = p * filmScale * density;
+	vec2 q = p * dotsPerUnit;
 	vec2 pitch = vec2(5.0 + tracking, 6.0 + leading);
 	float line = floor(q.y / pitch.y);
 	float column = floor(q.x / pitch.x);

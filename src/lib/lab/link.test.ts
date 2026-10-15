@@ -1,10 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { START } from './controls.ts';
-import { decodeLink, encodeLink, labUrl, saveLabLink, type LinkState } from './link.ts';
+import { DEFAULT_WIDTH, MAX_WIDTH, MIN_WIDTH, decodeLink, encodeLink, labUrl, readLink, saveLabLink, type LinkState } from './link.ts';
 
-const STATE: LinkState = { setup: structuredClone(START), stagger: null, zoom: 1 };
+const STATE: LinkState = { setup: structuredClone(START), stagger: null, width: DEFAULT_WIDTH };
 
 describe('semantic foil lab links', () => {
+	it('round-trips the preview width independently of material tuning', () => {
+		const state = { ...STATE, width: 517 };
+		expect(decodeLink(encodeLink(state))).toEqual(state);
+		expect(state.setup).toEqual(START);
+	});
+
+	it('bounds saved widths and uses a readable default for missing or invalid sizes', () => {
+		expect(readLink({ width: 1 })?.width).toBe(MIN_WIDTH);
+		expect(readLink({ width: 900 })?.width).toBe(MAX_WIDTH);
+		expect(readLink({ width: 421.7 })?.width).toBe(422);
+		for (const width of [undefined, '420', NaN, Infinity]) {
+			expect(readLink({ width })?.width).toBe(DEFAULT_WIDTH);
+		}
+	});
+
 	it('rejects an explicitly incompatible link version', () => {
 		const encoded = encodeLink(STATE);
 		const decoded = JSON.parse(atob(encoded.replaceAll('-', '+').replaceAll('_', '/'))) as Record<string, unknown>;

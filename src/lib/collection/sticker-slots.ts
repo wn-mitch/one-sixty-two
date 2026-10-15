@@ -49,11 +49,19 @@ export const STICKER_LAYOUT: StickerLayout = layout as unknown as StickerLayout;
 export const ERA_STICKER_SLOTS: Readonly<Record<CardEra, EraStickerSlots>> = slots as unknown as Record<CardEra, EraStickerSlots>;
 
 /**
- * A sticker's margin, as a fraction of the card width (2cqw): the least space between a sticker and
- * any protected layer, the inner frame, the photo edge, or its neighbour in the set. Card-relative,
- * so it holds at every card size.
+ * Default clearance from printed identity, the inner frame and photo edges, and the shared
+ * sticker-to-sticker gap, as a fraction of card width. Era placement rules can relax identity
+ * or photo-frame clearance without changing the set's spacing.
  */
 export const STICKER_MARGIN = 0.02;
+export interface StickerPlacement {
+	side?: 'left' | 'right';
+	overlapFrame?: boolean;
+	/** Clearance from printed identity; sticker-to-sticker spacing stays shared. */
+	identityMargin?: number;
+	/** Bottom of the set sits just above this printed badge. */
+	aboveLayer?: string;
+}
 const STEP = 0.0025;
 
 /** Distance from a point to a box, both in card-width units (u across, v down). */
@@ -93,17 +101,17 @@ export function onPhoto(point: SlotPoint, era: Pick<EraLayout, 'photo' | 'photoR
 	});
 }
 
-/** True when a sticker centred at (x, y) keeps its margin from every protected box, the rim, the photo edge and the given neighbours. */
-export function stickerFits(point: SlotPoint, era: EraLayout, sizes: Pick<StickerLayout, 'aspect' | 'radius' | 'rim'>, neighbours: readonly SlotPoint[] = []): boolean {
+/** Keeps identity, rim and neighbour clearances; selected eras may overlap the decorative photo frame. */
+export function stickerFits(point: SlotPoint, era: EraLayout, sizes: Pick<StickerLayout, 'aspect' | 'radius' | 'rim'>, neighbours: readonly SlotPoint[] = [], placement: StickerPlacement = {}): boolean {
 	const { aspect, radius, rim } = sizes;
 	const u = point.x;
 	const v = point.y * aspect;
 	const edge = rim + radius + STICKER_MARGIN;
 	if (u < edge || u > 1 - edge || v < edge || v > aspect - edge) return false;
-	// A sticker sits wholly on the photo or wholly off it, and off the gem ring, a margin from either edge.
-	if (!onPhoto(point, era, sizes) && distanceToBox(u, v, scaled(era.ring ?? era.photo, aspect)) < radius + STICKER_MARGIN) return false;
+	// Photo trim is protected unless the era deliberately straddles it.
+	if (!placement.overlapFrame && !onPhoto(point, era, sizes) && distanceToBox(u, v, scaled(era.ring ?? era.photo, aspect)) < radius + STICKER_MARGIN) return false;
 	for (const box of era.protected) {
-		if (distanceToBox(u, v, scaled(box, aspect)) < radius + STICKER_MARGIN) return false;
+		if (distanceToBox(u, v, scaled(box, aspect)) < radius + (placement.identityMargin ?? STICKER_MARGIN)) return false;
 	}
 	return neighbours.every(other => Math.hypot(u - other.x, v - other.y * aspect) >= 2 * radius + STICKER_MARGIN);
 }
@@ -123,21 +131,28 @@ export function setPoints(shape: StickerSetShape, pitch: number, u: number, v: n
 
 /** Set shapes an era tries, in order, unless it overrides them; each later shape costs a little more. */
 export const DEFAULT_SET_SHAPES: readonly StickerSetShape[] = ['column', 'row', 'grid'];
-/** The 1970s front uses mirrored vertical pairs above its corner badges; the contemporary front uses one column. */
-export const ERA_SET_SHAPES: Readonly<Partial<Record<CardEra, readonly StickerSetShape[]>>> = { '1970s': ['split-stacked'], '2020s': ['column'] };
-/** The contemporary front keeps its vertical set on the right, below the team mark. */
-export const ERA_SET_SIDES: Readonly<Partial<Record<CardEra, 'left' | 'right'>>> = { '2020s': 'right' };
+/** The 1970s front uses mirrored vertical pairs; the 1980s and contemporary fronts use columns. */
+export const ERA_SET_SHAPES: Readonly<Partial<Record<CardEra, readonly StickerSetShape[]>>> = { '1970s': ['split-stacked'], '1980s': ['column'], '2020s': ['column'] };
+/** Anchor columns to their identity chips; the 1970s pairs may straddle decorative frame bars. */
+export const ERA_PLACEMENT: Readonly<Partial<Record<CardEra, StickerPlacement>>> = {
+	'1970s': { overlapFrame: true, aboveLayer: 'season.roundel' },
+	// The slanted name band leaves a tighter gap beneath the year/position chip.
+	'1980s': { side: 'right', identityMargin: 0.01 },
+	'2020s': { side: 'left' }
+};
 
 /**
  * Picks an era's sticker set: the grade and three face stickers evenly spaced and sharing an edge,
  * grade first. A column hugs the requested photo side, or either side when none is specified,
- * and its top or bottom, whichever clears every protected layer with the least drift, preferring
- * stickers wholly on the photo and off its central subject; with no room for a column it takes a
- * row, then a 2×2 block. A split set sits as high and as far out as it can, its pairs mirrored
- * across the card's centre line. Every shape uses the same spacing. Returns null when none fits.
+ * starting at the top when a side is requested; otherwise it chooses the top or bottom with
+ * the least drift, preferring stickers wholly on the photo and off its central subject. With
+ * no room for a column it takes a row, then a 2×2 block. A split set hugs its badge columns,
+ * mirrored across the card's centre line. Every shape uses the same sticker-to-sticker spacing.
  */
-export function solveStickerSlots(era: EraLayout, sizes: Pick<StickerLayout, 'aspect' | 'radius' | 'rim'>, shapes: readonly StickerSetShape[] = DEFAULT_SET_SHAPES, side?: 'left' | 'right'): EraStickerSlots | null {
+export function solveStickerSlots(era: EraLayout, sizes: Pick<StickerLayout, 'aspect' | 'radius' | 'rim'>, shapes: readonly StickerSetShape[] = DEFAULT_SET_SHAPES, placement: StickerPlacement = {}): EraStickerSlots | null {
 	const { aspect, radius } = sizes;
+	const { side } = placement;
+	const above = era.protected.find(box => box.layer === placement.aboveLayer);
 	const photo = scaled(era.photo, aspect);
 	const inset = radius + STICKER_MARGIN;
 	const pitch = 2 * radius + STICKER_MARGIN;
@@ -159,18 +174,19 @@ export function solveStickerSlots(era: EraLayout, sizes: Pick<StickerLayout, 'as
 				const bottom = Math.max(...centres.map(([, cv]) => cv));
 				let cost = rank * 0.03;
 				if (split) {
-					// Vertical pairs hug the badge sides first; horizontal pairs sit in the upper corners.
-					cost += v + (shape === 'split-stacked' ? 4 : 0.5) * u;
+					// Stack directly above the corner badges, or use the upper corners without an anchor.
+					cost += (above ? Math.abs(bottom - (above.y * aspect - inset)) : v) + (shape === 'split-stacked' ? 4 : 0.5) * u;
 				} else {
 					// Hug a photo side and its top or bottom.
 					const leftGap = Math.abs(u - (photo.u0 + inset));
 					const rightGap = Math.abs(right - (photo.u1 - inset));
 					cost += side === 'right' ? rightGap : side === 'left' ? leftGap : Math.min(leftGap, rightGap);
-					cost += Math.min(Math.abs(v - (photo.v0 + inset)), Math.abs(bottom - (photo.v1 - inset)));
+					const topGap = Math.abs(v - (photo.v0 + inset));
+					cost += side ? topGap : Math.min(topGap, Math.abs(bottom - (photo.v1 - inset)));
 				}
 				if (right > 1 || bottom > aspect || (best && cost >= best.cost)) continue;
 				const points = centres.map(([cu, cv]) => ({ x: round(cu), y: round(cv / aspect) }));
-				if (!points.every(point => stickerFits(point, era, sizes)) || !points.every((point, index) => points.slice(index + 1).every(other => Math.hypot(point.x - other.x, (point.y - other.y) * aspect) >= 2 * radius + STICKER_MARGIN - 1e-4))) continue;
+				if (!points.every(point => stickerFits(point, era, sizes, [], placement)) || !points.every((point, index) => points.slice(index + 1).every(other => Math.hypot(point.x - other.x, (point.y - other.y) * aspect) >= 2 * radius + STICKER_MARGIN - 1e-4))) continue;
 				for (const point of points) {
 					if (!split && !onPhoto(point, era, sizes)) cost += 0.06;
 					if (distanceToBox(point.x, point.y * aspect, subject) < radius) cost += 0.2;

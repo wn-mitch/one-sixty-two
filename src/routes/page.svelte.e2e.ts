@@ -413,20 +413,21 @@ test('retries a failed chunk without rerolling the committed draft', async ({ pa
 	expect(aborted).toBe(true);
 });
 
-test('preserves incompatible saved bytes until an explicit new draft', async ({ page }) => {
+test('reports an incompatible active draft nonmodally and clears only its slot', async ({ page }) => {
 	await page.addInitScript(() => {
 		if (!localStorage.getItem('162-zero:v1')) localStorage.setItem('162-zero:v1', '{"schemaVersion":0}');
 	});
 	await page.goto('/');
-	await expect(page.getByRole('alert')).toContainText('Saved draft is incompatible');
-	expect(await deviceDraftText(page)).toBe('{"schemaVersion":0}');
-	await page.getByRole('button', { name: 'Start new draft', exact: true }).click();
+	await expect(page.getByText('An older draft could not resume. Your saved seasons and collection are unchanged.')).toBeVisible();
+	await expect(page.getByRole('dialog')).not.toBeVisible();
+	expect(await deviceDraftText(page)).toBeNull();
+	await page.getByRole('button', { name: 'Start draft', exact: true }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect((await deviceDraft(page)).schemaVersion).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
 });
 
-test('imports a legacy localStorage draft once and keeps it across reloads', async ({ page }) => {
+test('imports an incompatible legacy draft once without repeating the notice after reload', async ({ page }) => {
 	const legacy = '{"schemaVersion":0,"legacy":true}';
 	await page.addInitScript(value => {
 		if (!sessionStorage.getItem('seeded')) {
@@ -435,12 +436,13 @@ test('imports a legacy localStorage draft once and keeps it across reloads', asy
 		}
 	}, legacy);
 	await page.goto('/');
-	await expect(page.getByRole('alert')).toContainText('Saved draft is incompatible');
-	expect(await deviceDraftText(page)).toBe(legacy);
+	await expect(page.getByText('An older draft could not resume. Your saved seasons and collection are unchanged.')).toBeVisible();
+	expect(await deviceDraftText(page)).toBeNull();
 	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1'))).toBeNull();
 	await page.reload();
-	await expect(page.getByRole('alert')).toContainText('Saved draft is incompatible');
-	expect(await deviceDraftText(page)).toBe(legacy);
+	await expect(page.getByRole('button', { name: 'Start draft', exact: true })).toBeEnabled();
+	await expect(page.getByText('An older draft could not resume. Your saved seasons and collection are unchanged.')).toHaveCount(0);
+	expect(await deviceDraftText(page)).toBeNull();
 });
 
 test('permits in-memory play when storage is blocked', async ({ page }) => {
@@ -487,7 +489,7 @@ for (const invalid of ['empty', 'wrong-roll']) {
 	});
 }
 
-test('route teardown cancels resumed hydration without overwriting a completed save', async ({ page, request }) => {
+test('route teardown cancels resumed hydration without overwriting an unfinished save', async ({ page, request }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: /Start draft/ }).click();
 	await chooseStadium(page);
@@ -495,9 +497,8 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 		await pickFirstSeason(page, request);
 		if (index < SLOTS.length - 1) await openPack(page);
 	}
-	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
-	await expect(page.getByRole('region', { name: 'All 162 games', exact: true }).locator(SEASON_GAME)).toHaveCount(162);
-	const completed = await deviceDraftText(page);
+	await expect(page.getByRole('button', { name: 'Simulate 162 games', exact: true })).toBeEnabled();
+	const unfinished = await deviceDraftText(page);
 	await page.goto('/');
 	const gate = Promise.withResolvers<void>();
 	const paused = Promise.withResolvers<void>();
@@ -516,7 +517,35 @@ test('route teardown cancels resumed hydration without overwriting a completed s
 	await expect(page).toHaveURL(/\/about$/);
 	gate.resolve();
 	await page.waitForLoadState('networkidle');
-	expect(await deviceDraftText(page) === completed).toBe(true);
+	expect(await deviceDraftText(page)).toBe(unfinished);
+});
+
+test('keeps completed seasons in history without reopening results or starting a draft on return', async ({ page, request }) => {
+	await finishRoster(page, request);
+	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
+	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120_000 });
+	await expect(page.getByRole('link', { name: 'Shop: 1 unlock token', exact: true })).toBeVisible();
+	await expect.poll(() => deviceDraftText(page)).toBeNull();
+	const token = await page.evaluate(async () => {
+		// The application installs this typed database hook for browser regression tests.
+		const device = window as unknown as { __deviceDb: { all(sql: string): Promise<{ token: string }[]> } };
+		const entries = await device.__deviceDb.all('SELECT token FROM seasons');
+		return entries[0]?.token;
+	});
+	expect(token).toBeTruthy();
+	await page.goto('/classic');
+	await expect(page).toHaveURL(/\/$/);
+	await expect(page.getByRole('button', { name: 'Start draft', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Resume draft', exact: true })).toHaveCount(0);
+	await expect(page.locator('#results-heading')).toHaveCount(0);
+	expect(await deviceDraftText(page)).toBeNull();
+	await page.goto('/shop');
+	await expect(page.locator('.balance')).toHaveText('1 unlock token');
+	await page.goto(`/#replay=${token}`);
+	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120_000 });
+	expect(await deviceDraftText(page)).toBeNull();
+	await page.goto('/shop');
+	await expect(page.locator('.balance')).toHaveText('1 unlock token');
 });
 
 test('keeps the Home copy width when centering on ultrawide screens', async ({ page }) => {

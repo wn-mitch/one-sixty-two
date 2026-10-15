@@ -39,7 +39,11 @@
 
 <div class="control" class:staggered title={dial?.note}>
 	<div class="head">
-		<label for={id}>{name}</label>
+		{#if dial || options.length > 4}
+			<label for={id}>{name}</label>
+		{:else}
+			<span class="label" id={`${id}-label`}>{name}</span>
+		{/if}
 		{#if dial}
 			<input
 				{id}
@@ -59,6 +63,7 @@
 			type="button"
 			class="stagger"
 			aria-pressed={staggered}
+			aria-label={`Stagger ${name}`}
 			title="Spread this control across several cards side by side"
 			onclick={() => lab.toggleStagger(target)}>Stagger</button
 		>
@@ -77,7 +82,7 @@
 			onkeydown={nudge}
 		/>
 	{:else if options.length <= 4}
-		<div class="steps" role="radiogroup" aria-label={name}>
+		<div class="steps" role="radiogroup" aria-labelledby={`${id}-label`}>
 			{#each options as option (option.value)}
 				<button type="button" role="radio" aria-checked={option.value === current} onclick={() => lab.set(target, option.value)}>{option.label}</button>
 			{/each}
@@ -94,19 +99,19 @@
 </div>
 
 <style>
-	.control { display: grid; gap: 0.3rem; padding: 0.35rem 0.4rem; border-radius: var(--radius); }
+	.control { display: grid; gap: var(--space-1); padding: var(--space-2) 0; border-radius: var(--radius); }
 	.control.staggered { background: color-mix(in oklch, var(--accent) 12%, transparent); outline: 1px solid color-mix(in oklch, var(--accent) 45%, transparent); }
-	.head { display: flex; align-items: center; gap: 0.5rem; }
-	label { flex: 1; font-size: var(--text-sm); color: var(--text); }
-	input[type='number'] { width: 6.4rem; min-height: 0; height: 1.7rem; padding: 0.15rem 0.3rem; font: inherit; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-	.dial { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); cursor: ew-resize; }
-	button { min-height: 1.9rem; padding: 0.2rem 0.45rem; font-size: var(--text-sm); }
-	.stagger { min-height: 1.6rem; padding: 0.1rem 0.45rem; font-size: var(--text-xs); color: var(--muted); background: transparent; }
+	.head { display: flex; align-items: center; gap: var(--space-2); }
+	label, .label { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); text-transform: capitalize; }
+	input[type='number'] { width: 5.5rem; min-height: 44px; box-sizing: border-box; padding: var(--space-2); font: inherit; font-size: var(--text-sm); font-variant-numeric: tabular-nums; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+	.dial { width: 100%; min-width: 0; height: 28px; margin: 0; accent-color: var(--accent); cursor: ew-resize; }
+	button { min-height: 44px; padding: var(--space-1) var(--space-2); font-size: var(--text-sm); }
+	.stagger { flex: none; padding: var(--space-1) var(--space-2); font-size: var(--text-xs); color: var(--muted); background: transparent; }
 	.stagger[aria-pressed='true'] { color: var(--background); background: var(--accent); border-color: var(--accent); }
 	.steps { display: flex; flex-wrap: wrap; gap: 2px; }
 	.steps button { flex: 1 1 0; min-width: 2.6rem; border-radius: 2px; font-variant-numeric: tabular-nums; }
 	.steps button[aria-checked='true'] { color: var(--background); background: var(--text); border-color: var(--text); }
 	.list { display: flex; gap: 2px; }
-	.list select { flex: 1; min-width: 0; min-height: 1.9rem; font: inherit; font-size: var(--text-sm); color: var(--text); background: var(--surface-raised); border: 1px solid var(--border); border-radius: 2px; }
-	.list button { width: 2rem; }
+	.list select { flex: 1; min-width: 0; min-height: 44px; font: inherit; font-size: var(--text-sm); color: var(--text); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius); }
+	.list button { width: 44px; flex: none; }
 </style>

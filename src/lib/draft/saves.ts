@@ -1,4 +1,6 @@
 import { json, parseJson, type Db } from '../storage/sql.ts';
+import { completionReward } from '../cosmetics/ledger.ts';
+import { LEAGUE_CHAPTERS } from '../sim/league-types.ts';
 import { STACK_ROLES } from './cleanup.ts';
 import { LEAGUE_VERSION, LineupError, validateLineup, type LeagueSeason } from './league.ts';
 import { replayRun, RunActionError, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunPhase, type RunSetup } from './run.ts';
@@ -59,22 +61,46 @@ export async function saveRun(db: Db, id: string, run: DraftRun, season: LeagueS
  const stamp = now.toISOString();
  try {
   await db.run([{
-   sql: `INSERT INTO draft_runs (id, created_at, updated_at, setup_json, actions_json, phase, season_json) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT (id) DO UPDATE SET updated_at = excluded.updated_at, actions_json = excluded.actions_json, phase = excluded.phase, season_json = excluded.season_json`,
-   bind: [id, stamp, stamp, json(run.setup), json(run.actions), run.phase, season === null ? null : json(season)]
-  }]);
+   sql: `INSERT INTO draft_runs (id, created_at, updated_at, setup_json, actions_json, phase, season_json, resume_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET updated_at = excluded.updated_at, actions_json = excluded.actions_json, phase = excluded.phase, season_json = excluded.season_json, resume_state = excluded.resume_state`,
+   bind: [id, stamp, stamp, json(run.setup), json(run.actions), run.phase, season === null ? null : json(season), (season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? 'archived' : 'active']
+  }, ...((season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? completionReward('draft:' + id, stamp) : [])]);
   return null;
  } catch { return 'Your draft could not be saved: browser storage is blocked or full. It continues in this tab.'; }
 }
 
-/** The most recently updated run that parses, or null. */
+/** The most recently updated unfinished active run that parses; completed history never autoopens. */
 export async function latestRun(db: Db): Promise<SavedRun | null> {
- const rows = await db.all<RunRow>('SELECT * FROM draft_runs ORDER BY updated_at DESC, id');
+ const rows = await db.all<RunRow>("SELECT * FROM draft_runs WHERE resume_state = 'active' ORDER BY updated_at DESC, id");
  for (const row of rows) {
   const saved = fromRow(row);
-  if (saved) return saved;
+  if (saved && (saved.season?.chapters.length ?? 0) < LEAGUE_CHAPTERS) return saved;
  }
  return null;
+}
+
+/** Explicit history links may open a completed or archived run without making it active again. */
+export async function getRun(db: Db, id: string): Promise<SavedRun | null> {
+ const rows = await db.all<RunRow>('SELECT * FROM draft_runs WHERE id = ?', [id]);
+ return rows.length ? fromRow(rows[0]) : null;
+}
+
+/** Completed Draft Mode history includes retired runs, independently of their resume eligibility. */
+export async function completedRuns(db: Db): Promise<SavedRun[]> {
+ const rows = await db.all<RunRow>('SELECT * FROM draft_runs WHERE season_json IS NOT NULL ORDER BY updated_at DESC, id');
+ return rows.flatMap(row => {
+  const saved = fromRow(row);
+  return saved && (saved.season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? [saved] : [];
+ });
+}
+
+/** Retires only the observed active snapshot while keeping its history and concurrent replacements. */
+export async function archiveRun(db: Db, saved: SavedRun): Promise<void> {
+ await db.run([{
+  sql: `UPDATE draft_runs SET resume_state = 'archived'
+   WHERE id = ? AND updated_at = ? AND setup_json = ? AND actions_json = ? AND phase = ? AND season_json IS ?`,
+  bind: [saved.id, saved.updatedAt, json(saved.setup), json(saved.actions), saved.phase, saved.season === null ? null : json(saved.season)]
+ }]);
 }
 
 export async function deleteRun(db: Db, id: string): Promise<void> {

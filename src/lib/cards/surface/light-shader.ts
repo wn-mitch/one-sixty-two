@@ -14,6 +14,7 @@ layout(location = 5) in vec4 a_plate;
 uniform vec2 u_resolution;
 out vec2 v_card;
 out vec2 v_atlas;
+flat out vec2 v_cardSize;
 flat out vec4 v_tile;
 flat out vec4 v_light;
 flat out vec4 v_view;
@@ -23,6 +24,7 @@ void main() {
 	vec2 position = a_origin + corner.x * a_axes.xy + corner.y * a_axes.zw;
 	v_card = corner;
 	v_atlas = a_tile.xy + corner * a_tile.zw;
+	v_cardSize = vec2(length(a_axes.xy), length(a_axes.zw));
 	v_tile = a_tile;
 	v_light = a_light;
 	v_view = a_view;
@@ -45,6 +47,7 @@ export function lightFragment(spec?: ProgramSpec): string {
 precision highp float;
 in vec2 v_card;
 in vec2 v_atlas;
+flat in vec2 v_cardSize;
 flat in vec4 v_tile;
 flat in vec4 v_light;
 flat in vec4 v_view;
@@ -126,6 +129,8 @@ float plateTone = 1.0;
 float plateStain = 0.6;
 // How strongly the holo film shows its colour and pattern; 1 is the film as designed.
 float holoVivid = 1.0;
+// This card's chosen colourway, or -1 to keep the scene/film default, unpacked in main.
+int cardPalette = -1;
 ${holoFilmGlsl(spec)}
 
 ${foilPlateGlsl(spec?.plates)}
@@ -168,9 +173,12 @@ void main() {
 	float intensity = 0.55 + 0.45 * v_light.z;
 
 	vec4 result = vec4(0.0);
-	// The tier, the era's holo pattern and its foil plate share one slot: tier + 4 * pattern + 128 * plate.
-	float plateCode = floor(v_light.w / 128.0 + 0.001);
-	float packed = v_light.w - plateCode * 128.0;
+	// Tier, film, plate and one-based per-card colourway share one exact integer slot.
+	float paletteCode = floor(v_light.w / 4096.0 + 0.001);
+	float finishCode = v_light.w - paletteCode * 4096.0;
+	cardPalette = int(paletteCode) - 1;
+	float plateCode = floor(finishCode / 128.0 + 0.001);
+	float packed = finishCode - plateCode * 128.0;
 	float tier = mod(packed + 0.01, 4.0) - 0.01;
 	float pattern = u_holoPattern < -0.5 ? floor(packed / 4.0 + 0.01) : u_holoPattern;
 	int plate = int((u_foilPlate < -0.5 ? plateCode : u_foilPlate) + 0.5);

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import SeasonLibrary from '#lib/components/SeasonLibrary.svelte';
+	import DraftRunHistory from '#lib/components/DraftRunHistory.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
 	import { deleteSeason, loadLibrary, renameSeason, STORAGE_NOTICE, type LibraryView } from '#lib/game/library.ts';
@@ -83,33 +84,18 @@
 </svelte:head>
 
 <main class="page">
-	<a class="back-link" href="/">← Back to the draft</a>
-	<header class="intro">
-		<div>
-			<h1>My seasons</h1>
-			<p class="lede muted">Every season you finish is saved in this browser. Pick a club for its cards and stats, or pick two for the tale of the tape and a best-of-five.</p>
-		</div>
-		<nav class="side-links" aria-label="Related">
-			<a class="h2h-link" href="/collection">Collection →</a>
-			<a class="h2h-link" href="/h2h">Head-to-head with any replay link →</a>
-		</nav>
-	</header>
+	<header class="intro"><h1>My seasons</h1></header>
 	{#if loading}
 		<p class="muted" role="status">Loading your seasons…</p>
 	{:else if error}
 		<p class="error" role="alert">{error}</p>
 	{:else}
 		<SeasonLibrary {entries} {history} {profiles} {manifest} {status} onCopy={entry => void copyChallenge(entry)} onRename={rename} onDelete={remove} />
+		{#if manifest}<DraftRunHistory {manifest} />{/if}
 	{/if}
 </main>
 
 <style>
 	.page { display: grid; gap: var(--space-4); width: min(100%, 84rem); padding-block: var(--space-8); }
-	.back-link { color: var(--muted); font-weight: 700; text-decoration: none; }
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
-	.lede { margin: 0; max-width: 52ch; }
-	.intro { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-2) var(--space-6); }
-	.side-links { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
-	.h2h-link { color: var(--muted); font-size: var(--text-sm); font-weight: 650; }
-	.h2h-link:hover { color: var(--text); }
 </style>

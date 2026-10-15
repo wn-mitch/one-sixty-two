@@ -9,6 +9,9 @@
  import type { ReliefProfile } from './surface/surfaces.ts';
  import type { HoloPattern } from './surface/holo-films.ts';
  import type { FoilPlate, PlateTuning } from './surface/foil-plates.ts';
+ import { equippedAppearance } from '../cosmetics/store.svelte.ts';
+ import type { CardAppearance } from '../cosmetics/catalogue.ts';
+ import { resolveCardAppearance } from './card-appearance.ts';
  import { appSettings } from '../game/settings.svelte.ts';
  import Front1950s from './fronts/Front1950s.svelte';
  import Front1960s from './fronts/Front1960s.svelte';
@@ -34,7 +37,7 @@
  let {
   s,
   face = 'front',
-  interactive = false,
+  interactive = true,
   thumbnail = false,
   compact = false,
   idle = true,
@@ -44,6 +47,7 @@
   film,
   plate,
   plateTuning,
+  appearance,
   capture = false,
   stickers,
   freshStickers,
@@ -64,6 +68,11 @@
   film?: HoloPattern;
   plate?: FoilPlate;
   plateTuning?: PlateTuning;
+  /**
+   * Cosmetic source: omitted uses the player's equipped tier choice, null restores the era defaults,
+   * and an object previews that appearance without changing the equipped choice or card tier.
+   */
+  appearance?: CardAppearance | null;
   capture?: boolean;
   /** Overrides the collection's stickers for this card, e.g. while they are being arranged. */
   stickers?: readonly PlacedSticker[];
@@ -75,6 +84,8 @@
  const colors = $derived(Object.entries(s.k).map(([role, color]) => `--${role}:${color}`).join(';'));
  const Front = $derived(fronts[s.era]);
  const Back = $derived(backs[s.era]);
+ const equipped = $derived(appearance === undefined ? equippedAppearance(s.fin.tier) : {});
+ const shownAppearance = $derived(resolveCardAppearance(s.fin.tier, equipped, appearance, film, plate));
  // Captures and lit scenes keep the static finish; every other front is lit by its own WebGL canvas.
  const flat = $derived(capture || scene);
  // Compact cards and thumbnails are too small for relief to read, so they keep the static finish too.
@@ -86,6 +97,14 @@
  const finishPaint = $derived(shaded ? '' : `;--stamp:${s.fin.stamp};--emb:${s.fin.emb};--gem-ring:${s.fin.gem ? GEM_RING : s.fin.stamp}`);
  const light = new CardLight();
  $effect(() => light.setNameProfile(nameProfile));
+ // Attribute-only finish changes need a fresh shader frame; wall scenes listen for the same change.
+ $effect(() => {
+  void shownAppearance.film;
+  void shownAppearance.plate;
+  void shownAppearance.palette;
+  LightEngine.shared()?.dirty(light);
+  root?.dispatchEvent(new CustomEvent('cards:appearance', { bubbles: true }));
+ });
  const shownStickers = $derived(face === 'front' && !compact && !thumbnail && !capture && (stickers || appSettings.showStickers) ? stickers ?? cardStickers(s.seasonId) : undefined);
  // Stickers print under the light, so a lit card repaints its map when they are placed, moved or hidden.
  $effect(() => {
@@ -102,8 +121,9 @@
  data-face={face}
  data-finish={s.fin.tier}
  data-identity={`${s.full}|${s.year}|${s.team}|${s.pos}`}
- data-film={film}
- data-plate={plate}
+ data-film={shownAppearance.film}
+ data-plate={shownAppearance.plate}
+ data-palette={shownAppearance.palette}
  data-plate-tuning={plateTuning && `${plateTuning.scale},${plateTuning.tone},${plateTuning.stain},${plateTuning.vivid ?? 1}`}
  data-thumbnail={thumbnail}
  data-interactive={interactive}
@@ -128,7 +148,7 @@
   {#if face === 'front'}<Front {s} />{:else}<Back {s} {onDetails} />{/if}
  </div>
  {#if face === 'front' && compact}<CompactPlate {s} />{/if}
- {#if face === 'front'}<Material {s} layer="over" paint={!shaded} />{/if}
+ {#if face === 'front'}<Material {s} layer="over" paint={!shaded} appearance={shownAppearance} />{/if}
  <!-- Explicit stickers (the collection editor) always show; elsewhere the player's setting decides. -->
  {#if shownStickers}<StickerLayer era={s.era} stickers={shownStickers} fresh={freshStickers} />{/if}
  {#if face === 'front' && lit}<canvas class="light" aria-hidden="true" use:lightCanvas={light}></canvas>{/if}

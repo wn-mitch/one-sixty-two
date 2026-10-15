@@ -16,6 +16,35 @@ export interface CollectionShelf {
  cards: CollectedCard[];
 }
 
+/** The collection's default view groups exact seasons by the game's player identity. */
+export interface CollectionStack {
+ key: string;
+ label: string;
+ cards: CollectedCard[];
+}
+
+/**
+ * Groups matched exact-season cards by identity, preserving the caller's sort order inside each
+ * stack. Team bullpen cards are units, not players, so they intentionally remain season-specific.
+ */
+export function stackCollection(
+ cards: readonly CollectedCard[],
+ candidates: readonly Candidate[]
+): CollectionStack[] {
+ const bySeason = new Map(candidates.map(candidate => [candidate.seasonId, candidate]));
+ const stacks = new Map<string, CollectionStack>();
+ for (const card of cards) {
+  const candidate = bySeason.get(card.seasonId);
+  const key = candidate?.eligibleSlots.includes('BP')
+   ? `bullpen:${card.seasonId}`
+   : candidate?.playerId ?? `season:${card.seasonId}`;
+  const stack = stacks.get(key);
+  if (stack) stack.cards.push(card);
+  else stacks.set(key, { key, label: card.label, cards: [card] });
+ }
+ return [...stacks.values()];
+}
+
 export interface CollectionProgress { owned: number; total: number; shelves: CollectionShelf[] }
 
 const OTHER = { key: 'other', label: 'Other seasons', order: Number.MAX_SAFE_INTEGER };

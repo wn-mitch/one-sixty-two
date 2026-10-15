@@ -1,17 +1,20 @@
 <script lang="ts">
 	import { toasts } from '../toast.svelte.ts';
 	import { onMount } from 'svelte';
-	import Card from '../cards/Card.svelte';
 	import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
 	import type { Draft, Manifest, Profile } from '../game/types.ts';
 	import { loadMedia } from '../media/client.ts';
 	import type { MediaManifest } from '../media/types.ts';
+	import { loadRankings } from '../rankings/client.ts';
+	import type { WarRankings } from '../rankings/types.ts';
 	import { innings } from '../game/format.ts';
 	import { MVP_TIE_RULE, SERIES_TIE_RULE, type SeriesAward, type SeriesGame, type SeriesResult, type SeriesSuperlative, type SeriesSuperlativeKind, type SeriesTeamId } from '../sim/series-types.ts';
 	import GameBoxScore from './GameBoxScore.svelte';
 	import SeriesSwings from './SeriesSwings.svelte';
 	import { tableScroll } from './table-scroll.ts';
 	import TeamBoxTables from './TeamBoxTables.svelte';
+	import InspectableCard from './h2h/InspectableCard.svelte';
+	import SeriesRosterRail, { type SeriesRosterCard } from './h2h/SeriesRosterRail.svelte';
 
 	interface Props {
 		result: SeriesResult;
@@ -30,6 +33,13 @@
 
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaStatus = $state<CardMediaStatus>('loading');
+	let rankings = $state.raw<WarRankings | null>(null);
+	$effect(() => {
+		let live = true;
+		rankings = null;
+		void loadRankings(manifest.dataVersion).then(value => { if (live) rankings = value; }).catch(() => {});
+		return () => { live = false; };
+	});
 	onMount(() => {
 		let live = true;
 		loadMedia().then(value => { if (live) { media = value; mediaStatus = 'ready'; } }).catch(() => { if (live) mediaStatus = 'unavailable'; });
@@ -59,9 +69,20 @@
 		if (!value) return null;
 		const profile = profiles[value.teamId].find(entry => entry.seasonId === value.seasonId);
 		const slot = drafts[value.teamId].picks.find(pick => pick.seasonId === value.seasonId)?.slot ?? null;
-		return { value, profile, view: profile ? createCardViewModel({ profile, slot, media, manifest, mediaStatus }) : null };
+		return { value, profile, view: profile ? createCardViewModel({ profile, slot, media, manifest, mediaStatus, rankings }) : null };
 	}
 	let seriesMvp = $derived(award(result.mvp));
+	let rosterCards = $derived.by(() => {
+		const output: Record<SeriesTeamId, SeriesRosterCard[]> = { 'team-a': [], 'team-b': [] };
+		for (const id of ['team-a', 'team-b'] as const) {
+			const bySeason = new Map(profiles[id].map(profile => [profile.seasonId, profile]));
+			output[id] = drafts[id].picks.flatMap(pick => {
+				const profile = bySeason.get(pick.seasonId);
+				return profile ? [{ seasonId: pick.seasonId, slot: pick.slot, view: createCardViewModel({ profile, slot: pick.slot, media, manifest, mediaStatus, rankings }) }] : [];
+			});
+		}
+		return output;
+	});
 
 	function runs(value: number): string {
 		return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)}`;
@@ -97,7 +118,6 @@
 	}
 	let superlatives = $derived(result.superlatives.map(superlative));
 
-	const noDetails = () => {};
 </script>
 
 <section class="series-results" aria-labelledby="series-heading">
@@ -149,11 +169,23 @@
 		</div>
 		{#if tiedRecords}<p class="note">{SERIES_TIE_RULE}</p>{/if}
 	</header>
+	<section class="rosters" aria-labelledby="series-rosters-heading">
+		<div class="section-heading">
+			<h2 id="series-rosters-heading">Series rosters</h2>
+			<p>Choose any card to inspect its exact season</p>
+		</div>
+		<div class="roster-grid">
+			{#each result.teams as entry (entry.id)}
+				<SeriesRosterRail title={entry.name} items={rosterCards[entry.id]} />
+			{/each}
+		</div>
+	</section>
+
 
 	{#if seriesMvp}
 		<section class="mvp" aria-labelledby="series-mvp-heading">
 			{#if seriesMvp.view}
-				<div class="mvp-card"><Card s={seriesMvp.view} face="front" onDetails={noDetails} /></div>
+				<div class="mvp-card"><InspectableCard s={seriesMvp.view} actionLabel={`Inspect Series MVP ${seriesMvp.value.displayName}`} /></div>
 			{/if}
 			<div class="mvp-copy">
 				<p class="eyebrow">Series MVP · {team(seriesMvp.value.teamId).name}</p>
@@ -262,6 +294,8 @@
 	tr.champion .wins-col { color: var(--accent); }
 	tr.champion .seed { color: var(--accent); }
 
+	.rosters { display: grid; gap: var(--space-4); min-width: 0; }
+	.roster-grid { display: grid; gap: var(--space-6); min-width: 0; }
 	.mvp { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: center; }
 	.mvp-card { flex: none; width: min(13rem, 52vw); }
 	.mvp-copy { display: grid; flex: 1 1 15rem; gap: var(--space-2); max-width: 36rem; min-width: 0; }
@@ -301,6 +335,9 @@
 	.game-meta { display: grid; gap: 2px; grid-column: 2; color: var(--muted); font-size: var(--text-xs); }
 	.game-state { color: var(--text); font-weight: 650; }
 
+	@media (min-width: 64rem) {
+		.roster-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	}
 	@media (min-width: 48rem) {
 		.award-row { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0; }
 		.award { padding-right: var(--space-4); }

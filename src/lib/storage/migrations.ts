@@ -225,6 +225,46 @@ export const MIGRATIONS: readonly Migration[] = [
      WHERE typeof(war) IN ('integer', 'real') AND war >= 14 ORDER BY rostered_at`
    });
   }
+ },
+ {
+  version: 9,
+  up(db) {
+   exec(db, "ALTER TABLE draft_runs ADD COLUMN resume_state TEXT NOT NULL DEFAULT 'active'");
+   exec(db, `CREATE TABLE shop_completions (
+    key TEXT PRIMARY KEY NOT NULL,
+    completed_at TEXT NOT NULL,
+    credit INTEGER NOT NULL CHECK (typeof(credit) = 'integer' AND credit IN (0, 1))
+   )`);
+   exec(db, 'CREATE TABLE shop_owned (item_id TEXT PRIMARY KEY NOT NULL)');
+   exec(db, `CREATE TABLE shop_equipped (
+    tier TEXT PRIMARY KEY NOT NULL CHECK (tier IN ('foil', 'emboss', 'gem')),
+    item_id TEXT NOT NULL REFERENCES shop_owned (item_id),
+    colorway TEXT,
+    CHECK (tier = 'gem' OR colorway IS NULL)
+   )`);
+   // Purchases serialize in SQLite, not in a tab's possibly stale view of its balance.
+   exec(db, `CREATE TRIGGER shop_purchase_balance BEFORE INSERT ON shop_owned
+    WHEN NOT EXISTS (SELECT 1 FROM shop_owned WHERE item_id = NEW.item_id)
+     AND (SELECT COALESCE(SUM(credit), 0) FROM shop_completions) <= (SELECT COUNT(*) FROM shop_owned)
+    BEGIN SELECT RAISE(ABORT, 'Not enough tokens. Complete a new season to earn one.'); END`);
+   for (const operation of ['INSERT', 'UPDATE']) {
+    exec(db, `CREATE TRIGGER shop_equip_owned_${operation.toLowerCase()} BEFORE ${operation} ON shop_equipped
+     WHEN NOT EXISTS (SELECT 1 FROM shop_owned WHERE item_id = NEW.item_id)
+     BEGIN SELECT RAISE(ABORT, 'Unlock this finish before equipping it.'); END`);
+   }
+   // Existing history establishes receipts, never starting credits. Collection history survives deletion.
+   exec(db, `INSERT INTO shop_completions (key, completed_at, credit)
+    SELECT 'classic:' || key, saved_at, 0 FROM seasons WHERE wins + losses = 162`);
+   exec(db, `INSERT OR IGNORE INTO shop_completions (key, completed_at, credit)
+    SELECT 'classic:' || season_key, MIN(rostered_at), 0 FROM rostered GROUP BY season_key`);
+   // Six chapters constituted a completed Draft Mode season when this schema shipped.
+   // CASE protects old malformed saves from JSON extraction errors without modifying their contents.
+   exec(db, `INSERT INTO shop_completions (key, completed_at, credit)
+    SELECT 'draft:' || id, updated_at, 0 FROM draft_runs
+    WHERE CASE WHEN json_valid(season_json) THEN
+     json_type(season_json, '$.chapters') = 'array' AND json_array_length(season_json, '$.chapters') >= 6
+     ELSE 0 END`);
+  }
  }
 ];
 

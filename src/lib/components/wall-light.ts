@@ -1,4 +1,6 @@
 import type { Finish } from '../cards/finish.ts';
+import type { FoilPlate } from '../cards/surface/foil-plates.ts';
+import type { HoloPattern } from '../cards/surface/holo-films.ts';
 import { autonomousMotion, type MotionRegistration } from '../cards/motion-runtime.ts';
 import { stableUnit } from '../cards/stable-unit.ts';
 import { layoutOffset } from '../cards/surface/geometry.ts';
@@ -75,6 +77,7 @@ export class WallLight {
 		this.#observer.observe(stage);
 		stage.addEventListener('cards:fitted', this.#onCardChanged);
 		stage.addEventListener('load', this.#onCardChanged, true);
+		stage.addEventListener('cards:appearance', this.#onAppearance);
 		this.#registration = autonomousMotion.register(stage, {
 			// A raised card holds the page's ambient light still until it lands again.
 			active: settings => !settings.reducedMotion && !autonomousMotion.ambientHeld && this.#cards.length > 0,
@@ -148,6 +151,8 @@ export class WallLight {
 		const width = card.querySelector<HTMLElement>('.card')?.offsetWidth ?? 0;
 		this.#queue.invalidate(`${card.dataset.wallCard}@${width}`);
 	};
+
+	#onAppearance = () => this.#queueDraw();
 
 	#queueDraw(): void {
 		if (this.#drawQueued || this.#destroyed) return;
@@ -228,6 +233,9 @@ export class WallLight {
 				spotlight,
 				tier: card.tier,
 				era: card.era,
+				film: card.element.dataset.film as HoloPattern | undefined,
+				plate: card.element.dataset.plate as FoilPlate | undefined,
+				palette: palette(card.element.dataset.palette),
 				pattern: stableUnit(card.key.split('@')[0] ?? '', 41)
 			};
 		});
@@ -241,7 +249,14 @@ export class WallLight {
 		this.#observer.disconnect();
 		this.#stage.removeEventListener('cards:fitted', this.#onCardChanged);
 		this.#stage.removeEventListener('load', this.#onCardChanged, true);
+		this.#stage.removeEventListener('cards:appearance', this.#onAppearance);
 		this.#registration.unregister();
 		this.#renderer.destroy();
 	}
+}
+
+/** A preset colourway index, or undefined to keep the film's own. */
+function palette(value: string | undefined): number | undefined {
+	const index = Number(value);
+	return value !== undefined && Number.isInteger(index) && index >= 0 ? index : undefined;
 }

@@ -16,7 +16,9 @@ import {
  validateReplay
 } from './draft.ts';
 import { decodeReplay, encodeReplay } from './share.ts';
-import { persistDraft, restoreDraft } from './persistence.ts';
+import { clearCompletedDraft, persistDraft, restoreDraft } from './persistence.ts';
+import { saveSeason } from './library.ts';
+import type { SeasonResult } from '../sim/types.ts';
 import { brokenDb, memoryDb } from '../storage/test-db.ts';
 import type { Db } from '../storage/sql.ts';
 import { SLOTS, isJackpot, type Candidate, type Draft, type Manifest, type Roll, type Slot, type TeamRoll } from './types.ts';
@@ -602,17 +604,58 @@ describe('permanent deterministic drafting', () => {
   const saved = JSON.stringify({ ...current, schemaVersion: 3, modelVersion: 'pa-v2', phase: 'results' });
   await rawSave(db, saved);
   expect(await restoreDraft(db, manifest)).toMatchObject({ kind: 'incompatible' });
-  expect(await rawRead(db)).toBe(saved);
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'empty' });
  });
 
- it('does not overwrite incompatible saves and allows blocked-storage play', async () => {
+ it('reports an incompatible active save once and allows blocked-storage play', async () => {
   const { db } = await memoryDb();
   const obsolete = JSON.stringify({ ...finish(), schemaVersion: 1 });
   await rawSave(db, obsolete);
+  await db.run([{ sql: "INSERT INTO series (id, recorded_at, json) VALUES ('kept', 'synthetic', '{}')" }]);
   expect((await restoreDraft(db, manifest)).kind).toBe('incompatible');
-  expect(await rawRead(db)).toBe(obsolete);
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'empty' });
+  expect(await db.all('SELECT id FROM series')).toEqual([{ id: 'kept' }]);
   expect((await restoreDraft(brokenDb, manifest)).kind).toBe('unavailable');
   expect(await persistDraft(brokenDb, finish(), 'simulating')).toContain('Resume unavailable');
+ });
+
+ it('keeps a concurrent replacement and reports a failed incompatible cleanup honestly', async () => {
+  const { db } = await memoryDb();
+  const obsolete = JSON.stringify({ ...finish(), schemaVersion: 1 });
+  await rawSave(db, obsolete);
+  const replacement = createDraft(manifest, 99);
+  const racing: Db = {
+   all: db.all,
+   run: async statements => {
+    await persistDraft(db, replacement, 'stadium');
+    await db.run(statements);
+   }
+  };
+  expect((await restoreDraft(racing, manifest)).kind).toBe('incompatible');
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft: replacement, phase: 'stadium' });
+  await rawSave(db, obsolete);
+  expect(await restoreDraft({ all: db.all, run: brokenDb.run }, manifest)).toMatchObject({ kind: 'unavailable', message: expect.stringContaining('could not resume or be cleared') });
+  expect(await rawRead(db)).toBe(obsolete);
+ });
+
+ it('retires a completed active snapshot only after history succeeds and retains replay access', async () => {
+  const { db } = await memoryDb();
+  const draft = finish();
+  const result = { wins: 90, losses: 72, runsFor: 700, runsAgainst: 600, batting: [], pitching: [], games: [] } as unknown as SeasonResult;
+  await persistDraft(db, draft, 'results');
+  expect(await saveSeason(brokenDb, draft, result, [], manifest)).toContain('unavailable');
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft, phase: 'results' });
+  expect(await saveSeason(db, draft, result, [], manifest)).toBeNull();
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'empty' });
+  expect(await db.all('SELECT key FROM seasons')).toHaveLength(1);
+  expect(decodeReplay(encodeReplay(draft), manifest).picks).toEqual(draft.picks);
+  // An earlier phase may remain if the final active-save write failed but history succeeded.
+  await persistDraft(db, draft, 'simulating');
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'empty' });
+  const replacement = createDraft(manifest, 100);
+  await persistDraft(db, replacement, 'stadium');
+  expect(await clearCompletedDraft(db, draft)).toBeNull();
+  expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft: replacement, phase: 'stadium' });
  });
 
  it('preserves exact simulation inputs on reload', async () => {

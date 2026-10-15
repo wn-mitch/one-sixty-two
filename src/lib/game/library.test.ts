@@ -3,6 +3,7 @@ import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, se
 import { deleteSeason, gameFeats, loadLibrary, renameSeason, saveSeason } from './library.ts';
 import { persistDraft } from './persistence.ts';
 import { brokenDb, memoryDb } from '../storage/test-db.ts';
+import { readShop } from '../cosmetics/ledger.ts';
 import { SLOTS, type Candidate, type Draft, type Manifest } from './types.ts';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 import type { SeasonResult } from '../sim/types.ts';
@@ -76,6 +77,36 @@ describe('season library', () => {
   await deleteSeason(db, key);
   expect((await loadLibrary(db, manifest)).entries).toEqual([]);
   expect(await db.all('SELECT * FROM season_cards')).toEqual([]);
+ });
+ it('rewards only a complete 162-game result and keeps its receipt after deleting and resaving', async () => {
+  const { db } = await memoryDb();
+  const draft = complete(71);
+  await saveSeason(db, draft, { ...result(100), losses: 61 }, [], manifest);
+  expect((await readShop(db)).balance).toBe(0);
+  await saveSeason(db, draft, result(100), [], manifest);
+  await saveSeason(db, draft, result(100), [], manifest);
+  expect((await readShop(db)).balance).toBe(1);
+  const key = (await loadLibrary(db, manifest)).entries[0].key;
+  await deleteSeason(db, key);
+  expect((await readShop(db)).balance).toBe(1);
+  await saveSeason(db, draft, result(100), [], manifest);
+  expect((await readShop(db)).balance).toBe(1);
+  await saveSeason(db, complete(72), result(90), [], manifest);
+  expect((await readShop(db)).balance).toBe(2);
+ });
+ it('does not reward invalid records that happen to total 162', async () => {
+  const { db } = await memoryDb();
+  await saveSeason(db, complete(73), result(-1), [], manifest);
+  await saveSeason(db, complete(74), result(100.5), [], manifest);
+  expect((await readShop(db)).balance).toBe(0);
+ });
+ it('rolls back the season and collection when its reward receipt cannot be saved', async () => {
+  const { db, raw } = await memoryDb();
+  raw.exec({ sql: "CREATE TRIGGER refuse_reward BEFORE INSERT ON shop_completions BEGIN SELECT RAISE(ABORT, 'receipt unavailable'); END" });
+  await expect(saveSeason(db, complete(75), result(100), [], manifest)).resolves.toContain('unavailable');
+  expect((await loadLibrary(db, manifest)).entries).toEqual([]);
+  expect(await db.all('SELECT * FROM rostered')).toEqual([]);
+  expect((await readShop(db)).balance).toBe(0);
  });
  it('returns a notice instead of throwing when storage fails', async () => {
   await expect(saveSeason(brokenDb, complete(9), result(70), [], manifest)).resolves.toMatch('unavailable');

@@ -6,7 +6,7 @@
 	import Control from '#lib/lab/Control.svelte';
 	import LabCard from '#lib/lab/LabCard.svelte';
 	import { applies, dialsOf, finishInUse, ownFinish, ownPalette, ownUnder, type Target } from '#lib/lab/controls.ts';
-	import { Lab, MAX_STAGGER, ZOOMS } from '#lib/lab/lab.svelte.ts';
+	import { Lab, MIN_WIDTH, MAX_WIDTH, MAX_STAGGER } from '#lib/lab/lab.svelte.ts';
 	import { sceneOf } from '#lib/lab/scene.ts';
 	import GradientControl from '#lib/lab/GradientControl.svelte';
 	import { LabLinkSaveError } from '#lib/lab/link.ts';
@@ -22,6 +22,18 @@
 	let videoProgress = $state<VideoProgress | null>(null);
 	let videoAbort: AbortController | undefined;
 	let mounted = $state(false);
+	let viewportWidth = $state(1440);
+	let viewportHeight = $state(900);
+	let stageWidth = $state(800);
+	let toolbarHeight = $state(100);
+	const narrow = $derived(viewportWidth <= 832);
+	// Fit the whole 5:7 preview, including tilt clearance, rather than clipping a zoomed card.
+	const maximumWidth = $derived(Math.max(MIN_WIDTH, Math.floor(Math.min(
+		MAX_WIDTH,
+		stageWidth - 64,
+		(narrow ? viewportHeight * 0.52 - 64 : viewportHeight - toolbarHeight - 176) * 5 / 7
+	))));
+	const previewWidth = $derived(Math.min(lab.width, maximumWidth));
 	const supported = LightEngine.shared() !== null;
 
 	onMount(() => {
@@ -47,16 +59,15 @@
 	const dialTargets = (kind: 'film' | 'finish' | 'plate', name: string) => Object.keys(dialsOf(kind, name)).map(dial => `${kind}:${dial}`);
 	const staggerIsChoice = $derived(lab.stagger !== null && !lab.stagger.target.includes(':'));
 
-	function zoomBy(by: number): void {
-		const index = ZOOMS.indexOf(lab.zoom as (typeof ZOOMS)[number]);
-		lab.zoom = ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, index + by))]!;
+	function resizePreview(value: number): void {
+		lab.width = Math.round(Math.min(maximumWidth, Math.max(MIN_WIDTH, value)));
 	}
 
 	function wheel(event: WheelEvent): void {
 		// A trackpad pinch arrives as a wheel with the control key held.
 		if (!event.ctrlKey && !event.metaKey) return;
 		event.preventDefault();
-		zoomBy(event.deltaY < 0 ? 1 : -1);
+		resizePreview(previewWidth + (event.deltaY < 0 ? 20 : -20));
 	}
 
 	async function copyLink(): Promise<void> {
@@ -121,15 +132,20 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
+<svelte:window bind:innerWidth={viewportWidth} bind:innerHeight={viewportHeight} />
+
 {#if mounted}
 <main class="lab">
-	<section class="stage-area" aria-label="Cards">
-		<div class="toolbar">
-			<div class="group" role="radiogroup" aria-label="Zoom">
-				{#each ZOOMS as zoom (zoom)}
-					<button type="button" role="radio" aria-checked={lab.zoom === zoom} onclick={() => (lab.zoom = zoom)}>{zoom}×</button>
-				{/each}
+	<section class="stage-area" aria-label="Cards" bind:clientWidth={stageWidth}>
+		<div class="toolbar" bind:clientHeight={toolbarHeight}>
+			<div class="preview-controls">
+				<div class="width-control">
+					<label for="lab-width">Width <output for="lab-width">{previewWidth} px</output></label>
+					<input id="lab-width" type="range" min={MIN_WIDTH} max={maximumWidth} step="1" value={previewWidth} oninput={event => resizePreview(event.currentTarget.valueAsNumber)} aria-describedby="lab-width-note" />
+				</div>
+				<label class="check"><input type="checkbox" checked={lab.setup.drift} onchange={event => (lab.setup = { ...lab.setup, drift: event.currentTarget.checked })} /> Drift</label>
 			</div>
+			<p id="lab-width-note" class="preview-note">Preview size only. Pattern scale and MP4 size stay unchanged.</p>
 			{#if lab.stagger}
 				<div class="group" aria-label="Stagger">
 					<span class="what">Stagger <b>{lab.stagger.target.replace(':', ' ')}</b></span>
@@ -143,12 +159,15 @@
 					<button type="button" onclick={() => (lab.stagger = null)}>Done</button>
 				</div>
 			{/if}
-			<div class="group">
-				<label class="check"><input type="checkbox" checked={lab.setup.drift} onchange={event => (lab.setup = { ...lab.setup, drift: event.currentTarget.checked })} /> Drift</label>
-				<button type="button" onclick={() => lab.randomize()}>Go nuts</button>
-				<button type="button" onclick={() => lab.reset()}>Reset</button>
-				<button type="button" disabled={savingLink} onclick={copyLink}>{savingLink ? 'Saving link…' : 'Copy link'}</button>
-				<button type="button" disabled={exporting || !supported || (lab.setup.print === 'front' && !fronts[lab.setup.era])} onclick={exportVideo}>Export MP4</button>
+			<div class="actions">
+				<div class="group">
+					<button type="button" onclick={() => lab.randomize()}>Randomize</button>
+					<button type="button" onclick={() => lab.reset()}>Reset</button>
+				</div>
+				<div class="group">
+					<button type="button" disabled={savingLink} onclick={copyLink}>{savingLink ? 'Saving link…' : 'Copy link'}</button>
+					<button type="button" disabled={exporting || !supported || (lab.setup.print === 'front' && !fronts[lab.setup.era])} onclick={exportVideo}>Export MP4</button>
+				</div>
 				{#if exporting}<button type="button" onclick={() => videoAbort?.abort()}>Cancel export</button>{/if}
 			</div>
 		</div>
@@ -163,7 +182,7 @@
 		{/if}
 		{#if frontError}<p role="alert">Could not load the era fronts: {frontError}</p>{/if}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="stage" class:staggered={lab.stagger !== null} style={`--lab-zoom:${lab.zoom}`} onwheel={wheel}>
+		<div class="stage" class:staggered={lab.stagger !== null} style={`--lab-card-width:${previewWidth}px`} onwheel={wheel} role={lab.stagger ? 'region' : undefined} aria-label={lab.stagger ? 'Staggered previews' : undefined}>
 			{#each variants as variant, index (`${index}:${variant.value ?? ''}`)}
 				{@const scene = sceneOf(variant.setup)}
 				<LabCard
@@ -181,10 +200,10 @@
 
 	<aside class="panel" aria-label="Controls">
 		<details open>
-			<summary>Print</summary>
-			<Control {lab} target="print" />
-			<Control {lab} target="tier" />
-			<Control {lab} target="era" />
+			<summary>Card & material</summary>
+			<Control {lab} target="print" label="Preview" />
+			<Control {lab} target="tier" label="Material" />
+			<Control {lab} target="era" label="Era" />
 			<button type="button" class="wide" onclick={() => lab.useEra()}>Use the {lab.setup.era} look</button>
 			{#if shown('stock')}<Control {lab} target="stock" />{/if}
 		</details>
@@ -238,39 +257,42 @@
 {/if}
 
 <style>
-	.lab { width: calc(100vw - 2rem); margin-left: calc(50% - 50vw + 1rem); box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem); gap: var(--space-4); padding: var(--space-4); align-items: start; }
+	.lab { width: calc(100vw - 2rem); margin-left: calc(50% - 50vw + 1rem); box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 25rem); gap: var(--space-6); padding: var(--space-4); align-items: start; }
 	.stage-area { position: sticky; top: var(--space-4); display: grid; gap: var(--space-3); min-width: 0; }
-	.toolbar { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
-	.group { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+	.toolbar { display: grid; gap: var(--space-2); }
+	.preview-controls { display: flex; align-items: center; gap: var(--space-6); }
+	.width-control { display: grid; gap: var(--space-1); flex: 1; max-width: 28rem; min-width: 0; }
+	.width-control label { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); font-weight: 650; }
+	.width-control output { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+	.width-control input { width: 100%; min-width: 0; height: 28px; margin: 0; accent-color: var(--accent); }
+	.preview-note { margin: 0; font-size: var(--text-xs); color: var(--muted); }
+	.actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
+	.group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
 	.manual-link { display: grid; gap: var(--space-2); font-size: var(--text-sm); }
 	.manual-link input { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; }
-	.toolbar button { min-height: 2rem; padding: 0.2rem 0.6rem; font-size: var(--text-sm); }
-	.toolbar [aria-checked='true'] { color: var(--background); background: var(--text); border-color: var(--text); }
+	.toolbar button { min-height: 44px; padding: 0.3rem 0.75rem; font-size: var(--text-sm); }
 	.what { margin-right: 0.4rem; font-size: var(--text-sm); color: var(--muted); }
 	.what b { color: var(--accent); }
 	.count { min-width: 1.6rem; text-align: center; font-variant-numeric: tabular-nums; }
-	.check { display: flex; align-items: center; gap: 0.3rem; margin-right: 0.4rem; font-size: var(--text-sm); }
+	.check { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; font-size: var(--text-sm); }
 	.stage {
-		--lab-card-width: calc(min(24rem, 60vw) * var(--lab-zoom));
-		display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: var(--space-4);
-		max-height: calc(100dvh - 9rem); overflow: auto; padding: var(--space-4); perspective: 1400px;
+		display: flex; justify-content: center; align-items: flex-start; gap: var(--space-6);
+		overflow: auto; padding: 32px; perspective: 1400px;
 		background: radial-gradient(circle at 50% 30%, oklch(24% 0.012 255), var(--background) 70%); border-radius: var(--radius-lg);
 	}
-	.stage.staggered { --lab-card-width: calc(13rem * var(--lab-zoom)); flex-wrap: nowrap; justify-content: flex-start; }
-	.panel { display: grid; gap: var(--space-2); max-height: calc(100dvh - 6rem); overflow: auto; padding-right: 0.3rem; }
-	details { display: grid; gap: 0.2rem; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
-	summary { cursor: pointer; font-weight: 650; padding: 0.2rem 0.3rem; }
+	.stage.staggered { justify-content: flex-start; }
+	.panel { display: grid; gap: var(--space-3); min-width: 0; max-height: calc(100dvh - 7rem); overflow: auto; padding: 0 var(--space-2) var(--space-2); scrollbar-gutter: stable; }
+	details { padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+	summary { cursor: pointer; font-size: var(--text-base); font-weight: 650; padding: var(--space-2) 0; overflow-wrap: anywhere; }
 	summary b { color: var(--accent); font-weight: 650; }
 	summary span { color: var(--muted); font-weight: 400; font-size: var(--text-sm); }
-	.wide { min-height: 2rem; margin: 0.2rem 0.4rem; font-size: var(--text-sm); }
-	.hint { color: var(--muted); font-size: var(--text-sm); margin: 0 var(--space-2); }
+	.wide { min-height: 44px; margin: var(--space-2) 0; font-size: var(--text-sm); }
+	.hint { color: var(--muted); font-size: var(--text-sm); margin: 0; }
 	@media (max-width: 52rem) {
-		.lab { width: auto; margin-left: 0; grid-template-columns: 1fr; padding: var(--space-2); }
-		/* The cards stay on screen above the controls as they scroll. */
-		.stage-area { top: 0; z-index: 2; padding-bottom: var(--space-2); background: var(--background); }
-		.toolbar { gap: var(--space-2); }
-		.stage { max-height: 46dvh; padding: var(--space-2); --lab-card-width: calc(min(20rem, 78vw, 38dvh * 5 / 7) * var(--lab-zoom)); }
-		.stage.staggered { --lab-card-width: calc(min(9rem, 38dvh * 5 / 7) * var(--lab-zoom)); }
-		.panel { max-height: none; }
+		.lab { width: auto; margin-left: 0; grid-template-columns: 1fr; gap: var(--space-4); padding: var(--space-2); }
+		.stage-area { position: static; }
+		.preview-controls { gap: var(--space-4); }
+		.stage { padding: 32px; }
+		.panel { max-height: none; overflow: visible; padding: 0; scrollbar-gutter: auto; }
 	}
 </style>

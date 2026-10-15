@@ -10,6 +10,15 @@ import type { SeriesInput, SeriesProgress, SeriesResult, SeriesTeamId, SeriesWor
 
 export type { SeriesField };
 export type SeriesPhase = 'setup' | 'running' | 'results';
+export type SeriesClubStatus = 'empty' | 'pending' | 'ready' | 'error';
+export interface SeriesClub {
+ source: 'saved' | 'replay';
+ entry: LibraryView | null;
+ draft: Draft;
+ profiles: Profile[];
+ canonical: string;
+ stadiumName: string;
+}
 const DEFAULT_NAMES: Record<SeriesTeamId, string> = { 'team-a': 'Team A', 'team-b': 'Team B' };
 const TEAM_IDS = ['team-a', 'team-b'] as const;
 
@@ -22,6 +31,8 @@ export class SeriesSession {
  library = $state.raw<LibraryView[]>([]);
  fields = $state<Record<SeriesTeamId, SeriesField>>({ 'team-a': { link: '', name: '' }, 'team-b': { link: '', name: '' } });
  fieldErrors = $state<Record<SeriesTeamId, string>>({ 'team-a': '', 'team-b': '' });
+ clubStatus = $state<Record<SeriesTeamId, SeriesClubStatus>>({ 'team-a': 'empty', 'team-b': 'empty' });
+ clubs = $state.raw<Record<SeriesTeamId, SeriesClub | null>>({ 'team-a': null, 'team-b': null });
  phase = $state<SeriesPhase>('setup');
  loading = $state(true);
  error = $state('');
@@ -34,8 +45,8 @@ export class SeriesSession {
  drafts = $state.raw<Record<SeriesTeamId, Draft> | null>(null);
  private canonical: Record<SeriesTeamId, string> | null = null;
  private runId = 0;
+ private validationIds: Record<SeriesTeamId, number> = { 'team-a': 0, 'team-b': 0 };
  private worker: Worker | null = null;
- private abort: AbortController | null = null;
 
  get running(): boolean { return this.phase === 'running'; }
 
@@ -64,6 +75,8 @@ export class SeriesSession {
   this.result = null;
   this.fields = fromHash;
   this.fieldErrors = { 'team-a': '', 'team-b': '' };
+  this.clubs = { 'team-a': null, 'team-b': null };
+  this.clubStatus = { 'team-a': 'empty', 'team-b': 'empty' };
   if (fromHash['team-a'].link && fromHash['team-b'].link) await this.play();
  }
 
@@ -74,46 +87,74 @@ export class SeriesSession {
   catch { this.library = []; }
  }
 
- choose(id: SeriesTeamId, entry: LibraryView): void {
+ async choose(id: SeriesTeamId, entry: LibraryView): Promise<void> {
   this.fields[id] = { link: `${location.origin}/#replay=${entry.token}`, name: entry.nickname ?? '' };
+  await this.validate(id, entry);
+ }
+
+ /** Validates one replay and loads its exact roster without starting either regular season. */
+ async validate(id: SeriesTeamId, entry: LibraryView | null = null): Promise<boolean> {
+  const manifest = this.manifest;
+  if (!manifest) return false;
+  const validationId = ++this.validationIds[id];
+  this.fieldErrors[id] = '';
+  this.clubStatus[id] = 'pending';
+  this.clubs = { ...this.clubs, [id]: null };
+  try {
+   const loaded = await loadReplayLink(this.fields[id].link, manifest, location.origin);
+   const profiles = await loadDraftProfiles(manifest, loaded.draft);
+   if (validationId !== this.validationIds[id]) return false;
+   const stadiumName = manifest.stadiums.find(stadium => stadium.ref.id === loaded.draft.homeStadium?.id)?.name ?? 'Home park unavailable';
+   this.clubs = {
+    ...this.clubs,
+    [id]: { source: entry ? 'saved' : 'replay', entry, draft: loaded.draft, profiles, canonical: replayLinkPath(loaded.link), stadiumName }
+   };
+   this.clubStatus[id] = 'ready';
+   return true;
+  } catch (error) {
+   if (validationId !== this.validationIds[id]) return false;
+   this.fieldErrors[id] = error instanceof ReplayLinkError ? error.message : 'The replay could not be loaded. Please retry.';
+   this.clubStatus[id] = 'error';
+   return false;
+  }
+ }
+
+ /** Returns one side to its chooser without disturbing the opposing club. */
+ change(id: SeriesTeamId): void {
+  this.validationIds[id]++;
+  this.clubs = { ...this.clubs, [id]: null };
+  this.clubStatus[id] = 'empty';
   this.fieldErrors[id] = '';
  }
 
  async play(): Promise<void> {
   if (!this.manifest || this.running) return;
   const manifest = this.manifest;
-  this.stopRun();
+  const readiness = await Promise.all(TEAM_IDS.map(id => this.clubs[id] ? true : this.validate(id)));
+  if (readiness.some(ready => !ready)) return;
+  const a = this.clubs['team-a'];
+  const b = this.clubs['team-b'];
+  if (!a || !b) return;
+
+  this.stopWorker();
   const runId = ++this.runId;
-  const abort = new AbortController();
-  this.abort = abort;
   this.phase = 'running';
   this.error = '';
   this.result = null;
   this.fieldErrors = { 'team-a': '', 'team-b': '' };
   this.progress = { 'team-a': 0, 'team-b': 0, series: 0 };
-  this.stage = 'Checking both replay links…';
+  this.canonical = { 'team-a': a.canonical, 'team-b': b.canonical };
+  this.drafts = { 'team-a': a.draft, 'team-b': b.draft };
+  this.profiles = { 'team-a': a.profiles, 'team-b': b.profiles };
+  this.stage = 'Loading the series model…';
   const current = () => runId === this.runId;
   try {
-   const loaded = await Promise.allSettled(TEAM_IDS.map(id => loadReplayLink(this.fields[id].link, manifest, location.origin, fetch, abort.signal)));
+   const data = await loadSimulation(manifest);
    if (!current()) return;
-   let failed = false;
-   loaded.forEach((outcome, index) => {
-    if (outcome.status === 'fulfilled') return;
-    failed = true;
-    this.fieldErrors[TEAM_IDS[index]] = outcome.reason instanceof ReplayLinkError ? outcome.reason.message : 'The replay could not be loaded. Please retry.';
+   const team = (id: SeriesTeamId, club: SeriesClub) => ({
+    id, name: this.fields[id].name.trim() || DEFAULT_NAMES[id], key: JSON.stringify(replayInput(club.draft)), season: prepareSeasonInput(club.draft, club.profiles, data)
    });
-   if (failed) { this.phase = 'setup'; this.stage = ''; return; }
-   const [a, b] = loaded.map(outcome => (outcome as PromiseFulfilledResult<Awaited<ReturnType<typeof loadReplayLink>>>).value);
-   this.canonical = { 'team-a': replayLinkPath(a.link), 'team-b': replayLinkPath(b.link) };
-   this.stage = 'Loading both rosters…';
-   const [data, profilesA, profilesB] = await Promise.all([loadSimulation(manifest), loadDraftProfiles(manifest, a.draft), loadDraftProfiles(manifest, b.draft)]);
-   if (!current()) return;
-   this.drafts = { 'team-a': a.draft, 'team-b': b.draft };
-   this.profiles = { 'team-a': profilesA, 'team-b': profilesB };
-   const team = (id: SeriesTeamId, draft: Draft, profiles: Profile[]) => ({
-    id, name: this.fields[id].name.trim() || DEFAULT_NAMES[id], key: JSON.stringify(replayInput(draft)), season: prepareSeasonInput(draft, profiles, data)
-   });
-   const input: SeriesInput = { teams: [team('team-a', a.draft, profilesA), team('team-b', b.draft, profilesB)] };
+   const input: SeriesInput = { teams: [team('team-a', a), team('team-b', b)] };
    this.stage = 'Replaying both regular seasons for seeding…';
    const worker = new Worker(new URL('../engine/series.worker.ts', import.meta.url), { type: 'module' });
    this.worker = worker;
@@ -135,7 +176,7 @@ export class SeriesSession {
    worker.onmessageerror = () => { if (current()) this.fail('The series result could not be read. Please retry.'); };
    worker.postMessage({ runId, input });
   } catch (error) {
-   if (!current() || abort.signal.aborted) return;
+   if (!current()) return;
    this.fail(error instanceof Error ? error.message : 'The series could not start.');
   }
  }
@@ -160,7 +201,7 @@ export class SeriesSession {
  }
 
  private fail(message: string): void {
-  this.stopRun();
+  this.stopWorker();
   this.error = message;
   this.phase = 'setup';
   this.stage = '';
@@ -171,15 +212,10 @@ export class SeriesSession {
   this.worker = null;
  }
 
- private stopRun(): void {
-  this.abort?.abort();
-  this.abort = null;
-  this.stopWorker();
- }
 
  cancel(): void {
   this.runId++;
-  this.stopRun();
+  this.stopWorker();
   this.phase = 'setup';
   this.stage = 'Series cancelled.';
  }

@@ -63,9 +63,15 @@
   const message = await result;
   if (message) toasts.show(message, { tone: 'error' });
  }
+ function clearHistorySelection() {
+  const url = new URL(location.href);
+  url.searchParams.delete('run');
+  history.replaceState(history.state, '', url);
+ }
  async function startNew() {
   confirmingNew = false;
   await session.abandon();
+  if (!session.run) clearHistorySelection();
   window.scrollTo({ top: 0 });
  }
 </script>
@@ -95,7 +101,7 @@
    {:else}<button class="primary" onclick={() => location.reload()}>Reload</button>{/if}
   </div>
  {:else if session.screen === 'entry' && session.manifest}
-  <DraftEntry franchises={session.manifest.franchises} refused={session.refused} busy={session.busy} onStart={(id, difficulty) => void session.start(id, difficulty)} />
+  <DraftEntry franchises={session.manifest.franchises} refused={session.refused} busy={session.busy} onStart={(id, difficulty) => { clearHistorySelection(); void session.start(id, difficulty); }} />
  {:else if session.screen === 'drafting' && session.run}
   <DraftTable run={session.run} revision={session.revision} {profiles} manifest={session.manifest} {media} {mediaStatus} {rankings} {clubName}
    onPick={cardId => refusal(session.pick(cardId))} />

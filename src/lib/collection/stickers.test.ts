@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryEntry, SavedBatter, SavedPitcher } from '../game/library.ts';
 import type { CardEra } from '../cards/view-model.ts';
-import { ERA_STICKER_SLOTS, ERA_SET_SHAPES, ERA_SET_SIDES, onPhoto, setPoints, solveStickerSlots, STICKER_LAYOUT, STICKER_MARGIN, stickerFits, type EraStickerSlots } from './sticker-slots.ts';
+import { ERA_PLACEMENT, ERA_STICKER_SLOTS, onPhoto, setPoints, STICKER_LAYOUT, STICKER_MARGIN, stickerFits, type EraStickerSlots } from './sticker-slots.ts';
 import { faceStickers, LEGACY_FACE_SLOTS, familyStickers, RARITY, seasonStickers, STICKER_BY_KIND, STICKER_RULES_VERSION, STICKER_SPOTS, STICKERS, type PlacedSticker } from './stickers.ts';
 
 const batter = (seasonId: string, line: Partial<SavedBatter>): SavedBatter => ({
@@ -172,17 +172,12 @@ describe('sticker rules', () => {
   expect(hidden.map(item => item.kind)).toEqual(['grade-a', 'hr-game-4', 'hits-150', 'hr-20']);
  });
 
- it('commits the slot table its measured layout solves to', () => {
-  for (const era of Object.keys(STICKER_LAYOUT.eras) as CardEra[]) expect(solveStickerSlots(STICKER_LAYOUT.eras[era], STICKER_LAYOUT, ERA_SET_SHAPES[era], ERA_SET_SIDES[era]), era).toEqual(ERA_STICKER_SLOTS[era]);
- // The full solve searches every era's measured layout; it runs in seconds alone and longer beside the rest of the suite.
- }, 60_000);
-
- it('lines each era\'s set up evenly, a margin clear of its protected layers and frame', () => {
+ it('lines each era\'s set up evenly, clear of its protected identity and outer rim', () => {
   const pitch = 2 * STICKER_LAYOUT.radius + STICKER_MARGIN;
   for (const [era, slots] of Object.entries(ERA_STICKER_SLOTS) as [CardEra, EraStickerSlots][]) {
    const points = [slots.grade, ...slots.face];
    const layout = STICKER_LAYOUT.eras[era];
-   for (const point of points) expect(stickerFits(point, layout, STICKER_LAYOUT), `${era} ${point.x},${point.y}`).toBe(true);
+   for (const point of points) expect(stickerFits(point, layout, STICKER_LAYOUT, [], ERA_PLACEMENT[era]), `${era} ${point.x},${point.y}`).toBe(true);
    const axis = 0.5;
    const expected = setPoints(slots.shape, pitch, points[0].x, points[0].y * STICKER_LAYOUT.aspect, axis);
    for (const [index, point] of points.entries()) {
@@ -210,24 +205,30 @@ describe('sticker rules', () => {
   expect(rarest.y).toBe(third.y);
   expect(rarest.y).toBeGreaterThan(grade.y);
   for (const point of [grade, rarest, second, third]) {
-   expect(onPhoto(point, layout, STICKER_LAYOUT)).toBe(true);
-   expect(stickerFits(point, layout, STICKER_LAYOUT)).toBe(true);
+   expect(onPhoto(point, layout, STICKER_LAYOUT)).toBe(false);
+   expect(stickerFits(point, layout, STICKER_LAYOUT, [], ERA_PLACEMENT['1970s'])).toBe(true);
   }
   for (const layer of ['season.roundel', 'logo.roundel']) {
    const badge = layout.protected.find(box => box.layer === layer)!;
+   const column = layer === 'season.roundel' ? grade : second;
+   expect(column.x).toBeCloseTo(badge.x + badge.w / 2, 2);
    expect(rarest.y + STICKER_LAYOUT.radius / STICKER_LAYOUT.aspect).toBeLessThan(badge.y);
   }
  });
 
- it('keeps the 2020s set in a right-side vertical column below the mark', () => {
-  const slots = ERA_STICKER_SLOTS['2020s'];
-  const layout = STICKER_LAYOUT.eras['2020s'];
+ it.each(['1980s', '2020s'] as const)('places the %s column directly below the year/position chip', era => {
+  const slots = ERA_STICKER_SLOTS[era];
+  const layout = STICKER_LAYOUT.eras[era];
+  const chip = layout.protected.find(box => box.layer === (era === '1980s' ? 'season.chip' : 'season.slab'))!;
   expect(slots.shape).toBe('column');
+  expect(slots.grade.x).toBeGreaterThan(chip.x);
+  expect(slots.grade.x).toBeLessThan(chip.x + chip.w);
+  const top = slots.grade.y - STICKER_LAYOUT.radius / STICKER_LAYOUT.aspect;
+  expect(top).toBeGreaterThan(chip.y + chip.h);
+  expect(top - chip.y - chip.h).toBeLessThan(0.04);
   for (const point of [slots.grade, ...slots.face]) {
-   expect(point.x).toBeGreaterThan(layout.photo.x + layout.photo.w / 2);
    expect(point.x).toBe(slots.grade.x);
-   expect(onPhoto(point, layout, STICKER_LAYOUT)).toBe(true);
-   expect(stickerFits(point, layout, STICKER_LAYOUT)).toBe(true);
+   expect(stickerFits(point, layout, STICKER_LAYOUT, [], ERA_PLACEMENT[era])).toBe(true);
   }
  });
 });

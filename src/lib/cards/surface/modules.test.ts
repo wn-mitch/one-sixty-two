@@ -80,12 +80,16 @@ describe('light programs', () => {
 		expect(lightFragment(spec)).toContain('blendPick');
 	});
 
-	it('carry every finish and colourway when the scene remixes them, and key apart from the plain program', () => {
+	it('carries every colourway for either scene or per-card remixes without widening plain cards', () => {
 		const plain = programSpec(film('carpet'), 0, {});
-		const remixed = programSpec(film('carpet'), 0, { palette: 2 });
-		expect(remixed.remix).toBe(true);
-		for (const palette of PALETTES) expect(lightFragment(remixed)).toContain(`palette_${palette.name.replaceAll('-', '_')}`);
-		expect(programKey(remixed)).not.toBe(programKey(plain));
+		const sceneRemix = programSpec(film('carpet'), 0, { palette: 2 });
+		const cardRemix = programSpec(film('carpet'), 0, {}, 2);
+		expect(sceneRemix.remix).toBe(true);
+		expect(cardRemix.remix).toBe(true);
+		for (const palette of PALETTES) expect(lightFragment(cardRemix)).toContain(`palette_${palette.name.replaceAll('-', '_')}`);
+		expect(programKey(cardRemix)).toBe(programKey(sceneRemix));
+		expect(programKey(cardRemix)).not.toBe(programKey(plain));
+		expect(lightFragment(cardRemix)).toContain('cardPalette >= 0 ? cardPalette');
 	});
 
 	it('updates custom gradient uniforms without compiling another program', () => {

@@ -56,16 +56,31 @@
 	{#if session.phase === 'results' && session.result && session.manifest && session.profiles && session.drafts}
 		<SeriesResults result={session.result} manifest={session.manifest} profiles={session.profiles} drafts={session.drafts} copyStatus={copyStatus || session.historyNotice} onCopy={() => void copySeries()} onAgain={again} />
 	{:else}
-		<a class="back-link" href="/seasons">← My seasons</a>
 		<h1>Head-to-head</h1>
-		<p class="lede muted">Paste two replay links. Both regular seasons replay to set the seeds; the better record hosts games 1, 2 and 5 of a best-of-five in its home stadium.</p>
-		<SeriesSetup fields={session.fields} fieldErrors={session.fieldErrors} library={session.library} running={session.running} loading={session.loading} error={session.error} stage={session.stage} progress={session.progress} onChoose={(id, entry) => session.choose(id, entry)} onSubmit={event => void play(event)} onCancel={() => session.cancel()} />
+		<p class="lede muted">Choose two drafted clubs. Their regular seasons replay for seeding, then the better record hosts Games 1, 2 and 5.</p>
+		<SeriesSetup
+			fields={session.fields}
+			fieldErrors={session.fieldErrors}
+			clubs={session.clubs}
+			clubStatus={session.clubStatus}
+			library={session.library}
+			manifest={session.manifest}
+			running={session.running}
+			loading={session.loading}
+			error={session.error}
+			stage={session.stage}
+			progress={session.progress}
+			onChoose={(id, entry) => session.choose(id, entry)}
+			onValidate={id => session.validate(id)}
+			onChange={id => session.change(id)}
+			onSubmit={event => void play(event)}
+			onCancel={() => session.cancel()}
+		/>
 	{/if}
 </main>
 
 <style>
-	.page { display: grid; gap: var(--space-4); width: min(100%, 56rem); padding-block: var(--space-8); min-width: 0; }
-	.back-link { color: var(--muted); font-weight: 700; text-decoration: none; }
-	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
-	.lede { margin: 0; max-width: 60ch; }
+	.page { display: grid; gap: var(--space-6); width: min(100%, 84rem); padding-block: var(--space-8); min-width: 0; }
+	h1 { margin: 0; font-size: var(--text-3xl); letter-spacing: -.03em; }
+	.lede { margin: calc(-1 * var(--space-2)) 0 0; max-width: 68ch; }
 </style>

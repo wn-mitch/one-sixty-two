@@ -4,7 +4,8 @@ import { addPack, choosePack, commitPick, createDraft, reassignPick, rollDraft, 
 import { libraryKey, saveSeason } from './library.ts';
 import { newCards, newStickers, type NewCard, type NewSticker } from '../collection/collection.ts';
 import { refreshStickers } from '../collection/store.svelte.ts';
-import { persistDraft, restoreDraft, RESUME_NOTICE, type Restore, type SavedPhase } from './persistence.ts';
+import { refreshShop } from '../cosmetics/store.svelte.ts';
+import { clearCompletedDraft, persistDraft, restoreDraft, RESUME_NOTICE, type Restore, type SavedPhase } from './persistence.ts';
 import { deviceDb } from '../storage/db.ts';
 import { newSeed } from './random.ts';
 import { challengeFor, claimChallenge, type Challenge } from './challenge.ts';
@@ -47,6 +48,7 @@ export class Session {
  error = $state('');
  incompatible = $state(false);
  storageNotice = $state('');
+ resumeNotice = $state('');
  announce = $state('');
  confirmNew = $state(false);
  completed = $state(0);
@@ -64,6 +66,9 @@ export class Session {
  textCopyFallback = $state(false);
  private selected = new Map<string, Profile>();
  private savedPhase: SavedPhase = 'draft';
+ private archivedDraft: Draft | null = null;
+ private savePending: Promise<void> = Promise.resolve();
+ get canAutoResume(): boolean { return !!this.savedDraft && this.savedPhase !== 'results'; }
  private retryAction = $state<'initialize' | 'pool' | 'resume' | 'simulation' | null>(null);
  shared = false;
  private epoch = 0;
@@ -243,8 +248,13 @@ export class Session {
     saved = await restoreDraft(device.db, manifest);
    } catch { saved = { kind: 'unavailable', message: RESUME_NOTICE }; }
    if (epoch !== this.epoch) return;
-   if (saved.kind === 'valid') { this.savedDraft = saved.draft; this.savedPhase = saved.phase; }
-   else if (saved.kind === 'incompatible') { this.error = saved.message; this.incompatible = true; }
+   if (saved.kind === 'valid') {
+    this.savedDraft = saved.draft;
+    this.savedPhase = saved.phase;
+    if (saved.notice) this.storageNotice = saved.notice;
+    else if (saved.phase === 'results') this.storageNotice = 'This completed season still needs saving. Resume it to recover your results.';
+   }
+   else if (saved.kind === 'incompatible') this.resumeNotice = saved.message;
    else if (saved.kind === 'unavailable') this.storageNotice = saved.message;
    this.retryAction = null;
   } catch (error) {
@@ -260,15 +270,24 @@ export class Session {
   if (this.shared || !this.draft || !this.manifest) return;
   const { draft, profiles, manifest } = this;
   const now = new Date();
+  await this.savePending;
   let notice: string | null;
   try {
    const { db } = await deviceDb();
    notice = await saveSeason(db, draft, result, profiles, manifest, now);
    if (!notice) {
-    const key = await libraryKey(draft);
-    const [earned, added] = await Promise.all([newStickers(db, key, now.toISOString(), profiles), newCards(db, key, profiles)]);
-    if (epoch === this.epoch) { this.newStickers = earned; this.newCards = added; }
-    void refreshStickers();
+    void refreshShop();
+    if (this.draft === draft) this.archivedDraft = draft;
+    if (this.savedDraft === draft) this.savedDraft = null;
+    notice = await clearCompletedDraft(db, draft);
+    try {
+     const key = await libraryKey(draft);
+     const [earned, added] = await Promise.all([newStickers(db, key, now.toISOString(), profiles), newCards(db, key, profiles)]);
+     if (epoch === this.epoch) { this.newStickers = earned; this.newCards = added; }
+     void refreshStickers();
+    } catch {
+     notice ??= 'Your season is in My seasons, but its new collection items could not be loaded.';
+    }
    }
   }
   catch { notice = 'Your season library is unavailable: browser storage is blocked or full.'; }
@@ -280,10 +299,12 @@ export class Session {
   const epoch = this.epoch;
   this.savedPhase = phase;
   // Writes queue in order on the database worker; the notice reflects the latest outcome.
-  void deviceDb()
-   .then(device => persistDraft(device.db, draft, phase).then(failure => failure ?? device.notice))
-   .catch(() => RESUME_NOTICE)
-   .then(notice => { if (epoch === this.epoch) this.storageNotice = notice ?? ''; });
+  this.savePending = this.savePending.then(async () => {
+   const notice = await deviceDb()
+    .then(device => persistDraft(device.db, draft, phase).then(failure => failure ?? device.notice))
+    .catch(() => RESUME_NOTICE);
+   if (epoch === this.epoch) this.storageNotice = notice ?? '';
+  });
  }
  private async hydrateRoster(): Promise<void> {
   if (!this.manifest || !this.draft) return;
@@ -335,12 +356,12 @@ export class Session {
   this.epoch += 1;
   this.loading = false;
   this.confirmNew = false;
-  if (this.draft) this.savedDraft = this.draft;
+  if (this.draft) this.savedDraft = this.draft === this.archivedDraft ? null : this.draft;
   this.phase = 'start';
  }
  requestNew(): void {
   if (this.loading) return;
-  const active = this.draft ?? this.savedDraft;
+  const active = this.draft === this.archivedDraft ? this.savedDraft : this.draft ?? this.savedDraft;
   if (active && this.phase !== 'results') { this.confirmNew = true; return; }
   void this.startNew();
  }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readLibrary } from '../game/library.ts';
 import { loadSeriesHistory } from '../game/series-history.ts';
 import type { LibraryEntry } from '../game/library.ts';
+import { completionReward, readShop } from '../cosmetics/ledger.ts';
 import { NO_LEGACY } from './legacy.ts';
 import { migrate, MIGRATIONS, SCHEMA_VERSION, type Migration } from './migrations.ts';
 import { memoryDb } from './test-db.ts';
@@ -64,7 +65,7 @@ describe('device database migrations', () => {
   const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 3));
   await db.run([{ sql: "INSERT INTO draft_runs VALUES ('run', 'a', 'b', '{}', '[]', 'window')" }]);
   expect(migrate(raw, NO_LEGACY)).toEqual({ from: 3, to: SCHEMA_VERSION });
-  expect(await db.all('SELECT * FROM draft_runs')).toEqual([{ id: 'run', created_at: 'a', updated_at: 'b', setup_json: '{}', actions_json: '[]', phase: 'window', season_json: null }]);
+  expect(await db.all('SELECT * FROM draft_runs')).toEqual([{ id: 'run', created_at: 'a', updated_at: 'b', setup_json: '{}', actions_json: '[]', phase: 'window', season_json: null, resume_state: 'active' }]);
  });
 
  it('moves default-placed stickers to the frame edges and keeps one tier per family per season', async () => {
@@ -155,6 +156,50 @@ describe('device database migrations', () => {
    { season_id: 'e', kind: 'war-22', earned_at: 'earlier', season_key: 'k0', x: 0.3, y: 0.3, hidden: 1 },
    { season_id: 'f', kind: 'war-22', earned_at: '2026-01-01', season_key: 'k1', x: 0.9, y: 0.9, hidden: 0 }
   ]);
+ });
+
+ it('seeds zero-credit receipts for existing and deleted history without altering historical data', async () => {
+  const { db, raw } = await memoryDb({
+   ...NO_LEGACY, draft: '{"saved":"run"}', library: JSON.stringify([entry('kept', 120), entry('deleted', 90)])
+  }, MIGRATIONS.filter(step => step.version <= 8));
+  await db.run([
+   { sql: "DELETE FROM seasons WHERE key = 'deleted'" },
+   { sql: 'INSERT INTO rostered VALUES (?, ?, ?, ?, ?, ?, ?, ?)', bind: ['other', 'rostered-only', 'earlier', 'Example', 'LF', 0, 0, null] },
+   ...[
+    ['complete', JSON.stringify({ chapters: Array(6).fill({}) })],
+    ['incomplete', JSON.stringify({ chapters: Array(5).fill({}) })],
+    ['no-season', null],
+    ['malformed', '{'],
+    ['not-array', JSON.stringify({ chapters: 'six chapters' })]
+   ].map(([id, season]) => ({
+    sql: 'INSERT INTO draft_runs (id, created_at, updated_at, setup_json, actions_json, phase, season_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    bind: [id, 'created', 'updated', '{}', '[]', 'complete', season]
+   }))
+  ]);
+  const tables = ['draft', 'seasons', 'season_cards', 'rostered', 'stickers', 'series'] as const;
+  const before = await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)));
+  const runs = await db.all('SELECT * FROM draft_runs');
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 8, to: 9 });
+  expect(await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)))).toEqual(before);
+  expect(await db.all('SELECT * FROM draft_runs')).toEqual(runs.map(run => ({ ...run, resume_state: 'active' })));
+  expect(await db.all('SELECT key, credit FROM shop_completions ORDER BY key')).toEqual([
+   { key: 'classic:deleted', credit: 0 },
+   { key: 'classic:kept', credit: 0 },
+   { key: 'classic:rostered-only', credit: 0 },
+   { key: 'draft:complete', credit: 0 }
+  ]);
+  expect(await readShop(db)).toEqual({ balance: 0, owned: [], equipped: {} });
+  await db.run([
+   ...completionReward('classic:deleted', 'later'),
+   ...completionReward('classic:kept', 'later'),
+   ...completionReward('classic:rostered-only', 'later'),
+   ...completionReward('draft:complete', 'later')
+  ]);
+  expect((await readShop(db)).balance).toBe(0);
+  await db.run(completionReward('draft:incomplete', 'later'));
+  expect((await readShop(db)).balance).toBe(1);
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 9, to: 9 });
+  expect((await readShop(db)).balance).toBe(1);
  });
 
  it('leaves the database at the last good version when a migration fails', async () => {

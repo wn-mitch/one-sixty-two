@@ -26,6 +26,7 @@
  let session = $state.raw<GameSession | null>(null);
  // Storage problems are toasts, not a paragraph that shifts the screen.
  $effect(() => { const notice = session?.storageNotice; if (notice) toasts.show(notice, { id: 'storage', tone: 'error' }); });
+ $effect(() => { const notice = session?.resumeNotice; if (notice) toasts.show(notice, { id: 'resume' }); });
  let StadiumDeck = $state<typeof import('#lib/components/StadiumDeck.svelte').default | null>(null);
  let DraftBoard = $state<typeof import('#lib/components/DraftBoard.svelte').default | null>(null);
  let Lineup = $state<typeof import('#lib/components/Lineup.svelte').default | null>(null);
@@ -74,13 +75,13 @@
   });
  });
  $effect(() => {
-  // Arriving at `/classic` on the welcome step (a reload, a link or forward) opens the game itself.
+  // Ordinary returns resume unfinished play only; completed seasons belong in My seasons.
   const current = session;
   if (page.url.pathname !== '/classic' || !current || current.phase !== 'start') return;
   if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;
   untrack(() => {
-   if (current.savedDraft) void current.resume();
-   else void current.startNew();
+   if (current.canAutoResume) void current.resume();
+   else void goto('/', { replace: true, reset: false });
   });
  });
  onMount(() => {

@@ -5,19 +5,28 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import Settings from '#lib/components/Settings.svelte';
 	import Toaster from '#lib/components/Toaster.svelte';
+	import TokenAmount from '#lib/components/TokenAmount.svelte';
 	import { refreshStickers } from '#lib/collection/store.svelte.ts';
 	import { page } from '$app/state';
+	import { refreshShop, shopState } from '#lib/cosmetics/store.svelte.ts';
 	import { sitePreviewImage } from '#lib/share/site-preview.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
 	const sitePreview = sitePreviewImage();
+	const destinations = [
+		{ href: '/', label: 'Play' }, { href: '/seasons', label: 'My seasons' },
+		{ href: '/collection', label: 'Collection' }, { href: '/h2h', label: 'Head-to-head' },
+		{ href: '/shop', label: 'Shop' }
+	];
+	const playing = $derived(['/', '/classic', '/draft'].includes(page.url.pathname) || /^\/(r|c)\//.test(page.url.pathname));
 	// Roster links (/r, /c) set their own preview from the published season image.
 	const rosterLink = $derived(/^\/(r|c)\//.test(page.url.pathname));
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
 
 	onMount(() => {
 		void refreshStickers();
+		void refreshShop();
 	});
 
 	onMount(() => {
@@ -77,9 +86,18 @@
 <div class="site">
 	<header class="site-header">
 		<a class="wordmark" href="/" aria-label="162-0 home"><span aria-hidden="true" class="mark"></span>162-0</a>
+		<nav class="primary-nav" aria-label="Main navigation">
+			{#each destinations as destination (destination.href)}
+				<a href={destination.href} aria-current={(destination.href === '/' ? playing : page.url.pathname === destination.href) ? 'page' : undefined}>{destination.label}</a>
+			{/each}
+		</nav>
 		<nav class="site-actions" aria-label="Site controls">
+			<a class="wallet-link" href="/shop" title={shopState.snapshot ? `Shop: ${shopState.snapshot.balance} unlock ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop: unlock token balance unavailable'}>
+				<span class="sr-only">{shopState.snapshot ? 'Shop:' : 'Shop: balance unavailable,'}</span>
+				<TokenAmount amount={shopState.snapshot?.balance ?? null} />
+			</a>
 			<Settings />
-			<a class="rules-link" href="/about">Rules &amp; model</a>
+			<a class="rules-link" href="/about" aria-label="Rules & model">Rules<span class="rules-model"> &amp; model</span></a>
 		</nav>
 	</header>
 	{@render children()}
@@ -106,7 +124,7 @@
 
 <style>
 	.site {
-		max-width: 80rem;
+		max-width: 88rem;
 		margin-inline: auto;
 		padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right));
 	}
@@ -124,16 +142,37 @@
 		z-index: 5;
 		display: flex;
 		min-height: 4rem;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-4);
+		column-gap: var(--space-4);
+		row-gap: 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.site-header > a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: var(--text-sm); }
 	.wordmark { flex: none; color: var(--text); text-decoration: none; font-size: var(--text-xl) !important; font-weight: 850; letter-spacing: -.04em; gap: var(--space-3); }
 	.mark { width: .75rem; height: .75rem; border: 2px solid var(--text); transform: rotate(45deg); }
 	.site-actions { position: relative; display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
+	.wallet-link { display: inline-flex; min-width: 2.75rem; min-height: 2.75rem; align-items: center; justify-content: center; padding-inline: var(--space-2); border-radius: var(--radius); color: var(--accent); font-size: var(--text-sm); font-weight: 750; text-decoration: none; }
+	.wallet-link:hover { color: var(--accent-hover); background: var(--surface); }
+	.primary-nav { order: 3; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; gap: var(--space-1); padding-block: var(--space-1); }
+	.primary-nav a { display: flex; align-items: center; justify-content: center; min-height: 3rem; padding: var(--space-2) var(--space-1); border-radius: var(--radius); color: var(--muted); font: 650 1rem/1.2 var(--font-control); text-align: center; text-decoration: none; }
+	.primary-nav a:hover { background: var(--surface); color: var(--text); }
+	.primary-nav a[aria-current='page'] { color: var(--accent); background: var(--surface); }
+	@media (min-width: 64rem) {
+		.site-header { flex-wrap: nowrap; }
+		.primary-nav { order: 0; display: flex; width: auto; }
+		.primary-nav a { padding-inline: var(--space-3); }
+	}
 	.rules-link { min-height: 2.75rem; display: inline-flex; align-items: center; padding-inline: var(--space-3); border-radius: var(--radius); color: var(--muted); font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
 	.rules-link:hover { color: var(--text); background: var(--surface); }
+	@media (max-width: 23.99rem) {
+		.site-header { column-gap: var(--space-2); }
+		.wordmark { gap: var(--space-2); }
+		.wallet-link, .rules-link { padding-inline: var(--space-2); }
+		.rules-model { display: none; }
+		.site-actions :global(.settings-trigger) { padding-inline: var(--space-2); }
+		.primary-nav a { font-size: var(--text-sm); }
+	}
 	/* Home deals cards behind the header: no rule cutting across them, and a fade keeps the links legible. */
 	.site:has(:global(main.home-start)) .site-header { border-bottom-color: transparent; }
 	.site:has(:global(main.home-start)) .site-header::before { content: ''; position: absolute; z-index: -1; inset: 0 calc(-1 * max(var(--space-4), env(safe-area-inset-left))) -2.5rem; background: linear-gradient(var(--background) 55%, transparent); pointer-events: none; }

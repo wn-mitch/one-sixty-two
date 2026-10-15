@@ -1,9 +1,13 @@
 <script lang="ts">
 	import type { CardViewModel } from './view-model.ts';
+	import type { CardAppearance } from '../cosmetics/catalogue.ts';
+	import { PALETTES } from './surface/holo-films.ts';
 
 	export interface MaterialProps {
 		s: CardViewModel;
 		layer: 'under' | 'over';
+		/** Resolved card appearance; static cards use its Gem colourway as a truthful simplified fallback. */
+		appearance?: CardAppearance;
 		/**
 		 * Paints the finish in CSS. Off on a card lit by the WebGL canvas: the shader draws every metal,
 		 * holo, bevel and glint, so only the tagged shapes stay, unpainted, for the surface map to read.
@@ -11,14 +15,30 @@
 		paint?: boolean;
 	}
 
-	let { s, layer, paint = true }: MaterialProps = $props();
+	let { s, layer, appearance, paint = true }: MaterialProps = $props();
 	const MASK = '-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);';
 	const GOLD_FOIL = 'linear-gradient(115deg, #9a6c22 0%, #f7df9a 15%, #c4953a 29%, #fff3c8 43%, #b5832d 57%, #f2d58a 73%, #8f6420 100%)';
+	const STATIC_PALETTES: Record<string, string> = {
+		rainbow: 'linear-gradient(125deg, #ff5fb7, #ffd34f, #6dffa8, #4fd2ff, #a57bff, #ff5fb7)',
+		'oil-slick': 'linear-gradient(125deg, #cf3fa5, #3db8a8, #a87943, #354c9b, #cf3fa5)',
+		aurora: 'linear-gradient(125deg, #743ec7, #45dca8, #3bcbbf, #8156d9)',
+		thermal: 'linear-gradient(125deg, #1f1f1f, #b6232f, #f06a28, #ffd95a, #fff7dc)',
+		'gold-leaf': 'linear-gradient(125deg, #8c5214, #e0a83d, #ffedb3, #bd7924, #8c5214)',
+		ice: 'linear-gradient(125deg, #f4fbff, #8be8f3, #b7b1f5, #ffffff, #8be8f3)',
+		synthwave: 'linear-gradient(125deg, #26d9ff, #8c33f2, #ff4099, #26d9ff)',
+		sunset: 'linear-gradient(125deg, #4a1c78, #ff4f63, #ffb35c)',
+		mint: 'linear-gradient(125deg, #177d73, #8fe0bf, #e3fae8)',
+		'rose-gold': 'linear-gradient(125deg, #8a404d, #d98f9e, #f2d4b8)',
+		vaporwave: 'linear-gradient(125deg, #4d1fad, #29e0f5, #fa3db3)',
+		'mono-silver': 'linear-gradient(125deg, #4f5761, #abb3bf, #edf2f7)'
+	};
 	/** A tagged shape's CSS paint, or nothing when the light canvas prints it. */
 	const fill = (css: string) => paint ? css : '';
 	const silver = $derived(s.fin.foil && !s.fin.emboss);
 	const gold = $derived(s.fin.emboss && !s.fin.gem);
 	const gem = $derived(s.fin.gem);
+	const paletteName = $derived(appearance?.palette === undefined ? undefined : PALETTES[appearance.palette]?.name);
+	const palette = $derived(paletteName ? STATIC_PALETTES[paletteName] : undefined);
 </script>
 
 {#if layer === 'under'}
@@ -30,7 +50,7 @@
 		<div data-layer="material.slab" style="position:absolute; inset:0; border-radius:1.8cqw; background:#a9a397; opacity:var(--depth, 1);"></div>
 	</div>
 {:else}
-	<div class="material-root" data-layer="material" data-finish={s.fin.tier} style="container-type:inline-size; position:absolute; inset:0; pointer-events:none; border-radius:1.8cqw; --k:calc(var(--finish-ring, 1) * var(--rim-era, 1));">
+	<div class="material-root" data-layer="material" data-finish={s.fin.tier} data-palette={paletteName} style="container-type:inline-size; position:absolute; inset:0; pointer-events:none; border-radius:1.8cqw; --k:calc(var(--finish-ring, 1) * var(--rim-era, 1));">
 		{#if paint}
 			<div data-layer="material.face-bevel" style="position:absolute; inset:0; border-radius:1.8cqw; box-shadow:inset calc(var(--lx) * -0.5cqw) calc(var(--ly) * -0.5cqw) 0.4cqw -0.1cqw rgba(255,255,255,0.35), inset calc(var(--lx) * 0.5cqw) calc(var(--ly) * 0.5cqw) 0.5cqw -0.1cqw rgba(0,0,0,0.35);"></div>
 		{/if}
@@ -59,9 +79,9 @@
 		{/if}
 		{#if gem}
 			{#if paint}
-				<div data-layer="material.prism-wash" style="position:absolute; inset:0; border-radius:1.8cqw; background:linear-gradient(125deg, #ff5fb7 0%, #ffd34f 18%, #6dffa8 36%, #4fd2ff 54%, #a57bff 72%, #ff5fb7 90%) var(--mx) var(--my) / 260% 260%; opacity:calc((0.13 + var(--lift) * 0.08) * var(--k)); "></div>
+				<div data-layer="material.prism-wash" style={`position:absolute; inset:0; border-radius:1.8cqw; background:${palette ?? 'linear-gradient(125deg, #ff5fb7 0%, #ffd34f 18%, #6dffa8 36%, #4fd2ff 54%, #a57bff 72%, #ff5fb7 90%)'} var(--mx) var(--my) / 260% 260%; opacity:calc((0.13 + var(--lift) * 0.08) * var(--k));`}></div>
 			{/if}
-			<div data-layer="material.prism-ring" data-surface="ring" data-surface-shape="frame" style={`position:absolute; inset:0 0 0 var(--rim-left, 0); box-sizing:border-box; padding:calc(var(--k) * 2cqw); border-radius:var(--rim-left-radius, 1.8cqw) 1.8cqw 1.8cqw var(--rim-left-radius, 1.8cqw); ${fill(`background:conic-gradient(from var(--ang), #ff3fa4, #ffb800, #ffee55, #3dff8a, #22c8ff, #7a5cff, #ff3fa4); ${MASK}`)}`}></div>
+			<div data-layer="material.prism-ring" data-surface="ring" data-surface-shape="frame" style={`position:absolute; inset:0 0 0 var(--rim-left, 0); box-sizing:border-box; padding:calc(var(--k) * 2cqw); border-radius:var(--rim-left-radius, 1.8cqw) 1.8cqw 1.8cqw var(--rim-left-radius, 1.8cqw); ${fill(`background:${palette ?? 'conic-gradient(from var(--ang), #ff3fa4, #ffb800, #ffee55, #3dff8a, #22c8ff, #7a5cff, #ff3fa4)'}; ${MASK}`)}`}></div>
 			{#if paint}
 				<div data-layer="material.prism-facets" style={`position:absolute; inset:0 0 0 var(--rim-left, 0); box-sizing:border-box; padding:calc(var(--k) * 2cqw); border-radius:var(--rim-left-radius, 1.8cqw) 1.8cqw 1.8cqw var(--rim-left-radius, 1.8cqw); background:repeating-linear-gradient(60deg, rgba(255,255,255,0.45) 0 0.35cqw, rgba(255,255,255,0) 0.35cqw 2.2cqw), repeating-linear-gradient(-60deg, rgba(255,255,255,0.3) 0 0.35cqw, rgba(255,255,255,0) 0.35cqw 2.2cqw); ${MASK}`}></div>
 				<div data-layer="material.gem-lenticular" style={`position:absolute; inset:0 0 0 var(--rim-left, 0); box-sizing:border-box; padding:calc(var(--k) * 2cqw); border-radius:var(--rim-left-radius, 1.8cqw) 1.8cqw 1.8cqw var(--rim-left-radius, 1.8cqw); background:repeating-linear-gradient(90deg, rgba(255,255,255,0.55) 0 0.22cqw, rgba(0,0,0,0.22) 0.22cqw 0.5cqw, rgba(255,255,255,0) 0.5cqw 0.9cqw) calc(var(--mx) * 0.2) 0 / auto; ${MASK}`}></div>

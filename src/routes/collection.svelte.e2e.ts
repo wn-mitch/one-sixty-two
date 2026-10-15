@@ -28,6 +28,7 @@ test('a saved season fills the collection and its sticker album, with stickers t
  }, [LEGACY_KEYS.library, JSON.stringify([entry])]);
 
  await page.goto('/collection');
+ await page.getByRole('button', { name: 'All seasons', exact: true }).click();
  const grid = page.getByRole('list', { name: 'Collected cards' });
  await expect(grid.getByRole('button')).toHaveCount(2);
  await expect(page.getByText(/2\s+cards · 2\s+of [\d,]+ player-seasons, <0\.01%/)).toBeVisible();
@@ -56,6 +57,7 @@ test('a saved season fills the collection and its sticker album, with stickers t
  await expect.poll(async () => (await handle.boundingBox())!.y).toBeGreaterThan(before!.y + 5);
 
  await page.reload();
+ await page.getByRole('button', { name: 'All seasons', exact: true }).click();
  await page.getByRole('list', { name: 'Collected cards' }).getByRole('button', { name: new RegExp(hitterLabel) }).click();
  const reopened = page.getByRole('region', { name: hitterLabel });
  await expect(reopened.getByText('1 hidden')).toBeVisible();
@@ -74,4 +76,54 @@ test('a saved season fills the collection and its sticker album, with stickers t
  await expect(page.getByRole('list', { name: 'Collected cards' }).getByRole('button')).toHaveCount(1);
  await page.getByRole('button', { name: 'Show all cards' }).click();
  await expect(page.getByRole('list', { name: 'Collected cards' }).getByRole('button')).toHaveCount(2);
+});
+
+test('player stacks keep exact seasons and remember a filter-safe cover on mobile', async ({ page, request }) => {
+ const manifest = await currentManifest(request);
+ const byPlayer = new Map<string, typeof manifest.candidates>();
+ for (const candidate of manifest.candidates) {
+  if (!candidate.eligibleSlots.includes('LF')) continue;
+  const seasons = byPlayer.get(candidate.playerId) ?? [];
+  if (!seasons.some(item => item.seasonId.split(':')[1] === candidate.seasonId.split(':')[1])) seasons.push(candidate);
+  byPlayer.set(candidate.playerId, seasons);
+ }
+ const candidates = [...byPlayer.values()].find(seasons => seasons.length >= 3)!.slice(0, 3);
+ const entries: LibraryEntry[] = candidates.map((candidate, index) => ({
+  key: `stack-example-${index}`, savedAt: new Date(index * 1000).toISOString(), token: 'not-a-replay',
+  schemaVersion: 5, modelVersion: 'contact-v1', dataVersion: manifest.dataVersion,
+  record: { wins: 120, losses: 42 }, runs: { scored: 900, allowed: 500 },
+  batting: [], pitching: [], stadium: null,
+  roster: [{ seasonId: candidate.seasonId, label: `Example player ${candidate.seasonId.split(':')[1]}`, slot: 'LF' }]
+ }));
+ await page.addInitScript(({ key, value }) => {
+  if (!sessionStorage.getItem('stack-seeded')) {
+   sessionStorage.setItem('stack-seeded', '1');
+   localStorage.setItem(key, value);
+  }
+ }, { key: LEGACY_KEYS.library, value: JSON.stringify(entries) });
+ await page.goto('/collection');
+ const players = page.getByRole('list', { name: 'Collected players' });
+ await expect(players.getByRole('button')).toHaveCount(1);
+ await players.getByRole('button').click();
+ const rail = page.getByRole('region', { name: 'Owned seasons' });
+ await expect(rail.locator('.season-card')).toHaveCount(3);
+ const coverYear = candidates[0].seasonId.split(':')[1];
+ await rail.locator('.season-item').filter({ has: page.getByRole('button', { name: `Open Example player ${coverYear}`, exact: true }) }).getByRole('button', { name: 'Set as cover', exact: true }).click();
+ await page.reload();
+ await expect(players.getByRole('button').locator('.card')).toHaveAttribute('data-identity', new RegExp(`\\|${coverYear}\\|`));
+ const otherYear = candidates[1].seasonId.split(':')[1];
+ await page.getByRole('searchbox', { name: 'Find a card' }).fill(otherYear);
+ await expect(players.getByRole('button').locator('.card')).toHaveAttribute('data-identity', new RegExp(`\\|${otherYear}\\|`));
+ await page.getByRole('searchbox', { name: 'Find a card' }).fill('');
+ await expect(players.getByRole('button').locator('.card')).toHaveAttribute('data-identity', new RegExp(`\\|${coverYear}\\|`));
+ await players.getByRole('button').click();
+ await expect(rail.locator('.season-card')).toHaveCount(3);
+ const geometry = await rail.evaluate(element => ({
+  width: element.clientWidth, content: element.scrollWidth,
+  page: document.documentElement.scrollWidth, viewport: innerWidth
+ }));
+ expect(geometry.content).toBeGreaterThan(geometry.width);
+ expect(geometry.page).toBeLessThanOrEqual(geometry.viewport);
+ await page.getByRole('button', { name: 'All seasons', exact: true }).click();
+ await expect(page.getByRole('list', { name: 'Collected cards' }).getByRole('button')).toHaveCount(3);
 });

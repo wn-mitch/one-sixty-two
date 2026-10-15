@@ -29,15 +29,17 @@ export interface Stagger {
 export interface LinkState {
 	setup: Setup;
 	stagger: Stagger | null;
-	zoom: number;
+	width: number;
 }
 
-export const ZOOMS = [1, 1.5, 2, 3, 4] as const;
+export const DEFAULT_WIDTH = 420;
+export const MIN_WIDTH = 160;
+export const MAX_WIDTH = 720;
 export const MAX_STAGGER = 8;
 
-/** The plain object a link stores: the state's schema version, setup fields, stagger and zoom. */
+/** The plain object a link stores: the state's schema version, setup fields, stagger and preview width. */
 export function linkObject(state: LinkState): Record<string, unknown> {
-	return { v: LAB_LINK_VERSION, ...state.setup, stagger: state.stagger, zoom: state.zoom };
+	return { v: LAB_LINK_VERSION, ...state.setup, stagger: state.stagger, width: state.width };
 }
 
 /** Builds the full hash link, which remains a useful fallback when R2 is unavailable. */
@@ -123,7 +125,8 @@ export function readLink(saved: unknown): LinkState | null {
 	return {
 		setup,
 		stagger: known ? { target, count: Math.min(Math.max(count, 2), MAX_STAGGER), page } : null,
-		zoom: ZOOMS.includes(record.zoom as never) ? record.zoom as number : 1
+		width: typeof record.width === 'number' && Number.isFinite(record.width)
+			? Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, record.width))) : DEFAULT_WIDTH
 	};
 }
 
