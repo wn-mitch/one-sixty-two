@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
+import { availableCandidates, commitPick, createDraft, legalSlots, replayInput, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { libraryKey, type LibraryEntry } from '../lib/game/library.ts';
 import { LEGACY_KEYS } from '../lib/storage/legacy.ts';
 import { encodeReplay } from '../lib/game/share.ts';
+import { seriesHash } from '../lib/game/replay-link.ts';
 import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
 import { currentManifest, currentRankings, deviceDraftText, STORAGE_KEY } from './draft-test-fixtures.ts';
 import { finishFor } from '../lib/cards/finish.ts';
@@ -45,7 +46,7 @@ async function gameSummaries(page: Page): Promise<string[]> {
  return page.locator('.games .game-head').allInnerTexts();
 }
 
-test('plays a best-of-five from two saved seasons, shares it, and never touches the active save', async ({ page, browser, request, baseURL }) => {
+test('pairs gallery cards, preserves cancelled selections, shares identical games, and leaves the active draft untouched', async ({ page, browser, request, baseURL }) => {
  const manifest = await currentManifest(request);
  const aces = completeDraft(manifest, 1, 0);
  const bombers = completeDraft(manifest, 101, 5);
@@ -75,28 +76,30 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
  await expect(tiles.locator('.title')).toHaveText(['Old timers', 'Bombers', 'Aces']);
  await expect(tiles.nth(0)).toContainText('Retired');
 
- await page.goto('/h2h');
- const pickerA = page.locator('#team-a-library');
- await expect(pickerA.locator('option')).toHaveCount(3);
- const label = (item: LibraryEntry) => `${item.nickname} · ${item.record.wins}–${item.record.losses} · ${item.stadium!.name}`;
- await pickerA.selectOption({ label: label(library[0]) });
- await expect(page.getByRole('heading', { level: 2, name: 'Aces' })).toBeVisible();
- await page.locator('#team-b-library').selectOption({ label: label(library[1]) });
- await expect(page.getByRole('heading', { level: 2, name: 'Bombers' })).toBeVisible();
+ const tile = (name: string) => page.getByRole('list', { name: 'Saved clubs' }).getByRole('button').filter({ hasText: name });
+ await page.getByRole('button', { name: 'Head-to-head', exact: true }).click();
+ await tile('Aces').click();
+ await tile('Bombers').click();
+ await page.getByRole('link', { name: 'Play best-of-five' }).click();
+ await expect(page).toHaveURL(/\/h2h#a=/);
+ await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Team gallery' })).toHaveAttribute('aria-current', 'page');
+ await expect(page.getByRole('status').filter({ hasText: /Replaying|Playing|Game/ })).toBeVisible();
+ await page.getByRole('button', { name: 'Cancel series' }).click();
+ await expect(page).toHaveURL(/\/seasons#a=/);
+ await expect(page.getByRole('heading', { name: 'Replay challenge' })).toBeVisible();
  const rosterA = page.getByRole('region', { name: 'Aces roster' });
  await expect(rosterA.getByRole('button', { name: /Inspect/ })).toHaveCount(16);
  await expect(rosterA.getByRole('button', { name: /Inspect/ }).nth(finishCase.index).locator('.card')).toHaveAttribute('data-finish', finishCase.finish);
  await rosterA.getByRole('button', { name: /Inspect/ }).first().click();
  await expect(page.locator('[data-card-reader]:popover-open')).toBeVisible();
  await page.keyboard.press('Escape');
- await page.getByRole('button', { name: 'Play best-of-five' }).click();
- await expect(page.getByRole('status').filter({ hasText: /Replaying|Playing|Game/ })).toBeVisible();
- await page.getByRole('button', { name: 'Cancel series' }).click();
- await expect(page.getByText('Series cancelled.')).toBeVisible();
- await expect(page.getByRole('heading', { level: 2, name: 'Aces' })).toBeVisible();
  await expect(page.getByRole('button', { name: 'Play best-of-five' })).toBeEnabled();
- await page.getByRole('button', { name: 'Play best-of-five' }).click();
- await expect(page.getByRole('status').filter({ hasText: /Replaying|Playing|Game/ })).toBeVisible();
+ await page.getByRole('button', { name: 'Back to gallery' }).click();
+ await expect(page).toHaveURL(/\/seasons$/);
+ await expect(tile('Aces')).toHaveAttribute('aria-pressed', 'true');
+ await expect(tile('Bombers')).toHaveAttribute('aria-pressed', 'true');
+ await expect(page.getByRole('region', { name: /Aces vs Bombers/ })).toBeVisible();
+ await page.getByRole('link', { name: 'Play best-of-five' }).click();
  const played = await gameSummaries(page);
  expect(played.length).toBeGreaterThanOrEqual(3);
  expect(played.length).toBeLessThanOrEqual(5);
@@ -111,17 +114,22 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
  expect(seriesUrl).toMatch(/\/h2h#a=.+&an=Aces&b=.+&bn=Bombers$/);
  const fresh = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
  const other = await fresh.newPage();
- // Opening the link from the setup page is a same-document hash change.
+ // Empty setup URLs return to the gallery; a shared URL still runs without any saved clubs.
  await other.goto('/h2h');
- await expect(other.getByRole('button', { name: 'Play best-of-five' })).toBeDisabled();
+ await expect(other).toHaveURL(/\/seasons$/);
+ await expect(other.getByRole('button', { name: 'Use a replay link' })).toBeVisible();
  await other.goto(seriesUrl);
+ expect(await gameSummaries(other)).toEqual(played);
+ // A new hash on the existing results page starts the same deterministic matchup.
+ await other.goto(`${seriesUrl}&replay=again`);
+ await expect(other.getByRole('status').filter({ hasText: /Checking|Replaying|Playing|Game/ })).toBeVisible();
  expect(await gameSummaries(other)).toEqual(played);
  await fresh.close();
 
  // The finished series joins this device's head-to-head history.
  const champion = (await page.getByRole('heading', { level: 1 }).innerText()).startsWith('Aces') ? 'Aces' : 'Bombers';
- await page.goto('/seasons');
- const tile = (name: string) => page.getByRole('list', { name: 'Saved clubs' }).getByRole('button').filter({ hasText: name });
+ await page.getByRole('button', { name: 'Play another series' }).click();
+ await expect(page).toHaveURL(/\/seasons$/);
  await expect(tile(champion)).toContainText('H2H 1–0');
  await expect(tile(champion === 'Aces' ? 'Bombers' : 'Aces')).toContainText('H2H 0–1');
  await tile('Aces').click();
@@ -140,11 +148,12 @@ test('plays a best-of-five from two saved seasons, shares it, and never touches 
 });
 
 
-test('validates pasted replay identities before a series starts', async ({ page, request }) => {
+test('plays two pasted replay links from an empty gallery without collecting either imported roster', async ({ page, request }) => {
  const manifest = await currentManifest(request);
  const replayA = encodeReplay(completeDraft(manifest, 201, 2));
  const replayB = encodeReplay(completeDraft(manifest, 301, 8));
- await page.goto('/h2h');
+ await page.goto('/seasons');
+ await page.getByRole('button', { name: 'Use a replay link' }).click();
 
  await page.getByLabel('Team A replay link').fill(`/#replay=${replayA}`);
  await page.getByLabel('Club name').first().fill('Visitors');
@@ -161,13 +170,85 @@ test('validates pasted replay identities before a series starts', async ({ page,
 
  await page.getByRole('button', { name: 'Change team' }).first().click();
  await expect(page.getByLabel('Team A replay link')).toHaveValue(`/#replay=${replayA}`);
+ await page.getByRole('button', { name: 'Use Team A replay' }).click();
+ await page.getByRole('button', { name: 'Play best-of-five' }).click();
+ await expect(page).toHaveURL(/\/h2h#a=.+&an=Visitors&b=.+&bn=Hosts$/);
+ await gameSummaries(page);
+ await page.getByRole('button', { name: 'Play another series' }).click();
+ await expect(page.getByText('Finish a season and it is saved here automatically, on this device only.')).toBeVisible();
+ await expect(page.getByRole('list', { name: 'Saved clubs' }).getByRole('button')).toHaveCount(0);
+ await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Collection' }).click();
+ await expect(page.getByRole('heading', { name: 'No cards yet' })).toBeVisible();
 });
-test('names the broken link instead of starting a series', async ({ page }) => {
- await page.goto('/h2h');
+test('names broken challenge links, focuses the first error, and lets a corrected matchup play', async ({ page, request }) => {
+ const manifest = await currentManifest(request);
+ const replayA = encodeReplay(completeDraft(manifest, 401, 1));
+ const replayB = encodeReplay(completeDraft(manifest, 501, 3));
+ await page.goto('/seasons');
+ await page.getByRole('button', { name: 'Use a replay link' }).click();
  await page.getByLabel('Team A replay link').fill('https://example.com/r/aaaaaaaaaaaaaaaaaaaaaa');
  await page.getByLabel('Team B replay link').fill('/r/aaaaaaaaaaaaaaaaaaaaaa');
  await page.getByRole('button', { name: 'Play best-of-five' }).click();
  await expect(page.getByText('Replay links must come from this site.')).toBeVisible();
  await expect(page.getByText('No replay exists at that link.')).toBeVisible();
  await expect(page.getByLabel('Team A replay link')).toBeFocused();
+ await expect(page).toHaveURL(/\/seasons$/);
+ await page.getByLabel('Team A replay link').fill(`/#replay=${replayA}`);
+ await page.getByRole('button', { name: 'Use Team A replay' }).click();
+ await page.getByLabel('Team B replay link').fill(`/#replay=${replayB}`);
+ await page.getByRole('button', { name: 'Use Team B replay' }).click();
+ await expect(page.getByText('Replay ready', { exact: true })).toHaveCount(2);
+ await page.getByRole('button', { name: 'Play best-of-five' }).click();
+ await expect(page).toHaveURL(/\/h2h#a=/);
+ await page.getByRole('button', { name: 'Cancel series' }).click();
+ await expect(page.getByRole('heading', { name: 'Replay challenge' })).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Play best-of-five' })).toBeEnabled();
+});
+
+test('prefills one saved team, accepts a replay opponent, and restores the gallery selection', async ({ page, request }) => {
+ const manifest = await currentManifest(request);
+ const savedDraft = completeDraft(manifest, 601, 0);
+ const opponent = completeDraft(manifest, 701, 4);
+ const stored = await request.post('/api/replays', { data: replayInput(opponent) });
+ expect(stored.status()).toBe(201);
+ const replay = await stored.json() as { id: string; url: string };
+ const saved = entry(manifest, savedDraft, await libraryKey(savedDraft), 94, 'Home club');
+ await page.addInitScript(({ key, value }) => localStorage.setItem(key, value), { key: LEGACY_KEYS.library, value: JSON.stringify([saved]) });
+ await page.goto('/seasons');
+ const savedTile = page.getByRole('list', { name: 'Saved clubs' }).getByRole('button').filter({ hasText: 'Home club' });
+ await savedTile.click();
+ await page.getByRole('button', { name: 'Use a replay link' }).click();
+ await expect(page.getByRole('heading', { level: 2, name: 'Home club' })).toBeVisible();
+ await expect(page.getByRole('region', { name: 'Home club roster' }).getByRole('button', { name: /Inspect/ })).toHaveCount(16);
+ await page.getByRole('button', { name: 'Back to gallery' }).click();
+ await expect(savedTile).toHaveAttribute('aria-pressed', 'true');
+ await page.getByRole('button', { name: 'Use a replay link' }).click();
+ await page.getByLabel('Team B replay link').fill(replay.url);
+ await page.getByLabel('Club name').fill('Replay rival');
+ await page.getByRole('button', { name: 'Play best-of-five' }).click();
+ await expect(page).toHaveURL(/\/h2h#a=.+&an=Home\+club&b=.+&bn=Replay\+rival$/);
+ await gameSummaries(page);
+ await page.getByRole('button', { name: 'Play another series' }).click();
+ await expect(page.getByRole('list', { name: 'Saved clubs' }).getByRole('button')).toHaveCount(1);
+ await expect(savedTile).toBeVisible();
+});
+
+test('a broken shared matchup offers retry and editing in the gallery, never a standalone chooser', async ({ page }) => {
+ const hash = seriesHash({
+  'team-a': { link: '/r/aaaaaaaaaaaaaaaaaaaaaa', name: 'Missing club' },
+  'team-b': { link: 'https://example.com/r/aaaaaaaaaaaaaaaaaaaaaa', name: 'Foreign club' }
+ });
+ await page.goto(`/h2h${hash}`);
+ await expect(page.getByRole('alert')).toContainText('Team A: No replay exists at that link.');
+ await expect(page.getByRole('alert')).toContainText('Team B: Replay links must come from this site.');
+ await expect(page.getByRole('textbox')).toHaveCount(0);
+ await page.getByRole('button', { name: 'Retry series' }).click();
+ await expect(page.getByRole('alert')).toContainText('Team A: No replay exists at that link.');
+ await page.getByRole('link', { name: 'Edit replay challenge' }).click();
+ await expect(page).toHaveURL(/\/seasons#a=/);
+ await expect(page.getByLabel('Team A replay link')).toHaveValue('/r/aaaaaaaaaaaaaaaaaaaaaa');
+ await expect(page.getByLabel('Team B replay link')).toHaveValue('https://example.com/r/aaaaaaaaaaaaaaaaaaaaaa');
+ await page.getByRole('button', { name: 'Back to gallery' }).click();
+ await expect(page).toHaveURL(/\/seasons$/);
+ await expect(page.getByRole('button', { name: 'Use a replay link' })).toBeVisible();
 });

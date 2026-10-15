@@ -75,7 +75,7 @@
   });
  });
  $effect(() => {
-  // Ordinary returns resume unfinished play only; completed seasons belong in My seasons.
+  // Ordinary returns resume unfinished play only; completed seasons belong in the team gallery.
   const current = session;
   if (page.url.pathname !== '/classic' || !current || current.phase !== 'start') return;
   if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;

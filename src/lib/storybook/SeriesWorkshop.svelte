@@ -1,6 +1,6 @@
 <script module lang="ts">
 	export interface SeriesWorkshopProps {
-		initial?: 'setup' | 'library' | 'errors' | 'running' | 'results';
+		initial?: 'setup' | 'saved-replay' | 'errors' | 'running' | 'results';
 	}
 </script>
 
@@ -8,6 +8,7 @@
 	import { onMount } from 'svelte';
 	import SeriesResults from '#lib/components/SeriesResults.svelte';
 	import SeriesSetup from '#lib/components/SeriesSetup.svelte';
+	import SeriesProgress from '#lib/components/h2h/SeriesProgress.svelte';
 	import type { LibraryView } from '#lib/game/library.ts';
 	import type { SeriesClub, SeriesClubStatus } from '#lib/game/series-session.svelte.ts';
 	import type { SeriesField } from '#lib/game/replay-link.ts';
@@ -30,7 +31,6 @@
 	let stage = $state('');
 	let progress = $state<Record<SeriesTeamId | 'series', number>>({ 'team-a': 0, 'team-b': 0, series: 0 });
 	let copyStatus = $state('');
-	const library = $derived(series && initial !== 'setup' ? series.library.filter(entry => entry.status === 'playable') : []);
 
 	function reset(): void {
 		screen = initial === 'results' ? 'results' : 'setup';
@@ -45,6 +45,7 @@
 		stage = running ? 'Replaying both regular seasons for seeding…' : '';
 		progress = running ? { 'team-a': 118, 'team-b': 96, series: 0 } : { 'team-a': 0, 'team-b': 0, series: 0 };
 		copyStatus = '';
+		if (series) loadInitialClubs(series);
 	}
 
 	function choose(id: SeriesTeamId, entry: LibraryView): void {
@@ -65,15 +66,26 @@
 		clubStatus[id] = 'ready';
 	}
 
-	function loadRunningClubs(value: ExampleSeries): void {
+	function loadInitialClubs(value: ExampleSeries): void {
 		const entries = value.library.filter(entry => entry.status === 'playable').slice(0, 2);
-		if (entries[0]) choose('team-a', entries[0]);
-		if (entries[1]) choose('team-b', entries[1]);
+		if ((initial === 'saved-replay' || running) && entries[0]) choose('team-a', entries[0]);
+		if (running && entries[1]) choose('team-b', entries[1]);
+		else if (initial === 'saved-replay' && entries[1]) fields['team-b'].link = `${EXAMPLE_LINK}${entries[1].key}`;
 	}
 
 	function validateReplay(id: SeriesTeamId): void {
-		fieldErrors[id] = 'Example replay links are not fetched in Storybook. Choose a saved season.';
-		clubStatus[id] = 'error';
+		const entry = series?.library.filter(entry => entry.status === 'playable')[id === 'team-a' ? 0 : 1];
+		if (!series || !entry || fields[id].link !== `${EXAMPLE_LINK}${entry.key}`) {
+			fieldErrors[id] = 'Use this side’s example replay link. Storybook does not fetch external replays.';
+			clubStatus[id] = 'error';
+			return;
+		}
+		fieldErrors[id] = '';
+		clubs = {
+			...clubs,
+			[id]: { source: 'replay', entry: null, draft: series.drafts[id], profiles: series.profiles[id], canonical: fields[id].link, stadiumName: entry.stadium?.name ?? 'Home park unavailable' }
+		};
+		clubStatus[id] = 'ready';
 	}
 
 	function changeTeam(id: SeriesTeamId): void {
@@ -88,6 +100,7 @@
 			'team-a': fields['team-a'].link.trim() ? '' : 'Paste a replay link.',
 			'team-b': fields['team-b'].link.trim() ? '' : 'Paste a replay link.'
 		};
+		for (const id of ['team-a', 'team-b'] as const) if (!fieldErrors[id] && !clubs[id]) validateReplay(id);
 		if (fieldErrors['team-a'] || fieldErrors['team-b'] || !clubs['team-a'] || !clubs['team-b']) return;
 		screen = 'results';
 	}
@@ -97,7 +110,7 @@
 		void getExampleSeries()
 			.then(value => {
 				series = value;
-				if (running) loadRunningClubs(value);
+				loadInitialClubs(value);
 			})
 			.catch((reason: unknown) => { loadError = reason instanceof Error ? reason.message : 'Unable to prepare the example series.'; });
 	});
@@ -120,27 +133,27 @@
 		{:else}
 			<p class="muted" role="status">Playing the example best-of-five…</p>
 		{/if}
+	{:else if running}
+		<div class="page">
+			<h1>Best-of-five</h1>
+			<SeriesProgress {stage} {progress} onCancel={() => { running = false; stage = 'Series cancelled.'; }} />
+		</div>
 	{:else}
 		<div class="page">
-			<h1>Head-to-head</h1>
-			<p class="lede muted">Choose two drafted clubs. Their regular seasons replay for seeding, then the better record hosts Games 1, 2 and 5.</p>
+			<h1>Replay challenge</h1>
+			<p class="lede muted">Add a replay opponent to your selected team, or use two replay links.</p>
+			{#if stage}<p role="status">{stage}</p>{/if}
 			<SeriesSetup
 				{fields}
 				{fieldErrors}
 				{clubs}
 				{clubStatus}
-				{library}
 				manifest={series?.manifest ?? null}
-				{running}
 				loading={false}
 				error={loadError}
-				{stage}
-				{progress}
-				onChoose={choose}
 				onValidate={validateReplay}
 				onChange={changeTeam}
 				onSubmit={submit}
-				onCancel={() => { running = false; stage = 'Series cancelled.'; }}
 			/>
 		</div>
 	{/if}

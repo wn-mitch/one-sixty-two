@@ -45,8 +45,13 @@
 			<p class="eyebrow">Tale of the tape</p>
 			<h2 id="compare-heading">{teamTitle(a)} <span class="vs">vs</span> {teamTitle(b)}</h2>
 		</div>
-		<button type="button" class="close" aria-label="Back to all-time leaders" onclick={onClose}>✕</button>
+		<button type="button" class="close" aria-label="Close comparison" onclick={onClose}>✕</button>
 	</header>
+	{#if playable}
+		<a class="button primary play" {href}>Play best-of-five</a>
+	{:else}
+		<p class="muted note">A retired club can’t play head-to-head.</p>
+	{/if}
 
 	<div class="stars">
 		{#each sides as side (side.entry.key)}
@@ -80,11 +85,6 @@
 		</tbody>
 	</table>
 
-	{#if playable}
-		<a class="button primary play" {href}>Play best-of-five</a>
-	{:else}
-		<p class="muted note">A retired club can’t play head-to-head.</p>
-	{/if}
 
 	{#if meetings.length}
 		<section aria-labelledby="meetings-heading">
@@ -106,7 +106,7 @@
 	.eyebrow { margin: 0 0 var(--space-1); color: var(--accent); font-size: var(--text-xs); font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 	h2 { margin: 0; font: italic 900 clamp(1.4rem, 2.6vw, 1.9rem) / 1.05 'Barlow Condensed', sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
 	.vs { color: var(--muted); font-size: .7em; }
-	.close { display: grid; place-items: center; flex: none; width: 2.75rem; padding: 0; font-size: 1.1rem; }
+	.close { display: grid; place-items: center; flex: none; width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: 1.1rem; }
 	.stars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 	figure { display: grid; justify-items: center; gap: var(--space-2); margin: 0; text-align: center; }
 	.card { display: block; width: min(7rem, 100%); }
@@ -122,7 +122,7 @@
 	.tape tbody tr { border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
 	.edge { color: var(--accent); font-weight: 850; }
 	.meetings { border-top: 1px solid var(--border) !important; }
-	.play { justify-self: start; display: inline-flex; align-items: center; text-decoration: none; }
+	.play { justify-self: start; display: inline-flex; align-items: center; min-height: 2.75rem; text-decoration: none; }
 	.note { margin: 0; font-size: var(--text-sm); }
 	h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 	ol { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); }

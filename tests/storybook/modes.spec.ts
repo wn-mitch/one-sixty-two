@@ -3,8 +3,8 @@ import { test, expect, openStory } from './workshop-test';
 
 const tiles = (page: Page) => page.getByRole('list', { name: 'Saved clubs' }).getByRole('button');
 
-test('My seasons sorts clubs and opens a club from the all-time leaders', async ({ page }) => {
-	await openStory(page, 'modes-my-seasons--leaders');
+test('Team gallery sorts clubs and opens a club from the all-time leaders', async ({ page }) => {
+	await openStory(page, 'modes-team-gallery--leaders');
 	await expect(tiles(page)).toHaveCount(3);
 	const sortGroup = page.getByRole('group', { name: 'Sort clubs' });
 	await expect(sortGroup.getByRole('button', { name: 'Most wins' })).toHaveAttribute('aria-pressed', 'true');
@@ -28,8 +28,8 @@ test('My seasons sorts clubs and opens a club from the all-time leaders', async 
 	await expect(tiles(page).and(page.locator('[aria-pressed="true"]'))).toHaveText(new RegExp(team));
 });
 
-test('My seasons shows a club’s cards, lines, and history, and renames and deletes it', async ({ page }) => {
-	await openStory(page, 'modes-my-seasons--club');
+test('Team gallery shows a club’s cards, lines, and history, and renames and deletes it', async ({ page }) => {
+	await openStory(page, 'modes-team-gallery--club');
 	const club = page.getByRole('region', { name: 'Example Aces', exact: true });
 	await expect(club.getByRole('list', { name: 'Roster' }).getByRole('listitem')).toHaveCount(16);
 	await expect(club.locator('.roster .card [data-card]').first()).toBeVisible();
@@ -52,8 +52,8 @@ test('My seasons shows a club’s cards, lines, and history, and renames and del
 	await expect(page.getByRole('region', { name: 'Last fall’s club' }).getByRole('button', { name: 'Copy challenge link' })).toHaveCount(0);
 });
 
-test('My seasons compares two clubs by Ctrl/Cmd-click or the Compare toggle', async ({ page }) => {
-	await openStory(page, 'modes-my-seasons--leaders');
+test('Team gallery compares decks through modifier selection or Head-to-head mode', async ({ page }) => {
+	await openStory(page, 'modes-team-gallery--leaders');
 	await page.getByRole('group', { name: 'Sort clubs' }).getByRole('button', { name: 'Most recent' }).click();
 	await tiles(page).nth(0).click();
 	await tiles(page).nth(1).click({ modifiers: ['ControlOrMeta'] });
@@ -63,10 +63,10 @@ test('My seasons compares two clubs by Ctrl/Cmd-click or the Compare toggle', as
 	await expect(meetings.locator('td')).toHaveText(await tape.getByRole('link', { name: /won 3–/ }).first().innerText().then(text => text.startsWith('Example Aces') ? ['1', '0'] : ['0', '1']));
 	await expect(tape.getByRole('link', { name: 'Play best-of-five' })).toHaveAttribute('href', /^\/h2h#a=.+&an=Example\+Aces&b=/);
 
-	// A plain click goes back to one club; the Compare toggle builds pairs without a modifier key.
+	// A plain click inspects one club; Head-to-head builds pairs without a modifier key.
 	await tiles(page).nth(0).click();
 	await expect(page.getByRole('region', { name: 'Example Aces', exact: true })).toBeVisible();
-	await page.getByRole('button', { name: 'Compare', exact: true }).click();
+	await page.getByRole('button', { name: 'Head-to-head', exact: true }).click();
 	await tiles(page).nth(2).click();
 	const retiredTape = page.getByRole('region', { name: /^Example Aces vs Last fall’s club$/ });
 	await expect(retiredTape).toBeVisible();
@@ -74,17 +74,17 @@ test('My seasons compares two clubs by Ctrl/Cmd-click or the Compare toggle', as
 	await expect(retiredTape).toContainText('A retired club can’t play head-to-head.');
 });
 
-test('My seasons fits a phone without sideways scroll', async ({ page }) => {
+test('Team gallery fits a phone without sideways scroll', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	await openStory(page, 'modes-my-seasons--compare');
+	await openStory(page, 'modes-team-gallery--compare');
 	await expect(page.getByRole('region', { name: /vs/ })).toBeVisible();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-test('My seasons explains an empty or blocked library', async ({ page }) => {
-	await openStory(page, 'modes-my-seasons--empty');
+test('Team gallery handles an empty or blocked library', async ({ page }) => {
+	await openStory(page, 'modes-team-gallery--empty');
 	await expect(page.getByText('Finish a season and it is saved here')).toBeVisible();
-	await openStory(page, 'modes-my-seasons--storage-blocked');
+	await openStory(page, 'modes-team-gallery--storage-blocked');
 	await expect(page.locator('[data-toast]')).toHaveText(/browser storage is blocked/);
 });
 
@@ -142,23 +142,21 @@ test('Collection explains an empty or blocked binder', async ({ page }) => {
 	await expect(page.locator('[data-toast]')).toHaveText(/browser storage is blocked/);
 });
 
-test('head-to-head validates links, fills from saved seasons, and plays the series', async ({ page }) => {
-	await openStory(page, 'modes-head-to-head--from-my-seasons');
-	const play = page.getByRole('button', { name: 'Play best-of-five', exact: true });
-	await play.click();
-	await expect(page.getByLabel('Team A replay link')).toHaveAttribute('aria-invalid', 'true');
-	await expect(page.locator('#team-a-error')).toHaveText('Paste a replay link.');
-
-	await page.getByLabel('Choose from my seasons').first().selectOption({ index: 1 });
-	await expect(page.getByLabel('Team A replay link')).toHaveValue(/^https:\/\/example\.invalid\/r\/[0-9a-f]{64}$/);
-	await expect(page.locator('#team-a-name')).toHaveValue('Example Aces');
-	await expect(page.locator('#team-a-error')).toHaveCount(0);
-	// Retired mementos cannot play, so only the two playable clubs are offered.
-	await expect(page.getByLabel('Choose from my seasons').nth(1).locator('option')).toHaveCount(3);
-	await page.getByLabel('Choose from my seasons').nth(1).selectOption({ index: 2 });
-	await expect(page.getByLabel('Team B replay link')).toHaveValue(/^https:\/\/example\.invalid\/r\/[0-9a-f]{64}$/);
-	expect(await page.getByLabel('Team B replay link').inputValue()).not.toBe(await page.getByLabel('Team A replay link').inputValue());
-	await play.click();
+test('head-to-head adds a replay opponent to a saved deck and plays the series', async ({ page }) => {
+	await openStory(page, 'modes-head-to-head--saved-team-and-replay');
+	await expect(page.getByRole('heading', { name: 'Example Aces', level: 2, exact: true })).toBeVisible();
+	const replay = page.getByLabel('Team B replay link');
+	await expect(replay).toHaveValue(/^https:\/\/example\.invalid\/r\/[0-9a-f]{64}$/);
+	const link = await replay.inputValue();
+	await page.locator('#team-b-name').fill('Example Challenger');
+	await page.getByRole('button', { name: 'Use Team B replay', exact: true }).click();
+	const opponent = page.getByRole('region', { name: 'Example Challenger', exact: true });
+	await expect(opponent.getByText('Replay ready', { exact: true })).toBeVisible();
+	await opponent.getByRole('button', { name: 'Change team', exact: true }).click();
+	await expect(replay).toHaveValue(link);
+	await expect(page.locator('#team-b-name')).toHaveValue('Example Challenger');
+	await page.getByRole('button', { name: 'Use Team B replay', exact: true }).click();
+	await page.getByRole('button', { name: 'Play best-of-five', exact: true }).click();
 
 	const verdict = page.getByRole('heading', { level: 1, name: / win 3–[0-2]$/ });
 	await expect(verdict).toBeVisible();
@@ -182,15 +180,14 @@ test('head-to-head validates links, fills from saved seasons, and plays the seri
 	await boxes.getByText('Batting and pitching', { exact: true }).click();
 	await expect(boxes.getByRole('table').first()).toBeVisible();
 	await page.getByRole('button', { name: 'Play another series', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Head-to-head', level: 1 })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Replay challenge', level: 1 })).toBeVisible();
 });
 
-test('head-to-head shows run progress and lets the series be cancelled', async ({ page }) => {
+test('head-to-head cancellation restores the selected teams', async ({ page }) => {
 	await openStory(page, 'modes-head-to-head--running');
-	await expect(page.getByRole('status')).toContainText('Team A season 118/162 · Team B season 96/162');
-	await expect(page.getByRole('button', { name: 'Play best-of-five', exact: true })).toBeDisabled();
-	await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-	await expect(page.getByRole('status')).toHaveText('Series cancelled.');
+	await expect(page.getByRole('button', { name: 'Play best-of-five', exact: true })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Cancel series', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Change team', exact: true })).toHaveCount(2);
 	await expect(page.getByRole('button', { name: 'Play best-of-five', exact: true })).toBeEnabled();
 });
 

@@ -70,7 +70,7 @@
    {#if hasSavedDraft}<button class="secondary resume" disabled={loading} onclick={onResume}>Resume draft</button>{/if}
    <a class="button draft-mode" href="/draft">Draft Mode <span class="beta">Beta</span></a>
   </div>
-  <p class="library-link"><a href="/seasons">My seasons</a> · <a href="/collection">Collection</a> · <a href="/h2h">Head-to-head</a></p>
+  <p class="library-link"><a href="/seasons">Team gallery</a> · <a href="/collection">Collection</a></p>
   {#if loading}
    <p class="start-status muted" role="status">Loading the historical player pool…</p>
   {:else if showcaseStatus === 'loading'}

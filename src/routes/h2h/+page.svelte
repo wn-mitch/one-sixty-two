@@ -1,23 +1,15 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { goto } from '$app/navigation';
 	import SeriesResults from '#lib/components/SeriesResults.svelte';
-	import SeriesSetup from '#lib/components/SeriesSetup.svelte';
+	import SeriesProgress from '#lib/components/h2h/SeriesProgress.svelte';
 	import { copyShareLink } from '#lib/game/share.ts';
+	import { parseSeriesHash } from '#lib/game/replay-link.ts';
 	import { SeriesSession } from '#lib/game/series-session.svelte.ts';
-	import type { SeriesTeamId } from '#lib/sim/series-types.ts';
 
 	const session = new SeriesSession();
-	const TEAMS: { id: SeriesTeamId; label: string }[] = [{ id: 'team-a', label: 'Team A' }, { id: 'team-b', label: 'Team B' }];
 	let copyStatus = $state('');
-
-	async function play(event: SubmitEvent): Promise<void> {
-		event.preventDefault();
-		copyStatus = '';
-		await session.play();
-		await tick();
-		const firstError = TEAMS.find(team => session.fieldErrors[team.id]);
-		if (firstError) document.getElementById(`${firstError.id}-link`)?.focus();
-	}
+	const checking = $derived(session.loading || Object.values(session.clubStatus).includes('pending'));
 
 	async function copySeries(): Promise<void> {
 		const link = `${location.origin}/h2h${session.seriesHash()}`;
@@ -27,9 +19,23 @@
 		} catch { copyStatus = `Copy this series link: ${link}`; }
 	}
 
-	function again(): void {
-		copyStatus = '';
-		session.reset();
+	async function gallery(restore = false): Promise<void> {
+		const hash = restore ? session.seriesHash() : '';
+		session.cancel();
+		try { await goto(`/seasons${hash}`); }
+		catch { session.error = 'The gallery could not open. Use Back to gallery to try again.'; }
+	}
+
+	/** Empty and partial matchups belong in the gallery, never a second setup screen. */
+	function hasMatchup(): boolean {
+		const fields = parseSeriesHash(location.hash);
+		if (fields?.['team-a'].link && fields['team-b'].link) {
+			session.fields = fields;
+			return true;
+		}
+		session.cancel();
+		void goto(`/seasons${fields ? location.hash : ''}`, { replaceState: true });
+		return false;
 	}
 
 	$effect(() => {
@@ -37,8 +43,11 @@
 	});
 
 	onMount(() => {
-		void session.initialize();
-		const onHash = () => { copyStatus = ''; void session.openHash(); };
+		if (hasMatchup()) void session.initialize();
+		const onHash = () => {
+			copyStatus = '';
+			if (hasMatchup() && session.manifest) void session.openHash();
+		};
 		addEventListener('hashchange', onHash);
 		return () => {
 			removeEventListener('hashchange', onHash);
@@ -48,34 +57,33 @@
 </script>
 
 <svelte:head>
-	<title>Head-to-head | 162-0</title>
-	<meta name="description" content="Pit two drafted 162-0 teams against each other in a best-of-five series." />
+	<title>Best-of-five | Team gallery | 162-0</title>
+	<meta name="description" content="Replay a shared 162-0 best-of-five. Both teams' regular seasons determine home-field advantage." />
 </svelte:head>
 
 <main class="page">
 	{#if session.phase === 'results' && session.result && session.manifest && session.profiles && session.drafts}
-		<SeriesResults result={session.result} manifest={session.manifest} profiles={session.profiles} drafts={session.drafts} copyStatus={copyStatus || session.historyNotice} onCopy={() => void copySeries()} onAgain={again} />
+		<SeriesResults result={session.result} manifest={session.manifest} profiles={session.profiles} drafts={session.drafts} copyStatus={copyStatus || session.historyNotice} onCopy={() => void copySeries()} onAgain={() => void gallery()} />
 	{:else}
-		<h1>Head-to-head</h1>
-		<p class="lede muted">Choose two drafted clubs. Their regular seasons replay for seeding, then the better record hosts Games 1, 2 and 5.</p>
-		<SeriesSetup
-			fields={session.fields}
-			fieldErrors={session.fieldErrors}
-			clubs={session.clubs}
-			clubStatus={session.clubStatus}
-			library={session.library}
-			manifest={session.manifest}
-			running={session.running}
-			loading={session.loading}
-			error={session.error}
-			stage={session.stage}
-			progress={session.progress}
-			onChoose={(id, entry) => session.choose(id, entry)}
-			onValidate={id => session.validate(id)}
-			onChange={id => session.change(id)}
-			onSubmit={event => void play(event)}
-			onCancel={() => session.cancel()}
-		/>
+		<h1>Best-of-five</h1>
+		<p class="lede muted">Both regular seasons replay for seeding. The better record hosts Games 1, 2 and 5.</p>
+		{#if session.running}
+			<SeriesProgress stage={session.stage} progress={session.progress} onCancel={() => void gallery(true)} />
+		{:else if checking}
+			<p class="muted" role="status">Checking the matchup and loading exact seasons…</p>
+			<button class="secondary" onclick={() => void gallery(true)}>Cancel series</button>
+		{:else}
+			<div class="errors" role="alert">
+				{#if session.error}<p>{session.error}</p>{/if}
+				{#if session.fieldErrors['team-a']}<p>Team A: {session.fieldErrors['team-a']}</p>{/if}
+				{#if session.fieldErrors['team-b']}<p>Team B: {session.fieldErrors['team-b']}</p>{/if}
+			</div>
+			<div class="actions">
+				<button class="primary" onclick={() => void (session.manifest ? session.play() : session.initialize())}>Retry series</button>
+				<a class="button secondary" href={`/seasons${session.seriesHash()}`}>Edit replay challenge</a>
+				<a href="/seasons">Back to gallery</a>
+			</div>
+		{/if}
 	{/if}
 </main>
 
@@ -83,4 +91,7 @@
 	.page { display: grid; gap: var(--space-6); width: min(100%, 84rem); padding-block: var(--space-8); min-width: 0; }
 	h1 { margin: 0; font-size: var(--text-3xl); letter-spacing: -.03em; }
 	.lede { margin: calc(-1 * var(--space-2)) 0 0; max-width: 68ch; }
+	.errors { color: var(--error); }
+	.errors p { margin: 0; }
+	.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 </style>

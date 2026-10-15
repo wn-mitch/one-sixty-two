@@ -23,15 +23,17 @@
 		onCopy: (entry: LibraryView) => void;
 		onRename: (entry: LibraryView, nickname: string) => void;
 		onDelete: (entry: LibraryView) => void;
+		/** Opens replay-link setup, prefilled with the currently selected saved clubs. */
+		onReplay?: (selected: readonly LibraryView[]) => void;
 		/** Clubs selected on first render; one shows that club, two compare them. */
 		initialSelection?: readonly string[];
 	}
-	let { entries, history, profiles, manifest, status, onCopy, onRename, onDelete, initialSelection = [] }: Props = $props();
+	let { entries, history, profiles, manifest, status, onCopy, onRename, onDelete, onReplay, initialSelection = [] }: Props = $props();
 	$effect(() => { if (status) toasts.show(status, { id: 'library', tone: /unavailable|could not|blocked|full/i.test(status) ? 'error' : 'info' }); });
 
 	let sort = $state<'wins' | 'date'>('wins');
-	let comparing = $state(false);
-	let chosen = $state<string[]>(untrack(() => initialSelection.slice(0, 2)));
+	let headToHead = $state(untrack(() => new Set(initialSelection).size >= 2));
+	let chosen = $state<string[]>(untrack(() => [...new Set(initialSelection)].slice(0, 2)));
 	let panel = $state<HTMLElement>();
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaStatus = $state<CardMediaStatus>('loading');
@@ -47,6 +49,13 @@
 		: b.savedAt.localeCompare(a.savedAt)));
 	const selected = $derived(chosen.map(key => entries.find(entry => entry.key === key)).filter((entry): entry is LibraryView => !!entry));
 	const leaders = $derived(libraryLeaders(entries));
+	const selectionHint = $derived(headToHead
+		? selected.length === 0
+			? 'Select two saved teams.'
+			: selected.length === 1
+				? '1 of 2 selected. Choose one more team.'
+				: '2 of 2 selected. Change or deselect either team.'
+		: 'Select a team to inspect. Ctrl- or ⌘-click to start head-to-head.');
 	const cards = $derived.by(() => {
 		const byEntry = new Map<string, Map<string, CardViewModel>>();
 		for (const entry of entries) {
@@ -63,19 +72,26 @@
 		return stars(entry, 6).flatMap(seasonId => { const view = views.get(seasonId); return view ? [{ seasonId, view }] : []; });
 	};
 
-	/** Plain click shows one club; Ctrl/Cmd-click, or any click while comparing, builds a pair. */
+	/** Plain click inspects one club; Head-to-head mode and Ctrl/Cmd-click build a pair. */
 	async function select(key: string, event: MouseEvent | KeyboardEvent): Promise<void> {
-		const additive = comparing || event.ctrlKey || event.metaKey;
+		const modifierPairing = event.ctrlKey || event.metaKey;
+		const pairing = headToHead || modifierPairing;
 		const current = selected.map(entry => entry.key);
-		if (additive) chosen = current.includes(key) ? current.filter(item => item !== key) : [...current, key].slice(-2);
+		if (pairing) chosen = current.includes(key) ? current.filter(item => item !== key) : [...current, key].slice(-2);
 		else chosen = current.length === 1 && current[0] === key ? [] : [key];
 		await tick();
-		// Single-column layouts put the panel below the tiles.
-		if (panel && chosen.length && panel.getBoundingClientRect().top > innerHeight) panel.scrollIntoView({ block: 'start' });
+		// Keep the gallery in place until a complete mobile pairing is ready.
+		if (panel && chosen.length && (!headToHead || chosen.length === 2) && panel.getBoundingClientRect().top > innerHeight) {
+			panel.scrollIntoView({ block: 'start' });
+		}
+	}
+	function toggleHeadToHead(): void {
+		headToHead = !headToHead;
+		if (!headToHead && chosen.length > 1) chosen = chosen.slice(0, 1);
 	}
 	function pick(key: string): void {
 		chosen = [key];
-		panel?.scrollIntoView({ block: 'nearest' });
+		if (!headToHead) panel?.scrollIntoView({ block: 'nearest' });
 	}
 	function remove(entry: LibraryView): void {
 		chosen = chosen.filter(key => key !== entry.key);
@@ -85,16 +101,24 @@
 
 <div class="library">
 	<div class="toolbar">
-		<div class="toggle" role="group" aria-label="Sort clubs">
-			<button type="button" aria-pressed={sort === 'wins'} onclick={() => sort = 'wins'}>Most wins</button>
-			<button type="button" aria-pressed={sort === 'date'} onclick={() => sort = 'date'}>Most recent</button>
-		</div>
-		<button type="button" class="compare-toggle" aria-pressed={comparing} onclick={() => comparing = !comparing}>Compare</button>
-		<p class="hint">{comparing ? 'Choose two clubs to compare.' : 'Ctrl- or ⌘-click two clubs to compare.'}</p>
+		{#if sorted.length}
+			<div class="toggle" role="group" aria-label="Sort clubs">
+				<button type="button" aria-pressed={sort === 'wins'} onclick={() => sort = 'wins'}>Most wins</button>
+				<button type="button" aria-pressed={sort === 'date'} onclick={() => sort = 'date'}>Most recent</button>
+			</div>
+			<button type="button" class="head-to-head-toggle" aria-pressed={headToHead} onclick={toggleHeadToHead}>Head-to-head</button>
+		{/if}
+		{#if onReplay}
+			<button type="button" class="replay" onclick={() => onReplay?.(selected)}>Use a replay link</button>
+		{/if}
+		{#if sorted.length}<p class="hint" aria-live="polite">{selectionHint}</p>{/if}
 	</div>
 
 	{#if !sorted.length}
-		<p class="empty muted">Finish a season and it is saved here automatically, on this device only.</p>
+		<div class="empty">
+			<p class="muted">Finish a season and it is saved here automatically, on this device only.</p>
+			{#if onReplay}<p class="muted">You can still play head-to-head with two replay links.</p>{/if}
+		</div>
 	{:else}
 		<div class="columns">
 			<ol class="tiles" aria-label="Saved clubs">
@@ -128,24 +152,27 @@
 </div>
 
 <style>
-	.library { display: grid; gap: var(--space-3); }
-	.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
-	.toggle { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
-	.toggle button, .compare-toggle { min-height: 2.25rem; padding: .25rem .9rem; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: var(--text-sm); }
+	.library { display: grid; gap: var(--space-3); min-width: 0; }
+	.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-width: 0; }
+	.toggle { display: inline-flex; max-width: 100%; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+	.toggle button, .head-to-head-toggle, .replay { min-height: 2.75rem; padding: .25rem .9rem; border-radius: 999px; font-size: var(--text-sm); }
+	.toggle button { border: 0; background: transparent; color: var(--muted); }
 	.toggle button[aria-pressed='true'] { background: var(--surface-raised); color: var(--text); box-shadow: 0 1px 0 color-mix(in oklch, var(--text) 12%, transparent); }
-	.compare-toggle { border: 1px solid var(--border); }
-	.compare-toggle[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
-	.hint { margin: 0; color: var(--muted); font-size: var(--text-xs); }
-	.empty { margin: 0; }
-	.columns { display: grid; gap: var(--space-6); align-items: start; }
-	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+	.head-to-head-toggle { border: 1px solid var(--border); background: transparent; color: var(--muted); }
+	.head-to-head-toggle[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 10%, transparent); color: var(--accent); }
+	.replay { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+	.hint { flex: 1 1 15rem; margin: 0; color: var(--muted); font-size: var(--text-xs); }
+	.empty { display: grid; gap: var(--space-1); }
+	.empty p { margin: 0; }
+	.columns { display: grid; gap: var(--space-6); align-items: start; min-width: 0; }
+	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: var(--space-3); min-width: 0; margin: 0; padding: 0; list-style: none; }
 	.panel { min-width: 0; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); scroll-margin-top: var(--space-4); }
 	@media (min-width: 64rem) {
 		.columns { grid-template-columns: minmax(0, 1fr) minmax(24rem, 30rem); }
 		.panel { position: sticky; top: var(--space-4); max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; }
 	}
 	@media (max-width: 40rem) {
-		.tiles { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+		.tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 		.panel { padding: var(--space-4); }
 	}
 </style>

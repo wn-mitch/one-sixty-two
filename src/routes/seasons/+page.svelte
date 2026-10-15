@@ -1,7 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { goto } from '$app/navigation';
 	import SeasonLibrary from '#lib/components/SeasonLibrary.svelte';
 	import DraftRunHistory from '#lib/components/DraftRunHistory.svelte';
+	import SeriesSetup from '#lib/components/SeriesSetup.svelte';
+	import { SeriesSession } from '#lib/game/series-session.svelte.ts';
+	import { parseSeriesHash } from '#lib/game/replay-link.ts';
+	import type { SeriesTeamId } from '#lib/sim/series-types.ts';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
 	import { deleteSeason, loadLibrary, renameSeason, STORAGE_NOTICE, type LibraryView } from '#lib/game/library.ts';
@@ -17,6 +22,70 @@
 	let loading = $state(true);
 	let error = $state('');
 	let status = $state('');
+	let replay = $state(false);
+	let selectedKeys = $state<string[]>([]);
+	let challenge = $state.raw(new SeriesSession());
+	const TEAMS: SeriesTeamId[] = ['team-a', 'team-b'];
+
+	function newChallenge(): SeriesSession {
+		challenge.destroy();
+		challenge = new SeriesSession();
+		challenge.manifest = manifest;
+		challenge.loading = false;
+		return challenge;
+	}
+
+	async function focusChallenge(): Promise<void> {
+		await tick();
+		if (replay) document.getElementById('replay-heading')?.focus();
+	}
+
+	async function useReplay(selected: readonly LibraryView[]): Promise<void> {
+		selectedKeys = selected.map(entry => entry.key);
+		const session = newChallenge();
+		replay = true;
+		void focusChallenge();
+		await Promise.all(selected.filter(entry => entry.status === 'playable').slice(0, 2).map((entry, index) => session.choose(TEAMS[index], entry)));
+	}
+
+	async function restoreChallenge(): Promise<void> {
+		if (!manifest) return;
+		if (!parseSeriesHash(location.hash)) {
+			challenge.destroy();
+			replay = false;
+			return;
+		}
+		const session = newChallenge();
+		replay = true;
+		await session.openHash(false);
+		if (session !== challenge || !replay) return;
+		selectedKeys = TEAMS.flatMap(id => {
+			const entry = entries.find(entry => session.clubs[id]?.canonical === `/#replay=${entry.token}`);
+			return entry ? [entry.key] : [];
+		});
+		void focusChallenge();
+	}
+
+	function backToGallery(): void {
+		challenge.destroy();
+		replay = false;
+		window.history.replaceState(window.history.state, '', location.pathname);
+	}
+
+	async function play(event: SubmitEvent): Promise<void> {
+		event.preventDefault();
+		const session = challenge;
+		const ready = await Promise.all(TEAMS.map(id => session.clubs[id] ? true : session.validate(id)));
+		if (session !== challenge || !replay) return;
+		if (ready.some(value => !value)) {
+			await tick();
+			const firstError = TEAMS.find(id => session.fieldErrors[id]);
+			if (firstError) document.getElementById(`${firstError}-link`)?.focus();
+			return;
+		}
+		try { await goto(`/h2h${session.seriesHash()}`); }
+		catch { session.error = 'The series could not open. Please retry.'; }
+	}
 
 	async function refresh(): Promise<void> {
 		const current = manifest;
@@ -71,26 +140,57 @@
 	}
 
 	onMount(() => {
+		let live = true;
+		const onHash = () => { void restoreChallenge(); };
+		addEventListener('hashchange', onHash);
 		loadManifest()
-			.then(value => { manifest = value; return refresh(); })
+			.then(async value => {
+				if (!live) return;
+				manifest = value;
+				await refresh();
+				if (live) await restoreChallenge();
+			})
 			.catch(caught => { error = caught instanceof Error ? caught.message : 'The game data could not be loaded.'; })
-			.finally(() => { loading = false; });
+			.finally(() => { loading = false; if (live && replay) void focusChallenge(); });
+		return () => {
+			live = false;
+			removeEventListener('hashchange', onHash);
+			challenge.destroy();
+		};
 	});
 </script>
 
 <svelte:head>
-	<title>My seasons | 162-0</title>
-	<meta name="description" content="Completed 162-0 seasons saved on this device." />
+	<title>{replay ? 'Replay challenge' : 'Team gallery'} | 162-0</title>
+	<meta name="description" content="Inspect saved 162-0 teams, choose two for a best-of-five, or challenge a replay link." />
 </svelte:head>
 
 <main class="page">
-	<header class="intro"><h1>My seasons</h1></header>
+	<header class="intro"><h1>Team gallery</h1></header>
 	{#if loading}
 		<p class="muted" role="status">Loading your seasons…</p>
 	{:else if error}
 		<p class="error" role="alert">{error}</p>
+	{:else if replay}
+		<div class="replay-heading">
+			<button class="secondary" onclick={backToGallery}>Back to gallery</button>
+			<h2 id="replay-heading" tabindex="-1">Replay challenge</h2>
+			<p class="muted">Use two replay links, or add an opponent to your selected team. Both seasons replay for seeding.</p>
+		</div>
+		<SeriesSetup
+			fields={challenge.fields}
+			fieldErrors={challenge.fieldErrors}
+			clubs={challenge.clubs}
+			clubStatus={challenge.clubStatus}
+			{manifest}
+			loading={challenge.loading}
+			error={challenge.error}
+			onValidate={id => challenge.validate(id)}
+			onChange={id => challenge.change(id)}
+			onSubmit={event => void play(event)}
+		/>
 	{:else}
-		<SeasonLibrary {entries} {history} {profiles} {manifest} {status} onCopy={entry => void copyChallenge(entry)} onRename={rename} onDelete={remove} />
+		<SeasonLibrary {entries} {history} {profiles} {manifest} {status} initialSelection={selectedKeys} onReplay={selected => void useReplay(selected)} onCopy={entry => void copyChallenge(entry)} onRename={rename} onDelete={remove} />
 		{#if manifest}<DraftRunHistory {manifest} />{/if}
 	{/if}
 </main>
@@ -98,4 +198,6 @@
 <style>
 	.page { display: grid; gap: var(--space-4); width: min(100%, 84rem); padding-block: var(--space-8); }
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
+	.replay-heading { display: grid; justify-items: start; gap: var(--space-3); }
+	.replay-heading h2, .replay-heading p { margin: 0; }
 </style>

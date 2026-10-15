@@ -4,7 +4,7 @@
 	const { Story } = defineMeta({
 		title: 'Modes/Head-to-head', component: SeriesWorkshop,
 		args: { initial: 'setup' },
-		argTypes: { initial: { control: 'inline-radio', options: ['setup', 'library', 'errors', 'running', 'results'] } }
+		argTypes: { initial: { control: 'inline-radio', options: ['setup', 'saved-replay', 'errors', 'running', 'results'] } }
 	});
 </script>
 <script lang="ts">
@@ -12,7 +12,7 @@
 </script>
 {#snippet template(args: SeriesWorkshopProps)}<SeriesWorkshop {...args} />{/snippet}
 <Story exportName="Setup" args={{ initial: 'setup' }} {template} />
-<Story name="From my seasons" exportName="FromMySeasons" args={{ initial: 'library' }} {template} />
+<Story name="Saved team and replay" exportName="SavedTeamAndReplay" args={{ initial: 'saved-replay' }} {template} />
 <Story name="Link errors" exportName="LinkErrors" args={{ initial: 'errors' }} {template} />
 <Story exportName="Running" args={{ initial: 'running' }} {template} />
 <Story exportName="Results" args={{ initial: 'results' }} {template} />

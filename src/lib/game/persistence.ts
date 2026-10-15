@@ -68,6 +68,6 @@ export async function clearCompletedDraft(db: Db, draft: Draft): Promise<string 
   }]);
   return null;
  } catch {
-  return 'Your season is in My seasons, but its active draft could not be cleared. Browser storage is unavailable.';
+  return 'Your season is in the team gallery, but its active draft could not be cleared. Browser storage is unavailable.';
  }
 }

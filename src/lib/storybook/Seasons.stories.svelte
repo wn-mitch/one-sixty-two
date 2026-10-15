@@ -2,7 +2,7 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import SeasonsWorkshop from './SeasonsWorkshop.svelte';
 	const { Story } = defineMeta({
-		title: 'Modes/My seasons', component: SeasonsWorkshop,
+		title: 'Modes/Team gallery', component: SeasonsWorkshop,
 		args: { initial: 'leaders' },
 		argTypes: { initial: { control: 'inline-radio', options: ['leaders', 'club', 'compare', 'empty', 'blocked'] } }
 	});

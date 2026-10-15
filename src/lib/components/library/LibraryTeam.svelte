@@ -59,7 +59,7 @@
 				{#if tally.won || tally.lost}<span>Head-to-head series {tally.won}–{tally.lost}</span>{/if}
 			</p>
 		</div>
-		<button type="button" class="close" aria-label="Back to all-time leaders" onclick={onClose}>✕</button>
+		<button type="button" class="close" aria-label="Close team details" onclick={onClose}>✕</button>
 	</header>
 
 	{#if entry.status === 'retired'}
@@ -132,7 +132,7 @@
 				{/each}
 			</ol>
 		{:else}
-			<p class="muted">No series yet. Ctrl- or Cmd-click another club, or use Compare, to set one up.</p>
+			<p class="muted">No series yet. Choose Head-to-head above, then select another team.</p>
 		{/if}
 	</section>
 </section>
@@ -145,10 +145,10 @@
 	h2 { margin: 0; font: italic 900 clamp(1.6rem, 3vw, 2.1rem) / 1 'Barlow Condensed', sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
 	.facts { display: flex; flex-wrap: wrap; gap: .25rem .75rem; margin: 0; color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 	.facts strong { color: var(--text); }
-	.close { display: grid; place-items: center; flex: none; width: 2.75rem; padding: 0; font-size: 1.1rem; }
+	.close { display: grid; place-items: center; flex: none; width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: 1.1rem; }
 	.retired-note { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 	.actions, .rename { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-	.small { min-height: 2.25rem; padding: .25rem .75rem; font-size: var(--text-sm); }
+	.small { min-height: 2.75rem; padding: .25rem .75rem; font-size: var(--text-sm); }
 	.danger { color: var(--error); }
 	.rename label { width: 100%; font-size: var(--text-sm); }
 	.rename input { flex: 1 1 12rem; }

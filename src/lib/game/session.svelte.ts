@@ -286,7 +286,7 @@ export class Session {
      if (epoch === this.epoch) { this.newStickers = earned; this.newCards = added; }
      void refreshStickers();
     } catch {
-     notice ??= 'Your season is in My seasons, but its new collection items could not be loaded.';
+     notice ??= 'Your season is in the team gallery, but its new collection items could not be loaded.';
     }
    }
   }

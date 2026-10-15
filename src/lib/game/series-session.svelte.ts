@@ -1,6 +1,6 @@
 import { loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
 import { replayInput } from './draft.ts';
-import { loadLibrary, type LibraryView } from './library.ts';
+import type { LibraryView } from './library.ts';
 import { recordSeries, seriesRecord } from './series-history.ts';
 import { deviceDb } from '../storage/db.ts';
 import { loadReplayLink, parseSeriesHash, ReplayLinkError, replayLinkPath, seriesHash, type SeriesField } from './replay-link.ts';
@@ -23,12 +23,11 @@ const DEFAULT_NAMES: Record<SeriesTeamId, string> = { 'team-a': 'Team A', 'team-
 const TEAM_IDS = ['team-a', 'team-b'] as const;
 
 /**
- * Drives the head-to-head page: validates two replay links, recomputes both seasons and the
- * series in a worker. It never reads or writes the active-draft save.
+ * Validates gallery replay challenges and drives shared head-to-head runs in a worker.
+ * It never reads or writes the active-draft save.
  */
 export class SeriesSession {
  manifest = $state.raw<Manifest | null>(null);
- library = $state.raw<LibraryView[]>([]);
  fields = $state<Record<SeriesTeamId, SeriesField>>({ 'team-a': { link: '', name: '' }, 'team-b': { link: '', name: '' } });
  fieldErrors = $state<Record<SeriesTeamId, string>>({ 'team-a': '', 'team-b': '' });
  clubStatus = $state<Record<SeriesTeamId, SeriesClubStatus>>({ 'team-a': 'empty', 'team-b': 'empty' });
@@ -43,7 +42,6 @@ export class SeriesSession {
  result = $state.raw<SeriesResult | null>(null);
  profiles = $state.raw<Record<SeriesTeamId, Profile[]> | null>(null);
  drafts = $state.raw<Record<SeriesTeamId, Draft> | null>(null);
- private canonical: Record<SeriesTeamId, string> | null = null;
  private runId = 0;
  private validationIds: Record<SeriesTeamId, number> = { 'team-a': 0, 'team-b': 0 };
  private worker: Worker | null = null;
@@ -51,12 +49,13 @@ export class SeriesSession {
  get running(): boolean { return this.phase === 'running'; }
 
  async initialize(): Promise<void> {
+  const runId = this.runId;
   this.loading = true;
   this.error = '';
   try {
    const manifest = await loadManifest();
+   if (runId !== this.runId) return;
    this.manifest = manifest;
-   this.refreshLibrary();
    this.loading = false;
    await this.openHash();
    return;
@@ -66,26 +65,23 @@ export class SeriesSession {
   this.loading = false;
  }
 
- /** Fills the fields from a series hash and plays when both links are present; also used on in-page hash changes. */
- async openHash(): Promise<void> {
+ /** Restores a matchup from the URL; gallery challenges validate without starting a simulation. */
+ async openHash(autoplay = true): Promise<void> {
   const fromHash = parseSeriesHash(location.hash);
   if (!fromHash || !this.manifest) return;
   this.cancel();
   this.stage = '';
+  this.error = '';
+  this.historyNotice = '';
   this.result = null;
   this.fields = fromHash;
   this.fieldErrors = { 'team-a': '', 'team-b': '' };
   this.clubs = { 'team-a': null, 'team-b': null };
   this.clubStatus = { 'team-a': 'empty', 'team-b': 'empty' };
-  if (fromHash['team-a'].link && fromHash['team-b'].link) await this.play();
+  if (autoplay && fromHash['team-a'].link && fromHash['team-b'].link) await this.play();
+  else await Promise.all(TEAM_IDS.filter(id => fromHash[id].link).map(id => this.validate(id)));
  }
 
- async refreshLibrary(): Promise<void> {
-  const manifest = this.manifest;
-  if (!manifest) return;
-  try { this.library = (await loadLibrary((await deviceDb()).db, manifest)).entries.filter(entry => entry.status === 'playable'); }
-  catch { this.library = []; }
- }
 
  async choose(id: SeriesTeamId, entry: LibraryView): Promise<void> {
   this.fields[id] = { link: `${location.origin}/#replay=${entry.token}`, name: entry.nickname ?? '' };
@@ -119,7 +115,7 @@ export class SeriesSession {
   }
  }
 
- /** Returns one side to its chooser without disturbing the opposing club. */
+ /** Reopens one replay input without disturbing the opposing club. */
  change(id: SeriesTeamId): void {
   this.validationIds[id]++;
   this.clubs = { ...this.clubs, [id]: null };
@@ -130,8 +126,10 @@ export class SeriesSession {
  async play(): Promise<void> {
   if (!this.manifest || this.running) return;
   const manifest = this.manifest;
+  const pendingRunId = this.runId;
+  this.error = '';
   const readiness = await Promise.all(TEAM_IDS.map(id => this.clubs[id] ? true : this.validate(id)));
-  if (readiness.some(ready => !ready)) return;
+  if (pendingRunId !== this.runId || readiness.some(ready => !ready)) return;
   const a = this.clubs['team-a'];
   const b = this.clubs['team-b'];
   if (!a || !b) return;
@@ -139,11 +137,9 @@ export class SeriesSession {
   this.stopWorker();
   const runId = ++this.runId;
   this.phase = 'running';
-  this.error = '';
   this.result = null;
   this.fieldErrors = { 'team-a': '', 'team-b': '' };
   this.progress = { 'team-a': 0, 'team-b': 0, series: 0 };
-  this.canonical = { 'team-a': a.canonical, 'team-b': b.canonical };
   this.drafts = { 'team-a': a.draft, 'team-b': b.draft };
   this.profiles = { 'team-a': a.profiles, 'team-b': b.profiles };
   this.stage = 'Loading the series model…';
@@ -215,26 +211,18 @@ export class SeriesSession {
 
  cancel(): void {
   this.runId++;
+  for (const id of TEAM_IDS) this.validationIds[id]++;
   this.stopWorker();
   this.phase = 'setup';
   this.stage = 'Series cancelled.';
  }
 
- reset(): void {
-  this.cancel();
-  this.stage = '';
-  this.result = null;
-  this.refreshLibrary();
-  history.replaceState(history.state, '', location.pathname);
- }
 
- /** Hash for the played series, using each link's canonical form. */
+ /** Canonical matchup URL for validated participants, before or after playing. */
  seriesHash(): string {
-  const links = this.canonical;
-  if (!links) return seriesHash(this.fields);
   return seriesHash({
-   'team-a': { link: links['team-a'], name: this.fields['team-a'].name },
-   'team-b': { link: links['team-b'], name: this.fields['team-b'].name }
+   'team-a': { link: this.clubs['team-a']?.canonical ?? this.fields['team-a'].link, name: this.fields['team-a'].name },
+   'team-b': { link: this.clubs['team-b']?.canonical ?? this.fields['team-b'].link, name: this.fields['team-b'].name }
   });
  }
 

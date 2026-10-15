@@ -15,8 +15,8 @@
 	let { children }: LayoutProps = $props();
 	const sitePreview = sitePreviewImage();
 	const destinations = [
-		{ href: '/', label: 'Play' }, { href: '/seasons', label: 'My seasons' },
-		{ href: '/collection', label: 'Collection' }, { href: '/h2h', label: 'Head-to-head' },
+		{ href: '/', label: 'Play' }, { href: '/seasons', label: 'Team gallery' },
+		{ href: '/collection', label: 'Collection' },
 		{ href: '/shop', label: 'Shop' }
 	];
 	const playing = $derived(['/', '/classic', '/draft'].includes(page.url.pathname) || /^\/(r|c)\//.test(page.url.pathname));
@@ -88,7 +88,7 @@
 		<a class="wordmark" href="/" aria-label="162-0 home"><span aria-hidden="true" class="mark"></span>162-0</a>
 		<nav class="primary-nav" aria-label="Main navigation">
 			{#each destinations as destination (destination.href)}
-				<a href={destination.href} aria-current={(destination.href === '/' ? playing : page.url.pathname === destination.href) ? 'page' : undefined}>{destination.label}</a>
+				<a href={destination.href} aria-current={(destination.href === '/' ? playing : destination.href === '/seasons' ? ['/seasons', '/h2h'].includes(page.url.pathname) : page.url.pathname === destination.href) ? 'page' : undefined}>{destination.label}</a>
 			{/each}
 		</nav>
 		<nav class="site-actions" aria-label="Site controls">
@@ -154,7 +154,7 @@
 	.site-actions { position: relative; display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
 	.wallet-link { display: inline-flex; min-width: 2.75rem; min-height: 2.75rem; align-items: center; justify-content: center; padding-inline: var(--space-2); border-radius: var(--radius); color: var(--accent); font-size: var(--text-sm); font-weight: 750; text-decoration: none; }
 	.wallet-link:hover { color: var(--accent-hover); background: var(--surface); }
-	.primary-nav { order: 3; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; gap: var(--space-1); padding-block: var(--space-1); }
+	.primary-nav { order: 3; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; gap: var(--space-1); padding-block: var(--space-1); }
 	.primary-nav a { display: flex; align-items: center; justify-content: center; min-height: 3rem; padding: var(--space-2) var(--space-1); border-radius: var(--radius); color: var(--muted); font: 650 1rem/1.2 var(--font-control); text-align: center; text-decoration: none; }
 	.primary-nav a:hover { background: var(--surface); color: var(--text); }
 	.primary-nav a[aria-current='page'] { color: var(--accent); background: var(--surface); }
@@ -165,7 +165,7 @@
 	}
 	.rules-link { min-height: 2.75rem; display: inline-flex; align-items: center; padding-inline: var(--space-3); border-radius: var(--radius); color: var(--muted); font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
 	.rules-link:hover { color: var(--text); background: var(--surface); }
-	@media (max-width: 23.99rem) {
+	@media (max-width: 30rem) {
 		.site-header { column-gap: var(--space-2); }
 		.wordmark { gap: var(--space-2); }
 		.wallet-link, .rules-link { padding-inline: var(--space-2); }
