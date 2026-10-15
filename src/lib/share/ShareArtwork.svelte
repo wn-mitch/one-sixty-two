@@ -9,7 +9,7 @@
 	/**
 	 * The season share image at 1080×1920, sized so a phone shows every name legibly: the wordmark,
 	 * the final record and grade, a line of season facts, then either the roster on the home park's
-	 * field or the roster as a fan of large cards. The same component renders the local preview and
+	 * field or a four-by-four grid of full fronts. The same component renders the local preview and
 	 * the published capture.
 	 */
 	let { model, format = 'field' }: { model: ShareRenderModel; format?: ShareFormat } = $props();
