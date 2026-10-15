@@ -11,6 +11,7 @@ layout(location = 2) in vec4 a_tile;
 layout(location = 3) in vec4 a_light;
 layout(location = 4) in vec4 a_view;
 layout(location = 5) in vec4 a_plate;
+layout(location = 6) in float a_zoom;
 uniform vec2 u_resolution;
 out vec2 v_card;
 out vec2 v_atlas;
@@ -19,6 +20,7 @@ flat out vec4 v_tile;
 flat out vec4 v_light;
 flat out vec4 v_view;
 flat out vec4 v_plate;
+flat out float v_zoom;
 void main() {
 	vec2 corner = vec2(gl_VertexID & 1, gl_VertexID >> 1);
 	vec2 position = a_origin + corner.x * a_axes.xy + corner.y * a_axes.zw;
@@ -29,6 +31,7 @@ void main() {
 	v_light = a_light;
 	v_view = a_view;
 	v_plate = a_plate;
+	v_zoom = max(a_zoom, 1.0);
 	vec2 clip = position / u_resolution * 2.0 - 1.0;
 	gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
 }`;
@@ -52,6 +55,7 @@ flat in vec4 v_tile;
 flat in vec4 v_light;
 flat in vec4 v_view;
 flat in vec4 v_plate;
+flat in float v_zoom;
 uniform sampler2D u_map;
 uniform sampler2D u_ink;
 uniform sampler2D u_circuit;
@@ -142,7 +146,9 @@ void over(inout vec4 target, vec3 color, float alpha) {
 void main() {
 	// Rounded card corners, 1.8% of the width.
 	vec2 p = v_card * CARD;
-	footprint = max(length(fwidth(p)), 1e-5);
+	// Films and plates read a zoomed copy of the face, so a small swatch shows them at full-card detail.
+	vec2 q = CARD * 0.5 + (p - CARD * 0.5) / v_zoom;
+	footprint = max(length(fwidth(p)), 1e-5) / v_zoom;
 	plateScale = u_plateScale * v_plate.x;
 	plateTone = u_plateTone * v_plate.y;
 	plateStain = clamp(u_stain * v_plate.z, 0.0, 1.0);
@@ -186,7 +192,7 @@ void main() {
 	// Full gloss marks a vinyl sticker, smooth over the card's plate, with the plain refractor sweep for its holo.
 	float vinyl = step(0.985, gloss);
 	float plated = smoothstep(0.45, 0.9, metal) * (1.0 - iridescence * (1.0 - u_plateUnderFilm)) * (1.0 - vinyl) * u_plateDepth;
-	if (plate > 0 && plated > 0.0) normal = normalize(normal + vec3(foilSlope(p, plate) * plated, 0.0));
+	if (plate > 0 && plated > 0.0) normal = normalize(normal + vec3(foilSlope(q, plate) * plated, 0.0));
 	// Each metal runs from its shadow colour through a saturated body to a near-white hot spot.
 	bool gold = tier > 1.5 && tier < 2.5;
 	vec3 deep = gold ? vec3(0.32, 0.19, 0.04) : tier > 2.5 ? vec3(0.34, 0.33, 0.4) : vec3(0.27, 0.29, 0.33);
@@ -208,11 +214,11 @@ void main() {
 	vec3 foil = mix(deep, body, smoothstep(0.08, 0.6, band));
 	foil = mix(foil, hot, glint * (0.55 + 0.45 * intensity));
 	// Damascus darkens its dark layers and carbon its black tows; stain tints the steel with temper colours.
-	vec2 tone = plate > 0 ? plateShade(p, plate) * min(plated, 1.0) : vec2(0.0);
+	vec2 tone = plate > 0 ? plateShade(q, plate) * min(plated, 1.0) : vec2(0.0);
 	foil *= 1.0 - min(tone.x, 1.0) * 0.82;
-	foil *= mix(vec3(1.0), plateTint(p, plate), min(tone.y, 1.0));
+	foil *= mix(vec3(1.0), plateTint(q, plate), min(tone.y, 1.0));
 	float flash;
-	vec3 holo = holoFoil(p + v_view.zw, normal, normalize(toLight + view), band, vinyl > 0.5 ? 0.0 : pattern, flash);
+	vec3 holo = holoFoil(q + v_view.zw, normal, normalize(toLight + view), band, vinyl > 0.5 ? 0.0 : pattern, flash);
 	holo = mix(holo, vec3(1.0), flash * 0.45) * (0.75 + 0.5 * flash);
 	// Holo vinyl is pearly: its rainbow sits over a white base.
 	holo = mix(holo, vec3(1.0), vinyl * 0.35);

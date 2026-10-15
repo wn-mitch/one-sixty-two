@@ -33,6 +33,20 @@
 		void refreshShop();
 	});
 
+	// `?perf` on any page shows frame pacing and light-pass counters, on any build, for checking feel on real hardware.
+	onMount(() => {
+		if (!page.url.searchParams.has('perf')) return;
+		let stop = () => {};
+		let stopped = false;
+		void import('#lib/dev/perf-hud.ts').then(({ mountPerfHud }) => {
+			if (!stopped) stop = mountPerfHud();
+		});
+		return () => {
+			stopped = true;
+			stop();
+		};
+	});
+
 	onMount(() => {
 		if (!import.meta.env.DEV) return;
 		let cancelScheduled = () => {};
@@ -108,7 +122,7 @@
 		<div class="attribution">
 			<p>Inspired by <a href="https://82-0.com/">82-0</a>. An original baseball challenge.</p>
 			<p><a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates.
-				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/about#attribution">Full attribution &amp; data download</a>. <a href="/about#image-credits">Image credits</a>.</p>
+				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/credits">Full attribution, data download &amp; image credits</a>.</p>
 		</div>
 		<div class="footer-links">
 			{#if externalSupport}
@@ -141,7 +155,8 @@
 	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) .site-header { display: none; }
 	.site-header {
 		position: relative;
-		z-index: 5;
+		/* Above the draft's sticky toolbar, so the Menu panel opens over it rather than under it. */
+		z-index: 30;
 		display: flex;
 		min-height: 4rem;
 		flex-wrap: wrap;

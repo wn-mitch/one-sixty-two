@@ -262,7 +262,7 @@ describe('autonomous motion scheduler', () => {
 		expect(frames).toHaveLength(1);
 	});
 
-	it('shares one throttled frame loop and one observer across visible subscribers', () => {
+	it('shares one frame loop and one observer, stepping drift on whole display frames', () => {
 		const { environment, scheduler } = createSchedulerFixture();
 		const firstNode = {} as Element;
 		const secondNode = {} as Element;
@@ -270,28 +270,27 @@ describe('autonomous motion scheduler', () => {
 		const secondFrames: number[] = [];
 		const first = scheduler.register(firstNode, {
 			active: () => true,
-			frame: frame => firstFrames.push(frame.time),
+			frame: frame => firstFrames.push(Math.round(frame.time)),
 			state: () => undefined
 		});
 		const second = scheduler.register(secondNode, {
 			active: () => true,
-			frame: frame => secondFrames.push(frame.time),
+			frame: frame => secondFrames.push(Math.round(frame.time)),
 			state: () => undefined
 		});
 
 		expect(environment.frames.size).toBe(1);
 		expect(environment.observed.size).toBe(2);
-		environment.flush(0);
-		environment.flush(10);
-		expect(firstFrames).toEqual([0]);
-		environment.flush(31);
-		expect(firstFrames).toEqual([0, 31]);
-		expect(secondFrames).toEqual([0, 31]);
+		// A 60 Hz display: drift moves on every second frame, both subscribers on the same ones.
+		for (let index = 0; index <= 6; index++) environment.flush(index * 1000 / 60);
+		expect(firstFrames).toEqual([0, 17, 50, 83]);
+		expect(secondFrames).toEqual(firstFrames);
 
 		environment.intersect(firstNode, false);
-		environment.flush(62);
-		expect(firstFrames).toEqual([0, 31]);
-		expect(secondFrames).toEqual([0, 31, 62]);
+		environment.flush(7000 / 60);
+		environment.flush(8000 / 60);
+		expect(firstFrames).toEqual([0, 17, 50, 83]);
+		expect(secondFrames).toEqual([0, 17, 50, 83, 117]);
 
 		first.unregister();
 		second.unregister();
@@ -299,6 +298,18 @@ describe('autonomous motion scheduler', () => {
 		expect(environment.visibilityListeners.size).toBe(0);
 		expect(environment.observed.size).toBe(0);
 		expect(environment.disconnected).toBe(1);
+	});
+
+	it('follows a pointer on every frame of a fast display and drifts on every fourth', () => {
+		const { environment, scheduler } = createSchedulerFixture();
+		const pointer: number[] = [];
+		const drift: number[] = [];
+		scheduler.register({} as Element, { active: () => true, rate: () => 'frame', frame: frame => pointer.push(frame.delta), state: () => undefined });
+		scheduler.register({} as Element, { active: () => true, frame: frame => drift.push(Math.round(frame.delta)), state: () => undefined });
+		// A 120 Hz display, long enough for the scheduler to learn its frame period.
+		for (let index = 0; index <= 120; index++) environment.flush(index * 1000 / 120);
+		expect(pointer).toHaveLength(121);
+		expect(drift.slice(-10)).toEqual(Array(10).fill(33));
 	});
 
 	it('retains the shared lifecycle until its last resize consumer releases', () => {
@@ -341,16 +352,19 @@ describe('autonomous motion scheduler', () => {
 		});
 
 		environment.flush(100);
-		environment.flush(131);
+		environment.flush(117);
+		environment.flush(133);
 		environment.setHidden(true);
 		expect(environment.frames.size).toBe(0);
 		environment.setHidden(false);
 		environment.flush(10_000);
-		environment.flush(10_031);
-		expect(times).toEqual([0, 31, 31, 62]);
+		environment.flush(10_017);
+		environment.flush(10_033);
+		// Ten hidden seconds never reach logical time.
+		expect(times).toEqual([0, 17, 33, 66]);
 
 		media.set(true);
-		environment.flush(10_062);
+		environment.flush(10_050);
 		expect(effectiveStates.at(-1)).toBe(false);
 		expect(environment.frames.size).toBe(0);
 		media.set(false);

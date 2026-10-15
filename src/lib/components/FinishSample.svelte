@@ -9,6 +9,8 @@
 
 	let { tier, era, appearance, idle = true }: { tier: Finish; era: CardEra; appearance: CardAppearance | null; idle?: boolean } = $props();
 
+	// Swatches show their film or plate at the scale of a full-size card, so the pattern reads however small the swatch is.
+	const PATTERN_WIDTH = 260;
 	const light = new CardLight();
 	const available = LightEngine.shared() !== null;
 	const plate = $derived(tier === 'base' ? undefined : appearance?.plate ?? ERA_FOIL[era]);
@@ -40,6 +42,7 @@
 	data-plate={plate}
 	data-palette={palette}
 	data-identity={identity}
+	data-pattern-width={PATTERN_WIDTH}
 	aria-label={`${tier} finish sample`}
 	use:tilt={{ enabled: available, idle, finish, light, identity }}
 >

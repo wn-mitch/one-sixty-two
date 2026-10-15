@@ -54,6 +54,8 @@ export interface LitCard {
 	plateTuning?: PlateTuning;
 	/** Prints this Gem card in one preset colourway; unset keeps the film's own or the scene's override. */
 	palette?: number;
+	/** Magnifies the film and plate around the card's centre, so a small swatch shows them at full-card detail; 1 is true scale. */
+	zoom?: number;
 }
 
 /** Tuning a scene can change between draws. */
@@ -177,7 +179,7 @@ const TIER_CODE: Record<Finish, number> = { base: 0, foil: 1, emboss: 2, gem: 3 
 /** The atlas starts small for phones and doubles, up to the GPU's limit, when the cards on screen outgrow it. */
 const ATLAS_SIZE = 2048;
 const ATLAS_LIMIT = 4096;
-const FLOATS = 22;
+const FLOATS = 23;
 /** How far, in card units, a card's seed can shift its holo film. */
 const FILM_SHIFT = 2.5;
 
@@ -210,6 +212,7 @@ export class LightRenderer {
 	#shelfY = 0;
 	#shelfHeight = 0;
 	#data = new Float32Array(FLOATS * 64);
+	readonly #slots = new Float32Array(TUNE_SLOTS);
 	#width = 0;
 	#height = 0;
 	#lost = false;
@@ -218,7 +221,7 @@ export class LightRenderer {
 	/** Returns null when this browser has no WebGL2; the caller keeps the static finish. */
 	static create(canvas: LightCanvas): LightRenderer | null {
 		try {
-			const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: true, depth: false, stencil: false }) as WebGL2RenderingContext | null;
+			const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false }) as WebGL2RenderingContext | null;
 			return gl ? new LightRenderer(canvas, gl) : null;
 		} catch {
 			return null;
@@ -273,6 +276,7 @@ export class LightRenderer {
 		attribute(3, 4, 10);
 		attribute(4, 4, 14);
 		attribute(5, 4, 18);
+		attribute(6, 1, 22);
 		gl.bindVertexArray(null);
 		const atlas = this.#atlasTexture();
 		const inkAtlas = this.#atlasTexture();
@@ -380,10 +384,11 @@ export class LightRenderer {
 
 	/** Sizes the drawing buffer to the canvas's CSS box at `pixelRatio`. */
 	resize(width: number, height: number, pixelRatio: number): void {
-		this.#width = width;
-		this.#height = height;
 		const pixelWidth = Math.max(1, Math.round(width * pixelRatio));
 		const pixelHeight = Math.max(1, Math.round(height * pixelRatio));
+		// The drawing buffer's own size at this ratio, so a card placed on whole device pixels stays on them.
+		this.#width = pixelWidth / pixelRatio;
+		this.#height = pixelHeight / pixelRatio;
 		if (this.#canvas.width !== pixelWidth) this.#canvas.width = pixelWidth;
 		if (this.#canvas.height !== pixelHeight) this.#canvas.height = pixelHeight;
 	}
@@ -397,9 +402,10 @@ export class LightRenderer {
 
 	/**
 	 * Lights every card that has a surface map; cards without one keep their static finish. Returns false when a card
-	 * was skipped because its program is still compiling, so the caller can draw again next frame.
+	 * was skipped because its program is still compiling, so the caller can draw again next frame. `clear` false
+	 * draws over what the canvas holds, so several scenes' cards can share one frame.
 	 */
-	draw(cards: readonly LitCard[], options: LightOptions = {}): boolean {
+	draw(cards: readonly LitCard[], options: LightOptions = {}, clear = true): boolean {
 		const resources = this.#resources;
 		if (!resources || this.#lost || !this.#width || !this.#height) return true;
 		// Cards that show the same films and plate share a program and one instanced draw.
@@ -407,9 +413,7 @@ export class LightRenderer {
 		for (const card of cards) {
 			const tile = this.#tiles.get(card.key);
 			if (!tile) continue;
-			const film = HOLO_PATTERNS.indexOf(card.film ?? (card.era ? ERA_HOLO[card.era] : 'refractor'));
-			const plate = FOIL_PLATES.indexOf(card.plate ?? (card.era ? ERA_FOIL[card.era] : 'brushed'));
-			const spec = programSpec(film, plate, options, card.palette);
+			const { film, plate, spec } = this.#spec(card, options);
 			const key = programKey(spec);
 			let group = groups.get(key);
 			if (!group) groups.set(key, group = { spec, cards: [] });
@@ -417,8 +421,10 @@ export class LightRenderer {
 		}
 		const gl = this.#gl;
 		gl.viewport(0, 0, this.#canvas.width, this.#canvas.height);
-		gl.clearColor(0, 0, 0, 0);
-		gl.clear(gl.COLOR_BUFFER_BIT);
+		if (clear) {
+			gl.clearColor(0, 0, 0, 0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+		}
 		let complete = true;
 		for (const group of groups.values()) {
 			const program = resources.programs.get(group.spec);
@@ -444,6 +450,19 @@ export class LightRenderer {
 			gl.bindVertexArray(null);
 		}
 		return complete;
+	}
+
+	#spec(card: LitCard, options: LightOptions): { film: number; plate: number; spec: ProgramSpec } {
+		const film = HOLO_PATTERNS.indexOf(card.film ?? (card.era ? ERA_HOLO[card.era] : 'refractor'));
+		const plate = FOIL_PLATES.indexOf(card.plate ?? (card.era ? ERA_FOIL[card.era] : 'brushed'));
+		return { film, plate, spec: programSpec(film, plate, options, card.palette) };
+	}
+
+	/** Whether `card`'s program has compiled, so a draw lights it. */
+	compiled(card: LitCard, options: LightOptions = {}): boolean {
+		const resources = this.#resources;
+		if (!resources || this.#lost) return true;
+		return resources.programs.get(this.#spec(card, options).spec) !== null;
 	}
 
 	/** Writes one card's instance attributes at `offset`. */
@@ -474,6 +493,7 @@ export class LightRenderer {
 		data[offset + 19] = tuning.tone;
 		data[offset + 20] = tuning.stain;
 		data[offset + 21] = tuning.vivid ?? 1;
+		data[offset + 22] = card.zoom ?? 1;
 	}
 
 	#setUniforms(uniforms: Uniforms, options: LightOptions): void {
@@ -500,9 +520,10 @@ export class LightRenderer {
 		gl.uniform1f(uniforms.plateScale, options.plateScale ?? DEFAULT_LIGHT.plateScale);
 		gl.uniform1f(uniforms.plateTone, options.plateTone ?? DEFAULT_LIGHT.plateTone);
 		gl.uniform1f(uniforms.stain, options.stain ?? DEFAULT_LIGHT.stain);
+		const slots = this.#slots;
 		const tune = (which: WebGLUniformLocation | null, values: WebGLUniformLocation | null, module: ModuleTune | null | undefined) => {
 			gl.uniform1i(which, module ? module.index : -1);
-			const slots = new Float32Array(TUNE_SLOTS);
+			slots.fill(0);
 			if (module) slots.set(module.values.slice(0, TUNE_SLOTS));
 			gl.uniform1fv(values, slots);
 		};

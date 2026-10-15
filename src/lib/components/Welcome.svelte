@@ -71,7 +71,7 @@
     <button class="primary start" disabled={loading || !manifest} onclick={onStart} aria-describedby="start-detail">Build my team <span aria-hidden="true">↗</span></button>
    {/if}
   </div>
-  <p class="start-detail" id="start-detail">16 picks · 162 simulated games · <a href="/about#how-to-play">How to play</a></p>
+  <p class="start-detail" id="start-detail">16 picks · 162 simulated games · <a href="/how-to-play">How to play</a></p>
   {#if firstSeasonBonus}<p class="bonus-note">Your first season includes a bonus token.</p>{/if}
   {#if loading}
    <p class="start-status muted" role="status">Loading the historical player pool…</p>
@@ -206,8 +206,8 @@
    padding: var(--space-4);
    border: 1px solid var(--border);
    border-radius: var(--radius-lg);
-   background: oklch(16% .009 255 / .82);
-   backdrop-filter: blur(10px);
+   /* Nearly opaque instead of a backdrop blur, which would re-blur the moving wall behind it every frame. */
+   background: oklch(16% .009 255 / .94);
   }
  }
  @media (max-width: 24rem) {

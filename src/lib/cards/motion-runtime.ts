@@ -1,6 +1,16 @@
 import { appSettings, type AppSettingsSnapshot, type AppSettingsState } from '../game/settings.svelte.ts';
 
-const FRAME_INTERVAL = 30;
+/**
+ * How often each kind of motion moves, in milliseconds. A subscriber ticks on whole display frames: every frame
+ * under a pointer, about 60 times a second under phone tilt, and about 30 for drift and other ambient motion. Locking
+ * to a whole number of frames keeps steps even (every 4th frame at 120 Hz, not alternating 3 and 4).
+ */
+export const MOTION_INTERVALS = { frame: 0, sensor: 1000 / 60, ambient: 1000 / 30 } as const;
+export type MotionRate = keyof typeof MOTION_INTERVALS;
+/** The display's frame period is learned from frame timestamps; this is the guess before it is. */
+const DEFAULT_PERIOD = 1000 / 60;
+/** Counters for the `?perf` overlay. */
+export const motionStats = { frames: 0, ticks: 0, period: DEFAULT_PERIOD };
 
 interface IntersectionEntryLike {
 	target: Element;
@@ -35,7 +45,12 @@ export interface MotionFrame {
 interface Subscriber {
 	node: Element;
 	visible: boolean;
+	/** The logical time and frame count of this subscriber's last tick. */
+	lastTime: number | null;
+	lastFrame: number;
 	active(settings: AppSettingsSnapshot): boolean;
+	/** How smoothly it moves now; ambient when unset. */
+	rate?(): MotionRate;
 	frame(frame: MotionFrame): void;
 	state(settings: AppSettingsSnapshot, visible: boolean): void;
 }
@@ -80,8 +95,9 @@ export class AutonomousMotionScheduler {
 	#unsubscribeSettings: (() => void) | null = null;
 	#frameHandle = 0;
 	#lastTimestamp: number | null = null;
-	#lastPaint = Number.NEGATIVE_INFINITY;
 	#logicalTime = 0;
+	#frameCount = 0;
+	#period = DEFAULT_PERIOD;
 	#ambientHolds = 0;
 
 	constructor(
@@ -165,17 +181,28 @@ export class AutonomousMotionScheduler {
 			this.#lastTimestamp = null;
 			return;
 		}
-		if (timestamp - this.#lastPaint < FRAME_INTERVAL) {
-			this.#request();
-			return;
-		}
-		const delta = this.#lastTimestamp === null ? 0 : Math.max(0, Math.min(100, timestamp - this.#lastTimestamp));
+		const elapsed = this.#lastTimestamp === null ? 0 : Math.max(0, Math.min(100, timestamp - this.#lastTimestamp));
 		this.#lastTimestamp = timestamp;
-		this.#lastPaint = timestamp;
-		this.#logicalTime += delta;
-		const frame = { time: this.#logicalTime, delta, settings: this.#settings };
+		this.#logicalTime += elapsed;
+		this.#frameCount += 1;
+		motionStats.frames++;
+		// A slow average of steady frame gaps; a dropped frame or a pause does not retune it.
+		if (elapsed > 3 && elapsed < 1.5 * this.#period + 4) this.#period += (elapsed - this.#period) * 0.1;
+		motionStats.period = this.#period;
+		const frame = this.#frameCount;
 		for (const subscriber of this.#subscribers) {
-			if (subscriber.visible && subscriber.active(this.#settings)) subscriber.frame(frame);
+			if (!subscriber.visible || !subscriber.active(this.#settings)) {
+				subscriber.lastTime = null;
+				continue;
+			}
+			const every = Math.max(1, Math.round(MOTION_INTERVALS[subscriber.rate?.() ?? 'ambient'] / this.#period));
+			if (subscriber.lastTime !== null && frame - subscriber.lastFrame < every) continue;
+			const delta = subscriber.lastTime === null ? 0 : Math.min(100, this.#logicalTime - subscriber.lastTime);
+			subscriber.lastTime = this.#logicalTime;
+			// Counted from the last whole multiple, so subscribers at one rate share frames and the light pass draws them together.
+			subscriber.lastFrame = frame - (frame % every);
+			motionStats.ticks++;
+			subscriber.frame({ time: this.#logicalTime, delta, settings: this.#settings });
 		}
 		this.#request();
 	};
@@ -199,10 +226,10 @@ export class AutonomousMotionScheduler {
 
 	register(
 		node: Element,
-		callbacks: Pick<Subscriber, 'active' | 'frame' | 'state'>
+		callbacks: Pick<Subscriber, 'active' | 'frame' | 'state' | 'rate'>
 	): MotionRegistration {
 		this.#ensure();
-		const subscriber: Subscriber = { node, visible: true, ...callbacks };
+		const subscriber: Subscriber = { node, visible: true, lastTime: null, lastFrame: Number.NEGATIVE_INFINITY, ...callbacks };
 		this.#subscribers.add(subscriber);
 		let nodeSubscribers = this.#byNode.get(node);
 		if (!nodeSubscribers) {
@@ -271,7 +298,6 @@ export class AutonomousMotionScheduler {
 		this.#releaseSettings = null;
 		this.#frameHandle = 0;
 		this.#lastTimestamp = null;
-		this.#lastPaint = Number.NEGATIVE_INFINITY;
 	}
 }
 

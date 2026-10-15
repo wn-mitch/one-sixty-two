@@ -80,8 +80,13 @@
 	 */
 	.hand { --gap: var(--space-3); --w: clamp(104px, (100cqi - (var(--count) - 1) * var(--gap)) / var(--count), 11rem); display: flex; align-items: end; }
 	.hand-card + .hand-card { margin-inline-start: min(var(--gap), (100cqi - var(--count) * var(--w)) / (var(--count) - 1)); }
-	.hand-card { position: relative; flex: 0 0 var(--w); width: var(--w); min-height: 0; padding: 0; border: 0; background: transparent; border-radius: .35rem; filter: drop-shadow(0 .55rem .7rem oklch(8% .01 255 / .38)); transition: transform 180ms var(--ease-out), filter 180ms var(--ease-out); }
-	.hand-card:hover, .hand-card:focus-visible { z-index: 20; background: transparent; transform: translateY(-.7rem); filter: drop-shadow(0 1rem 1rem oklch(8% .01 255 / .48)); }
+	.hand-card { position: relative; flex: 0 0 var(--w); width: var(--w); min-height: 0; padding: 0; border: 0; background: transparent; border-radius: .35rem; isolation: isolate; transition: transform 180ms var(--ease-out); }
+	/* Static shadows under the card rather than a filter over a card that tilts and drifts. */
+	.hand-card::before, .hand-card::after { content: ''; position: absolute; inset: 1% 2% 0; z-index: -1; border-radius: .35rem; pointer-events: none; }
+	.hand-card::before { box-shadow: 0 .55rem 1rem oklch(8% .01 255 / .4); }
+	.hand-card::after { box-shadow: 0 1rem 1.5rem oklch(8% .01 255 / .5); opacity: 0; transition: opacity 180ms var(--ease-out); }
+	.hand-card:hover, .hand-card:focus-visible { z-index: 20; background: transparent; transform: translateY(-.7rem); }
+	.hand-card:hover::after, .hand-card:focus-visible::after { opacity: 1; }
 	.hand-card > span { display: block; }
 	.pick { position: absolute; z-index: 5; top: -.4rem; left: -.4rem; min-width: 1.6rem; padding: .15rem .35rem; border-radius: var(--radius); background: var(--text); color: var(--background); font: 800 .8rem / 1 'Barlow Condensed', sans-serif; text-align: center; }
 	.source-note { max-width: 74ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
