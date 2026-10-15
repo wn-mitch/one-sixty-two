@@ -216,7 +216,7 @@
 				<div class="setting-row">
 					<div class="setting-copy">
 						<label for={blockedId}>Blocked players</label>
-						<p>While drafting on a wide screen, also list players with no open position, so you can pick one and rearrange your field. Phones always list them last.</p>
+						<p>Also list players with no open position, so you can pick one and rearrange your field. On phones, they appear after players who can be placed.</p>
 					</div>
 					<button
 						id={blockedId}
