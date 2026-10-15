@@ -3,19 +3,20 @@ import { defineFilm } from './film.ts';
 /** Two overlapping spiral gratings with independent radial curvature and optional opposite winding. */
 export default defineFilm({
 	name: 'spiral-moire',
-	palette: 'mono-silver',
+	palette: 'rainbow',
+	scale: 0.2,
 	ground: 0.3,
 	params: {
 		pitch: { value: 1.8, min: 0.5, max: 4, step: 0.05, note: 'Spiral turns per scaled card unit; higher makes the two gratings finer.' },
-		tightness: { value: 4, min: 1, max: 12, step: 1, note: 'Interleaved spiral arms; whole arms keep each grating continuous around its centre.' },
-		pitchOffset: { value: 0.045, min: 0, max: 0.18, step: 0.005, note: 'Relative pitch difference between the gratings; 0 gives equal pitch.' },
-		offset: { value: 0.16, min: 0, max: 0.75, step: 0.01, note: 'Distance between spiral centres in card units; bends the interference bands.' },
+		tightness: { value: 12, min: 1, max: 12, step: 1, note: 'Interleaved spiral arms; whole arms keep each grating continuous around its centre.' },
+		pitchOffset: { value: 0.168165137614679, min: 0, max: 0.18, step: 0.005, note: 'Relative pitch difference between the gratings; 0 gives equal pitch.' },
+		offset: { value: 0.704307626146789, min: 0, max: 0.75, step: 0.01, note: 'Distance between spiral centres in card units; bends the interference bands.' },
 		contrast: { value: 1.6, min: 0.2, max: 2, step: 0.05, note: 'Depth of the overlapping light and dark bands, independent of the colourway.' },
-		slideWithTilt: { value: 1, min: 0, max: 4, step: 0.05, note: 'Move the second grating with tilt. Locked centres rotate only; 0 fixes the overlap.' },
-		lockCenters: { value: 0, min: 0, max: 1, step: 1, note: '1 keeps both spirals at the same origin, ignoring offset and tilt translation. Tilt still rotates the second spiral.' },
-		bendA: { value: 1, min: 0.5, max: 2, step: 0.01, note: 'First spiral radial bend: 1 gives evenly spaced turns; above 1 packs turns toward the rim, below 1 toward the centre.' },
-		bendB: { value: 1, min: 0.5, max: 2, step: 0.01, note: 'Second spiral radial bend, independent of the first. Different bends create concentric interference.' },
-		counterWound: { value: 0, min: 0, max: 1, step: 1, note: '1 reverses the second spiral, so clockwise and counterclockwise gratings cross.' }
+		slideWithTilt: { value: 1.61563455657492, min: 0, max: 4, step: 0.05, note: 'Move the second grating with tilt. Locked centres rotate only; 0 fixes the overlap.' },
+		lockCenters: { value: 1, min: 0, max: 1, step: 1, note: '1 keeps both spirals at the same origin, ignoring offset and tilt translation. Tilt still rotates the second spiral.' },
+		bendA: { value: 0.5, min: 0.5, max: 2, step: 0.01, note: 'First spiral radial bend: 1 gives evenly spaced turns; above 1 packs turns toward the rim, below 1 toward the centre.' },
+		bendB: { value: 2, min: 0.5, max: 2, step: 0.01, note: 'Second spiral radial bend, independent of the first. Different bends create concentric interference.' },
+		counterWound: { value: 1, min: 0, max: 1, step: 1, note: '1 reverses the second spiral, so clockwise and counterclockwise gratings cross.' }
 	},
 	helpers: `
 // Filter each Fourier component separately. Filtering the two gratings before multiplying would erase

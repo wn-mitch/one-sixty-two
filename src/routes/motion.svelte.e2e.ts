@@ -1,8 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function openSettings(page: Page) {
-	await page.getByRole('button', { name: 'Menu', exact: true }).click();
-	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const menu = page.locator('.menu-panel:not([hidden])');
+	if (!(await menu.isVisible())) {
+		await page.getByRole('button', { name: 'Menu', exact: true }).first().click();
+	}
+	await menu.getByRole('button', { name: 'Settings', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Settings' });
 	await expect(dialog).toBeVisible();
 	return dialog;

@@ -45,6 +45,14 @@ describe('lab links', () => {
 		expect(bucket.objects.get(`${LAB_LINK_PREFIX}AAAAAAAA`)).toBe(before);
 	});
 
+	it('rejects explicit unsupported print choices instead of storing them', async () => {
+		const bucket = new MemoryBucket();
+		for (const print of ['window', 'unknown']) {
+			await expect(storeLabLink(bucket, { ...STATE, print })).rejects.toBeInstanceOf(LabLinkInvalidError);
+		}
+		expect(bucket.objects.size).toBe(0);
+	});
+
 	it('rejects states that are not lab setups or are too large', async () => {
 		const bucket = new MemoryBucket();
 		await expect(storeLabLink(bucket, [1, 2])).rejects.toBeInstanceOf(LabLinkInvalidError);

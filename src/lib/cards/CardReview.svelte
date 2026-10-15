@@ -2,9 +2,10 @@
  import { tick, untrack, type Snippet } from 'svelte';
  import type { ResultsInspection } from '../game/results-types.ts';
  import type { CardViewModel } from './view-model.ts';
+ import type { PlacedSticker } from '../collection/stickers.ts';
  import CardFlip from './CardFlip.svelte';
 
- let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, flipInPlace = false, onMove, moveRequested = $bindable(false), readerNav, pairFaces = true, wall = false }: {
+ let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, showHeading = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, flipInPlace = false, onMove, moveRequested = $bindable(false), readerNav, pairFaces = true, wall = false, stickers, freshStickers }: {
   id?: string;
   s: CardViewModel;
   inspection?: ResultsInspection;
@@ -13,6 +14,7 @@
   textBack?: boolean;
   selectedMode?: 'simulated' | 'actual';
   showControl?: boolean;
+  showHeading?: boolean;
   onFrontSelect?: (trigger: HTMLButtonElement) => void;
   onClose?: () => void;
   sourceElement?: HTMLElement | null;
@@ -26,6 +28,8 @@
   pairFaces?: boolean;
   /** The front drifts and catches the light on its own until it is hovered. */
   wall?: boolean;
+  stickers?: readonly PlacedSticker[];
+  freshStickers?: ReadonlySet<string>;
  } = $props();
  const generatedId = $props.id();
  const reviewId = $derived(id ?? generatedId);
@@ -80,8 +84,8 @@ let heading = $state<HTMLHeadingElement>();
  }
 </script>
 
-<section id={reviewId} class="card-review" class:raised-only={raisedOnly} aria-labelledby={onFrontSelect || raisedOnly ? undefined : `${reviewId}-heading`} aria-label={onFrontSelect || raisedOnly ? `${s.full} · ${s.year}` : undefined} data-season-id={seasonKey}>
- {#if !onFrontSelect && !raisedOnly}<header class="review-header">
+<section id={reviewId} class="card-review" class:raised-only={raisedOnly} aria-labelledby={onFrontSelect || raisedOnly || !showHeading ? undefined : `${reviewId}-heading`} aria-label={onFrontSelect || raisedOnly || !showHeading ? `${s.full} · ${s.year}` : undefined} data-season-id={seasonKey}>
+ {#if showHeading && !onFrontSelect && !raisedOnly}<header class="review-header">
   <div><h3 id="{reviewId}-heading" bind:this={heading} tabindex="-1">{s.full} · {s.year}</h3><p>{s.team} · {s.pos}</p></div>
   {#if onClose}<button type="button" onclick={onClose}>Hide card</button>{/if}
  </header>{/if}
@@ -96,7 +100,7 @@ let heading = $state<HTMLHeadingElement>();
    {#if textBack}<button type="button" class="back-text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>{/if}
    {#if onMove}<button type="button" onclick={moveCard}>Move card</button>{/if}
   {/snippet}
- <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} {flipInPlace} {readerNav} {pairFaces} {wall} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
+ <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} {flipInPlace} {readerNav} {pairFaces} {wall} {stickers} {freshStickers} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
 </div>
 </section>
 

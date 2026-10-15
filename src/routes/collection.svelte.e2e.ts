@@ -31,9 +31,10 @@ test('a saved season fills the collection and its sticker album, with stickers t
  await page.getByRole('button', { name: 'All seasons', exact: true }).click();
  const grid = page.getByRole('list', { name: 'Collected cards' });
  await expect(grid.getByRole('button')).toHaveCount(2);
- await expect(page.getByText(/2\s+cards · 2\s+of [\d,]+ player-seasons, <0\.01%/)).toBeVisible();
+ await expect(page.getByRole('meter', { name: 'Player-seasons' })).toHaveAttribute('value', '2');
  // Kinds reached across both cards (grade C, 20–120 wins, MVP, 20–60 HR, 150–175 hits, 100–145 RBI, .350–.400 OBP, 200–300 K) and one sticker per family per card.
- await expect(page.getByText(/23\s+of 97 sticker kinds · 10\s+on your cards/)).toBeVisible();
+ await expect(page.getByRole('meter', { name: 'Sticker kinds' })).toHaveAttribute('value', '23');
+ await expect(page.getByRole('meter', { name: 'Sticker kinds' })).toHaveAttribute('max', '97');
  const tile = grid.getByRole('button', { name: new RegExp(hitterLabel) });
  // The face shows the grade and the three rarest families by simulated earn rate: MVP, 60 HR, .400 OBP (120 wins, 175 hits and 145 RBI are more common).
  const faceFamilies = () => tile.locator('.stickers [data-family]').evaluateAll(nodes => nodes.map(node => `${node.getAttribute('data-family')}:${node.textContent}`));
@@ -42,10 +43,17 @@ test('a saved season fills the collection and its sticker album, with stickers t
  await tile.click();
  const detail = page.getByRole('region', { name: hitterLabel });
  await expect(detail.getByRole('heading', { level: 2 })).toBeFocused();
+ await expect(detail.locator('.surface .front .stickers [data-family="mvp"]')).toBeVisible();
+ await detail.getByRole('button', { name: 'Turn over', exact: true }).click();
+ await expect(detail.locator('.back[aria-hidden="false"]')).toBeVisible();
+ await detail.getByRole('button', { name: 'Show front', exact: true }).click();
+ await expect(detail.locator('.front[aria-hidden="false"]')).toBeVisible();
+ await page.keyboard.press('Escape');
  // The panel shows progress toward each counting sticker's next rung; Hide and Show wait behind Edit stickers.
  await expect(detail.getByText('61 of 70 HR', { exact: true })).toBeVisible();
  await expect(detail.getByRole('button', { name: /^Hide / })).toHaveCount(0);
  await detail.getByRole('button', { name: 'Edit stickers' }).click();
+ await expect(detail.locator('.surface > .card')).toHaveAttribute('data-interactive', 'false');
  await detail.getByRole('button', { name: 'Hide 60 home runs' }).click();
  // Hiding 60 HR lets the next rarest family, 145 RBI, onto the face.
  await expect.poll(faceFamilies).toEqual(['grade:Cgrade', 'mvp:TeamMVP', 'eye:.400OBP', 'production:145RBI']);
@@ -76,6 +84,54 @@ test('a saved season fills the collection and its sticker album, with stickers t
  await expect(page.getByRole('list', { name: 'Collected cards' }).getByRole('button')).toHaveCount(1);
  await page.getByRole('button', { name: 'Show all cards' }).click();
  await expect(page.getByRole('list', { name: 'Collected cards' }).getByRole('button')).toHaveCount(2);
+});
+
+test('player stacks hide backing cards for single seasons and preserve multi-season selection', async ({ page, request }) => {
+ await page.setViewportSize({ width: 1512, height: 828 });
+ const manifest = await currentManifest(request);
+ const byPlayer = new Map<string, typeof manifest.candidates>();
+ for (const candidate of manifest.candidates) {
+  if (!candidate.eligibleSlots.includes('LF')) continue;
+  const seasons = byPlayer.get(candidate.playerId) ?? [];
+  if (!seasons.some(item => item.seasonId.split(':')[1] === candidate.seasonId.split(':')[1])) seasons.push(candidate);
+  byPlayer.set(candidate.playerId, seasons);
+ }
+ const candidates = [...byPlayer.values()].find(seasons => seasons.length >= 3)!.slice(0, 3);
+ const singleton = [...byPlayer.values()].find(seasons => seasons[0].playerId !== candidates[0].playerId)![0];
+ const entries: LibraryEntry[] = [...candidates, singleton].map((candidate, index) => ({
+  key: `stack-example-${index}`, savedAt: new Date(index * 1000).toISOString(), token: 'not-a-replay',
+  schemaVersion: 5, modelVersion: 'contact-v1', dataVersion: manifest.dataVersion,
+  record: { wins: 120, losses: 42 }, runs: { scored: 900, allowed: 500 },
+  batting: [], pitching: [], stadium: null,
+  roster: [{ seasonId: candidate.seasonId, label: `Example player ${candidate.seasonId.split(':')[1]}`, slot: 'LF' }]
+ }));
+ await page.addInitScript(({ key, value }) => {
+  if (!sessionStorage.getItem('stack-seeded')) {
+   sessionStorage.setItem('stack-seeded', '1');
+   localStorage.setItem(key, value);
+  }
+ }, { key: LEGACY_KEYS.library, value: JSON.stringify(entries) });
+ await page.goto('/collection');
+ const players = page.getByRole('list', { name: 'Collected players' });
+ await expect(players.getByRole('button')).toHaveCount(2);
+ await expect(players.locator('button.stack-tile')).toHaveCount(1);
+ expect(await players.locator('button:not(.stack-tile) .art').evaluate(element => getComputedStyle(element, '::before').content)).toBe('none');
+ expect(await players.locator('button.stack-tile .art').evaluate(element => getComputedStyle(element, '::before').content)).not.toBe('none');
+ await players.locator('button:not(.stack-tile)').click();
+ await expect(page.locator('.stack-panel')).toBeVisible();
+ await expect(page.getByRole('region', { name: 'Owned seasons' })).toHaveCount(0);
+ await players.locator('button.stack-tile').click();
+ const rail = page.getByRole('region', { name: 'Owned seasons' });
+ await expect(rail.locator('.season-card')).toHaveCount(3);
+ const selectedYear = candidates[0].seasonId.split(':')[1];
+ await rail.getByRole('button', { name: `Open Example player ${selectedYear}`, exact: true }).click();
+ const detail = page.getByRole('region', { name: `Example player ${selectedYear}`, exact: true });
+ await expect(detail.getByRole('heading', { level: 2 })).toBeFocused();
+ await expect(detail.locator('.surface .card[data-face="front"]')).toHaveAttribute('data-identity', new RegExp(`\\|${selectedYear}\\|`));
+ await detail.getByRole('button', { name: 'Turn over', exact: true }).click();
+ await expect(detail.locator('.back[aria-hidden="false"]')).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(rail.locator('.season-card[aria-pressed="true"]')).toHaveAccessibleName(`Open Example player ${selectedYear}`);
 });
 
 test('player stacks keep exact seasons and remember a filter-safe cover on mobile', async ({ page, request }) => {

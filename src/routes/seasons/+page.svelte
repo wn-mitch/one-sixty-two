@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import ScreenLoading from '#lib/components/ScreenLoading.svelte';
 	import { goto } from '$app/navigation';
 	import SeasonLibrary from '#lib/components/SeasonLibrary.svelte';
 	import DraftRunHistory from '#lib/components/DraftRunHistory.svelte';
@@ -8,12 +9,13 @@
 	import { parseSeriesHash } from '#lib/game/replay-link.ts';
 	import type { SeriesTeamId } from '#lib/sim/series-types.ts';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { loadDraftProfiles, loadManifest } from '#lib/game/data.ts';
+	import { loadChunk, loadManifest } from '#lib/game/data.ts';
 	import { deleteSeason, loadLibrary, renameSeason, STORAGE_NOTICE, type LibraryView } from '#lib/game/library.ts';
 	import { deviceDb } from '#lib/storage/db.ts';
 	import { copyShareLink, decodeReplay, storeReplay } from '#lib/game/share.ts';
 	import { loadSeriesHistory, type SeriesRecord } from '#lib/game/series-history.ts';
 	import { draftModeEnabled } from '#lib/app/features.ts';
+	import { appSettings } from '#lib/game/settings.svelte.ts';
 	import type { Manifest, Profile } from '#lib/game/types.ts';
 
 	let manifest = $state.raw<Manifest | null>(null);
@@ -21,6 +23,7 @@
 	let history = $state.raw<SeriesRecord[]>([]);
 	const profiles = new SvelteMap<string, readonly Profile[]>();
 	let loading = $state(true);
+	let ready = $state(false);
 	let error = $state('');
 	let status = $state('');
 	let replay = $state(false);
@@ -109,16 +112,28 @@
 			if (library.notice ?? device.notice) status = (library.notice ?? device.notice)!;
 			history = await loadSeriesHistory(device.db);
 		} catch { status = STORAGE_NOTICE; }
-		void loadCards();
+		await loadCards();
 	}
 
-	/** Loads each playable club's season profiles, one club at a time, so tiles fill in with cards. */
+	/** Display saved roster identities independently of whether their draft can still replay. */
 	async function loadCards(): Promise<void> {
-		if (!manifest) return;
+		const current = manifest;
+		if (!current) return;
+		const candidates = new Map(current.candidates.map(candidate => [candidate.seasonId, candidate]));
 		for (const entry of entries) {
-			if (entry.status !== 'playable' || profiles.has(entry.key)) continue;
-			try { profiles.set(entry.key, await loadDraftProfiles(manifest, decodeReplay(entry.token, manifest))); }
-			catch { /* the tile keeps its slot placeholders */ }
+			if (profiles.has(entry.key)) continue;
+			const wanted = new Set(entry.roster.map(pick => pick.seasonId));
+			const chunks = new Map<string, { franchiseId: string; decade: number }>();
+			for (const seasonId of wanted) {
+				const candidate = candidates.get(seasonId);
+				if (candidate) chunks.set(`${candidate.franchiseId}-${candidate.decade}`, candidate);
+			}
+			const loaded: Profile[] = [];
+			for (const roll of chunks.values()) {
+				try { loaded.push(...(await loadChunk(current, roll)).filter(profile => wanted.has(profile.seasonId))); }
+				catch { status = 'Some card artwork could not load. Saved records are unchanged.'; }
+			}
+			profiles.set(entry.key, loaded);
 		}
 	}
 
@@ -164,7 +179,7 @@
 				if (live) await restoreChallenge();
 			})
 			.catch(caught => { error = caught instanceof Error ? caught.message : 'The game data could not be loaded.'; })
-			.finally(() => { loading = false; if (live && replay) void focusChallenge(); });
+			.finally(() => { loading = false; ready = true; if (live && replay) void focusChallenge(); });
 		return () => {
 			live = false;
 			removeEventListener('hashchange', onHash);
@@ -177,11 +192,11 @@
 	<title>{replay ? 'Head-to-head' : 'My teams'} | 162-0</title>
 	<meta name="description" content="Your completed 162-0 teams, saved on this device. Pick two for a best-of-five, or challenge a replay link." />
 </svelte:head>
+<ScreenLoading active={loading} label="Loading your seasons…" />
 
-<main class="page">
+<main class="page" class:ready style:--content-fade={appSettings.effectiveEnabled ? '280ms' : '0ms'}>
 	<header class="intro">
 		<h1>My teams</h1>
-		{#if !replay}<p class="muted">Every season you complete is saved here automatically, on this device. Pick two for a head-to-head series.</p>{/if}
 	</header>
 	{#if loading}
 		<p class="muted" role="status">Loading your seasons…</p>
@@ -222,12 +237,12 @@
 </main>
 
 <style>
-	.page { display: grid; gap: var(--space-4); width: min(100%, 84rem); padding-block: var(--space-8); }
+	.page { display: grid; gap: var(--space-4); width: min(100%, 84rem); padding-block: var(--space-8); opacity: 0; transition: opacity var(--content-fade) ease-out; }
+	.page.ready { opacity: 1; }
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
 	.replay-heading { display: grid; justify-items: start; gap: var(--space-3); }
 	.replay-heading h2, .replay-heading p { margin: 0; }
 	.intro { display: grid; gap: var(--space-2); }
-	.intro p { margin: 0; max-width: 60ch; }
 	.opponents h3 { margin: 0 0 var(--space-2); font-size: var(--text-base); }
 	.opponents ul { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 </style>

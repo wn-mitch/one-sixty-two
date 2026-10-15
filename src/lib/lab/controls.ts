@@ -13,8 +13,8 @@ import { STOCKS, type Stock } from '#lib/cards/surface/surfaces.ts';
  * is named by a `Target` so any of them can be staggered across several cards side by side.
  */
 
-/** What the card prints: a fully foiled sheet, a foil frame round bare stock, or a real era front. */
-export type Print = 'sheet' | 'window' | 'front';
+/** What the card prints: a fully foiled sheet, an options frame round bare stock, or a real era front. */
+export type Print = 'sheet' | 'options' | 'front';
 /** What stands proud of a foil sheet: nothing, a rim inside its edge, or that rim and a star in the middle. */
 export type Relief = 'flat' | 'rim' | 'star';
 export type ModuleKind = 'film' | 'finish' | 'plate';
@@ -56,7 +56,7 @@ export const TIERS: readonly { value: Finish; label: string }[] = [
 ];
 export const PRINTS: readonly { value: Print; label: string }[] = [
 	{ value: 'sheet', label: 'Foil sheet' },
-	{ value: 'window', label: 'Foil frame' },
+	{ value: 'options', label: 'Options' },
 	{ value: 'front', label: 'Era front' }
 ];
 export const RELIEFS: readonly { value: Relief; label: string }[] = [

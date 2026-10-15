@@ -20,6 +20,12 @@ describe('semantic foil lab links', () => {
 		}
 	});
 
+	it('rejects links carrying an unsupported print instead of changing their meaning', () => {
+		for (const print of ['window', 'unknown']) {
+			expect(readLink({ ...STATE.setup, print, v: 1, width: DEFAULT_WIDTH })).toBeNull();
+		}
+	});
+
 	it('rejects an explicitly incompatible link version', () => {
 		const encoded = encodeLink(STATE);
 		const decoded = JSON.parse(atob(encoded.replaceAll('-', '+').replaceAll('_', '/'))) as Record<string, unknown>;

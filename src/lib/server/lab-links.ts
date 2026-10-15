@@ -1,3 +1,4 @@
+import { PRINTS } from '../lab/controls.ts';
 import type { ReplayBucket } from './replays.ts';
 
 /**
@@ -56,6 +57,7 @@ export function canonicalLabState(value: unknown): Record<string, unknown> {
 		const entry = value[key];
 		if (entry === undefined) continue;
 		if (typeof entry !== 'string' || !NAME.test(entry)) throw new LabLinkInvalidError();
+		if (key === 'print' && !PRINTS.some(option => option.value === entry)) throw new LabLinkInvalidError();
 		state[key] = entry;
 	}
 	if (value.gradient !== undefined) {

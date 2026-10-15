@@ -7,13 +7,14 @@ import { defineFilm } from './film.ts';
  */
 export default defineFilm({
 	name: 'apollonian',
-	ground: 0.48,
+	scale: 0.252202790519878,
+	ground: 0.798738532110092,
 	params: {
 		rotation: { value: 0, min: -3.14159, max: 3.14159, step: 0.01, note: 'Turns the complete circle packing, in radians.' },
-		rim: { value: 0.045, min: 0.005, max: 0.16, step: 0.001, note: 'Reflective rim width as a share of each circle radius.' },
+		rim: { value: 0.005, min: 0.005, max: 0.16, step: 0.001, note: 'Reflective rim width as a share of each circle radius.' },
 		detail: { value: 14, min: 4, max: 20, step: 1, note: 'Maximum inversion depth; higher reveals smaller tangent circles.' },
-		zoom: { value: 1, min: 0.3, max: 40, step: 0.05, note: 'Magnification of the gasket; zoom in to fill the card with a section of the circle packing.' },
-		focusX: { value: 0, min: -1, max: 1, step: 0.01, note: 'Horizontal focus in enclosing-circle radii: -1 is the left rim, 0 the centre, 1 the right rim.' },
+		zoom: { value: 5.94825831422018, min: 0.3, max: 40, step: 0.05, note: 'Magnification of the gasket; zoom in to fill the card with a section of the circle packing.' },
+		focusX: { value: -0.507262996941896, min: -1, max: 1, step: 0.01, note: 'Horizontal focus in enclosing-circle radii: -1 is the left rim, 0 the centre, 1 the right rim.' },
 		focusY: { value: 0, min: -1, max: 1, step: 0.01, note: 'Vertical focus in enclosing-circle radii: -1 is the top rim, 0 the centre, 1 the bottom rim.' }
 	},
 	helpers: `

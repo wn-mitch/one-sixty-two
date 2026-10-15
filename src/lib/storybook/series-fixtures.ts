@@ -63,7 +63,7 @@ async function buildSeries(): Promise<ExampleSeries> {
  return {
   result, manifest, profiles, drafts,
   library: [...library, memento],
-  libraryProfiles: new Map([[keys['team-a'], profilesA], [keys['team-b'], profilesB]]),
+  libraryProfiles: new Map([[keys['team-a'], profilesA], [keys['team-b'], profilesB], [memento.key, profilesB]]),
   history: [record]
  };
 }

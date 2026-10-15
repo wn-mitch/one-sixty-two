@@ -11,6 +11,7 @@ import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 import { isHitter } from '../lib/components/candidate-ranking.ts';
 import type { CompactPixelClip } from './compact-test-harness.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
+import type { buildSurfaceMap } from '../lib/cards/surface/surface-map.ts';
 
 const ERAS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'] as const;
 const WIDTHS = [240, 320, 330, 410] as const;
@@ -119,6 +120,7 @@ import CardFlip from ${JSON.stringify(resolve('src/lib/cards/CardFlip.svelte'))}
 import { createCardViewModel } from ${JSON.stringify(modelPath)};
 import { contrast, mix } from ${JSON.stringify(tokensPath)};
 import { compactNameClips as readCompactNameClips, inspectCompact as inspectCompactModels, previewCompact as renderCompact, disposeCompact } from ${JSON.stringify(resolve('src/routes/compact-test-harness.ts'))};
+export { buildSurfaceMap } from ${JSON.stringify(resolve('src/lib/cards/surface/surface-map.ts'))};
 
 let models = [];
 
@@ -358,6 +360,53 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
 	if (harnessDirectory) await rm(harnessDirectory, { recursive: true, force: true });
+});
+
+test('foil lettering follows percentage-width text, including intentional wrapping', async ({ page }) => {
+	await installHarness(page);
+	const measurements = await page.evaluate(async () => {
+		// The test bundle exposes the real surface-map painter without requiring WebGL.
+		const harness = window as typeof window & { CardLayoutHarness: { buildSurfaceMap: typeof buildSurfaceMap } };
+		await document.fonts.load('bold 14px "Barlow Condensed"');
+		const root = document.createElement('div');
+		root.style.cssText = 'position:relative;width:96px;height:134px;container-type:inline-size;';
+		const group = document.createElement('div');
+		group.style.cssText = 'position:absolute;left:4cqw;top:4cqw;width:66cqw;';
+		const name = document.createElement('span');
+		name.dataset.surface = 'name';
+		name.style.cssText = 'display:block;width:100%;max-width:100%;overflow-wrap:anywhere;font:bold 14cqw/1 "Barlow Condensed";';
+		group.append(name);
+		root.append(group);
+		document.body.append(root);
+		try {
+			return ['EXAMPLE', 'EXAMPLE EXTENDED NAME'].map(text => {
+				name.textContent = text;
+				const origin = root.getBoundingClientRect();
+				const range = document.createRange();
+				range.selectNodeContents(name);
+				const bounds = range.getBoundingClientRect();
+				const surface = harness.CardLayoutHarness.buildSurfaceMap(root, 'emboss', '1990s', 2);
+				const metal = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+				for (let y = 0; y < surface.height; y++) for (let x = 0; x < surface.width; x++) {
+					if (surface.data[(y * surface.width + x) * 4 + 1] < 128) continue;
+					metal.left = Math.min(metal.left, x / 2);
+					metal.right = Math.max(metal.right, x / 2);
+					metal.top = Math.min(metal.top, y / 2);
+					metal.bottom = Math.max(metal.bottom, y / 2);
+				}
+				return { text, metal, textBox: { left: bounds.left - origin.left, top: bounds.top - origin.top, right: bounds.right - origin.left, bottom: bounds.bottom - origin.top, width: bounds.width }, lineHeight: parseFloat(getComputedStyle(name).lineHeight) };
+			});
+		} finally { root.remove(); }
+	});
+	for (const { text, metal, textBox } of measurements) {
+		expect(metal.left, text).toBeGreaterThanOrEqual(textBox.left - 1);
+		expect(metal.top, text).toBeGreaterThanOrEqual(textBox.top - 1);
+		expect(metal.right, text).toBeLessThanOrEqual(textBox.right + 1);
+		expect(metal.bottom, text).toBeLessThanOrEqual(textBox.bottom + 1);
+		expect(metal.right - metal.left, text).toBeGreaterThan(textBox.width * 0.7);
+	}
+	expect(measurements[0].metal.bottom - measurements[0].metal.top).toBeLessThan(measurements[0].lineHeight);
+	expect(measurements[1].metal.bottom - measurements[1].metal.top).toBeGreaterThan(measurements[1].lineHeight);
 });
 
 test('keeps every era composition within its live card geometry', async ({ page, request }) => {

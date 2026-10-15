@@ -1,5 +1,6 @@
 <script lang="ts">
  import { onMount } from 'svelte';
+ import ScreenLoading from '#lib/components/ScreenLoading.svelte';
  import { SvelteMap } from 'svelte/reactivity';
  import DraftEntry from '#lib/components/draft-mode/DraftEntry.svelte';
  import DraftTable from '#lib/components/draft-mode/DraftTable.svelte';
@@ -76,6 +77,7 @@
  }
 </script>
 
+<ScreenLoading active={session.screen === 'loading'} label="Loading the draft…" />
 
 
 <main class="page" class:wide={session.screen === 'drafting'}>

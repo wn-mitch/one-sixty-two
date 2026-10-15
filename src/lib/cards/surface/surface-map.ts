@@ -176,9 +176,13 @@ function copyStyle(source: Element, target: HTMLElement): void {
  */
 function glyphs(element: HTMLElement, style: CSSStyleDeclaration, ascent: number, descent: number): Glyph[] {
 	const host = element.ownerDocument.createElement('div');
-	host.style.cssText = 'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;contain:layout style;';
+	host.style.cssText = `position:fixed;left:-100000px;top:0;width:${element.offsetWidth}px;visibility:hidden;pointer-events:none;contain:layout style;`;
 	const copy = element.cloneNode(true) as HTMLElement;
 	copyStyle(element, copy);
+	// The copy is mounted outside the card, so percentage widths would resolve against
+	// the fixed host instead of the element's original containing block. Preserve the
+	// laid-out border-box width or wrapped names become one glyph per line in the foil map.
+	copy.style.width = `${element.offsetWidth}px`;
 	copy.style.cssText += OVERRIDES;
 	const sources = [element, ...element.querySelectorAll('*')];
 	const copies = [copy, ...copy.querySelectorAll<HTMLElement>('*')];

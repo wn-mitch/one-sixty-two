@@ -15,7 +15,7 @@
 	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
 	import type { NewCard, NewSticker } from '../collection/collection.ts';
 	import type { SeasonReward } from '../cosmetics/ledger.ts';
-	import TokenAmount from './TokenAmount.svelte';
+	import ResultsReward from './ResultsReward.svelte';
 	import ResultsCollection from './ResultsCollection.svelte';
 	import ResultsGrades from './ResultsGrades.svelte';
 	import SeasonClipping from './SeasonClipping.svelte';
@@ -50,6 +50,8 @@
 		newCards?: readonly NewCard[];
 		/** Tokens this season's save just granted; null or zero when nothing new was earned. */
 		reward?: SeasonReward | null;
+		/** Only an own season participates in first-season guidance and earned-token feedback. */
+		ownSeason?: boolean;
 	}
 
 	let {
@@ -68,9 +70,9 @@
 		challenge = null,
 		newStickers = [],
 		newCards = [],
-		reward = null
+		reward = null,
+		ownSeason = false
 	}: Props = $props();
-	const earned = $derived(reward ? reward.season + reward.bonus : 0);
 	const grade = $derived(seasonGrade(result.wins, result.losses));
 	// Head-to-head setup opens with this team already in place; only the opponent is left to choose.
 	const headToHeadHref = $derived(`/seasons${seriesHash({
@@ -247,15 +249,7 @@
 	</header>
 
 
-	{#if reward && earned > 0}
-		<section class="reward" aria-labelledby="reward-heading">
-			<div>
-				<h3 id="reward-heading">{reward.bonus ? 'First season complete!' : 'Season complete'}</h3>
-				<p><TokenAmount amount={earned} /> {reward.bonus ? `${reward.season} season token + ${reward.bonus} first-season bonus` : `${earned} season token`} · Your team is saved in <a href="/seasons">My teams</a> and its cards joined your <a href="/collection">Collection</a>.</p>
-			</div>
-			<a class="button" href="/shop">Choose a card finish</a>
-		</section>
-	{/if}
+	<ResultsReward {reward} {ownSeason} />
 
 	<div class="awards-share">
 		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
@@ -450,10 +444,6 @@
 	.run-difference { color: var(--muted); font-size: var(--text-sm); }
 	.run-difference.up { color: var(--success); }
 	.run-difference.down { color: var(--error); }
-	.reward { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: var(--surface); }
-	.reward h3 { margin: 0 0 var(--space-1); font-size: var(--text-lg); }
-	.reward p { margin: 0; color: var(--muted); }
-	.reward :global(.token-amount) { color: var(--accent); font-weight: 750; }
 	/* Two equal columns: the share pair at full size, then the smaller head-to-head / new-draft pair. */
 	.score-actions { display: grid; align-content: center; gap: var(--space-2); width: min(100%, 24rem); }
 	.share-shortcuts, .more-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }

@@ -9,6 +9,7 @@
  import { loadMedia } from '../media/client.ts';
  import { deviceDb } from '../storage/db.ts';
  import type { Manifest } from '../game/types.ts';
+ import { seasonGrade } from '../game/grade.ts';
 
  let { manifest }: { manifest: Manifest } = $props();
  let runs = $state.raw<SavedRun[]>([]);
@@ -89,6 +90,7 @@
     <li>
      {#snippet club()}
       <ClubCard title={entry.title} parkName="Draft Mode" recordLabel={entry.record ? `${entry.record.wins} W · ${entry.record.losses} L` : 'Record unavailable'}
+       grade={entry.record ? seasonGrade(entry.record.wins, entry.record.losses) : null}
        stats={entry.record ? [{ label: 'Runs for', value: String(entry.record.runsFor) }, { label: 'Runs against', value: String(entry.record.runsAgainst) }] : []}
        footer={entry.retired ? 'Results unavailable in this version' : 'Full season results'} roster={entry.roster} stars={stars.get(entry.saved.id) ?? []} retired={entry.retired} />
      {/snippet}

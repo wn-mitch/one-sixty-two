@@ -27,6 +27,47 @@ function completeDraft(manifest: Manifest, seed: number, stadium: number): Draft
  throw new Error('No complete draft within 50 seeds');
 }
 
+test('lineup help stays available without changing the batting order or relief roles', async ({ page, request }) => {
+	const manifest = await currentManifest(request);
+	const draft = completeDraft(manifest, 301, 3);
+	await page.goto('/');
+	await writeDeviceDraft(page, JSON.stringify({ ...draft, phase: 'lineup' }));
+	await page.goto('/classic');
+	await expect(page.getByRole('heading', { name: 'Set your lineup' })).toBeVisible();
+	const before = await deviceDraft<Draft>(page);
+	await expect(page.getByRole('tooltip')).toHaveCount(0);
+
+	const battingHelp = page.getByRole('button', { name: 'About Smart lineup', exact: true });
+	await battingHelp.focus();
+	await expect(page.getByRole('tooltip')).toContainText('three best hitters');
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('tooltip')).toHaveCount(0);
+	await expect(battingHelp).toBeFocused();
+	await battingHelp.press('Enter');
+	await expect(page.getByRole('tooltip')).toBeVisible();
+
+	const rolesHelp = page.getByRole('button', { name: 'About Smart roles', exact: true });
+	await rolesHelp.click();
+	await expect(page.getByRole('tooltip')).toContainText("closer's job");
+	expect(await page.getByRole('tooltip').evaluate(node => {
+		const rect = node.getBoundingClientRect();
+		return rect.left >= 0 && rect.right <= innerWidth;
+	})).toBe(true);
+	await page.getByRole('heading', { name: 'Relief', exact: true }).click();
+	await expect(page.getByRole('tooltip')).toHaveCount(0);
+
+	await page.setViewportSize({ width: 1512, height: 828 });
+	await battingHelp.hover();
+	await expect(page.getByRole('tooltip')).toBeVisible();
+	await page.getByRole('tooltip').hover();
+	await expect(page.getByRole('tooltip')).toBeVisible();
+	await page.getByRole('heading', { name: 'Batting order', exact: true }).hover();
+	await expect(page.getByRole('tooltip')).toHaveCount(0);
+	const after = await deviceDraft<Draft>(page);
+	expect(after.battingOrder).toEqual(before.battingOrder);
+	expect(after.reliefRoles).toEqual(before.reliefRoles);
+});
+
 /** Stores and publishes a complete challenger season, as Challenge a friend would. */
 async function publishChallenger(manifest: Manifest, origin: string) {
  // Browsers send Origin on these POSTs; Node's fetch does not, and the site rejects cross-site posts.

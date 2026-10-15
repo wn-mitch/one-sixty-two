@@ -5,8 +5,11 @@ import { LEGACY_KEYS } from '../lib/storage/legacy.ts';
 import { encodeReplay } from '../lib/game/share.ts';
 import { seriesHash } from '../lib/game/replay-link.ts';
 import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
-import { currentManifest, currentRankings, deviceDraftText, STORAGE_KEY } from './draft-test-fixtures.ts';
+import { currentManifest, currentMedia, currentRankings, deviceDraftText, STORAGE_KEY } from './draft-test-fixtures.ts';
 import { finishFor } from '../lib/cards/finish.ts';
+import type { Db } from '../lib/storage/sql.ts';
+import { selectPhoto } from '../lib/media/client.ts';
+import { isHitter } from '../lib/components/candidate-ranking.ts';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(300000);
@@ -46,6 +49,88 @@ async function gameSummaries(page: Page): Promise<string[]> {
  return page.locator('.games .game-head').allInnerTexts();
 }
 
+test('grade grouping toggles without changing selection and sorts within each grade', async ({ page, request }) => {
+ const manifest = await currentManifest(request);
+ const draft = completeDraft(manifest, 1, 0);
+ const library = [
+  { ...entry(manifest, draft, 'recent-a', 139, 'Recent A'), savedAt: new Date(4).toISOString() },
+  { ...entry(manifest, draft, 'strong-a', 144, 'Strong A'), savedAt: new Date(3).toISOString() },
+  { ...entry(manifest, draft, 's-club', 151, 'S club'), savedAt: new Date(2).toISOString(), dataVersion: '0'.repeat(64) },
+  { ...entry(manifest, draft, 'ungraded', 3, 'Partial club'), savedAt: new Date(1).toISOString(), record: { wins: 3, losses: 4 } }
+ ];
+ await page.addInitScript(({ key, value }) => { localStorage.setItem(key, value); },
+  { key: LEGACY_KEYS.library, value: JSON.stringify(library) });
+ await page.goto('/seasons');
+ const grouping = page.getByRole('button', { name: 'Group by grade', exact: true });
+ const flat = page.getByRole('list', { name: 'Saved clubs', exact: true });
+ await expect(grouping).toHaveAttribute('aria-pressed', 'false');
+ await expect(flat.locator('.title')).toHaveText(['S club', 'Strong A', 'Recent A', 'Partial club']);
+ await flat.getByRole('button').filter({ hasText: 'Recent A' }).click();
+ await grouping.click();
+ await expect(grouping).toHaveAttribute('aria-pressed', 'true');
+ expect(await page.locator('.grade-group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['S teams', 'A teams', 'Ungraded teams']);
+ const gradeA = page.getByRole('list', { name: 'A clubs', exact: true });
+ await expect(gradeA.locator('.title')).toHaveText(['Strong A', 'Recent A']);
+ await expect(gradeA.getByRole('button').filter({ hasText: 'Recent A' })).toHaveAttribute('aria-pressed', 'true');
+ await page.getByRole('button', { name: 'Most recent', exact: true }).click();
+ await expect(gradeA.locator('.title')).toHaveText(['Recent A', 'Strong A']);
+ await expect(page.getByRole('region', { name: 'S teams', exact: true })).toContainText('Retired');
+ await expect(page.getByRole('list', { name: 'Ungraded clubs', exact: true }).locator('.title')).toHaveText(['Partial club']);
+ await grouping.click();
+ await expect(flat.locator('.title')).toHaveText(['Recent A', 'Strong A', 'S club', 'Partial club']);
+ await expect(flat.getByRole('button').filter({ hasText: 'Recent A' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('retired teams display identifiable cards without restoring replay or head-to-head eligibility', async ({ page, request }) => {
+ const manifest = await currentManifest(request);
+ const draft = completeDraft(manifest, 1, 0);
+ const media = await currentMedia(request);
+ const portrait = draft.picks.slice(0, -1).flatMap(pick => {
+  const candidate = manifest.candidates.find(candidate => candidate.seasonId === pick.seasonId)!;
+  const photo = selectPhoto(media, candidate.playerId, Number(pick.seasonId.split(':')[1]), pick.franchiseId);
+  return isHitter(pick.slot) && photo ? [{ pick, photo }] : [];
+ })[0];
+ if (!portrait) throw new Error('The archived-team fixture needs a rostered hitter with an approved photo.');
+ const archived: LibraryEntry = {
+  ...entry(manifest, draft, 'archived-display', 93, 'Archived club'),
+  batting: [{
+   seasonId: portrait.pick.seasonId, slot: portrait.pick.slot, label: 'Saved star', war: 5,
+   PA: 600, AB: 550, H: 150, doubles: 20, triples: 3, HR: 15, BB: 40, HBP: 5, SF: 5, RBI: 60, SB: 10, grandSlams: 0, walkOffHomeRuns: 0
+  }],
+  token: 'obsolete-draft-replay',
+  dataVersion: '0'.repeat(64),
+  roster: draft.picks.map((pick, index) => index === draft.picks.length - 1
+   ? { seasonId: 'unavailable-season', slot: pick.slot, label: 'Unavailable historical card' }
+   : { seasonId: pick.seasonId, slot: pick.slot, label: `Saved player ${index + 1}` })
+ };
+ const current = entry(manifest, draft, await libraryKey(draft), 91, 'Current club');
+ await page.addInitScript(({ key, value }) => { localStorage.setItem(key, value); },
+  { key: LEGACY_KEYS.library, value: JSON.stringify([archived, current]) });
+ await page.goto('/seasons');
+ const tiles = page.getByRole('list', { name: 'Saved clubs' });
+ const retired = tiles.getByRole('button').filter({ hasText: 'Archived club' });
+ await expect(retired).toContainText('Retired');
+ const savedRows = () => page.evaluate(async () => {
+  // Browser test builds expose the initialized device database.
+  const device = window as unknown as { __deviceDb: Db };
+  return Promise.all([device.__deviceDb.all('SELECT * FROM seasons ORDER BY key'), device.__deviceDb.all('SELECT * FROM season_cards ORDER BY season_key, position')]);
+ });
+ const before = await savedRows();
+ await retired.click();
+ const detail = page.getByRole('region', { name: 'Archived club', exact: true });
+ await expect(detail.locator('.roster .card[data-identity]')).toHaveCount(draft.picks.length - 1);
+ await expect(detail.locator('.roster .placeholder')).toHaveText(draft.picks[draft.picks.length - 1].slot);
+ await expect(retired.locator('.collage img').first()).toHaveAttribute('src', portrait.photo.url);
+ await expect(retired.locator('.collage img').first()).toHaveJSProperty('complete', true);
+ await expect(detail.getByRole('link', { name: 'Full season results' })).toHaveCount(0);
+ await expect(detail.getByRole('button', { name: 'Copy challenge link' })).toHaveCount(0);
+ await page.getByRole('button', { name: 'Head-to-head', exact: true }).click();
+ await tiles.getByRole('button').filter({ hasText: 'Current club' }).click();
+ await expect(page.getByText('A retired club can’t play head-to-head.', { exact: true })).toBeVisible();
+ await expect(page.getByRole('link', { name: 'Play best-of-five' })).toHaveCount(0);
+ expect(await savedRows()).toEqual(before);
+});
+
 test('pairs gallery cards, preserves cancelled selections, shares identical games, and leaves the active draft untouched', async ({ page, browser, request, baseURL }) => {
  const manifest = await currentManifest(request);
  const aces = completeDraft(manifest, 1, 0);
@@ -71,7 +156,7 @@ test('pairs gallery cards, preserves cancelled selections, shares identical game
  }, { key: STORAGE_KEY, active: ACTIVE_SAVE, libraryKey: LEGACY_KEYS.library, value: JSON.stringify(library) });
 
  await page.goto('/seasons');
- const tiles = page.getByRole('list', { name: 'Saved clubs' }).getByRole('button');
+ const tiles = page.getByRole('list', { name: 'Saved clubs' }).locator('button[data-entry]');
  await expect(tiles).toHaveCount(3);
  await expect(tiles.locator('.title')).toHaveText(['Old timers', 'Bombers', 'Aces']);
  await expect(tiles.nth(0)).toContainText('Retired');
@@ -159,7 +244,6 @@ test('plays two pasted replay links from an empty gallery without collecting eit
  await page.getByLabel('Club name').first().fill('Visitors');
  await page.getByRole('button', { name: 'Use Team A replay' }).click();
  await expect(page.getByRole('heading', { level: 2, name: 'Visitors' })).toBeVisible();
- await expect(page.getByText('Replay ready', { exact: true })).toBeVisible();
  await expect(page.getByRole('region', { name: 'Visitors roster' }).getByRole('button', { name: /Inspect/ })).toHaveCount(16);
 
  await page.getByLabel('Team B replay link').fill(`/#replay=${replayB}`);
@@ -175,7 +259,6 @@ test('plays two pasted replay links from an empty gallery without collecting eit
  await expect(page).toHaveURL(/\/h2h#a=.+&an=Visitors&b=.+&bn=Hosts$/);
  await gameSummaries(page);
  await page.getByRole('button', { name: 'Play another series' }).click();
- await expect(page.getByText('Finish a season and your team appears here.')).toBeVisible();
  await expect(page.getByRole('list', { name: 'Saved clubs' }).getByRole('button')).toHaveCount(0);
  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Collection' }).click();
  await expect(page.getByRole('heading', { name: 'No cards yet' })).toBeVisible();
@@ -217,11 +300,14 @@ test('prefills one saved team, accepts a replay opponent, and restores the galle
  await page.goto('/seasons');
  const savedTile = page.getByRole('list', { name: 'Saved clubs' }).getByRole('button').filter({ hasText: 'Home club' });
  await savedTile.click();
+ await expect(page.getByRole('button', { name: 'Use a replay link' })).toHaveCount(0);
+ await page.getByRole('button', { name: 'Head-to-head', exact: true }).click();
  await page.getByRole('button', { name: 'Use a replay link' }).click();
  await expect(page.getByRole('heading', { level: 2, name: 'Home club' })).toBeVisible();
  await expect(page.getByRole('region', { name: 'Home club roster' }).getByRole('button', { name: /Inspect/ })).toHaveCount(16);
  await page.getByRole('button', { name: 'Back to My teams' }).click();
  await expect(savedTile).toHaveAttribute('aria-pressed', 'true');
+ await page.getByRole('button', { name: 'Head-to-head', exact: true }).click();
  await page.getByRole('button', { name: 'Use a replay link' }).click();
  await page.getByLabel('Team B replay link').fill(replay.url);
  await page.getByLabel('Club name').fill('Replay rival');
@@ -229,7 +315,7 @@ test('prefills one saved team, accepts a replay opponent, and restores the galle
  await expect(page).toHaveURL(/\/h2h#a=.+&an=Home\+club&b=.+&bn=Replay\+rival$/);
  await gameSummaries(page);
  await page.getByRole('button', { name: 'Play another series' }).click();
- await expect(page.getByRole('list', { name: 'Saved clubs' }).getByRole('button')).toHaveCount(1);
+ await expect(page.getByRole('list', { name: 'Saved clubs' }).locator('button[data-entry]')).toHaveCount(1);
  await expect(savedTile).toBeVisible();
 });
 

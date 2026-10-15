@@ -62,6 +62,8 @@ Settings contains Motion, Card review animation, Card speed, Season playback (th
 
 Card text fitting batches font writes and layout reads across unique labels, including SVG arcs. Resize and text changes use geometry keys; font loading and option changes force fresh measurement.
 
+Screen-to-screen loading uses eight random static card fronts, which deal into a spinning ring and scatter away when the destination is ready. Waits under 120ms do not show it; Motion off and reduced motion keep the cards still. The 24 committed WebP snapshots contain three cards from each era and require no card renderer while loading. Refresh them from a running app with `just loading-cards http://127.0.0.1:5173` (ImageMagick required).
+
 ## Shop and card factory
 
 `/shop` sells cosmetic finishes for tokens. Each new completed Classic season earns one token; the first season completed on a device also earns a one-time first-season bonus token, written in the same transaction as the season (`bonus:first-season` is granted only while the device has no completion receipt at all, so it cannot recur after deletes or revisits). A developer-only six-chapter Draft Mode run also earns one token. Completion receipts prevent repeated saves, replay viewing, or deleting history from paying again; H2H does not earn tokens. Results announce what the save just earned, with a Choose a card finish link.
@@ -74,21 +76,27 @@ Full live cards use the equipped finish through the shared renderer, including t
 
 ## Foil lab
 
-`/lab` is the shared renderer's workshop for sheets, frames and era fronts. Module names and named dial values travel in versioned links. Copy link stores an immutable setup under `lab/v1/<8-character base62 id>` in R2 and returns `/lab/s/<id>`; requests are capped at 8 KiB and share the upload rate limit. A complete hash link remains available if storage fails. The standalone toy's base64 JSON hash links open here too.
+`/lab` is the shared renderer's workshop for foil sheets, Options reference cards and era fronts. Options pairs a live material sample with the effective settings and slider values; inactive controls are omitted, and each staggered card shows its own values. Module names and named dial values travel in versioned links. Copy link stores an immutable setup under `lab/v1/<8-character base62 id>` in R2 and returns `/lab/s/<id>`; requests are capped at 8 KiB and share the upload rate limit. A complete hash link remains available if storage fails. The standalone toy's base64 JSON hash links open here too.
 
 Numeric dials use continuous sliders and exact-value fields. Arrow keys use the module's normal step; Shift+arrow uses one tenth of that step for continuous values. Count dials stay integral. Fine values survive saved links without display rounding. Stagger compares several values side by side without replacing the dial.
 
-Width controls the rendered preview in CSS pixels, independently of pattern scale and MP4 dimensions. It travels with shared setups and applies consistently to sheets, frames, era fronts, and stagger comparisons. The preview fits the available viewport with tilt clearance; desktop keeps it beside scrolling controls, while narrow screens scroll the page normally.
+Width controls the rendered preview in CSS pixels, independently of pattern scale and MP4 dimensions. It travels with shared setups and applies consistently to sheets, Options, era fronts, and stagger comparisons. The preview fits the available viewport with tilt clearance; desktop keeps it beside scrolling controls, while narrow screens scroll the page normally.
 
 HGH sequence lettering has a minimum dot pitch of 5.56 CSS pixels in the shared live renderer. Narrow cards show fewer residues instead of losing the letters to the small-feature fade. Higher-density displays sharpen the same lettering size; larger cards and coarser material settings retain their natural scale.
 
 Colourways include sunset, mint, rose gold, vaporwave and mono silver. Custom gradients have two to five colour stops; their uniforms update without recompiling the shader and their values travel with the setup. Paisley film and plate tessellate across the sheet; the wallpaper plate embosses a repeating damask.
 
-Penrose, Pinwheel, Poincaré disk, Apollonian gasket and Gosper curve films are available in the lab and under Storybook's Workshop/Films. Penrose uses thin and thick quasiperiodic rhombi; Pinwheel uses the five-triangle substitution; Poincaré draws a hyperbolic polygon disk; Apollonian packs tangent circles; Gosper engraves complete order-three flowsnake curves.
+Penrose, Pinwheel, Poincaré disk, Apollonian gasket and Gosper curve films are available in the lab and under Storybook's Workshop/Films. Penrose uses thin and thick quasiperiodic rhombi; Pinwheel uses the five-triangle substitution; Poincaré draws a hyperbolic polygon disk; Apollonian packs tangent circles; Gosper samples one connected finite flowsnake without repeating it.
 
 Poincaré and Apollonian expose Zoom and Focus X/Y dials to crop into any part of the pattern; focus coordinates run from -1 to 1 in enclosing-circle radii, with positive Y toward the bottom. Scale controls pattern size independently of preview width. Double-helix's Slide with tilt dial walks each column vertically at a different rate: 0 fixes the geometry, 1 gives the full effect, and higher values amplify it. The walk follows the card's tilt rather than elapsed time, so holding a pose holds the pattern and returning restores it.
 
-The 2000s holo uses double-helix ladders with eleven rungs per half turn and vividness 2.6. Use the 2000s look restores its shipped film settings, including fixed geometry with Slide with tilt at 0; HGH sequence and skeletal-formula films remain separate lab options.
+Gosper exposes Zoom and Focus X/Y to sample different parts of the same curve. Focus offsets use whole-curve endpoint spans. Detail selects subdivision orders 1–8; the default order 6 is sampled close up. Zooming out or moving beyond the curve reveals its finite boundary rather than another tile. Density and Scale change the sampled area independently of preview width; Line width controls the ribbon thickness.
+
+Spiral Moiré defaults to rainbow colour with locked spiral centres, opposing winding and different radial bends. Its scale is 0.2 with twelve interleaved arms; tilt rotates the second spiral without shifting its centre.
+
+Apollonian defaults to a close-up left-offset sample with a thin reflective rim and a brighter ground. Zoom and Focus still expose the full gasket and its outer boundary.
+
+The 2000s holo uses double-helix ladders with eleven rungs per half turn and vividness 2.6. Use the 2000s look restores its shipped film settings, including Slide with tilt at 0.2; HGH sequence and skeletal-formula films remain separate lab options.
 
 Export MP4 renders 360 offline frames at 1080×1080 and 60 fps: one six-second figure-eight tilt with phase-locked film motion. The exporter checks that the first and last rendered pixels match, then muxes H.264 with WebCodecs. Encoding requires a browser with H.264 WebCodecs support; cancellation and encoding failures leave the setup intact.
 
@@ -263,4 +271,4 @@ The game publishes runs allowed per nine innings (RA9) and outs-based baseball i
 
 Source: [SABR's Lahman database](https://sabr.org/lahman-database/). Transformed data is distributed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) with generated full attribution, pinned revision, changes notice, and a downloadable transformed-data archive. This data licence does not automatically determine an application-code licence.
 
-`/how-to-play` walks through a draft in six illustrated steps. The `/about` route describes rules, eligibility, workload, and statistical assumptions. `/credits` displays the generated source notice, the data download and the image credits.
+`/how-to-play` walks through a draft in six illustrated steps. `/about` covers draft eligibility, season rules, and a short explanation of how players, ballparks, defense, and pitching affect the simulation. `/credits` displays the generated source notice, the data download and the image credits.

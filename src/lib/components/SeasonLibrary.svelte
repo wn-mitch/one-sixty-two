@@ -6,6 +6,8 @@
 	import { libraryLeaders, stars } from '../game/library-stats.ts';
 	import { seriesTally, type SeriesRecord } from '../game/series-history.ts';
 	import type { Manifest, Profile } from '../game/types.ts';
+	import { SEASON_GRADES, seasonGrade, type SeasonGrade } from '../game/grade.ts';
+	import GradeBadge from './GradeBadge.svelte';
 	import { loadMedia } from '../media/client.ts';
 	import type { MediaManifest } from '../media/types.ts';
 	import LibraryCompare from './library/LibraryCompare.svelte';
@@ -16,7 +18,7 @@
 	interface Props {
 		entries: readonly LibraryView[];
 		history: readonly SeriesRecord[];
-		/** Profiles by entry key, for playable clubs whose seasons have loaded. */
+		/** Available current card profiles by saved entry key, including retired clubs. */
 		profiles: ReadonlyMap<string, readonly Profile[]>;
 		manifest: Manifest | null;
 		status: string;
@@ -32,6 +34,7 @@
 	$effect(() => { if (status) toasts.show(status, { id: 'library', tone: /unavailable|could not|blocked|full/i.test(status) ? 'error' : 'info' }); });
 
 	let sort = $state<'wins' | 'date'>('wins');
+	let groupByGrade = $state(false);
 	let headToHead = $state(untrack(() => new Set(initialSelection).size >= 2));
 	let chosen = $state<string[]>(untrack(() => [...new Set(initialSelection)].slice(0, 2)));
 	let panel = $state<HTMLElement>();
@@ -47,8 +50,21 @@
 	const sorted = $derived([...entries].sort((a, b) => sort === 'wins'
 		? b.record.wins - a.record.wins || b.savedAt.localeCompare(a.savedAt)
 		: b.savedAt.localeCompare(a.savedAt)));
+	const gradeGroups = $derived.by(() => {
+		const groups = new Map<SeasonGrade | null, LibraryView[]>();
+		for (const entry of sorted) {
+			const grade = seasonGrade(entry.record.wins, entry.record.losses);
+			const clubs = groups.get(grade);
+			if (clubs) clubs.push(entry);
+			else groups.set(grade, [entry]);
+		}
+		return [...SEASON_GRADES, null].flatMap(grade => {
+			const clubs = groups.get(grade);
+			return clubs ? [{ grade, clubs }] : [];
+		});
+	});
 	const selected = $derived(chosen.map(key => entries.find(entry => entry.key === key)).filter((entry): entry is LibraryView => !!entry));
-	const leaders = $derived(libraryLeaders(entries));
+	const leaders = $derived(libraryLeaders(entries, 6));
 	const selectionHint = $derived(headToHead
 		? selected.length === 0
 			? 'Select two saved teams.'
@@ -99,6 +115,16 @@
 	}
 </script>
 
+{#snippet tiles(clubs: readonly LibraryView[], label: string)}
+	<ol class="tiles" aria-label={label}>
+		{#each clubs as entry (entry.key)}
+			<li>
+				<LibraryTile {entry} stars={fan(entry)} tally={seriesTally(history, entry.key)} selected={chosen.includes(entry.key)} onSelect={event => void select(entry.key, event)} />
+			</li>
+		{/each}
+	</ol>
+{/snippet}
+
 <div class="library">
 	<div class="toolbar">
 		{#if sorted.length}
@@ -106,9 +132,10 @@
 				<button type="button" aria-pressed={sort === 'wins'} onclick={() => sort = 'wins'}>Most wins</button>
 				<button type="button" aria-pressed={sort === 'date'} onclick={() => sort = 'date'}>Most recent</button>
 			</div>
+			<button type="button" class="group-toggle" aria-pressed={groupByGrade} onclick={() => groupByGrade = !groupByGrade}>Group by grade</button>
 			<button type="button" class="head-to-head-toggle" aria-pressed={headToHead} onclick={toggleHeadToHead}>Head-to-head</button>
 		{/if}
-		{#if onReplay}
+		{#if onReplay && (headToHead || !sorted.length)}
 			<button type="button" class="replay" onclick={() => onReplay?.(selected)}>Use a replay link</button>
 		{/if}
 		{#if sorted.length}<p class="hint" aria-live="polite">{selectionHint}</p>{/if}
@@ -123,14 +150,22 @@
 		</div>
 	{:else}
 		<div class="columns">
-			<ol class="tiles" aria-label="Saved clubs">
-				{#each sorted as entry (entry.key)}
-					<li>
-						<LibraryTile {entry} stars={fan(entry)} tally={seriesTally(history, entry.key)} selected={chosen.includes(entry.key)} onSelect={event => void select(entry.key, event)} />
-					</li>
-				{/each}
-			</ol>
-			<div class="panel" bind:this={panel}>
+			<div class="gallery">
+				{#if groupByGrade}
+					{#each gradeGroups as group (group.grade)}
+						<section class="grade-group" aria-label={`${group.grade ?? 'Ungraded'} teams`}>
+							<h2>
+								{#if group.grade}<GradeBadge grade={group.grade} />{:else}Ungraded{/if}
+								<span class="count" aria-label={`${group.clubs.length} teams`}>{group.clubs.length}</span>
+							</h2>
+							{@render tiles(group.clubs, `${group.grade ?? 'Ungraded'} clubs`)}
+						</section>
+					{/each}
+				{:else}
+					{@render tiles(sorted, 'Saved clubs')}
+				{/if}
+			</div>
+			<div class="panel" class:leader-panel={selected.length === 0} bind:this={panel}>
 				{#if selected.length === 2}
 					<LibraryCompare a={selected[0]} b={selected[1]} {cards} {history} onClose={() => chosen = []} />
 				{:else if selected.length === 1}
@@ -146,7 +181,14 @@
 						onClose={() => chosen = []}
 					/>
 				{:else}
-					<LibraryLeaders groups={leaders} onPick={pick} />
+					<LibraryLeaders groups={leaders} {cards} onPick={pick}>
+						{#snippet teamCard(key: string)}
+							{@const entry = entries.find(item => item.key === key)}
+							{#if entry}
+								<LibraryTile {entry} stars={fan(entry)} tally={seriesTally(history, entry.key)} selected={false} onSelect={() => pick(key)} />
+							{/if}
+						{/snippet}
+					</LibraryLeaders>
 				{/if}
 			</div>
 		</div>
@@ -157,17 +199,21 @@
 	.library { display: grid; gap: var(--space-3); min-width: 0; }
 	.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-width: 0; }
 	.toggle { display: inline-flex; max-width: 100%; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
-	.toggle button, .head-to-head-toggle, .replay { min-height: 2.75rem; padding: .25rem .9rem; border-radius: 999px; font-size: var(--text-sm); }
+	.toggle button, .group-toggle, .head-to-head-toggle, .replay { min-height: 2.75rem; padding: .25rem .9rem; border-radius: 999px; font-size: var(--text-sm); }
 	.toggle button { border: 0; background: transparent; color: var(--muted); }
 	.toggle button[aria-pressed='true'] { background: var(--surface-raised); color: var(--text); box-shadow: 0 1px 0 color-mix(in oklch, var(--text) 12%, transparent); }
-	.head-to-head-toggle { border: 1px solid var(--border); background: transparent; color: var(--muted); }
-	.head-to-head-toggle[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 10%, transparent); color: var(--accent); }
+	.group-toggle, .head-to-head-toggle { border: 1px solid var(--border); background: transparent; color: var(--muted); }
+	.group-toggle[aria-pressed='true'], .head-to-head-toggle[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 10%, transparent); color: var(--accent); }
 	.replay { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
 	.hint { flex: 1 1 15rem; margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	.empty { display: grid; justify-items: start; gap: var(--space-3); }
 	.empty h2 { margin: 0; }
 	.empty p { margin: 0; }
 	.columns { display: grid; gap: var(--space-6); align-items: start; min-width: 0; }
+	.gallery { display: grid; gap: var(--space-6); min-width: 0; }
+	.grade-group { display: grid; gap: var(--space-3); min-width: 0; }
+	.grade-group h2 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-xl); }
+	.count { color: var(--muted); font: 600 var(--text-sm) / 1 'Barlow', sans-serif; }
 	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: var(--space-3); min-width: 0; margin: 0; padding: 0; list-style: none; }
 	.panel { min-width: 0; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); scroll-margin-top: var(--space-4); }
 	@media (min-width: 64rem) {

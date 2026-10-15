@@ -12,9 +12,16 @@
 	let panel = $state<HTMLElement>();
 	const uid = $props.id();
 	const panelId = `${uid}-menu`;
+	let initialNavigation = true;
 
 	onMount(() => { developerDraft = draftModeEnabled(); });
-	afterNavigate(() => { open = false; });
+	afterNavigate(() => {
+		if (initialNavigation) {
+			initialNavigation = false;
+			return;
+		}
+		open = false;
+	});
 
 	async function toggle(): Promise<void> {
 		open = !open;

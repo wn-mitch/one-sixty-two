@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import ScreenLoading from '#lib/components/ScreenLoading.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import CollectionBinder from '#lib/components/collection/CollectionBinder.svelte';
 	import { createCardViewModel, type CardMediaStatus, type CardViewModel } from '#lib/cards/view-model.ts';
@@ -73,7 +74,7 @@
 			noteVisit(cards);
 			if (device.notice) status = device.notice;
 		} catch { status = STORAGE_NOTICE; }
-		void loadProfiles();
+		await loadProfiles();
 	}
 
 	/** Loads card profiles one franchise-decade chunk at a time; a card whose chunk fails keeps its text tile. */
@@ -107,12 +108,15 @@
 
 	onMount(() => {
 		let live = true;
-		loadMedia().then(value => { if (live) { media = value; mediaStatus = 'ready'; } }).catch(() => { if (live) mediaStatus = 'unavailable'; });
+		const mediaReady = loadMedia().then(value => { if (live) { media = value; mediaStatus = 'ready'; } }).catch(() => { if (live) mediaStatus = 'unavailable'; });
 		loadManifest()
-			.then(value => {
+			.then(async value => {
 				manifest = value;
-				loadRankings(value.dataVersion).then(loaded => { if (live) rankings = loaded; }).catch(() => {});
-				return refresh();
+				await Promise.all([
+					refresh(),
+					mediaReady,
+					loadRankings(value.dataVersion).then(loaded => { if (live) rankings = loaded; }).catch(() => {})
+				]);
 			})
 			.catch(caught => { error = caught instanceof Error ? caught.message : 'The game data could not be loaded.'; })
 			.finally(() => { loading = false; });
@@ -124,6 +128,7 @@
 	<title>Collection | 162-0</title>
 	<meta name="description" content="Every player-season you have drafted in 162-0, with the stickers they earned on your teams." />
 </svelte:head>
+<ScreenLoading active={loading} label="Loading your collection…" />
 
 <main class="page">
 	<header class="intro"><h1>Collection</h1></header>

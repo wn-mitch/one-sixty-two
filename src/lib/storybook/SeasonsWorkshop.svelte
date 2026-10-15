@@ -63,7 +63,6 @@
 <StoryFrame onReset={reset} wide fixtureNotice="Two synthetic clubs from a real best-of-five run, plus a retired memento. Nothing is saved, copied, or uploaded.">
 	<div class="page">
 		<h1>My teams</h1>
-		<p class="lede muted">Every completed season stays on this device. Inspect a deck, or choose two for a head-to-head series.</p>
 		{#if loading}
 			<p class="muted" role="status">Loading your seasons…</p>
 		{:else if error}
@@ -79,6 +78,5 @@
 <style>
 	.page { display: grid; gap: var(--space-4); }
 	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
-	.lede { margin: 0; max-width: 52ch; }
 	.error { margin: 0; color: var(--error); }
 </style>

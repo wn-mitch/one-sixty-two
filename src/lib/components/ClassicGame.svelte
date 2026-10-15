@@ -22,6 +22,7 @@
  import { shopState } from '#lib/cosmetics/store.svelte.ts';
  import GuideTip from '#lib/components/GuideTip.svelte';
  import type { WarRankings } from '#lib/rankings/types.ts';
+ import ScreenLoading from '#lib/components/ScreenLoading.svelte';
 
  type GameSession = import('#lib/game/session.svelte.ts').Session;
 
@@ -220,8 +221,19 @@
    riseIn(document.querySelectorAll<HTMLElement>('.scoreboard > :not(.record-block), .results > :not(.scoreboard)'), 160);
   });
  });
+ const waitingForStage = $derived(
+  session?.phase === 'stadium' ? !StadiumDeck :
+  ['ready', 'revealing', 'choosing'].includes(session?.phase ?? '') ? !DraftBoard :
+  session?.phase === 'lineup' ? !Lineup :
+  session?.phase === 'simulating' ? !Progress :
+  session?.phase === 'results' ? !Results : false
+ );
 </script>
 
+<ScreenLoading
+ active={!gameLoadError && !phaseLoadError && !session?.error && (waitingForStage || (page.url.pathname !== '/' && (!session || (session.loading && session.phase === 'start'))))}
+ label="Loading your team…"
+/>
 
 <main class:home-start={!session || session.phase === 'start'}>
  <ErrorDialog message={gameLoadError || phaseLoadError} onDismiss={() => { gameLoadError = ''; phaseLoadError = ''; }}>
@@ -265,8 +277,7 @@
     {:else if !phaseLoadError}<ProgressSkeleton />{/if}
    {:else if currentSession.phase === 'results' && currentSession.result}
     {#if Results}
-     {#if !currentSession.shared}<GuideTip step="results" text="Card fronts show each player's historical season; awards and totals are your simulated one. Your team is saved in My teams, and season tokens unlock card finishes in the Shop." />{/if}
-     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} />
+     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} ownSeason={!currentSession.shared} />
     {:else if !phaseLoadError}<ResultsSkeleton />{/if}
    {/if}
   {/if}

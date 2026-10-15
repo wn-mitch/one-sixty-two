@@ -58,7 +58,7 @@
 			{@const view = side.star ? cards.get(side.entry.key)?.get(side.star) : undefined}
 			{@const label = side.entry.roster.find(pick => pick.seasonId === side.star)?.label}
 			<figure>
-				<!-- Retired clubs never load cards, and playable ones fill in as their seasons load. -->
+				<!-- Historical roster identities can display even when the club cannot play. -->
 				{#if view}<span class="card" aria-hidden="true"><Card s={view} face="front" compact thumbnail interactive={false} onDetails={noDetails} /></span>
 				{:else}<span class="card empty-card">{side.entry.status === 'retired' ? 'Retired club · no card' : 'Loading card…'}</span>{/if}
 				<figcaption><span class="muted">Star</span> {label ?? '—'}</figcaption>

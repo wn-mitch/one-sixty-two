@@ -16,7 +16,7 @@ export default defineFilm({
 		strandWidth: { value: 0.052998375382263, min: 0.01, max: 0.3, step: 0.005, note: 'Half the thickness of each strand.' },
 		swell: { value: 0.0357702599388379, min: 0, max: 0.2, step: 0.005, note: 'How much a strand thickens where it faces the viewer.' },
 		rungs: { value: 11, min: 1, max: 20, step: 1, note: 'Base-pair rungs per half turn.' },
-		slideWithTilt: { value: 0, min: 0, max: 4, step: 0.05, note: 'Walk the helices vertically with tilt, each column at its own rate. 0 fixes the pattern; 1 gives the full effect.' }
+		slideWithTilt: { value: 0.2, min: 0, max: 4, step: 0.05, note: 'Walk the helices vertically with tilt, each column at its own rate. 0 fixes the pattern; 1 gives the full effect.' }
 	},
 	glsl: `
 	cellSize = 1.0 / (filmScale * density);

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import ScreenLoading from '#lib/components/ScreenLoading.svelte';
 	import { page } from '$app/state';
 	import { applyDraftModeOptIn, draftModeBuild } from '#lib/app/features.ts';
 	import DraftModeSkeleton from '#lib/components/skeletons/DraftModeSkeleton.svelte';
@@ -24,6 +25,7 @@
 	<title>{access === 'closed' ? 'Play · 162-0' : 'Draft Mode · 162-0'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
+<ScreenLoading active={access !== 'closed' && !Game && !loadError} label="Loading the draft…" />
 
 {#if access === 'closed'}
 	<main class="unavailable" aria-labelledby="unavailable-heading">

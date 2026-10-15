@@ -72,11 +72,22 @@ export async function verifyResultsInspection(page: Page): Promise<void> {
 	await review.getByRole('button', { name: 'Historical season', exact: true }).click();
 	await expect(review.getByRole('button', { name: 'Text version', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	const firstSeasonId = await review.getAttribute('data-season-id');
-	// The raised card turns to its front in place and stays raised until it is dismissed.
-	const raised = await review.locator('.stack').boundingBox();
+	// The raised reader stays centered while its transformed stack changes face. A
+	// transformed element's axis-aligned bounding box changes with its rotation,
+	// so compare the fixed reader anchor rather than its visual stack bounds.
+	const reader = review.locator('.reader');
+	const readerCenter = async (): Promise<{ x: number; y: number }> => {
+		const box = await reader.boundingBox();
+		if (!box) throw new Error('Raised card reader is not laid out');
+		return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+	};
+	const raisedCenter = await readerCenter();
 	await review.getByRole('button', { name: 'Show front', exact: true }).click();
 	await expect(review.getByRole('button', { name: 'Turn over', exact: true }).last()).toBeVisible();
-	await expect.poll(async () => (await review.locator('.stack').boundingBox())?.y).toBe(raised?.y);
+	await expect.poll(async () => {
+		const current = await readerCenter();
+		return Math.max(Math.abs(current.x - raisedCenter.x), Math.abs(current.y - raisedCenter.y));
+	}).toBeLessThanOrEqual(1);
 	await page.keyboard.press('Escape');
 	await expect(review).toHaveCount(0);
 	await expect(trigger).toBeFocused();

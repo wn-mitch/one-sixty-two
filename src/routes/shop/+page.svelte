@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import ScreenLoading from '#lib/components/ScreenLoading.svelte';
 	import FinishShop from '#lib/components/FinishShop.svelte';
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
 	import type { CardViewModel } from '#lib/cards/view-model.ts';
@@ -9,6 +10,7 @@
 	import type { MediaManifest } from '#lib/media/types.ts';
 	import { loadRankings } from '#lib/rankings/client.ts';
 	import type { WarRankings } from '#lib/rankings/types.ts';
+	import { appSettings } from '#lib/game/settings.svelte.ts';
 	import { deviceDb } from '#lib/storage/db.ts';
 	import { COSMETICS, finishName, type CustomTier } from '#lib/cosmetics/catalogue.ts';
 	import { equipCosmetic, readShop, unlockAndEquip } from '#lib/cosmetics/ledger.ts';
@@ -20,6 +22,7 @@
 	let data = $state.raw<{ manifest: Manifest; rankings: WarRankings; media: MediaManifest | null } | null>(null);
 	let cards = $state.raw<CardViewModel[]>([]);
 	let loading = $state(true);
+	let initialLoading = $state(true);
 	let busy = $state(false);
 	let error = $state('');
 	let mediaNotice = $state('');
@@ -28,12 +31,15 @@
 
 	async function load(): Promise<void> {
 		loading = true;
+		initialLoading = true;
 		error = '';
 		try {
+			const shopReady = refreshShop();
 			const manifest = await loadManifest();
 			const [rankings, media] = await Promise.all([
 				loadRankings(manifest.dataVersion),
-				loadMedia().catch(() => null)
+				loadMedia().catch(() => null),
+				shopReady
 			]);
 			if (!live) return;
 			mediaNotice = media ? '' : 'Photos are unavailable. Preview cards retain their identities and finish; reload to retry photos.';
@@ -42,6 +48,7 @@
 			if (!live) return;
 			error = caught instanceof Error ? caught.message : 'Preview cards could not be loaded.';
 			loading = false;
+			initialLoading = false;
 		}
 	}
 
@@ -56,9 +63,14 @@
 		previewCards(selectedTier, current.manifest, current.rankings, current.media, current.media ? 'ready' : 'unavailable')
 			.then(value => { if (!cancelled) cards = value; })
 			.catch(caught => { if (!cancelled) error = caught instanceof Error ? caught.message : 'The preview could not be loaded.'; })
-			.finally(() => { if (!cancelled) loading = false; });
+			.finally(() => {
+				if (cancelled) return;
+				loading = false;
+				initialLoading = false;
+			});
 		return () => { cancelled = true; };
 	});
+
 
 	async function change(action: (db: Awaited<ReturnType<typeof deviceDb>>['db']) => Promise<void>, success: string): Promise<void> {
 		if (busy) return;
@@ -80,7 +92,6 @@
 	const retry = () => { if (data) revision++; else void load(); };
 
 	onMount(() => {
-		void refreshShop();
 		void load();
 		return () => { live = false; };
 	});
@@ -95,37 +106,48 @@
 	<meta property="og:title" content="Shop | 162-0" />
 	<meta property="og:description" content="Earn a token for each completed season. Choose foil finishes and Gem holo patterns for your cards." />
 </svelte:head>
+<ScreenLoading active={initialLoading} label="Loading the shop…" />
 
-<main class="shop-page">
+<main class="shop-page" class:content-ready={!initialLoading} class:motion-enabled={appSettings.effectiveEnabled}>
 	<header class="shop-intro">
-		<div class="title-row"><h1>Shop</h1><p class="balance" aria-live="polite"><TokenAmount amount={balance} /></p></div>
-		<p class="factory-link"><a href="/factory">Card factory</a> · give each era its own finish and colorway</p>
-		<p class="rule"><strong>Cosmetic finishes · 1 token each.</strong> Complete a season to earn a token. Finishes change how cards look, never player statistics or strength.</p>
-		{#if balance === 0}
-			<p class="earn">No tokens yet. {shopState.snapshot?.firstSeasonBonus ? 'Your first completed season earns two, including a first-season bonus.' : 'Each completed season of your own earns one.'} <a href="/">Play a season</a></p>
-		{/if}
+		<h1>Shop</h1>
+		<div class="shop-tools">
+			<a class="button secondary factory-link" href="/factory">Card factory</a>
+			<div class="wallet">
+				<p class="balance" aria-live="polite"><TokenAmount amount={balance} /></p>
+				{#if balance === 0}<a class="earn" href="/">Play to earn</a>{/if}
+			</div>
+		</div>
 	</header>
 	{#if shopState.notice}<div class="storage-notice"><p class="notice" role="status">{shopState.notice}</p><button type="button" onclick={() => void refreshShop()}>Retry storage</button></div>{/if}
-	<FinishShop bind:tier snapshot={shopState.snapshot} {cards} {loading} {error} {busy} onRetry={retry} onUnlock={unlock} onEquip={equip} />
+	{#if !initialLoading}
+		<FinishShop bind:tier snapshot={shopState.snapshot} {cards} {loading} {error} {busy} onRetry={retry} onUnlock={unlock} onEquip={equip} />
+	{/if}
 	{#if mediaNotice}<p class="muted" role="status">{mediaNotice}</p>{/if}
-	<details class="earning"><summary>How tokens and finishes work</summary><p>Each new season of your own that plays all 162 games earns one token; the first season completed on this device earns one bonus token on top. Tokens are earned by playing; they cannot be bought. Every foil finish, holo pattern or holo colorway costs one token. Colorways recolor any Gem holo, including an era’s own.</p><p>Unlocks, tokens and applied finishes are saved in this browser on this device only; they do not sync to other devices. History from before tokens existed starts with no credit. Reopening results, playing someone else’s replay, and head-to-head series do not earn tokens. Deleting a saved season does not refund an unlock or award another token.</p><p>Cards keep their original tier and statistics. Full-size cards show the chosen finish in the light; compact cards and exported images keep their simplified finish.</p></details>
+	<details class="earning">
+		<summary>Tokens &amp; unlocks</summary>
+		<p>Finish a season to earn 1 token. Your first earns 2. Replays and head-to-head series do not earn tokens.</p>
+		<p>Each finish or colorway costs 1 token. Foil unlocks work on Silver and Gold cards; colorways work on any Gem holo. Applying an owned finish or restoring the original is free.</p>
+		<p>Cosmetic only. Unlocks and tokens stay on this device. Compact cards and exported images keep their simplified finish.</p>
+	</details>
 </main>
 
 <style>
 	.shop-page { display: grid; gap: var(--space-5); width: min(100%, 84rem); min-width: 0; padding-block: var(--space-5) var(--space-8); }
-	.shop-intro { display: grid; gap: var(--space-3); }
-	.title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-	.factory-link { margin: 0; font-size: var(--text-sm); color: var(--muted); }
-	.factory-link a { font-weight: 700; }
-	.rule { margin: 0; max-width: 60ch; color: var(--muted); }
-	.rule strong { color: var(--text); }
-	.earn { margin: 0; padding: var(--space-3); border-left: 3px solid var(--accent); background: var(--surface); }
-	.earn a { font-weight: 700; }
-	h1 { font-size: var(--text-2xl); }
+	.shop-page.motion-enabled { opacity: 0; transform: translateY(.5rem); }
+	.shop-page.motion-enabled.content-ready { opacity: 1; transform: none; transition: opacity 280ms ease-out, transform 280ms ease-out; }
+	.shop-intro { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+	.shop-tools { display: flex; align-items: center; gap: var(--space-6); }
+	.factory-link { font-size: var(--text-sm); }
+	.wallet { display: grid; justify-items: end; gap: var(--space-1); }
+	.earn { font-size: var(--text-xs); }
+	h1 { margin: 0; font-size: var(--text-2xl); }
 	.balance { margin: 0; color: var(--text); font-size: var(--text-xl); }
 	.storage-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
 	.storage-notice p { margin: 0; }
 	.earning { margin-top: var(--space-4); border-top: 1px solid var(--border); color: var(--muted); }
 	.earning summary { color: var(--text); }
+	.earning p { font-size: var(--text-sm); }
+	@media (max-width: 29rem) { .shop-tools { gap: var(--space-3); } }
 	@media (min-width: 48rem) { h1 { font-size: var(--text-3xl); } }
 </style>

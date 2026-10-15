@@ -20,8 +20,8 @@
   searchLabel = 'Find a card',
   onBeforeSearch,
   onSearch,
-  sorts,
-  sort,
+  sorts = [],
+  sort = '',
   descending,
   onSort,
   filters = [],
@@ -46,11 +46,11 @@
   /** Runs before a keystroke changes the query, so an owner can measure the cards first. */
   onBeforeSearch?: () => void;
   onSearch?: () => void;
-  sorts: readonly BrowseOption[];
-  sort: string;
+  sorts?: readonly BrowseOption[];
+  sort?: string;
   /** When set, the active sort shows its direction and choosing it again asks to reverse. */
   descending?: boolean;
-  onSort: (value: string) => void;
+  onSort?: (value: string) => void;
   filters?: readonly BrowseOption[];
   filter?: string;
   filterLegend?: string;
@@ -88,6 +88,7 @@
    {/if}
   </div>
   {/if}
+  {#if sorts.length}
   <div class="sort-row" class:many={sorts.length > 4} role="group" aria-labelledby="{uid}-sort-label">
    <span id="{uid}-sort-label" class="sort-label">Sort by</span>
    <span class="sort-options" class:stacked={sorts.length > 2}>
@@ -95,12 +96,13 @@
      {@const active = sort === option.value}
      <button type="button" aria-pressed={active} disabled={busy}
       aria-label={active && descending !== undefined ? `${option.label ?? option.value}, ${descending ? 'high to low' : 'low to high'}` : undefined}
-      onclick={() => { if (!active || descending !== undefined) onSort(option.value); }}>
+      onclick={() => { if (!active || descending !== undefined) onSort?.(option.value); }}>
       {option.label ?? option.value}{#if active && descending !== undefined}<span class="direction" aria-hidden="true">{descending ? '↓' : '↑'}</span>{/if}
      </button>
     {/each}
    </span>
   </div>
+  {/if}
   {#if filters.length}
    <!-- Phones keep the filters behind their toggle so the first cards sit near the top. -->
    <div class="filter-panel" id="{uid}-filters" hidden={!wide && searchable && !filtersOpen}>

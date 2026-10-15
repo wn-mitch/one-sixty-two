@@ -59,75 +59,17 @@
 	<section id="simulation">
 		<p class="section-number" aria-hidden="true">03</p>
 		<div>
-			<h2>The plate-appearance model</h2>
-			<p>Batter and pitcher event rates for BB, HBP, SO, 1B, 2B, 3B, HR, and OUT are combined against the 2025 league rate and normalized into one matchup distribution. Each plate appearance first samples a walk, hit by pitch, strikeout, or ball in play from that distribution. A ball in play is then resolved physically: it receives an exit velocity, launch angle, and spray direction, flies through the stadium, and is fielded or not. The hit type is never chosen first and then decorated with a trajectory.</p>
+			<h2>How games are played</h2>
+			<p>Every game runs one plate appearance at a time. The batter’s and pitcher’s stats set the chances of a walk, hit batter, strikeout, or ball in play. For a ball in play, the game simulates its flight and the fielders’ attempt to reach it.</p>
 
-			<h3>Era and park adjustment</h3>
-			<p>Rates start from all AL/NL records in the player’s year and league, not only draft-eligible players. Each profile receives a 100 PA or BFP league prior, is expressed relative to its source league, and is translated into the combined 2025 AL/NL batting-event environment. Hitter hit weights are divided by the source batting park factor; pitcher allowed-hit weights are divided by the source pitching park factor. Those broad run-park factors are only proxies, not event-specific home-run measurements. They remove the source park from the historical rates; the simulated stadiums act separately, through ball flight.</p>
-			<p>Pitcher doubles and triples allowed are inferred from that source league’s non-home-run hit mix because the source does not record them directly. Missing BFP is estimated as IP outs + H + BB + HBP. Any estimate is labelled in the generated profile.</p>
-			<p>Sacrifice flies are unavailable in some early records. The compiler retains recorded counts (zero when absent) and uses conservative recorded plate-appearance components for eligibility. Cards label the incomplete SF denominator used by OBP and OPS; these are not reconstructed historical totals.</p>
-
-			<h3>Matchup assumptions</h3>
 			<ul>
-				<li>Same-side left/left or right/right matchups multiply hit and walk weights by 0.95 and strikeout weight by 1.05.</li>
-				<li>Opposite-side matchups multiply hit and walk weights by 1.025 and strikeout weight by 0.975. Switch hitters bat opposite; unknown handedness is neutral.</li>
-				<li>No stadium multiplies any event rate. Venues affect only balls in play, through fences, walls, and air density.</li>
+				<li><strong>Players:</strong> each selected season is adjusted for its era and home park, so hitters from different decades face the same league conditions. Hitters get a small advantage against opposite-handed pitchers.</li>
+				<li><strong>Ballparks:</strong> fence distance, wall height, and elevation affect where a ball lands. A home run has to clear the wall. Parks don’t give players a blanket stat bonus.</li>
+				<li><strong>Defense and speed:</strong> fielders’ range, errors, and throwing affect balls in play. Runner speed and the opposing arm affect extra bases and steals.</li>
+				<li><strong>Pitching:</strong> your three starters get 54 starts each. Their historical innings per start set their usual workload. Bullpen roles determine who takes over, and relievers need rest after long or consecutive outings.</li>
 			</ul>
 
-			<h3>Contact, flight, and stadiums</h3>
-			<p>Batted balls are drawn from the 2025 Statcast exit-velocity, launch-angle, and spray distribution as continuous values. For each batter–pitcher matchup, the game fits a contact mix across exit-velocity and launch-angle regions plus a power shift, so that in a neutral reference park (330/380/400/380/330 ft, 10 ft walls, 500 ft elevation, <code>neutral-reference-v2</code>) the matchup reproduces its park-neutral rates for singles, doubles plus triples, home runs, and outs. Triples are matched only as closely as the physical regions allow, and a few slow, doubles-heavy seasons play with their closest fit; the compiled diagnostics count them. These are estimated profiles, not measured batted-ball data.</p>
-			<p>Flight uses a declared drag-and-lift approximation fitted to 2025 Statcast distances. Air density comes from each venue’s elevation, and every ball draws a small carry factor, so equal launches do not always land in the same spot. Conditions are fixed and calm: there is no wind or weather, and retractable roofs are treated as open. A ball is a home run only if it clears the actual wall height where it reaches the fence; otherwise it can hit the wall, bounce, or be caught. Walls interpolate Statcast line, gap, and center distances and heights; foul territory and wall shapes between measured points are estimated.</p>
-			<p>Fielders start from fixed positions. For each fair ball, every defender’s chance to reach a catch or a ground-ball pickup depends on when the ball arrives compared with that fielder’s reaction plus travel time. A ball that no one reaches is a hit; the batter takes extra bases when the retrieving throw would arrive after the batter. Reach, catch, and throw constants are fitted to 2025 Statcast outcomes in the neutral park.</p>
-
-			<details>
-				<summary>Runner advancement, outs, and steals</summary>
-				<div class="details-body">
-					<ul>
-						<li><strong>BB, HBP, and error:</strong> runners advance only when forced. A bases-loaded forced runner scores. An error is not a hit or RBI.</li>
-						<li><strong>Home run:</strong> every runner and the hitter score. <strong>Triple:</strong> every existing runner scores and the hitter reaches third.</li>
-						<li><strong>Double:</strong> runners on second and third score. A runner on first may try to score with baseline probability 0.35 + 0.40 × speed; otherwise that runner holds at third. The selected outfielder’s throwing estimate adjusts whether the attempt is made and the chance of being thrown out.</li>
-						<li><strong>Single:</strong> a runner on third scores. A runner on second may try to score with baseline probability 0.45 + 0.40 × speed. A runner on first may try for third, when open, with baseline probability 0.15 + 0.35 × speed. A declined attempt takes the required base; a failed attempt records a caught-advancing out, not caught stealing.</li>
-						<li><strong>Ground-rule double:</strong> every runner advances two bases. <strong>Infield hit:</strong> the batter reaches first and runners advance only when forced.</li>
-						<li><strong>Strikeout:</strong> one out and runners hold. A caught ball or fielded ground ball checks the fielder’s error estimate first; an error puts the batter on first with forced advancement. A ground ball fielded by an infielder with first occupied and fewer than two outs can become a double play; otherwise the batter is out and runners hold.</li>
-						<li><strong>Outfield tag:</strong> after an ordinary outfield catch with third occupied and fewer than two outs, the runner’s attempt baseline is 0.625. A safe attempt is a sacrifice fly and RBI; a hold or throw-out is an at-bat with no sacrifice fly.</li>
-						<li><strong>Steal:</strong> before a plate appearance, a runner on first may attempt second only when second is empty. Attempt propensity comes from that runner’s selected season. The runner’s smoothed success estimate is adjusted by the assigned catcher’s throwing evidence and clamped from 0.35 to 0.95. A caught stealing can end the inning before the batter appears.</li>
-					</ul>
-					<p>Speed is the selected season’s steal-attempt rate percentile among eligible hitters. It also sets a batter’s running time against fielders’ throws. A non-home-run walk-off stops when the winning run scores. A walk-off home run counts every run.</p>
-				</div>
-			</details>
-
-			<details>
-				<summary>Fielding and run prevention</summary>
-				<div class="details-body">
-					<p>The physical fielding model decides which fielder makes each play; there is no fixed responsibility table. Hit-prevention skill scales a fielder’s speed by 1 + .15 × skill and shortens reaction time by .08 seconds × skill. Outfield throwing scales an outfielder’s throw speed by 1 + .10 × skill. A caught or fielded ball then checks error avoidance, then eligible infield double-play participation, then an outfield tag-up. Defense does not affect walks, hit batters, or strikeouts.</p>
-					<p><code>defense-v2</code> normalizes five skills from canonical evidence: hit prevention, error avoidance, double-play participation, outfield throwing, and catcher throwing. Errors use exact-position PO + A + E; DP and outfield assists use fielding outs as context-affected exposure proxies; catcher throwing uses SB + CS. Cohorts are year, league, and position, falling back to the same-year combined leagues only when needed. Minimum cohort exposure is 4,374 fielding outs for DP/arm, 1,000 handled chances for errors, and 100 steal attempts for catcher throwing. Player rates are shrunk by 2,700 fielding outs, 300 handled chances, or 50 steal attempts before normalization and bounding.</p>
-					<p>Every normalized component is bounded from −1 to +1. Error avoidance is the cohort error-rate improvement divided by .02. DP and assist skills are the smoothed rate’s relative difference from the cohort divided by .50; a generic-OF arm result is then halved. Catcher throwing is the caught-stealing-rate difference divided by .20. In play, error probability is the position target minus .02 × skill; double-play probability adds .06 × the weighted lead/pivot/first-base skill; outfield arms also subtract .05 × skill from advance attempts and use .04 + .03 × skill for a conditional throw-out; catcher skill subtracts .05 × skill from the runner’s steal-success estimate. Every probability is explicitly bounded.</p>
-					<p>Exact LF/CF/RF evidence takes precedence. Generic OF assists and innings are used only when the split position is absent, at half strength, and are never added to an exact split. Incomplete or zero exposure is explicitly neutral with its reason recorded; there is no modern-talent fallback. These inputs do not invent framing, blocking, throwing velocity, measured range, or a proprietary scouting grade.</p>
-					<p>The pinned historical source’s <code>fld162</code> is fielding runs above average per 162 team games, not WAR. Complete joined stints and non-pitcher fielding exposure produce a smoothed aggregate budget capped at ±15 runs per 1,458 reference innings; <code>pos162</code> and <code>def162</code> are excluded. The compiler values the independently modelled error, DP, arm, and catcher effects in the same transition rules used by gameplay, then solves the remaining budget as hit prevention in the physical fielding model, bounded from −1 to +1. A budget beyond that bound is disclosed. If complete aggregate evidence is unavailable, hit prevention is neutral and <code>DEF est.</code> is —, while independently evidenced component skills still operate.</p>
-					<p>On card fronts, <code>DEF est.</code> is this pre-season estimated run value at the assigned fielding position, or the profile’s primary hitter position before assignment. It is not realized season defense. An assigned DH keeps HR instead; pitcher and collected bullpen fronts keep WAR/162 · ERA · SO.</p>
-				</div>
-			</details>
-
-			<details>
-				<summary>Pitching workload and relief</summary>
-				<div class="details-body">
-					<p>Each drafted starter receives exactly 54 starts in the chosen three-pitcher order. A start’s out budget is the rounded selected-season IP outs per start, clamped from 12 to 24. The starter leaves after the plate appearance that reaches the budget, or at an inning boundary after six runs charged in that appearance. Recovery is abstracted; injuries and seasonal fatigue are not modeled.</p>
-					<p>The closer and each named reliever hold a relief role and an optional backup role. <strong>Closer</strong> enters at the start of inning nine or later when tied or leading by zero to three runs, even replacing a starter who is still going. <strong>Setup</strong> takes the eighth, then the seventh, with the same lead once the starter is done; the first setup man in bullpen order is kept for the eighth, and the seventh never borrows the closer. <strong>Stopper</strong> enters before any plate appearance from the sixth on with a runner on second or third and a zero-to-three-run lead, replacing anyone but the closer, the starter included. <strong>Long</strong> covers a starter gone before the sixth, or a deficit of four or more, and stays until nine outs. <strong>Middle</strong> takes any other relief inning, including the rest of an inning a starter leaves at the out budget. A middle, setup, or stopper arm stays a second inning after facing four or fewer batters. The manager calls a role's primary holders first, in bullpen order, then backup holders who did not pitch the day before. Defaults are CL Closer/Setup, RP1 Setup/Stopper, RP2 Setup/Middle, and RP3 Middle/Long.</p>
-					<p>No named pitcher works three days running, and each inning pitched beyond the first costs one game of rest. There is no season innings cap; a tired pitcher is skipped.</p>
-					<p>Every relief inning none of them can take goes to the remainder arm, listed as BP: the pooled 2025 league relief, the same for every club, with unlimited workload. Rates are weighted by batters faced; the source does not reconstruct relief-only innings, and handedness is neutral. Each 2025 opponent has its saves leader as closer, its three next most-used relievers as named relievers with the default roles, and the rest of its relief pooled as its remainder, under the same rules. Results show outs-based IP notation and RA9, not simulated ERA, wins, or saves.</p>
-				</div>
-			</details>
-
-			<h3>Scoring boundaries</h3>
-			<p>Walks and hit batters are not at-bats. Hits, strikeouts, ordinary outs, and errors are at-bats. A successful tag-up is a sacrifice fly and not an at-bat. RBI are credited on hits, forced walks or hit batters, and tag-ups, but not on errors or double plays. Runs remain charged to the pitcher responsible for the runner, including inherited runners. A half inning is limited to 1,000 plate appearances and a game to 100 innings; exceeding either bound reports a simulation error instead of manufacturing a winner.</p>
-
-			<h3>Realized value, awards, and ranks</h3>
-			<p>Each plate appearance and attempted steal is valued from runs scored plus the change in neutral run expectancy, centered on the same current transition rules. The batter or runner receives offensive value. The active pitcher receives the opposing value after the play’s above-average defensive contribution is separated, and fielders receive telescoping hit-prevention, error, double-play, outfield-throwing, or catcher-throwing components. The accounting conserves offense + pitching + defense for each event; it is context dependent and is not an official earned-runs or historical-WAR reconstruction.</p>
-			<p><code>sim-war-v2</code> estimates hitter value as batting + running + defense + 20 replacement runs per 600 PA, divided by ten runs per estimated win. Individual pitcher value is pitching above neutral + 20 replacement runs per 600 outs, divided by ten. Negative values are retained. Participation includes PA, BF, fielding workload, actual running events, and a pitcher who allows runs without recording an out. The pooled BP remainder arm remains in team accounting but has no individual estimated WAR.</p>
-			<p>Awards use unrounded values across every participating individual: MVP, batting title, fewest runs allowed by RA9, strikeout leader, and LVP. Every exact tied winner gets an inspection chip; stable season ID selects the one featured card, and multiple featured awards merge onto one card. Results inspection compares hitters only with roster hitters and pitchers only with roster pitchers. Competition ranks exclude missing, nonfinite, and invalid-denominator values; an all-equal cohort is tied first, while a distinct tied worst remains marked worst.</p>
-
-			<h3>What this model is not</h3>
-			<p>This is a transparent, arcade-scale approximation. It is not an OOTP-level simulation, an official scoring reconstruction, a proprietary-equivalent WAR or scouting product, or a claim about how an athlete would literally perform in another era. Generic platoon effects, estimated batted-ball profiles, a declared flight approximation, fixed calm conditions, coarse park-factor normalization, context-affected fielding proxies, bounded defensive effects, and explicit advancement probabilities are deliberate limits.</p>
+			<p>Season stats and awards come from the simulated plays, not the players’ historical totals. Ball flight and defensive skills are estimates built from the available records. There are no injuries or weather effects.</p>
 		</div>
 	</section>
 
@@ -255,29 +197,7 @@
 	}
 
 	li + li { margin-top: 0.6rem; }
-
-	details {
-		margin-top: 1.5rem;
-		padding: 0.9rem 0;
-		border-top: 1px solid var(--border);
-		border-bottom: 1px solid var(--border);
-	}
-
-	details + details { margin-top: -1px; }
-
-	summary {
-		cursor: pointer;
-		font-size: 1rem;
-		font-weight: 800;
-	}
-
-	.details-body {
-		padding-top: 0.6rem;
-		color: var(--muted);
-	}
-
-
-
+	#simulation p + ul, #simulation ul + p { margin-top: 1.25rem; }
 
 	.ranking-source {
 		margin-top: 1.75rem;

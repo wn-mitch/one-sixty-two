@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, setContext } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import LoadingCards from '#lib/components/LoadingCards.svelte';
 	import './layout.css';
 	import '../lib/cards/fonts.css';
 	import favicon from '#lib/assets/favicon.svg';
@@ -8,12 +10,15 @@
 	import Toaster from '#lib/components/Toaster.svelte';
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
 	import { refreshStickers } from '#lib/collection/store.svelte.ts';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import { refreshShop, shopState } from '#lib/cosmetics/store.svelte.ts';
 	import { sitePreviewImage } from '#lib/share/site-preview.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+	const pendingScreens = setContext('screen-loading', new SvelteMap<symbol, string>());
+	const changingPage = $derived(!!navigating.to && navigating.to.url.pathname !== navigating.from?.url.pathname);
+	const loadingLabel = $derived([...pendingScreens.values()].at(-1) ?? 'Loading…');
 	const sitePreview = sitePreviewImage();
 	const destinations = [
 		{ href: '/', label: 'Play' }, { href: '/seasons', label: 'My teams' },
@@ -112,7 +117,7 @@
 		<nav class="site-actions" aria-label="Site controls">
 			<a class="shop-link" href="/shop" aria-current={page.url.pathname === '/shop' ? 'page' : undefined}
 				aria-label={balance === null ? 'Shop' : `Shop, ${balance} ${balance === 1 ? 'token' : 'tokens'}`}>
-				<span>Shop</span><span class="shop-balance" aria-hidden="true"><TokenAmount amount={balance} /></span>
+				<span>Shop</span><span class="shop-balance" data-token-wallet aria-hidden="true"><TokenAmount amount={balance} /></span>
 			</a>
 			<SiteMenu />
 		</nav>
@@ -133,6 +138,7 @@
 	</footer>
 </div>
 <Toaster />
+<LoadingCards active={changingPage || pendingScreens.size > 0} label={loadingLabel} />
 
 {#if FeedbackTools}
 	<FeedbackTools />

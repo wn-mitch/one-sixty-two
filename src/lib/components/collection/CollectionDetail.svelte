@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+	import CardReview from '../../cards/CardReview.svelte';
 	import Card from '../../cards/Card.svelte';
 	import type { CardViewModel } from '../../cards/view-model.ts';
 	import type { CollectedCard } from '../../collection/collection.ts';
@@ -15,11 +17,12 @@
 		view: CardViewModel | null;
 		/** Sticker kinds earned since the last visit; they slap onto the card as it opens. */
 		fresh?: ReadonlySet<string>;
+		seasons?: Snippet;
 		onMove: (seasonId: string, family: StickerFamily, x: number, y: number) => void | Promise<void>;
 		onHide: (seasonId: string, family: StickerFamily, hidden: boolean) => void | Promise<void>;
 		onClose: () => void;
 	}
-	let { card, view, fresh, onMove, onHide, onClose }: Props = $props();
+	let { card, view, fresh, seasons, onMove, onHide, onClose }: Props = $props();
 
 	/** Edit stickers shows every family with Hide/Show and puts move handles over the face stickers. */
 	let editing = $state(false);
@@ -99,10 +102,14 @@
 </script>
 
 <section class="detail" aria-labelledby="collection-detail-heading">
-	<div class="art">
+	<div class="art" class:has-seasons={!!seasons}>
 		<!-- The card tilts like the real thing, so foil stickers catch the light; it holds still while stickers are being moved. -->
 		<div class="surface" class:editing bind:this={surface}>
-			{#if view}<Card s={view} face="front" interactive={!editing} stickers={placed} freshStickers={fresh} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
+			{#if editing}
+				{#if view}<Card s={view} face="front" interactive={false} stickers={placed} freshStickers={fresh} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
+			{:else if view}
+				<CardReview s={view} showHeading={false} flipInPlace pairFaces={false} stickers={placed} freshStickers={fresh} />
+			{:else}<span class="placeholder"></span>{/if}
 			{#if editing}
 				<div class="handles">
 					{#each handles as handle (handle.definition.family)}
@@ -121,6 +128,7 @@
 				</div>
 			{/if}
 		</div>
+		{#if seasons}<div class="gallery-seasons">{@render seasons()}</div>{/if}
 	</div>
 	<div class="info">
 		<div class="head">
@@ -168,9 +176,16 @@
 </section>
 
 <style>
-	.detail { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: var(--space-8); padding: var(--space-6); border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
-	@media (max-width: 40rem) { .detail { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding: var(--space-4); } .art { width: min(100%, 15rem); justify-self: center; } }
-	.surface { position: relative; }
+	.detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-6); }
+	.art { display: grid; min-width: 0; gap: var(--space-4); align-items: start; }
+	.art.has-seasons { grid-template-columns: minmax(0, 1fr) 6rem; }
+	.surface { position: relative; width: min(100%, 18rem); justify-self: center; }
+	.gallery-seasons { min-width: 0; }
+	@media (max-width: 60rem) {
+		.detail { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+		.art.has-seasons { grid-template-columns: minmax(0, 1fr); }
+		.surface { width: min(100%, 15rem); }
+	}
 	/* Dragging needs the touch gestures; browsing keeps page scroll over the card. */
 	.surface.editing { touch-action: none; }
 	.placeholder { display: block; aspect-ratio: 5 / 7; border-radius: .5rem; background: var(--surface-raised); }

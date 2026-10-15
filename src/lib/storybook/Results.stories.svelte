@@ -17,6 +17,7 @@
 {/snippet}
 
 <Story name="Complete" exportName="Complete" {template} />
+<Story name="First season reward" exportName="FirstSeasonReward" args={{ initial: 'firstSeasonReward' }} {template} />
 
 <Story
 	name="Share link"

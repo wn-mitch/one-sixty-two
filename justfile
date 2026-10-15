@@ -18,6 +18,10 @@ media-review *args:
 media-prepare *args:
     npm run media:prepare -- {{args}}
 
+# Refresh the static loading-card bank from a running local app; requires ImageMagick.
+loading-cards *args:
+    node scripts/loading-cards.ts {{args}}
+
 statcast *args:
     npm run data:statcast -- {{args}}
 

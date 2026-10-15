@@ -5,6 +5,7 @@
  import { fade } from 'svelte/transition';
  import type { InspectionSeasonView } from '../game/results-types.ts';
  import { appSettings } from '../game/settings.svelte.ts';
+ import type { PlacedSticker } from '../collection/stickers.ts';
  import type { CardViewModel } from './view-model.ts';
  import Card from './Card.svelte';
  import InspectionBack from './InspectionBack.svelte';
@@ -28,7 +29,9 @@ let {
  flipInPlace = false,
  readerNav,
  pairFaces = true,
- wall = false
+ wall = false,
+ stickers,
+ freshStickers
 }: {
  s: CardViewModel;
  onDetails: () => void;
@@ -51,6 +54,8 @@ let {
  pairFaces?: boolean;
  /** The front drifts and catches the light on its own until it is hovered. */
  wall?: boolean;
+ stickers?: readonly PlacedSticker[];
+ freshStickers?: ReadonlySet<string>;
 } = $props();
 
 let stack = $state<HTMLDivElement>();
@@ -233,18 +238,18 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
    {#if paired && readerOpen}
     <!-- The face the raised card is not showing. -->
     <div class="companion" data-card-companion aria-hidden="true" inert out:fade={{ duration: appSettings.animateCards ? 160 : 0 }}>
-     {#if turned}<Card {s} face="front" interactive={false} {onDetails} />
+     {#if turned}<Card {s} face="front" interactive={false} {stickers} {freshStickers} {onDetails} />
      {:else if inspectionView || textBack}<InspectionBack {s} view={inspectionView} simplified={textBack} {onDetails} />
      {:else}<Card {s} face="back" {onDetails} />{/if}
     </div>
    {/if}
-   <div class="stack" class:turned class:back-layout={backDisplayed} data-flip data-text-back={textBack} data-motion-reduced={!appSettings.animateCards} use:flip={{ turned, opened: readerOpen, sourceElement, onReturned: flightReturned }} use:surfaceFlip>
+   <div class="stack" class:turned class:back-layout={backDisplayed && (appSettings.animateCards || turned)} data-flip data-text-back={textBack} data-motion-reduced={!appSettings.animateCards} use:flip={{ turned, opened: readerOpen, sourceElement, onReturned: flightReturned }} use:surfaceFlip>
     <div class="front" inert={turned} aria-hidden={turned}>
      {#if onFrontSelect}
-      <button type="button" class="select-front" aria-label="Select {s.year} {s.full}" onclick={frontClick} ondblclick={raiseFront}><Card {s} face="front" interactive {wall} {onDetails} /></button>
+      <button type="button" class="select-front" aria-label="Select {s.year} {s.full}" onclick={frontClick} ondblclick={raiseFront}><Card {s} face="front" interactive {wall} {stickers} {freshStickers} {onDetails} /></button>
      {:else}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="raise-front" ondblclick={raiseFront}><Card {s} face="front" interactive={!raisedOnly} {wall} {onDetails} /></div>
+      <div class="raise-front" ondblclick={raiseFront}><Card {s} face="front" interactive={!raisedOnly} {wall} {stickers} {freshStickers} {onDetails} /></div>
      {/if}
     </div>
     {#each ['#d4cfc4', '#f2efe8', '#d4cfc4', '#a9a397'] as color, index}

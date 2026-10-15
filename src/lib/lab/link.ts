@@ -1,4 +1,4 @@
-import { CHOICES, dialOf, parseSetup, type Relief, type Setup, type Target } from './controls.ts';
+import { CHOICES, dialOf, parseSetup, PRINTS, type Relief, type Setup, type Target } from './controls.ts';
 
 export const LAB_LINK_VERSION = 1;
 
@@ -116,6 +116,7 @@ export function readLink(saved: unknown): LinkState | null {
 	if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return null;
 	const record = saved as Record<string, unknown>;
 	if (record.v !== undefined && record.v !== LAB_LINK_VERSION) return null;
+	if (record.print !== undefined && !(PRINTS as readonly { value: string }[]).some(option => option.value === record.print)) return null;
 	const setup = parseSetup((isToyState(record) ? fromToy(record) : record) as Partial<Setup>);
 	const stagger = record.stagger as Partial<Stagger> | null | undefined;
 	const target = typeof stagger?.target === 'string' ? stagger.target : '';

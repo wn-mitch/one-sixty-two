@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import FinishSample from '#lib/components/FinishSample.svelte';
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
+	import FinishChoice from '#lib/components/FinishChoice.svelte';
+	import CardBrowser from '#lib/components/CardBrowser.svelte';
 	import { CARD_ERAS, type CardEra } from '#lib/cards/era.ts';
 	import { appearanceFor, COLORWAYS, COSMETICS, finishName, itemsForTier, type CustomTier } from '#lib/cosmetics/catalogue.ts';
 	import { equipCosmetic, readShop, resetEra, unlockAndEquip, unlocksFor, type EquippedFinish } from '#lib/cosmetics/ledger.ts';
@@ -11,8 +13,8 @@
 
 	// The card factory: one era at a time, choose that era's finish for one tier. Choices override the
 	// deck-wide finish from the Shop for that era only; everything is drawn from material swatches.
-	const TIERS: readonly { id: CustomTier; label: string }[] = [
-		{ id: 'gem', label: 'Gem holo' }, { id: 'foil', label: 'Silver foil' }, { id: 'emboss', label: 'Gold emboss' }
+	const TIERS: readonly { value: CustomTier; label: string }[] = [
+		{ value: 'gem', label: 'Gem holo' }, { value: 'foil', label: 'Silver foil' }, { value: 'emboss', label: 'Gold emboss' }
 	];
 	const DECK = 'deck';
 	let tier = $state<CustomTier>('gem');
@@ -36,7 +38,7 @@
 
 	// Reset the editor to the saved choice when the era, tier or that saved choice changes, not on every shop refresh.
 	const savedKey = $derived(JSON.stringify([tier, era, saved(tier, era) ?? null]));
-	$effect(() => {
+	$effect.pre(() => {
 		const [, , current] = JSON.parse(savedKey) as [CustomTier, CardEra, EquippedFinish | null];
 		draft = current ? { itemId: current.itemId, colorway: current.colorway } : { itemId: DECK, colorway: null };
 	});
@@ -49,10 +51,17 @@
 	const unchanged = $derived(usingDeck ? !current : !!current && current.itemId === draft.itemId && current.colorway === draft.colorway);
 	const short = $derived(!!snapshot && snapshot.balance < needed.length);
 
+	function choosePattern(itemId: string | null): void {
+		draft = { itemId, colorway: usingDeck ? null : draft.colorway };
+	}
+	function chooseColorway(colorway: string | null): void {
+		draft = { itemId: resolved.itemId, colorway };
+	}
+
 	async function commit(): Promise<void> {
 		if (busy || unchanged) return;
 		busy = true;
-		const label = `${era} ${TIERS.find(entry => entry.id === tier)!.label} cards`;
+		const label = `${era} ${TIERS.find(entry => entry.value === tier)!.label} cards`;
 		try {
 			const { db } = await deviceDb();
 			if (usingDeck) await resetEra(db, tier, era);
@@ -77,19 +86,20 @@
 	<header class="intro">
 		<a class="back" href="/shop">← Shop</a>
 		<div class="title-row"><h1>Card factory</h1><p class="balance" aria-live="polite"><TokenAmount amount={snapshot?.balance ?? null} /></p></div>
-		<p class="muted">Give each era its own look. A choice here replaces your deck-wide Shop finish for that era’s cards only. Cosmetic only; unlocks cost 1 token each and stay on this device.</p>
 	</header>
 	{#if shopState.notice}<p class="notice" role="status">{shopState.notice}</p>{/if}
+	{#if !snapshot && !shopState.notice}<p role="status">Loading finishes…</p>{/if}
 
-	<div class="tiers" role="group" aria-label="Card tier">
-		{#each TIERS as entry (entry.id)}<button type="button" aria-pressed={tier === entry.id} onclick={() => tier = entry.id}>{entry.label}</button>{/each}
-	</div>
+	{#if snapshot}
+	<CardBrowser label="Card factory" searchable={false} {busy}
+		filters={TIERS} filter={tier} filterLegend="Card tier"
+		onFilter={value => tier = value as CustomTier}>
 
 	<ul class="eras" aria-label="Eras">
 		{#each CARD_ERAS as option (option)}
 			{@const choice = saved(tier, option)}
 			<li>
-				<button type="button" class="era" aria-pressed={era === option} aria-label={`${option}, ${describe(choice)}`} onclick={() => era = option}>
+				<button type="button" class="era" disabled={busy} aria-pressed={era === option} aria-label={`${option}, ${describe(choice)}`} onclick={() => era = option}>
 					<span class="swatch" aria-hidden="true"><FinishSample {tier} era={option} appearance={choice ? appearanceFor(choice.itemId, choice.colorway) : deckChoice ? appearanceFor(deckChoice.itemId, deckChoice.colorway) : null} idle={false} /></span>
 					<span class="era-name">{option}</span>
 					<span class="era-state" class:custom={!!choice}>{describe(choice)}</span>
@@ -99,64 +109,104 @@
 	</ul>
 
 	<section class="editor" aria-labelledby="editor-heading">
-		<div class="preview"><FinishSample {tier} {era} appearance={preview} /></div>
+		<div class="preview-panel">
+			<div class="preview"><FinishSample {tier} {era} appearance={preview} /></div>
+			<div class="selection">
+				<h2 id="editor-heading">{era} {TIERS.find(entry => entry.value === tier)!.label}</h2>
+				<p class="chosen">{usingDeck ? 'Deck default' : describe({ itemId: draft.itemId as string | null, colorway: draft.colorway })}</p>
+			</div>
+			<div class="commit">
+				<button class="primary" type="button" disabled={busy || !snapshot || unchanged || short} onclick={() => void commit()}>
+					{#if unchanged}Applied{:else if usingDeck}Use deck default{:else if needed.length}Unlock &amp; apply · <TokenAmount amount={needed.length} />{:else}Apply to {era} cards{/if}
+				</button>
+				{#if short}<p class="muted">{needed.length - (snapshot?.balance ?? 0)} more {needed.length - (snapshot?.balance ?? 0) === 1 ? 'token' : 'tokens'} needed. <a href="/">Play to earn</a></p>{/if}
+			</div>
+		</div>
 		<div class="controls">
-			<h2 id="editor-heading">{era} {TIERS.find(entry => entry.id === tier)!.label}</h2>
-			<label>{tier === 'gem' ? 'Holo pattern' : 'Foil finish'}
-				<select value={draft.itemId ?? ''} onchange={event => {
-					const value = event.currentTarget.value;
-					draft = value === DECK ? { itemId: DECK, colorway: null } : { itemId: value || null, colorway: draft.itemId === DECK ? null : draft.colorway };
-				}}>
-					<option value={DECK}>Deck default ({deckChoice ? describe({ itemId: deckChoice.itemId, colorway: deckChoice.colorway }) : 'era original'})</option>
-					<option value="">Era original</option>
-					{#each items as item (item.id)}<option value={item.id}>{finishName(item)}{owns(item.id) ? '' : ' · 1 token'}</option>{/each}
-				</select>
-			</label>
-			{#if tier === 'gem' && !usingDeck}
-				<label>Colorway
-					<select value={draft.colorway ?? ''} onchange={event => { draft = { ...draft, colorway: event.currentTarget.value || null }; }}>
-						<option value="">Film original</option>
-						{#each COLORWAYS as option (option.id)}<option value={option.id}>{finishName(option)}{owns(`colorway:${option.id}`) ? '' : ' · 1 token'}</option>{/each}
-					</select>
-				</label>
+			<fieldset disabled={busy}>
+				<legend>{tier === 'gem' ? 'Holo pattern' : 'Foil finish'}</legend>
+				<div class="picker" role="region" aria-label="Pattern choices">
+					<ul class="choices">
+						<li><FinishChoice compact name="Deck default" {tier} {era}
+							appearance={deckChoice ? appearanceFor(deckChoice.itemId, deckChoice.colorway) : null}
+							selected={usingDeck} status="Free" disabled={busy}
+							onChoose={() => draft = { itemId: DECK, colorway: null }} /></li>
+						<li><FinishChoice compact name="Era original" {tier} {era}
+							appearance={appearanceFor(null, tier === 'gem' ? draft.colorway : null)}
+							selected={!usingDeck && draft.itemId === null} status="Free" disabled={busy}
+							onChoose={() => choosePattern(null)} /></li>
+						{#each items as item (item.id)}
+							<li><FinishChoice compact name={finishName(item)} {tier} {era}
+								appearance={appearanceFor(item.id, tier === 'gem' ? resolved.colorway : null)}
+								selected={draft.itemId === item.id} cost={item.cost} status={owns(item.id) ? 'Owned' : null}
+								disabled={busy} onChoose={() => choosePattern(item.id)} /></li>
+						{/each}
+					</ul>
+				</div>
+			</fieldset>
+			{#if tier === 'gem'}
+				<fieldset disabled={busy}>
+					<legend>Colorway</legend>
+					<div class="picker colorways" role="region" aria-label="Colorway choices">
+						<ul class="choices">
+							<li><FinishChoice compact name="Film original" {tier} {era}
+								appearance={appearanceFor(resolved.itemId)}
+								selected={resolved.colorway === null} status="Free" disabled={busy}
+								onChoose={() => chooseColorway(null)} /></li>
+							{#each COLORWAYS as option (option.id)}
+								<li><FinishChoice compact name={finishName(option)} {tier} {era}
+									appearance={appearanceFor(resolved.itemId, option.id)}
+									selected={resolved.colorway === option.id} status={owns(`colorway:${option.id}`) ? 'Owned' : null}
+									disabled={busy} onChoose={() => chooseColorway(option.id)} /></li>
+							{/each}
+						</ul>
+					</div>
+				</fieldset>
 			{/if}
-			<button class="primary" type="button" disabled={busy || !snapshot || unchanged || short} onclick={() => void commit()}>
-				{#if unchanged}Applied{:else if usingDeck}Use deck default{:else if needed.length}Unlock &amp; apply · <TokenAmount amount={needed.length} />{:else}Apply to {era} cards{/if}
-			</button>
-			{#if short}<p class="muted">You need {needed.length === 1 ? 'a token' : `${needed.length} tokens`}. Complete a season to earn one. <a href="/">Play a season</a></p>{/if}
 		</div>
 	</section>
+	</CardBrowser>
+	{/if}
+	<details class="factory-help">
+		<summary>About era finishes</summary>
+		<p>Each choice applies only to this era and tier. Deck default follows your Shop finish; Era original restores the era’s own pattern. Each new pattern or colorway costs 1 token. Owned finishes are free to reuse. Cosmetic only, saved on this device.</p>
+	</details>
 </main>
 
 <style>
-	.factory { display: grid; gap: var(--space-5); width: min(100%, 64rem); min-width: 0; padding-block: var(--space-5) var(--space-8); }
+	.factory { display: grid; gap: var(--space-5); width: min(100%, 84rem); min-width: 0; padding-block: var(--space-5) var(--space-8); }
 	.intro { display: grid; gap: var(--space-2); }
 	.intro p { margin: 0; max-width: 60ch; }
 	.back { justify-self: start; min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--muted); font-weight: 650; text-decoration: none; }
 	.title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 	h1 { font-size: var(--text-2xl); }
 	.balance { margin: 0; font-size: var(--text-xl); }
-	.tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
-	.tiers button { padding-inline: var(--space-2); background: transparent; font-size: var(--text-sm); }
-	.tiers button[aria-pressed='true'] { background: var(--text); color: var(--background); }
-	.eras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-	.era { display: grid; width: 100%; gap: 2px; padding: var(--space-1); text-align: left; background: transparent; border-color: transparent; }
+	.eras { display: grid; grid-auto-flow: column; grid-auto-columns: 8.5rem; gap: var(--space-2); overflow-x: auto; overscroll-behavior-x: contain; margin: 0 0 var(--space-5); padding: var(--space-1); list-style: none; }
+	.era { display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-items: center; align-content: start; width: 100%; height: 100%; gap: 2px var(--space-2); padding: var(--space-2); text-align: left; background: transparent; border-color: transparent; }
 	.era[aria-pressed='true'] { border-color: var(--accent); background: var(--surface); }
-	.swatch { display: block; }
+	.swatch { display: block; grid-row: span 2; }
 	.era-name { font-size: var(--text-sm); }
 	.era-state { color: var(--muted); font: 400 var(--text-xs)/1.3 system-ui, sans-serif; overflow-wrap: anywhere; }
 	.era-state.custom { color: var(--accent); }
-	.editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
-	.preview { width: min(100%, 11rem); justify-self: center; }
-	.controls { display: grid; gap: var(--space-3); min-width: 0; }
-	.controls h2 { margin: 0; font-size: var(--text-lg); }
-	.controls label { display: grid; gap: var(--space-1); font-size: var(--text-sm); font-weight: 650; }
-	.controls select { width: 100%; min-width: 0; }
-	.controls p { margin: 0; font-size: var(--text-sm); }
+	.editor { display: grid; grid-template-areas: 'preview' 'choices'; gap: var(--space-5); align-items: start; min-width: 0; }
+	.preview-panel { grid-area: preview; display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+	.preview { grid-row: span 2; width: 100%; }
+	.selection { align-self: end; }
+	.selection h2 { font-size: var(--text-lg); }
+	.chosen { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
+	.commit { display: grid; gap: var(--space-2); align-self: start; }
+	.commit p { margin: 0; font-size: var(--text-sm); }
+	.controls { grid-area: choices; display: grid; gap: var(--space-5); min-width: 0; }
+	fieldset { min-width: 0; border: 0; padding: 0; margin: 0; }
+	legend { margin-bottom: var(--space-2); font-size: var(--text-sm); font-weight: 650; }
+	.picker { max-height: 20rem; overflow-y: auto; overscroll-behavior-y: contain; padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius); }
+	.choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+	.colorways { max-height: 14rem; }
 	.primary { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); }
-	@media (min-width: 48rem) {
-		.eras { grid-template-columns: repeat(8, minmax(0, 1fr)); }
-		.editor { grid-template-columns: 14rem minmax(0, 1fr); }
-		.preview { width: 100%; }
+	.factory-help { border-top: 1px solid var(--border); color: var(--muted); font-size: var(--text-sm); }
+	@media (min-width: 64rem) {
+		.editor { grid-template-columns: minmax(0, 1fr) 16rem; grid-template-areas: 'choices preview'; gap: var(--space-6); }
+		.preview-panel { grid-template-columns: minmax(0, 1fr); position: sticky; top: var(--space-6); padding: var(--space-4); }
+		.preview { grid-row: auto; width: min(100%, 12rem); justify-self: center; }
 	}
 </style>

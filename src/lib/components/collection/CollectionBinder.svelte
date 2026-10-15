@@ -9,7 +9,7 @@
 	import type { CardViewModel } from '../../cards/view-model.ts';
 	import { bestWar, type CollectedCard } from '../../collection/collection.ts';
 	import { holds, stickerAlbum } from '../../collection/album.ts';
-	import { faceStickers, familyStickers, STICKER_BY_KIND, STICKERS, type StickerFamily } from '../../collection/stickers.ts';
+	import { faceStickers, STICKER_BY_KIND, STICKERS, type StickerFamily } from '../../collection/stickers.ts';
 	import { completionPercent, shelveCollection, stackCollection, type CollectionStack, type Grouping } from '../../collection/shelves.ts';
 	import { loadStackCoverPreferences, saveStackCoverPreferences } from '../../collection/stack-preferences.ts';
 	import { BULLPEN_SLOTS, HITTER_SLOTS, STARTER_SLOTS, type Candidate, type Franchise, type RosterSlot } from '../../game/types.ts';
@@ -143,7 +143,6 @@
 	const noDetails = () => {};
 	/** The detail panel unfolds above the grid and folds away on close; a different card fades in within the open panel. */
 	const motion = $derived(appSettings.effectiveEnabled);
-	const stickerCount = (card: CollectedCard) => familyStickers(card.stickers).length;
 
 	async function open(seasonId: string): Promise<void> {
 		panelFresh = slapped.has(seasonId) ? undefined : fresh.get(seasonId);
@@ -188,10 +187,25 @@
 	</section>
 {:else}
 	<div class="summary" id="collection-views">
-		<p class="count">
-			<span><strong>{cards.length}</strong> {cards.length === 1 ? 'card' : 'cards'} · <strong>{progress.owned.toLocaleString('en-US')}</strong> of {progress.total.toLocaleString('en-US')} player-seasons, <strong>{completionPercent(progress.owned, progress.total)}</strong></span>
-			<span><strong>{album.earned}</strong> of {album.total} sticker kinds · <strong>{album.held}</strong> on your cards</span>
-		</p>
+		<section class="collection-status" aria-label="Collection progress">
+			<header class="status-heading">
+				<span>Collection index</span>
+				<span class="inventory-count">{cards.length.toLocaleString('en-US')} {cards.length === 1 ? 'card' : 'cards'}</span>
+			</header>
+			<div class="status-row">
+				<span class="status-label" id="collection-seasons-label">Player-seasons</span>
+				<span class="status-value"><strong>{progress.owned.toLocaleString('en-US')}</strong><span> / {progress.total.toLocaleString('en-US')}</span></span>
+				<meter aria-labelledby="collection-seasons-label" min="0" max={Math.max(1, progress.total)} value={progress.owned}></meter>
+				<span class="status-percent">{completionPercent(progress.owned, progress.total)}</span>
+			</div>
+			<div class="status-row">
+				<span class="status-label" id="collection-stickers-label">Sticker kinds</span>
+				<span class="status-value"><strong>{album.earned.toLocaleString('en-US')}</strong><span> / {album.total.toLocaleString('en-US')}</span></span>
+				<meter aria-labelledby="collection-stickers-label" min="0" max={Math.max(1, album.total)} value={album.earned}></meter>
+				<span class="status-percent">{completionPercent(album.earned, album.total)}</span>
+			</div>
+			<p class="status-foot">{album.held.toLocaleString('en-US')} stickers on your cards</p>
+		</section>
 		<div class="views" role="group" aria-label="Show">
 			<button type="button" aria-pressed={view === 'cards'} onclick={() => { view = 'cards'; }}>Cards</button>
 			<button type="button" aria-pressed={view === 'stickers'} onclick={() => { view = 'stickers'; chosen = null; stackKey = null; }}>Stickers</button>
@@ -232,35 +246,24 @@
 			</p>
 		{/if}
 		{#if display === 'players' && grouping === 'none' && selectedStack && selected}
-			<section class="stack-panel" bind:this={detail} aria-labelledby="stack-heading">
-				<header class="stack-head">
-					<div>
-						<h2 id="stack-heading" tabindex="-1">{views.get(selectedStack.cards[0].seasonId)?.full ?? selectedStack.label}</h2>
-						<p class="muted">{selectedStack.cards.length} {selectedStack.cards.length === 1 ? 'season' : 'seasons'} in this filtered view</p>
+			<div class="stack-panel" bind:this={detail}>
+				{#snippet seasons()}
+					<div class="season-rail" role="region" aria-label="Owned seasons" use:tableScroll>
+						{#each selectedStack.cards as card (card.seasonId)}
+							{@const face = views.get(card.seasonId)}
+							<article class="season-item" class:current={selected.seasonId === card.seasonId}>
+								<button type="button" class="season-card" aria-label={`Open ${card.label}`} aria-pressed={selected.seasonId === card.seasonId} onclick={() => void open(card.seasonId)}>
+									{#if face}<Card s={face} face="front" stickers={card.stickers} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
+									<strong>{year(card)}</strong>
+								</button>
+								<button type="button" class="cover-button" onclick={() => setCover(selectedStack, card.seasonId)}>{coverPreferences[selectedStack.key] === card.seasonId ? 'Cover' : 'Set as cover'}</button>
+							</article>
+						{/each}
 					</div>
-					<button type="button" class="quiet close" onclick={() => { chosen = null; stackKey = null; }}>Close</button>
-				</header>
-				<div class="season-rail" role="region" aria-label="Owned seasons" use:tableScroll>
-					{#each selectedStack.cards as card (card.seasonId)}
-						{@const face = views.get(card.seasonId)}
-						<article class="season-item" class:current={selected.seasonId === card.seasonId}>
-							<button type="button" class="season-card" aria-label={`Open ${card.label}`} aria-pressed={selected.seasonId === card.seasonId} onclick={() => void open(card.seasonId)}>
-								{#if face}<Card s={face} face="front" stickers={card.stickers} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
-								<strong>{year(card)}</strong>
-							</button>
-							<button type="button" class="cover-button" onclick={() => setCover(selectedStack, card.seasonId)}>{coverPreferences[selectedStack.key] === card.seasonId ? 'Cover' : 'Set as cover'}</button>
-						</article>
-					{/each}
-				</div>
-				{#if preferenceStatus}<p class="preference-status" role="status">{preferenceStatus}</p>{/if}
-				<div class="detail-slot">
-					{#key selected.seasonId}
-						<div in:fade={{ duration: motion ? MOTION.gridEnter : 0 }}>
-							<CollectionDetail card={selected} view={views.get(selected.seasonId) ?? null} fresh={panelFresh} {onMove} {onHide} onClose={() => { chosen = null; stackKey = null; }} />
-						</div>
-					{/key}
-				</div>
-			</section>
+					{#if preferenceStatus}<p class="preference-status" role="status">{preferenceStatus}</p>{/if}
+				{/snippet}
+				<CollectionDetail card={selected} view={views.get(selected.seasonId) ?? null} fresh={panelFresh} seasons={selectedStack.cards.length > 1 ? seasons : undefined} {onMove} {onHide} onClose={() => { chosen = null; stackKey = null; }} />
+			</div>
 		{:else if selected}
 			<div class="detail-slot" bind:this={detail} transition:slide={{ duration: motion ? MOTION.screenRise : 0, easing: cubicOut }}>
 				{#key selected.seasonId}
@@ -276,14 +279,15 @@
 				{#each list as stack (stack.key)}
 					{@const cover = stackCover(stack)}
 					{@const face = views.get(cover.seasonId)}
-					{@const count = stickerCount(cover)}
 					<li data-candidate-group={stack.key}>
-						<button type="button" class="tile stack-tile" aria-pressed={stackKey === stack.key} onclick={() => void open(cover.seasonId)}>
+						<button type="button" class={stack.cards.length > 1 ? 'tile stack-tile' : 'tile'} aria-label={`${face?.full ?? stack.label}, ${stack.cards.length} ${stack.cards.length === 1 ? 'season' : 'seasons'}`} aria-pressed={stackKey === stack.key} onclick={() => void open(cover.seasonId)}>
 							<span class="art" aria-hidden="true">
 								{#if face}<Card s={face} face="front" stickers={cover.stickers} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
 							</span>
-							<span class="name">{face?.full ?? stack.label}</span>
-							<span class="meta">{stack.cards.length} {stack.cards.length === 1 ? 'season' : 'seasons'} · drafted {cover.times}×{#if count}<span class="chip">{count} {count === 1 ? 'sticker' : 'stickers'}</span>{/if}</span>
+							<span class="caption">
+								<span class="name" title={face?.full ?? stack.label}>{face?.full ?? stack.label}</span>
+								<span class="meta"><span>{stack.cards.length} {stack.cards.length === 1 ? 'season' : 'seasons'}</span><span class="draft-count" title={`Cover season drafted ${cover.times} times`}>drafted x{cover.times}</span></span>
+							</span>
 						</button>
 					</li>
 				{/each}
@@ -294,14 +298,12 @@
 			<ul class="grid" aria-label={label}>
 				{#each list as card (card.seasonId)}
 					{@const face = views.get(card.seasonId)}
-					{@const count = stickerCount(card)}
 					<li data-candidate-group={card.seasonId}>
-						<button type="button" class="tile" aria-pressed={chosen === card.seasonId} onclick={() => void open(card.seasonId)}>
+						<button type="button" class="tile" aria-label={card.label} aria-pressed={chosen === card.seasonId} onclick={() => void open(card.seasonId)}>
 							<span class="art" aria-hidden="true">
 								{#if face}<Card s={face} face="front" stickers={card.stickers} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
 							</span>
-							<span class="name">{card.label}</span>
-							<span class="meta">Drafted {card.times}× · best {card.best.wins}–{card.best.losses}{#if count}<span class="chip">{count} {count === 1 ? 'sticker' : 'stickers'}</span>{/if}</span>
+							<span class="caption"><span class="name" title={card.label}>{card.label}</span><span class="meta"><span class="draft-count" title={`Drafted ${card.times} times`}>drafted x{card.times}</span></span></span>
 						</button>
 					</li>
 				{/each}
@@ -333,8 +335,20 @@
 	.empty p { margin: 0; }
 	.button { min-height: 2.75rem; display: inline-flex; align-items: center; padding-inline: var(--space-4); border-radius: var(--radius, .5rem); background: var(--accent); color: var(--background); font-weight: 750; text-decoration: none; }
 	.summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-4); scroll-margin-top: 72px; }
-	.count { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: 0; color: var(--muted); font-size: var(--text-sm); }
-	.count strong { color: var(--text); }
+	.collection-status { flex: 0 1 38rem; min-width: 0; width: 100%; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+	.status-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-2); margin-bottom: var(--space-2); border-bottom: 1px solid var(--border); color: var(--muted); }
+	.status-heading > :first-child { font-weight: 700; text-transform: uppercase; letter-spacing: .1em; font-size: .65rem; }
+	.inventory-count { color: var(--text); font-weight: 650; }
+	.status-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(2rem, 6rem) 4.5em; align-items: center; gap: var(--space-3); padding-block: var(--space-1); }
+	.status-label { color: var(--text); }
+	.status-value, .status-percent { white-space: nowrap; text-align: right; color: var(--muted); }
+	.status-value strong { color: var(--text); font-weight: 700; }
+	meter { appearance: none; width: 100%; height: 3px; border: 0; border-radius: 0; background: var(--surface-raised); }
+	meter::-webkit-meter-bar { height: 3px; border: 0; border-radius: 0; background: var(--surface-raised); }
+	meter::-webkit-meter-optimum-value { background: var(--accent); }
+	meter::-moz-meter-bar { background: var(--accent); }
+	.status-foot { margin: var(--space-2) 0 0; color: var(--muted); font-size: .65rem; }
+	@media (max-width: 30rem) { .collection-status { padding-inline: var(--space-3); } .status-row { gap: var(--space-2); grid-template-columns: minmax(0, 1fr) auto 2rem 4.5em; } }
 	.views { display: inline-flex; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
 	.views button { min-height: 2.75rem; padding: 0 var(--space-4); border: 0; background: transparent; color: var(--muted); font-weight: 700; }
 	.views button[aria-pressed='true'], .modes button[aria-pressed='true'] { background: var(--text); color: var(--background); }
@@ -350,33 +364,35 @@
 	.clear { min-height: 2.75rem; }
 	.results, .stack-panel, .detail-slot { min-width: 0; }
 	.stack-panel { display: grid; gap: var(--space-4); margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
-	.stack-head { display: flex; align-items: start; justify-content: space-between; gap: var(--space-3); min-width: 0; }
-	.stack-head h2 { margin: 0; font-size: var(--text-xl); overflow-wrap: anywhere; }
-	.stack-head p { margin: var(--space-1) 0 0; }
 	.season-rail { display: flex; gap: var(--space-3); min-width: 0; overflow-x: auto; padding: 0 0 var(--space-2); scroll-snap-type: x proximity; }
-	.season-item { display: grid; flex: 0 0 min(10rem, 40vw); gap: var(--space-1); min-width: 0; scroll-snap-align: start; }
+	.season-item { display: grid; flex: 0 0 min(7rem, 40vw); gap: var(--space-1); min-width: 0; scroll-snap-align: start; }
+	@media (min-width: 60.001rem) {
+		.season-rail { flex-direction: column; gap: var(--space-2); max-height: 29rem; overflow-y: auto; scroll-snap-type: y proximity; padding: 0 var(--space-1) 0 0; }
+		.season-item { flex: 0 0 auto; }
+	}
 	.season-card { display: grid; gap: var(--space-1); min-width: 0; padding: var(--space-2); border: 1px solid transparent; border-radius: .5rem; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 	.season-card:hover, .season-item.current .season-card { border-color: var(--focus); background: var(--surface-raised); }
 	.season-card:focus-visible, .cover-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-	.season-card :global(.card), .stack-tile :global(.card) { min-width: 0; }
+	.season-card :global(.card), .tile :global(.card) { min-width: 0; }
 	.season-card strong { font-size: var(--text-sm); }
 	.cover-button { min-height: 2.75rem; padding: 0 var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--muted); font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; }
 	.cover-button:hover { background: var(--surface-raised); color: var(--text); }
 	.preference-status { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(10.5rem, 42vw), 1fr)); gap: var(--space-5) var(--space-4); margin: 0; padding: 0; list-style: none; }
-	.tile { display: grid; gap: var(--space-2); width: 100%; padding: var(--space-2); border: 1px solid transparent; border-radius: .75rem; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+	.tile { display: grid; align-content: start; gap: var(--space-3); width: 100%; height: 100%; padding: var(--space-2); border: 1px solid transparent; border-radius: .5rem; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
 	.tile:hover { background: var(--surface); }
 	.tile[aria-pressed='true'] { border-color: var(--focus); background: var(--surface); }
 	.tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-	.art { display: block; }
-	.stack-tile .art { position: relative; isolation: isolate; margin: var(--space-2) var(--space-2) 0 0; }
+	.art { display: block; margin: var(--space-2) var(--space-2) 0 0; }
+	.stack-tile .art { position: relative; isolation: isolate; }
 	.stack-tile .art::before, .stack-tile .art::after { content: ''; position: absolute; inset: 0; z-index: -1; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 	.stack-tile .art::before { transform: translate(8px, -8px); }
 	.stack-tile .art::after { transform: translate(4px, -4px); }
 	.placeholder { display: block; aspect-ratio: 5 / 7; border-radius: .5rem; background: var(--surface-raised); }
-	.name { font-weight: 750; font-size: var(--text-sm); line-height: 1.25; overflow-wrap: anywhere; }
-	.meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--muted); font-size: var(--text-xs); }
-	.chip { padding: .05rem .4rem; border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-variant-numeric: tabular-nums; }
+	.caption { display: grid; align-content: start; gap: .125rem; min-width: 0; }
+	.draft-count { flex: none; color: var(--muted); font-size: var(--text-xs); font-weight: 500; font-variant-numeric: tabular-nums; }
+	.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 750; font-size: var(--text-sm); line-height: 1.25; }
+	.meta { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-1); white-space: nowrap; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; font-variant-numeric: tabular-nums; }
 	.shelf { display: grid; gap: var(--space-3); }
 	.shelf h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: var(--space-2) 0 0; padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); font-size: var(--text-lg); }
 	.shelf-count { color: var(--muted); font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; }

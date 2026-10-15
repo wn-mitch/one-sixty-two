@@ -70,6 +70,11 @@ export const MOTION = {
 	handoffStagger: 35,
 	/** How long a departing screen's positions stay valid for the incoming screen to pick up. */
 	handoffTtl: 4000,
+	/** An earned token turns up, pauses long enough to read, then joins the Shop wallet. */
+	rewardRise: 600,
+	rewardHold: 1400,
+	rewardFlight: 720,
+	rewardSplash: 420,
 	/** Raising a roster card for review and returning it; divided by the card speed setting. */
 	cardFlight: 780,
 	/** Turning the field card between the field and its stadium details. */

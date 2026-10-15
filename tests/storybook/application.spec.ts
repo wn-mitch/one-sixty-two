@@ -39,27 +39,27 @@ async function expectFinalRecord(page: Page, result: ExampleSeason['result']): P
 test.describe('application workshop stories', () => {
 	test('starts or resumes a draft, and reset restores the welcome state', async ({ page }) => {
 		await openStory(page, 'application-welcome--start');
-		await page.getByRole('button', { name: /start draft/i }).click();
+		await page.getByRole('button', { name: /build my team/i }).click();
 		await expect(page.locator('.draft-board')).toBeVisible();
 		await expect(page.locator('.picked-count')).toContainText('0');
 		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
 		await expect(page.getByRole('heading', { name: /can you go/i })).toBeVisible();
 
 		await openStory(page, 'application-welcome--resume-available');
-		await page.getByRole('button', { name: /resume draft/i }).click();
+		await page.getByRole('button', { name: /resume my team/i }).click();
 		await expect(page.locator('.draft-board')).toBeVisible();
 		await expect(page.locator('.picked-count')).toContainText('6');
 		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
-		await expect(page.getByRole('button', { name: /resume draft/i })).toBeVisible();
+		await expect(page.getByRole('button', { name: /resume my team/i })).toBeVisible();
 	});
 
 	test('keeps welcome actions unavailable while its data is loading', async ({ page }) => {
 		await openStory(page, 'application-welcome--loading');
-		await expect(page.getByRole('button', { name: /start draft/i })).toBeDisabled();
+		await expect(page.getByRole('button', { name: /build my team/i })).toBeDisabled();
 		await expect(page.getByRole('status')).toBeVisible();
 	});
 
-	test('fits every welcome era without a scrolling rail', async ({ page }) => {
+	test('keeps all eight welcome eras in a non-scrolling rail', async ({ page }) => {
 		await openStory(page, 'application-welcome--start');
 		const strip = page.getByRole('region', { name: 'Card designs from eight eras', exact: true });
 		await expect(strip.locator('figure')).toHaveCount(8);
@@ -67,11 +67,18 @@ test.describe('application workshop stories', () => {
 			await page.setViewportSize({ width, height: 788 });
 			await expect.poll(() => strip.evaluate(root => {
 				const bounds = root.getBoundingClientRect();
+				const pageWidth = document.documentElement.clientWidth;
 				const style = getComputedStyle(root);
 				return !['auto', 'scroll'].includes(style.overflowX) &&
+					document.documentElement.scrollWidth <= pageWidth &&
 					[...root.querySelectorAll('figure')].every(figure => {
 						const card = figure.getBoundingClientRect();
-						return card.left >= bounds.left - 1 && card.right <= bounds.right + 1;
+						const button = figure.querySelector('button')?.getBoundingClientRect();
+						return button &&
+							card.left >= bounds.left - 1 &&
+							card.right <= bounds.right + 1 &&
+							button.left >= 0 &&
+							button.right <= pageWidth;
 					});
 			})).toBe(true);
 		}

@@ -1,12 +1,14 @@
 <script module lang="ts">
 	export interface ResultsWorkshopProps {
-		initial?: 'complete' | 'shareLink' | 'shareUnavailable';
+		initial?: 'complete' | 'shareLink' | 'shareUnavailable' | 'firstSeasonReward';
 	}
 </script>
 
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import Results from '#lib/components/Results.svelte';
+	import TokenAmount from '#lib/components/TokenAmount.svelte';
+	import type { SeasonReward } from '#lib/cosmetics/ledger.ts';
 	import type { ShareAction, ShareFormat, SharePublication } from '#lib/share/types.ts';
 	import { createExamplePublication, getExampleSeason, type ExampleSeason } from './season-fixtures.ts';
 	import DraftWorkshop from './DraftWorkshop.svelte';
@@ -31,6 +33,7 @@
 	let error = $state('');
 	let publication = $state<SharePublication | null>(null);
 	let shareStatus = $state('');
+	let reward = $state.raw<SeasonReward | null>(null);
 	let instance = $state(0);
 	let request = 0;
 	let observedInitial = untrack(() => initial);
@@ -58,6 +61,7 @@
 		season = null;
 		publication = null;
 		shareStatus = '';
+		reward = initial === 'firstSeasonReward' ? { season: 1, bonus: 1 } : null;
 		void getExampleSeason()
 			.then((value) => {
 				if (currentRequest !== request) return;
@@ -118,6 +122,9 @@
 		{:else if error}
 			<p role="alert">Unable to render the example results: {error}</p>
 		{:else if season && screen === 'results'}
+			{#if reward}
+				<nav class="reward-wallet" aria-label="Example Shop wallet"><a class="button" href="/shop">Shop <span data-token-wallet aria-hidden="true"><TokenAmount amount={2} /></span></a></nav>
+			{/if}
 			<Results
 				result={season.result}
 				draft={season.draft}
@@ -131,6 +138,8 @@
 				{publication}
 				sharing={false}
 				shareStatus={shareStatus}
+				{reward}
+				ownSeason={initial === 'firstSeasonReward'}
 				newStickers={exampleStickers}
 				newCards={season.profiles.slice(2, 5).map(profile => ({ seasonId: profile.seasonId, label: `${profile.displayName} ${profile.year}` }))}
 			/>
@@ -139,3 +148,9 @@
 		{/if}
 	{/key}
 </StoryFrame>
+
+<style>
+	.reward-wallet { display: flex; justify-content: flex-end; padding-bottom: var(--space-4); }
+	.reward-wallet a { gap: var(--space-2); }
+	.reward-wallet span { color: var(--accent); }
+</style>

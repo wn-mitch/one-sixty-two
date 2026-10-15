@@ -58,7 +58,7 @@ test('preview width resizes every print mode without changing material dials', a
 	await expect(page.locator('#lab-film-scale')).toHaveValue('1.44');
 	await expect(page.locator('#lab-film-density')).toHaveValue('2.2');
 
-	for (const print of ['Foil frame', 'Era front', 'Foil sheet']) {
+	for (const print of ['Options', 'Era front', 'Foil sheet']) {
 		await page.getByRole('radio', { name: print, exact: true }).click();
 		await expect(page.locator('.lab-card canvas[data-presented]')).toBeVisible({ timeout: 15000 });
 		await expect.poll(() => page.locator('.lab-card').evaluate(element => element.getBoundingClientRect().width)).toBe(320);

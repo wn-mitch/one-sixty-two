@@ -1,8 +1,16 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { LeaderGroups } from '../../game/library-stats.ts';
+	import type { CardViewModel } from '../../cards/view-model.ts';
+	import Card from '../../cards/Card.svelte';
 
-	/** All-time leaderboards across every saved club; choosing a row selects that club. */
-	let { groups, onPick }: { groups: LeaderGroups; onPick: (entryKey: string) => void } = $props();
+	/** Ranked cards across every saved club; choosing a card opens its saved team. */
+	let { groups, cards, teamCard, onPick }: {
+		groups: LeaderGroups;
+		cards: ReadonlyMap<string, ReadonlyMap<string, CardViewModel>>;
+		teamCard: Snippet<[entryKey: string]>;
+		onPick: (entryKey: string) => void;
+	} = $props();
 
 	const sections = $derived([
 		{ id: 'teams', title: 'Clubs', boards: groups.teams },
@@ -13,74 +21,62 @@
 </script>
 
 <section class="leaders" aria-labelledby="leaders-heading">
-	<header>
-		<p class="eyebrow">Across every saved club</p>
-		<h2 id="leaders-heading">All-time leaders</h2>
-	</header>
+	<h2 id="leaders-heading">All-time leaders</h2>
 	{#each sections as section (section.id)}
 		<section class="group" aria-labelledby={`leaders-${section.id}`}>
 			<h3 id={`leaders-${section.id}`}>{section.title}</h3>
-			<div class="boards">
-				{#each section.boards as board (board.id)}
-					<div class="board">
-						<h4>{board.title}</h4>
-						{#if board.note}<p class="note">{board.note}</p>{/if}
-						{#if board.leaders.length}
-							<ol>
-								{#each board.leaders as leader, index (`${leader.entryKey}:${leader.seasonId ?? ''}`)}
-									<li>
-										<button type="button" class="row" onclick={() => onPick(leader.entryKey)}>
-											<span class="rank">{index + 1}</span>
-											<span class="who">
-												<span class="name">{leader.player ?? leader.team}</span>
-												{#if leader.player}<span class="team">{leader.team}</span>{/if}
-											</span>
-											<span class="value">{leader.display}</span>
+			{#each section.boards as board (board.id)}
+				<section class="board" aria-labelledby={`board-${board.id}`}>
+					<h4 id={`board-${board.id}`}>{board.title}</h4>
+					{#if board.leaders.length}
+						<ol aria-label={`${board.title} leaders`}>
+							{#each board.leaders as leader, index (`${leader.entryKey}:${leader.seasonId ?? ''}`)}
+								<li>
+									{#if leader.seasonId}
+										{@const view = cards.get(leader.entryKey)?.get(leader.seasonId)}
+										<button type="button" class="player-card" aria-label={`${index + 1}. ${leader.player} · ${leader.display} ${board.title} · ${leader.team}`} onclick={() => onPick(leader.entryKey)}>
+											{#if view}
+												<Card s={view} face="front" idle={false} onDetails={() => onPick(leader.entryKey)} />
+											{:else}
+												<span class="unavailable">{leader.player}</span>
+											{/if}
 										</button>
-									</li>
-								{/each}
-							</ol>
-						{:else}
-							<p class="note">No qualifying seasons yet.</p>
-						{/if}
-					</div>
-				{/each}
-			</div>
+									{:else}
+										{@render teamCard(leader.entryKey)}
+									{/if}
+									<div class="standing"><span class="rank">#{index + 1}</span><strong class="value">{leader.display}</strong></div>
+									{#if leader.player}<span class="team" title={leader.team}>{leader.team}</span>{/if}
+								</li>
+							{/each}
+						</ol>
+					{:else}
+						<p class="empty">No qualifying seasons yet.</p>
+					{/if}
+					{#if board.note}<p class="note">{board.note}</p>{/if}
+				</section>
+			{/each}
 		</section>
 	{/each}
 </section>
 
 <style>
-	.leaders { display: grid; gap: var(--space-5); }
-	header { display: grid; gap: var(--space-1); }
-	.eyebrow { margin: 0; color: var(--muted); font-size: var(--text-xs); font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+	.leaders { display: grid; gap: var(--space-5); container-type: inline-size; }
 	h2 { margin: 0; font-size: var(--text-xl); }
-	.group { display: grid; gap: var(--space-2); }
+	.group { display: grid; gap: var(--space-4); }
 	h3 { margin: 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--border); font-size: var(--text-sm); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-	.boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--space-4); }
-	.board { display: grid; gap: var(--space-1); align-content: start; min-width: 0; }
-	h4 { margin: 0; font-size: var(--text-sm); }
-	.note { margin: 0; color: var(--muted); font-size: var(--text-xs); }
-	ol { display: grid; margin: 0; padding: 0; list-style: none; }
-	.row {
-		display: grid;
-		grid-template-columns: 1.25rem minmax(0, 1fr) auto;
-		gap: var(--space-2);
-		align-items: center;
-		width: 100%;
-		min-height: 2.25rem;
-		padding: .2rem var(--space-1);
-		border: 0;
-		border-radius: calc(var(--radius) - 2px);
-		background: transparent;
-		text-align: left;
-		font-weight: inherit;
-	}
-	.row:hover:not(:disabled) { background: var(--surface-raised); }
-	.row:active:not(:disabled) { transform: none; }
-	.rank { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-	.who { display: grid; min-width: 0; }
-	.name { font-size: var(--text-sm); font-weight: 650; overflow-wrap: anywhere; }
-	.team { color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
-	.value { font-weight: 800; font-variant-numeric: tabular-nums; }
+	.board { display: grid; gap: var(--space-2); min-width: 0; }
+	h4 { margin: 0; font: 800 var(--text-lg) / 1.2 'Barlow Condensed', sans-serif; }
+	.note, .empty { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
+	ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+	li { min-width: 0; }
+	.player-card { display: block; width: 100%; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: inherit; text-align: left; }
+	.player-card:hover:not(:disabled) { background: transparent; }
+	.player-card:active:not(:disabled) { transform: none; }
+	.player-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+	.unavailable { display: grid; place-items: center; aspect-ratio: 5 / 7; padding: var(--space-2); box-sizing: border-box; border: 1px solid var(--border); background: var(--surface-raised); font-size: var(--text-sm); }
+	.standing { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-1); padding-top: var(--space-1); font-variant-numeric: tabular-nums; }
+	.rank { color: var(--muted); font-size: var(--text-xs); }
+	.value { font-size: var(--text-base); font-weight: 800; }
+	.team { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-xs); }
+	@container (max-width: 22rem) { ol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

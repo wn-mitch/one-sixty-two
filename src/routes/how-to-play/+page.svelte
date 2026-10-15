@@ -29,7 +29,7 @@
 				</svg>
 			</div>
 			<h2><span class="number">1</span>Choose a home park</h2>
-			<p>You play 81 games there. Its fences, walls and elevation change how far the ball carries. No park is rated higher than another.</p>
+			<p>Your park hosts 81 games. Elevation affects ball flight; fences and wall heights determine what clears the yard. Those conditions apply to both teams, and parks are not balanced to produce equal win totals.</p>
 		</li>
 
 		<li class="step">
@@ -73,7 +73,8 @@
 				</div>
 			</div>
 			<h2><span class="number">5</span>Play the season</h2>
-			<p>All 162 games are simulated, plate appearance by plate appearance. Your team is saved in My teams, and its cards join your Collection.</p>
+			<p>Set your batting order, starting rotation and bullpen roles, then simulate all 162 games. Each plate appearance plays out against the opposing pitcher, with fielding, baserunning and the park shaping the result.</p>
+			<p>Afterward, inspect game scores and player stats to see where your team won or lost. The finished team stays in My teams, and its cards join your Collection.</p>
 		</li>
 
 		<li class="step">

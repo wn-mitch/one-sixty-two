@@ -1,10 +1,12 @@
 import type { Page } from '@playwright/test';
-import { test, expect, openStory } from './workshop-test';
+import { test, expect, openStory, openStoryByName } from './workshop-test';
 
-const tiles = (page: Page) => page.getByRole('list', { name: 'Saved clubs' }).getByRole('button');
+const savedClubs = (page: Page) => page.getByRole('list', { name: 'Saved clubs' });
+const tiles = (page: Page) => savedClubs(page).locator('button[data-entry]');
+const tileShell = (page: Page, name: string) => savedClubs(page).locator('li').filter({ hasText: name }).first();
 
 test('Team gallery sorts clubs and opens a club from the all-time leaders', async ({ page }) => {
-	await openStory(page, 'modes-team-gallery--leaders');
+	await openStoryByName(page, 'Modes/My teams', 'All-time leaders');
 	await expect(tiles(page)).toHaveCount(3);
 	const sortGroup = page.getByRole('group', { name: 'Sort clubs' });
 	await expect(sortGroup.getByRole('button', { name: 'Most wins' })).toHaveAttribute('aria-pressed', 'true');
@@ -19,8 +21,11 @@ test('Team gallery sorts clubs and opens a club from the all-time leaders', asyn
 	await expect(wins.getByRole('listitem').first()).toContainText('Last fall’s club');
 	await expect(wins.getByRole('listitem').first()).toContainText('112');
 	const avg = leaders.locator('.board').filter({ has: page.getByRole('heading', { name: 'Batting average', exact: true }) });
-	await expect(avg.getByRole('listitem')).toHaveCount(5);
-	const leader = avg.getByRole('listitem').first();
+	await expect(avg.getByRole('listitem')).toHaveCount(6);
+	await expect(wins.locator('[data-card="club"]')).toHaveCount(3);
+	await expect(avg.locator('[data-identity]')).toHaveCount(6);
+	expect(await leaders.locator('ol').evaluateAll(lists => lists.every(list => list.scrollHeight <= list.clientHeight))).toBe(true);
+	const leader = avg.getByRole('listitem').last();
 	const team = await leader.locator('.team').innerText();
 	await leader.getByRole('button').click();
 	await expect(leaders).toHaveCount(0);
@@ -29,7 +34,7 @@ test('Team gallery sorts clubs and opens a club from the all-time leaders', asyn
 });
 
 test('Team gallery shows a club’s cards, lines, and history, and renames and deletes it', async ({ page }) => {
-	await openStory(page, 'modes-team-gallery--club');
+	await openStoryByName(page, 'Modes/My teams', 'Club');
 	const club = page.getByRole('region', { name: 'Example Aces', exact: true });
 	await expect(club.getByRole('list', { name: 'Roster' }).getByRole('listitem')).toHaveCount(16);
 	await expect(club.locator('.roster .card [data-card]').first()).toBeVisible();
@@ -53,7 +58,7 @@ test('Team gallery shows a club’s cards, lines, and history, and renames and d
 });
 
 test('Team gallery compares decks through modifier selection or Head-to-head mode', async ({ page }) => {
-	await openStory(page, 'modes-team-gallery--leaders');
+	await openStoryByName(page, 'Modes/My teams', 'All-time leaders');
 	await page.getByRole('group', { name: 'Sort clubs' }).getByRole('button', { name: 'Most recent' }).click();
 	await tiles(page).nth(0).click();
 	await tiles(page).nth(1).click({ modifiers: ['ControlOrMeta'] });
@@ -74,25 +79,71 @@ test('Team gallery compares decks through modifier selection or Head-to-head mod
 	await expect(retiredTape).toContainText('A retired club can’t play head-to-head.');
 });
 
+test('Team cards retain grades for current and retired saves while flipping independently from selection', async ({ page }) => {
+	await openStoryByName(page, 'Modes/My teams', 'All-time leaders');
+	const current = tileShell(page, 'Example Aces');
+	const retired = tileShell(page, 'Last fall’s club');
+	const currentCard = current.locator('[data-card="club"]');
+	const retiredCard = retired.locator('[data-card="club"]');
+	await expect(currentCard).not.toHaveAttribute('data-grade', 'ungraded');
+	await expect(retiredCard).toHaveAttribute('data-grade', 'D');
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	const bounds = (await currentCard.boundingBox())!;
+	await page.mouse.move(bounds.x + bounds.width * .2, bounds.y + bounds.height * .3);
+	await expect.poll(() => currentCard.evaluate(node => (node as HTMLElement).style.transform)).toContain('rotate');
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await expect.poll(() => currentCard.evaluate(node => (node as HTMLElement).style.transform)).toBe('');
+
+	await current.locator('button[data-entry]').click();
+	await expect(current.locator('button[data-entry]')).toHaveAttribute('aria-pressed', 'true');
+	await current.getByRole('button', { name: 'Turn over Example Aces', exact: true }).click();
+	await expect(current.locator('button[data-entry]')).toHaveAttribute('aria-pressed', 'true');
+	await expect(current.locator('button[aria-label="Show front Example Aces"]')).toBeVisible();
+	await expect(currentCard).toHaveAttribute('data-face', 'back');
+	await current.getByRole('button', { name: 'Show front Example Aces', exact: true }).click();
+	await expect(current.locator('button[data-entry]')).toHaveAttribute('aria-pressed', 'true');
+	await expect(currentCard).toHaveAttribute('data-face', 'front');
+	await retired.getByRole('button', { name: 'Turn over Last fall’s club', exact: true }).click();
+	await expect(retiredCard).toHaveAttribute('data-face', 'back');
+	await expect(retiredCard).toHaveAttribute('data-grade', 'D');
+	await expect(retiredCard.locator('.back .roster-row')).toHaveCount(16);
+	await expect(retiredCard.locator('.back .roster-row').last()).toBeVisible();
+	await expect(current.locator('button[data-entry]')).toHaveAttribute('aria-pressed', 'true');
+	await expect(retired.locator('button[data-entry]')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('Team card grade gallery compares all nine finishes and exposes the back through its story control', async ({ page }) => {
+	await openStoryByName(page, 'Cards/Team cards', 'Nine-grade finishes');
+	const gallery = page.getByRole('region', { name: 'Nine-grade team card preview' });
+	const grades = ['F', 'D', 'C', 'B', 'A', 'AA', 'S', 'S+', 'Perfect'];
+	await expect(gallery.locator('[data-card="club"]')).toHaveCount(grades.length);
+	await expect(gallery.locator('[data-card="club"][data-face="front"]')).toHaveCount(grades.length);
+	expect(await gallery.locator('[data-gallery-grade]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-gallery-grade')))).toEqual(grades);
+
+	await page.getByRole('button', { name: 'Show backs', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Show backs', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(gallery.locator('[data-card="club"][data-face="back"]')).toHaveCount(grades.length);
+});
+
 test('Team gallery fits a phone without sideways scroll', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	await openStory(page, 'modes-team-gallery--compare');
+	await openStoryByName(page, 'Modes/My teams', 'Tale of the tape');
 	await expect(page.getByRole('region', { name: /vs/ })).toBeVisible();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
 test('Team gallery handles an empty or blocked library', async ({ page }) => {
-	await openStory(page, 'modes-team-gallery--empty');
-	await expect(page.getByText('Finish a season and it is saved here')).toBeVisible();
-	await openStory(page, 'modes-team-gallery--storage-blocked');
+	await openStoryByName(page, 'Modes/My teams', 'Empty');
+	await expect(page.getByRole('link', { name: 'Build my team', exact: true })).toHaveAttribute('href', '/?build=1');
+	await openStoryByName(page, 'Modes/My teams', 'Storage blocked');
 	await expect(page.locator('[data-toast]')).toHaveText(/browser storage is blocked/);
 });
 
 test('Collection lists every rostered card and arranges a card’s stickers', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openStory(page, 'modes-collection--binder');
+	await page.getByRole('button', { name: 'All seasons', exact: true }).click();
 	const grid = page.getByRole('list', { name: 'Collected cards' });
-	await expect(grid.getByRole('listitem').first()).toBeVisible();
 	expect(await grid.getByRole('listitem').count()).toBeGreaterThanOrEqual(14);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 	// Phones keep the binder's filters behind their toggle.
@@ -122,11 +173,12 @@ test('Collection lists every rostered card and arranges a card’s stickers', as
 
 test('Collection groups cards by team or era with completion that leaves bullpens out', async ({ page }) => {
 	await openStory(page, 'modes-collection--binder');
+	await page.getByRole('button', { name: 'All seasons', exact: true }).click();
 	const all = page.getByRole('list', { name: 'Collected cards' }).getByRole('listitem');
 	await expect(all.first()).toBeVisible();
 	const total = await all.count();
 	// The example binder holds one team bullpen, which is collected but not counted.
-	await expect(page.locator('.count')).toContainText(`${total - 1} of`);
+	await expect(page.getByRole('meter', { name: 'Player-seasons' })).toHaveAttribute('value', String(total - 1));
 	for (const grouping of ['Team', 'Era']) {
 		await page.getByLabel('Group').selectOption({ label: grouping });
 		const shelves = page.locator('section.shelf');
@@ -151,7 +203,6 @@ test('head-to-head adds a replay opponent to a saved deck and plays the series',
 	await page.locator('#team-b-name').fill('Example Challenger');
 	await page.getByRole('button', { name: 'Use Team B replay', exact: true }).click();
 	const opponent = page.getByRole('region', { name: 'Example Challenger', exact: true });
-	await expect(opponent.getByText('Replay ready', { exact: true })).toBeVisible();
 	await opponent.getByRole('button', { name: 'Change team', exact: true }).click();
 	await expect(replay).toHaveValue(link);
 	await expect(page.locator('#team-b-name')).toHaveValue('Example Challenger');

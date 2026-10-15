@@ -38,12 +38,37 @@ describe('foil lab controls', () => {
 		expect(valueOf('film:ground', { ...setup, film: 'dollar' })).not.toBe(0.4);
 		const scene = sceneOf(setup);
 		expect(scene.light.filmTune?.values).toContain(0.4);
+		expect(scene.reference.find(group => group.title === 'Film')?.rows).toContainEqual({ label: 'ground', value: '0.4' });
+	});
+
+	it('builds a live material reference from effective controls only', () => {
+		const scene = sceneOf({ ...START, tier: 'base', tuned: { 'film:galaxy': { ground: 1.2 } }, light: { glare: 0.7 } });
+		expect(scene.reference.map(group => group.title)).toEqual(['Options']);
+		expect(scene.reference[0]?.rows).toEqual([
+			{ label: 'print', value: 'Foil sheet' },
+			{ label: 'tier', value: 'Base' },
+			{ label: 'era', value: '2020s' },
+			{ label: 'stock', value: 'chrome' }
+		]);
+	});
+
+	it('resolves own selections and formats dial values stably', () => {
+		const scene = sceneOf({ ...START, film: 'circuit', finish: '', palette: '', under: '', light: { glare: 0.3 } });
+		const film = scene.reference.find(group => group.title === 'Film')!;
+		const light = scene.reference.find(group => group.title === 'Light')!;
+		expect(film.rows).toEqual(expect.arrayContaining([
+			{ label: 'film', value: 'circuit' },
+			{ label: 'palette', value: 'rainbow' },
+			{ label: 'under', value: 'spun' }
+		]));
+		expect(light.rows).toContainEqual({ label: 'glare', value: '0.3' });
 	});
 
 	it('restores the shipped film instead of retaining earlier lab tuning', () => {
-		const dirty = withValue({ ...START, film: 'double-helix' }, 'film:slideWithTilt', 3);
+		const clean = { ...START, film: 'double-helix' };
+		const dirty = withValue(clean, 'film:slideWithTilt', 3);
 		const preset = eraPreset(dirty, '2000s');
-		expect(valueOf('film:slideWithTilt', preset)).toBe(0);
+		expect(valueOf('film:slideWithTilt', preset)).toBe(valueOf('film:slideWithTilt', clean));
 		expect(dirty.tuned['film:double-helix']?.slideWithTilt).toBe(3);
 	});
 
