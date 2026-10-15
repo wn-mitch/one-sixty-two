@@ -189,13 +189,16 @@ test.describe('application workshop stories', () => {
 		await expect(finalDetails.getByRole('region', { name: /batting box score/i }).first()).toBeVisible();
 		await page.getByRole('button', { name: /batting totals/i }).click();
 		await expect(page.getByRole('heading', { name: 'Batting' })).toBeFocused();
-		const inspect = page.getByRole('button', { name: /inspect .* card/i }).first();
+		const inspect = page.locator('.award-card').first();
+		await expect(inspect).toHaveAttribute('aria-expanded', 'false');
+		await expect(inspect).toHaveAttribute('aria-controls', 'results-card-review');
 		await inspect.click();
-		await expect(page.locator('.card-review')).toBeVisible();
-		// The raised card steps through the whole hand, wrapping at either end, by button or arrow key.
-		const review = page.locator('.card-review');
+		const review = page.locator('#results-card-review');
+		await expect(review.locator('[data-card-reader]:popover-open')).toBeVisible();
+		await expect(inspect).toHaveAttribute('aria-expanded', 'true');
+		// The raised card steps through the whole hand by button or arrow key.
 		const first = await review.getAttribute('data-season-id');
-		const count = page.locator('.hand-count');
+		const count = review.locator('.hand-count');
 		const [, start, total] = (await count.textContent())!.match(/(\d+) \/ (\d+)/)!.map(Number);
 		expect(total).toBe(example.draft.picks.length);
 		await page.getByRole('button', { name: /^Next card: / }).click();
@@ -205,9 +208,8 @@ test.describe('application workshop stories', () => {
 		await page.keyboard.press('ArrowLeft');
 		await expect(review).toHaveAttribute('data-season-id', first!);
 		await page.keyboard.press('Escape');
-		await expect(page.locator('.card-review')).toBeVisible();
-		await page.getByRole('button', { name: 'Hide card', exact: true }).click();
-		await expect(page.locator('.card-review')).toHaveCount(0);
+		await expect(review).toHaveCount(0);
+		await expect(inspect).toHaveAttribute('aria-expanded', 'false');
 		await expect(inspect).toBeFocused();
 		await page.getByRole('button', { name: /new draft/i }).click();
 		await expect(page.locator('.draft-board')).toBeVisible();

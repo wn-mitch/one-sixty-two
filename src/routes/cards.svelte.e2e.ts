@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { createDraft, legalSlots, rollContains, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { isJackpot, type Draft, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
 import { selectLogo, selectPhoto } from '../lib/media/client.ts';
-import { isHitter, rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
+import { isHitter, mixGroups, rankGroups, type CandidateEntry, type RankingSort } from '../lib/components/candidate-ranking.ts';
 import type { WarRankings } from '../lib/rankings/types.ts';
 import {
 	deviceDraft,
@@ -24,21 +24,18 @@ function groupsFor(
 	manifest: Manifest,
 	profiles: Profile[],
 	sort: RankingSort,
-	rankings: WarRankings | null,
-	query = '',
-	filter: Slot | 'All' = 'All'
+	rankings: WarRankings | null
 ) {
 	const roll = draft.currentRoll!;
 	const candidates = new Set(manifest.candidates
 		.filter(candidate => rollContains(roll, candidate))
 		.map(candidate => candidate.seasonId));
-	const needle = query.trim().toLowerCase();
 	const entries: CandidateEntry[] = profiles
 		.filter(profile => candidates.has(profile.seasonId))
-		.filter(profile => filter === 'All' || profile.eligibleSlots.includes(filter))
-		.filter(profile => !needle || `${profile.displayName} ${profile.year} ${profile.historicalTeam}`.toLowerCase().includes(needle))
-		.map(profile => ({ profile, slots: filter === 'All' ? profile.eligibleSlots : [filter] }));
-	return rankGroups(entries, sort, rankings).slice(0, 20).map(group => group.playerId);
+		.map(profile => ({ profile, slots: profile.eligibleSlots }));
+	const bySeason = new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate]));
+	const groups = rankGroups(entries, sort, rankings).filter(group => group.entries.some(entry => legalSlots(draft, bySeason.get(entry.profile.seasonId)!, manifest).length));
+	return mixGroups(groups, sort, rankings, group => group.entries[0]).slice(0, 20).map(group => group.playerId);
 }
 
 async function visibleGroupIds(page: Page): Promise<string[]> {
@@ -297,7 +294,7 @@ test('keeps the two-way finish and both readable stat families through ordinary 
 	await sheet.getByRole('button', { name: 'Cancel move', exact: true }).click();
 });
 
-test('orders displayed exact seasons after a lower-ranked season is chosen', async ({ page, request }) => {
+test('keeps default-season ranking when a lower-ranked exact season is chosen', async ({ page, request }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	const [manifest, rankings] = await Promise.all([currentManifest(request), currentRankings(request)]);
 	// A franchise roll, so players can have several exact seasons; a jackpot deals one per player.
@@ -310,11 +307,15 @@ test('orders displayed exact seasons after a lower-ranked season is chosen', asy
 	const profiles = (await rollProfiles(request, manifest, draft.currentRoll!)).filter(profile => dealt.has(profile.seasonId));
 	const bySeason = new Map(profiles.map(profile => [profile.seasonId, profile]));
 	await openSavedDraft(page, draft);
-	await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
+	await expect(page.locator('.ranking-loading')).toHaveCount(0);
 	// Hitters and pitchers share one ranked list; a season with batting WAR/162 ranks as a hitter.
 	const playerCards = page.getByRole('region', { name: 'Players', exact: true }).locator('.player-card');
 	const ranked = async () => (await playerCards.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-season-id')!)))
 		.map(id => ({ id, pitcher: typeof rankings.seasons[id]?.battingWAR162 !== 'number' }));
+	const initial = await ranked();
+	const defaultWars = initial.map(card => rankings.seasons[card.id][card.pitcher ? 'pitchingWAR162' : 'battingWAR162']!);
+	expect(defaultWars).toEqual([...defaultWars].sort((a, b) => b - a));
+	const playerOrder = initial.map(card => bySeason.get(card.id)!.playerId);
 	const shown = (await ranked()).filter(card => !card.pitcher).map(card => card.id);
 	const current = shown.map(id => bySeason.get(id)!).find(profile => profiles.some(other =>
 		other.playerId === profile.playerId && other.seasonId !== profile.seasonId &&
@@ -325,8 +326,7 @@ test('orders displayed exact seasons after a lower-ranked season is chosen', asy
 		typeof rankings.seasons[profile.seasonId]?.battingWAR162 === 'number' &&
 		rankings.seasons[profile.seasonId].battingWAR162! < rankings.seasons[current!.seasonId].battingWAR162!)!;
 	await page.getByRole('combobox', { name: `Exact season for ${current!.displayName}`, exact: true }).selectOption(alternate.seasonId);
-	const orderedWars = async () => (await ranked()).map(card => rankings.seasons[card.id][card.pitcher ? 'pitchingWAR162' : 'battingWAR162']!);
-	await expect.poll(orderedWars).toEqual((await orderedWars()).sort((a, b) => b - a));
+	await expect.poll(async () => (await ranked()).slice(0, playerOrder.length).map(card => bySeason.get(card.id)!.playerId)).toEqual(playerOrder);
 	await expect((await revealCandidate(page, current!.playerId)).locator('.player-card')).toHaveAttribute('data-season-id', alternate.seasonId);
 	const saved = await deviceDraft<Draft>(page);
 	expect(saved.picks).toEqual(draft.picks);
@@ -363,7 +363,7 @@ test('fits complete candidate names after phone and desktop resizing with reduce
 test.describe('normal card motion', () => {
 	test.use({ reducedMotion: 'no-preference' });
 
-	test('tilts only for mouse and returns the reordered grid to clean styles', async ({ page, request }) => {
+	test('drifts at rest, ignores touch steering, and returns the reordered grid to clean styles', async ({ page, request }) => {
 		const [manifest, rankings] = await Promise.all([currentManifest(request), currentRankings(request)]);
 		const scenario = await cardScenario(request, manifest, () => true);
 		await openSavedDraft(page, scenario.draft);
@@ -376,6 +376,9 @@ test.describe('normal card motion', () => {
 		const tiltAngle = () => surface.evaluate(node => Number((node as HTMLElement).style.transform.match(/rotate3d\([^)]*,\s*(-?[\d.]+)deg\)/)?.[1] ?? 0));
 		// Park the real cursor off the cards so only the dispatched events below steer the tilt.
 		await page.mouse.move(1, 1);
+		const resting = await surface.evaluate(node => (node as HTMLElement).style.transform);
+		await expect.poll(() => surface.evaluate(node => (node as HTMLElement).style.transform)).not.toBe(resting);
+		await art.focus();
 		await expect.poll(tiltAngle).toBeLessThan(.5);
 		await art.dispatchEvent('pointermove', { pointerType: 'touch', clientX: 1, clientY: 1 });
 		expect(await tiltAngle()).toBeLessThan(.5);
@@ -407,6 +410,8 @@ test.describe('normal card motion', () => {
 		}))).toBe(true);
 		expect(await page.locator('body > [aria-hidden="true"][inert]').count()).toBe(0);
 		expect(await visibleGroupIds(page)).toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'metrics', rankings));
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await expect.poll(() => surface.evaluate(node => (node as HTMLElement).style.transform)).toBe('');
 	});
 	test.describe('on a phone', () => {
 		test.use({ hasTouch: true, isMobile: true });

@@ -10,19 +10,18 @@ export const STORAGE_KEY = '162-zero:v1';
 type DeviceDb = { all(sql: string, bind?: unknown[]): Promise<Record<string, unknown>[]>; run(statements: { sql: string; bind?: unknown[] }[]): Promise<void> };
 
 /**
- * Finds a player's group in the draft pool, which has no search: the pool pages twenty players at a time
- * and folds players a full role cannot take into a closed section after the last page.
+ * Finds a player's group in the append-only draft pool, revealing batches and opening full roles as needed.
  */
 export async function revealCandidate(page: Page, playerId: string): Promise<Locator> {
  const group = page.locator(`.candidate-card[data-candidate-group="${playerId}"]`);
  await expect(page.locator('.candidate-card').first()).toBeVisible();
- const previous = page.locator('.pagination .page-button').first();
- while (await previous.count() && await previous.isEnabled()) await previous.click();
  for (;;) {
   if (await group.count()) break;
-  const next = page.locator('.pagination .page-button').last();
-  if (!(await next.count()) || !(await next.isEnabled())) break;
-  await next.click();
+  const more = page.getByRole('button', { name: 'Load more players', exact: true });
+  if (!(await more.count())) break;
+  // Keyboard activation does not scroll the sentinel into view and race its observer.
+  await more.evaluate(button => button.focus({ preventScroll: true }));
+  await more.press('Enter');
  }
  const folded = page.locator('details.collapsed-role:not([open]) > summary');
  if (!(await group.count()) && await folded.count()) await folded.click();
@@ -31,17 +30,16 @@ export async function revealCandidate(page: Page, playerId: string): Promise<Loc
  return group;
 }
 
-/** Pages through the whole pool, folded roles included, and fails if the player appears anywhere. */
+/** Reveals the whole pool, folded roles included, and fails if the player appears anywhere. */
 export async function expectAbsentFromPool(page: Page, playerId: string): Promise<void> {
  const group = page.locator(`.candidate-card[data-candidate-group="${playerId}"]`);
  await expect(page.locator('.candidate-card').first()).toBeVisible();
- const previous = page.locator('.pagination .page-button').first();
- while (await previous.count() && await previous.isEnabled()) await previous.click();
  for (;;) {
   await expect(group).toHaveCount(0);
-  const next = page.locator('.pagination .page-button').last();
-  if (!(await next.count()) || !(await next.isEnabled())) break;
-  await next.click();
+  const more = page.getByRole('button', { name: 'Load more players', exact: true });
+  if (!(await more.count())) break;
+  await more.evaluate(button => button.focus({ preventScroll: true }));
+  await more.press('Enter');
  }
  const folded = page.locator('details.collapsed-role:not([open]) > summary');
  if (await folded.count()) await folded.click();
@@ -50,7 +48,7 @@ export async function expectAbsentFromPool(page: Page, playerId: string): Promis
 
 /** Waits for the draft pool's cards, the board's ready state now that the pool has no search box. */
 export async function expectPool(page: Page): Promise<void> {
- await expect(page.locator('.candidate-card').first()).toBeVisible();
+ await expect(page.getByRole('region', { name: 'Players', exact: true }).locator('.candidate-card[data-candidate-group]').first()).toBeVisible();
 }
 
 /** The page's application code installs the database hook once it has loaded. */

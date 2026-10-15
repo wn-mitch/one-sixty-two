@@ -5,6 +5,7 @@
   * The player pool's shape: CardBrowser's sort and filter rail beside or above a grid of card
   * placeholders, laid out with CandidateList's columns. `wide` follows the draft board; left unset, the
   * board's own wide media query decides. Without the rail it fills a browser whose controls are already real.
+  * Narrow cards reserve one metadata line; wide cards reserve the 44px season-control row.
   */
  let { wide: wideOverride, rail = true }: { wide?: boolean; rail?: boolean } = $props();
  const wide = $derived(wideOverride ?? boardWide.current);
@@ -21,7 +22,7 @@
   <div class="section-heading"><span class="sk-line" style:--sk-width="5.5rem"></span></div>
   <div class="card-grid">
    {#each { length: 12 } as _}
-    <div class="card"><span class="sk sk-card"></span><span class="meta"><span class="sk-line"></span><span class="sk-line" style:--sk-width="60%"></span></span></div>
+    <div class="card"><span class="sk sk-card"></span><span class="meta"><span class="sk-line"></span></span></div>
    {/each}
   </div>
  </div>
@@ -39,7 +40,6 @@
  .section-heading { margin-block: var(--space-3); font-size: var(--text-lg); line-height: 1.15; }
  .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; align-items: start; }
  .card { display: grid; gap: 12px; width: 100%; max-width: 24rem; min-width: 0; margin-inline: auto; }
- /* The qualification caption under a phone card runs to two short lines. */
  .meta { display: block; font-size: var(--text-xs); line-height: 1.367; }
  @media (min-width: 30rem) and (max-width: 47.999rem) { .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
  @media (min-width: 48rem) and (max-width: 1099px) { .pool-skeleton:not(.wide) .card-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
@@ -55,6 +55,5 @@
  .wide .section-heading { margin-block: calc(1rem + 1px) var(--space-3); font-size: 1.5rem; line-height: 1; }
  .wide .card-grid { gap: 28px 20px; }
  .wide .meta { display: flex; align-items: center; height: 44px; font-size: var(--text-sm); }
- .wide .meta .sk-line:last-child { display: none; }
  @media (min-width: 1360px) { .wide .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>

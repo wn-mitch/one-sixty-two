@@ -108,28 +108,40 @@ function flightReturned(): void {
 
 // A pointer click on a selectable front waits out the double-click window, so raising a card never selects it too.
 const DOUBLE_CLICK_MS = 220;
-let pendingSelect: ReturnType<typeof setTimeout> | undefined;
+let cancelPendingSelect: (() => void) | undefined;
 
 function frontClick(event: MouseEvent & { currentTarget: HTMLButtonElement }): void {
  if (readerOpen) return raisedClick();
- clearTimeout(pendingSelect);
- pendingSelect = undefined;
+ cancelPendingSelect?.();
  // Keyboard activation reports no clicks and selects at once.
  if (event.detail === 0) return onFrontSelect?.(event.currentTarget);
  if (event.detail > 1) return;
  const trigger = event.currentTarget;
- pendingSelect = setTimeout(() => {
-  pendingSelect = undefined;
+ const superseded = (next: Event) => {
+  if (next.type === 'keydown' || !next.composedPath().includes(trigger)) cancelPendingSelect?.();
+ };
+ const cancel = () => {
+  clearTimeout(timer);
+  document.removeEventListener('pointerdown', superseded, true);
+  document.removeEventListener('focusin', superseded, true);
+  document.removeEventListener('keydown', superseded, true);
+  cancelPendingSelect = undefined;
+ };
+ const timer = setTimeout(() => {
+  cancel();
   if (trigger.isConnected) onFrontSelect?.(trigger);
  }, DOUBLE_CLICK_MS);
+ cancelPendingSelect = cancel;
+ document.addEventListener('pointerdown', superseded, true);
+ document.addEventListener('focusin', superseded, true);
+ document.addEventListener('keydown', superseded, true);
 }
 
-$effect(() => () => clearTimeout(pendingSelect));
+$effect(() => () => cancelPendingSelect?.());
 
 /** A double click lifts the card into the reader face up, as turning it over lifts it face down. */
 function raiseFront(): void {
- clearTimeout(pendingSelect);
- pendingSelect = undefined;
+ cancelPendingSelect?.();
  if (readerOpen || raisedOnly) return;
  raisedFront = true;
 }

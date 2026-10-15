@@ -16,6 +16,7 @@ const ERAS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '20
 const WIDTHS = [240, 320, 330, 410] as const;
 
 test.setTimeout(180000);
+test.use({ reducedMotion: 'reduce' });
 
 interface Specimen {
 	label: string;

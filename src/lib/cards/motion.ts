@@ -198,7 +198,8 @@ export function tilt(node: HTMLElement, initialOptions: TiltOptions = {}) {
 
 	const autonomousEnabled = () => Boolean(options.idle || (options.wall && (options.finish ?? 'base') !== 'base'));
 	let spotlightAngle = stableUnit(identity, 32) * Math.PI * 2;
-	const interrupted = () => hovering || focused;
+	// A working phone sensor owns the pose even at neutral; ambient drift must not add a second tilt.
+	const interrupted = () => hovering || focused || ((options.enabled ?? true) && appSettings.effectiveEnabled && deviceTilt.enabled && deviceTilt.state === 'active');
 	const moving = () => Boolean(
 		options.idle || interrupted() || hoverBlend > 0.001 ||
 		!settled(pose.x, 0, 0.01) || !settled(pose.y, 0, 0.01) || !settled(currentLift, 0, 0.001) || pose.envelope.value > 0.01

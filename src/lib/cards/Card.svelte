@@ -37,7 +37,7 @@
   interactive = false,
   thumbnail = false,
   compact = false,
-  idle = false,
+  idle = true,
   wall = false,
   scene = false,
   nameProfile,
@@ -116,8 +116,8 @@
  use:tilt={{
   enabled: interactive && !thumbnail && !flat,
   eventTarget: root?.parentElement ?? undefined,
-  idle: idle && !flat,
-  wall: wall && !flat,
+  idle: idle && face === 'front' && !compact && !thumbnail && !flat,
+  wall: wall && face === 'front' && !compact && !thumbnail && !flat,
   finish: motionFinish,
   light: lit ? light : undefined,
   identity: `${s.full}|${s.year}|${s.team}|${s.pos}`

@@ -64,7 +64,7 @@
 
  interface CandidateMotionState {
   draftKey: string;
-  page: number;
+  count: number;
   filter: FilterSlot;
   sort: RankingSort;
   rankings: WarRankings | null;
@@ -73,7 +73,8 @@
  const gridMotion = createCandidateGridMotion();
  let candidateMotionState: CandidateMotionState | null = null;
  let filter = $state<FilterSlot>('All');
- let page = $state(0);
+ let visibleCount = $state(20);
+ let sentinel = $state<HTMLDivElement>();
  let flippedPlayerId = $state<string | null>(null);
  const showBlocked = $derived(appSettings.showBlockedCards);
  let browseRevision = $state(0);
@@ -130,7 +131,7 @@
   // Hitters and pitchers share one ranking, led by each player's default season, so choosing another exact
   // season never moves the card out from under the player.
   const mixed = mixGroups(filtered, sort, rankings, defaultEntry);
-  // Phones keep blocked players in the grid but after every player who can still be placed.
+  // When shown, blocked players follow every player who can still be placed on phones.
   return wide ? mixed : [...mixed].sort((a, b) => Number(isBlocked(a)) - Number(isBlocked(b)));
  });
  const openSlots = $derived.by(() => {
@@ -150,9 +151,8 @@
  ).length);
  const rankedGroups = $derived(roleSplit.shown);
  const collapsedGroups = $derived(roleSplit.collapsed);
- const pageCount = $derived(Math.max(1, Math.ceil(rankedGroups.length / 20)));
- const currentPage = $derived(Math.min(page, pageCount - 1));
- const pagedGroups = $derived(rankedGroups.slice(currentPage * 20, (currentPage + 1) * 20));
+ const shownGroups = $derived(rankedGroups.slice(0, visibleCount));
+ const hasMore = $derived(shownGroups.length < rankedGroups.length);
  const collapsedLabel = $derived.by(() => {
   const kinds = new Set(collapsedGroups.map(group => group.kind));
   const role = kinds.size === 2 ? 'Roster full' : kinds.has('Pitchers') ? 'Pitching staff full' : 'Lineup full';
@@ -187,7 +187,7 @@
   if (group.entries.some(entry => entry.profile.seasonId === seasonId)) onSeasonChange(group.playerId, seasonId);
  }
  function resetBrowse() {
-  page = 0;
+  visibleCount = 20;
   flippedPlayerId = null;
   onResetBrowse();
  }
@@ -207,15 +207,24 @@
   flippedPlayerId = null;
   onPlace?.(seasonId, group.entries.map(item => item.profile), slot, trigger);
  }
- async function changePage(next: number) {
-  page = next;
-  flippedPlayerId = null;
-  onResetBrowse();
+ async function loadMore(focusNew = false): Promise<void> {
+  if (busy || !hasMore) return;
+  const firstNew = rankedGroups[shownGroups.length]?.playerId;
+  visibleCount += 20;
+  if (!focusNew || !firstNew) return;
   await tick();
-  const results = document.getElementById(`${uid}-results`);
-  results?.focus({ preventScroll: true });
-  results?.scrollIntoView({ block: 'start' });
+  document.querySelector<HTMLButtonElement>(`[data-candidate-group="${CSS.escape(firstNew)}"] button.select-front, [data-candidate-group="${CSS.escape(firstNew)}"] button.art-trigger`)?.focus({ preventScroll: true });
  }
+ $effect(() => {
+  if (!sentinel || busy || !hasMore || typeof IntersectionObserver === 'undefined') return;
+  visibleCount;
+  const observer = new IntersectionObserver(entries => {
+   // Keyboard focus on the fallback owns this batch; never remove its button underneath Enter.
+   if (entries.some(entry => entry.isIntersecting) && !sentinel?.contains(document.activeElement)) void loadMore();
+  }, { rootMargin: '400px 0px' });
+  observer.observe(sentinel);
+  return () => observer.disconnect();
+ });
  function playerCardFromTarget(target: EventTarget | null): Element | null {
   return target instanceof Element ? target.closest('[data-candidate-card]') : null;
  }
@@ -234,26 +243,26 @@
   draftBrowseKey;
   untrack(() => {
    flippedPlayerId = null;
-   page = 0;
+   visibleCount = 20;
    browseRevision++;
   });
  });
  $effect(() => {
   if (!wide) flippedPlayerId = null;
  });
- // Rankings arriving re-sort the pool; the selected player's card stays in view rather than moving to another page.
+ // Rankings may move a selected player beyond the revealed prefix; reveal through their new position.
  $effect(() => {
   rankings;
   untrack(() => {
    if (!selectedSeasonId) return;
    const index = rankedGroups.findIndex(group => group.entries.some(entry => entry.profile.seasonId === selectedSeasonId));
-   if (index >= 0) page = Math.floor(index / 20);
+   if (index >= 0) visibleCount = Math.max(visibleCount, Math.ceil((index + 1) / 20) * 20);
   });
  });
  $effect.pre(() => {
   const next: CandidateMotionState = {
    draftKey: draftBrowseKey,
-   page: currentPage,
+   count: shownGroups.length,
    filter: activeFilter,
    sort,
    rankings
@@ -270,7 +279,7 @@
   const gather = gatherNext;
   gatherNext = false;
   if (next.draftKey !== previous.draftKey || !reordered) {
-   if (next.draftKey !== previous.draftKey || next.page !== previous.page) gridMotion.skip();
+   if (next.draftKey !== previous.draftKey || next.count !== previous.count) gridMotion.skip();
    return;
   }
   const revision = gridMotion.capture();
@@ -350,29 +359,25 @@
     <p class="notice">No eligible seasons are available in this pool. Your current roll is preserved.</p>
    {/if}
   {:else}
-   {#if pagedGroups.length}
+   {#if shownGroups.length}
    <section class="player-section" aria-label="Players">
     <div class="section-heading">
      <h3>Players</h3>
     </div>
     <div class="card-grid">
-     {#each pagedGroups as group (`${browseRevision}:${group.key}`)}
+     {#each shownGroups as group (`${browseRevision}:${group.key}`)}
       {@render candidateCard(group)}
      {/each}
     </div>
    </section>
    {/if}
-   {#if pageCount > 1}
-    <nav class="pagination" aria-label="Player card pages">
-     <button type="button" class="page-button" disabled={busy || currentPage === 0} onclick={() => changePage(currentPage - 1)}><span class="page-arrow" aria-hidden="true">←</span> Previous</button>
-     <span class="page-counter" role="status" aria-label={`${rankedGroups.length} players, page ${currentPage + 1} of ${pageCount}`}>
-      <span><strong>{currentPage + 1}</strong> / {pageCount}</span>
-      <small>{rankedGroups.length} {rankedGroups.length === 1 ? 'player' : 'players'}</small>
-     </span>
-     <button type="button" class="page-button" disabled={busy || currentPage === pageCount - 1} onclick={() => changePage(currentPage + 1)}>Next <span class="page-arrow" aria-hidden="true">→</span></button>
-    </nav>
+   {#if rankedGroups.length}
+    <div class="pool-more" data-pool-load bind:this={sentinel}>
+     <span role="status">{shownGroups.length} of {rankedGroups.length} players</span>
+     {#if hasMore}<button type="button" class="secondary" disabled={busy} onclick={() => loadMore(true)}>Load more players</button>{/if}
+    </div>
    {/if}
-   {#if collapsedGroups.length && currentPage === pageCount - 1}
+   {#if collapsedGroups.length && !hasMore}
     <details class="collapsed-role">
      <summary>{collapsedLabel}</summary>
      <div class="card-grid">
@@ -389,7 +394,7 @@
 <style>
  .candidates { min-width: 0; }
  .section-heading { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); align-items: baseline; justify-content: space-between; margin-block: var(--space-6) var(--space-3); }
- /* On phones the first section sits right under search so its cards start above the fold. */
+ /* On phones the first section sits right under the filters. */
  .candidates:not(.candidates-wide) .player-section:first-of-type .section-heading { margin-top: var(--space-3); }
  .section-heading h3 { font-size: var(--text-lg); }
  .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; align-items: start; }
@@ -411,14 +416,8 @@
  @keyframes ranking-spin { to { rotate: 1turn; } }
  :global([data-motion='off']) .ranking-spinner { animation: none; border-top-color: color-mix(in oklch, currentColor 25%, transparent); border-right-color: currentColor; }
  @media (prefers-reduced-motion: reduce) { .ranking-spinner { animation: none; border-right-color: currentColor; } }
- .pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); width: min(100%, 17.25rem); box-sizing: border-box; margin: var(--space-6) auto 0; padding: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
- .page-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-3); border: 0; background: transparent; font-size: var(--text-sm); font-weight: 650; }
- .page-button:not(:disabled):hover { background: var(--surface-hover); }
- .page-button:disabled { opacity: .4; }
- .page-arrow { font-size: 1.125rem; line-height: 1; }
- .page-counter { display: grid; gap: 2px; min-width: 3.5rem; color: var(--muted); font-size: var(--text-sm); line-height: 1.1; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
- .page-counter small { font-size: var(--text-xs); }
- .page-counter strong { color: var(--text); }
+ .pool-more { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+ .pool-more button { min-height: 44px; }
  @media (min-width: 48rem) {
   /* The first heading lines up with Your field: the panel's border plus its header padding. */
   .candidates-wide .player-section:first-of-type .section-heading { margin-top: calc(1rem + 1px); }

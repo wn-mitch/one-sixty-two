@@ -20,6 +20,7 @@ test.describe('Draft board browsing', () => {
 		await openStoryByName(page, 'Draft/Board', 'Partial roster');
 		const pack = page.getByRole('button', { name: 'Roll next franchise', exact: true });
 		await expect(page.locator('.reveal [data-roll-mark]')).toHaveCount(0);
+		await pack.focus();
 		await pack.click();
 		await expect(pack).toBeDisabled();
 		// The dealt card names the roll before the header does.
@@ -63,7 +64,9 @@ test.describe('Draft board browsing', () => {
 		const caption = page.locator('.foil-pack .caption');
 		await expect(caption).toHaveText('Tap the pack');
 		await expect(caption).toHaveCSS('opacity', '0');
-		await page.getByRole('button', { name: 'Roll next franchise', exact: true }).click();
+		const pack = page.getByRole('button', { name: 'Roll next franchise', exact: true });
+		await pack.focus();
+		await pack.press('Enter');
 		const cards = page.locator('.foil-pack .dealt-card');
 		await expect(cards.first()).toBeFocused();
 		await expect(caption).toHaveCSS('opacity', '0');
@@ -208,7 +211,8 @@ test.describe('Draft board browsing', () => {
 		await page.setViewportSize({ width: 1212, height: 788 });
 		await openChoosing(page);
 		await page.addStyleTag({ content: 'html { scrollbar-gutter: stable; }' });
-		await page.addStyleTag({ content: '.candidate-card .front > .card { transform: none !important; }' });
+		// Hold only the nested artwork's ambient tilt still; the reader's flight remains animated.
+		await page.addStyleTag({ content: '.candidate-card .front .card { transform: none !important; }' });
 		const card = page.locator('.candidate-card').first();
 		await card.getByRole('button', { name: /^Preview .+ at 2B$/ }).click();
 		const original = await card.evaluate(async root => {
@@ -340,7 +344,7 @@ test.describe('Draft board browsing', () => {
 		await expect(page.locator('.field-footer')).toHaveCount(0);
 	});
 
-	test('keeps desktop actions on one row and retains exact seasons across ranking pages', async ({ page }) => {
+	test('keeps desktop actions on one row and retains exact seasons while revealing more players', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openChoosing(page);
 		for (const width of [1100, 1212, 1440]) {
@@ -355,14 +359,24 @@ test.describe('Draft board browsing', () => {
 			expect(rows.every(row => row.aligned && row.touchSafe && row.labels.every(label => /^\d{4}$/.test(label ?? '')))).toBe(true);
 			expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 			const layout = await page.locator('.candidate-card').first().evaluate(candidate => {
-				const artwork = candidate.querySelector('.front .card')!.getBoundingClientRect();
-				const bounds = candidate.getBoundingClientRect();
-				const stack = candidate.querySelector('[data-flip]')!.getBoundingClientRect();
+				const bounds = candidate as HTMLElement;
+				const artwork = candidate.querySelector<HTMLElement>('.front .card')!;
+				const stack = candidate.querySelector<HTMLElement>('[data-flip]')!;
+				// Layout offsets exclude the artwork's intentional idle tilt without stopping motion.
+				const top = (node: HTMLElement): number => {
+					let offset = 0;
+					for (let current: HTMLElement | null = node; current; current = current.offsetParent as HTMLElement | null) {
+						offset += current.offsetTop;
+					}
+					return offset;
+				};
+				const artworkTop = top(artwork);
+				const stackTop = top(stack);
 				return {
-					startsWithArtwork: Math.abs(artwork.top - bounds.top) < 1,
-					extraHeight: bounds.height - artwork.height,
-					fullFront: artwork.width > 0 && Math.abs(artwork.height / artwork.width - 7 / 5) < .01 &&
-						artwork.top >= stack.top - 1 && artwork.bottom <= stack.bottom + 1
+					startsWithArtwork: Math.abs(artworkTop - top(bounds)) < 1,
+					extraHeight: bounds.offsetHeight - artwork.offsetHeight,
+					fullFront: artwork.offsetWidth > 0 && Math.abs(artwork.offsetHeight / artwork.offsetWidth - 7 / 5) < .01 &&
+						artworkTop >= stackTop - 1 && artworkTop + artwork.offsetHeight <= stackTop + stack.offsetHeight + 1
 				};
 			});
 			expect(layout.startsWithArtwork).toBe(true);
@@ -378,8 +392,10 @@ test.describe('Draft board browsing', () => {
 			return [...input.options].find(option => option.value !== input.value)!.value;
 		});
 		await select.selectOption(seasonId);
-		await expect(selectedGroup).toHaveCount(0);
-		await page.getByRole('navigation', { name: 'Player card pages' }).getByRole('button', { name: 'Next', exact: true }).click();
+		await expect(selectedGroup.locator('.player-card')).toHaveAttribute('data-season-id', seasonId);
+		const more = page.getByRole('button', { name: 'Load more players', exact: true });
+		await more.focus();
+		await more.press('Enter');
 		await expect(selectedGroup.locator('.player-card')).toHaveAttribute('data-season-id', seasonId);
 		await selectedGroup.getByRole('button', { name: 'Turn over', exact: true }).click();
 		await selectedGroup.getByRole('button', { name: /^Show text version for / }).click();
@@ -388,7 +404,7 @@ test.describe('Draft board browsing', () => {
 		await expect(selectedGroup.getByRole('button', { name: 'Text version', exact: true })).toHaveCount(0);
 	});
 
-	test('filters qualified candidates, reorders through real sort and ranking states, and pages results', async ({ page }) => {
+	test('filters qualified candidates, reorders through real ranking states, and appends results', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openChoosing(page);
 		const warOrder = await candidateGroups(page);
@@ -400,34 +416,16 @@ test.describe('Draft board browsing', () => {
 		await expect(candidate(page, '02')).toBeVisible();
 
 		await page.getByRole('button', { name: 'All', exact: true }).click();
-		const firstPage = await candidateGroups(page);
-		await expect(page.getByRole('navigation', { name: 'Player card pages' })).toBeVisible();
-		await page.getByRole('button', { name: 'Next', exact: true }).click();
-		await expect.poll(() => candidateGroups(page)).not.toEqual(firstPage);
-		await expect(page.getByRole('button', { name: 'Previous', exact: true })).toBeEnabled();
-		await expect(page.locator('.candidate-card[data-candidate-group]').first()).toBeInViewport();
-		await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
-		const pagination = page.getByRole('navigation', { name: 'Player card pages' });
-		// Desktop hides blocked groups: the pool's four pitchers have no legal slot on the first roll.
-		await expect(pagination.getByRole('status')).toContainText('21 players');
-		for (const width of [320, 402, 1212]) {
-			await page.setViewportSize({ width, height: 788 });
-			const bounds = await pagination.evaluate(nav => {
-				const rect = nav.getBoundingClientRect();
-				const parent = nav.parentElement!.getBoundingClientRect();
-				return {
-					width: rect.width, available: parent.width,
-					centerDifference: Math.abs(rect.left + rect.width / 2 - parent.left - parent.width / 2),
-					touchSafe: [...nav.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= 44)
-				};
-			});
-			expect(bounds.width).toBeLessThanOrEqual(bounds.available);
-			expect(bounds.touchSafe).toBe(true);
-			expect(bounds.centerDifference).toBeLessThan(1);
-		}
-		await pagination.getByRole('button', { name: 'Previous', exact: true }).click();
-		await expect(pagination.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
-		await expect.poll(() => candidateGroups(page)).toEqual(firstPage);
+		const initial = await candidateGroups(page);
+		const more = page.getByRole('button', { name: 'Load more players', exact: true });
+		await more.focus();
+		await more.press('Enter');
+		// Loading preserves the original prefix and moves keyboard focus to the first new card.
+		await expect(page.locator('.pool-more')).toContainText('21 of 21 players');
+		const appended = await candidateGroups(page);
+		expect(appended.slice(0, initial.length)).toEqual(initial);
+		await expect(page.locator('.candidate-card[data-candidate-group]').nth(initial.length).locator('button.select-front')).toBeFocused();
+		await expect(more).toHaveCount(0);
 
 		await openStory(page, 'draft-board--rankings-loading');
 		await expect(page.getByRole('status').filter({ hasText: /Example rankings are loading/ })).toBeVisible();
@@ -444,14 +442,15 @@ test.describe('Draft board browsing', () => {
 		await expect.poll(() => candidateGroups(page)).not.toEqual(unavailableOrder);
 	});
 
-	test('resets pagination and the initial selectable pool without leaving an overlay', async ({ page }) => {
+	test('resets the revealed pool without leaving an overlay', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await openChoosing(page);
-		await page.getByRole('button', { name: 'Next', exact: true }).click();
-		await expect(page.getByRole('navigation', { name: 'Player card pages' })).toContainText('2 / 2');
-		await expect(candidate(page, '01')).toHaveCount(0);
+		const more = page.getByRole('button', { name: 'Load more players', exact: true });
+		await more.focus();
+		await more.press('Enter');
+		await expect(page.locator('.pool-more')).toContainText('21 of 21 players');
 		await page.getByRole('button', { name: 'Reset story', exact: true }).click();
-		await expect(page.getByRole('navigation', { name: 'Player card pages' })).toContainText('1 / 2');
+		await expect(page.locator('.pool-more')).toContainText('20 of 21 players');
 		await expect(candidate(page, '01')).toBeVisible();
 		await page.setViewportSize({ width: 402, height: 874 });
 		await candidate(page, '06').getByRole('button', { name: /^Select / }).click();
@@ -536,7 +535,10 @@ test.describe('Draft board field sheet', () => {
 		await page.setViewportSize({ width: 402, height: 874 });
 		await openStoryByName(page, 'Draft/Board', 'Partial roster');
 		const stored = await page.evaluate(() => ['162-zero:v1', '162-zero:settings:v1'].map(key => localStorage.getItem(key)));
-		await page.getByRole('button', { name: /Roll next franchise/ }).click();
+		const pack = page.getByRole('button', { name: 'Roll next franchise', exact: true });
+		// Focusing settles idle drift before the pointer clicks, without disabling pack motion.
+		await pack.focus();
+		await pack.click();
 		await page.getByRole('button', { name: /^Take / }).click();
 		await page.locator('.candidate-card').first().getByRole('button', { name: /^Select / }).click();
 		let owner = page.locator('dialog.draft-sheet[open]');

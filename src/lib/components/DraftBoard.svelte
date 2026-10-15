@@ -205,7 +205,7 @@
   }
   if (!selectedProfile || busy) return;
   if (event.composedPath().some(node => node instanceof Element &&
-   node.matches('[data-app-settings], .error-dialog, [data-candidate-card], [data-slot], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
+   node.matches('[data-app-settings], .error-dialog, [data-candidate-card], [data-slot], [data-pool-load], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
   clearTransient();
   sheetOpen = false;
  }

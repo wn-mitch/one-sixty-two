@@ -44,10 +44,6 @@
 			if (!playerId || !alternate) throw new Error('The exact-season example candidate is unavailable.');
 
 			await userEvent.selectOptions(wideSeason, alternate.value);
-			await waitFor(() => expect(candidateByPlayer(canvasElement, playerId)).toBeUndefined());
-
-			const pagination = canvas.getByRole('navigation', { name: 'Player card pages' });
-			await userEvent.click(within(pagination).getByRole('button', { name: 'Next' }));
 			await waitFor(() => {
 				const retained = candidateByPlayer(canvasElement, playerId)?.querySelector<HTMLElement>('.player-card');
 				expect(retained).toHaveAttribute('data-season-id', alternate.value);

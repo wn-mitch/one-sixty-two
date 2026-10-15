@@ -104,10 +104,17 @@ test('reserves equal face slots for present, absent, and failed seasons at each 
 		for (const width of [1212, 320]) {
 			await page.setViewportSize({ width, height: 788 });
 			const entries = await gallery.evaluate(root => ['F00', 'F01', 'F02', 'F03'].map(id => {
-				const entry = root.querySelector(`[data-franchise-id="${id}"]`)!;
-				const faces = [...entry.querySelectorAll('.card-face:not(.compact-face)')].map(face => {
-					const box = face.querySelector('.card, .status-panel')!.getBoundingClientRect();
-					return { top: box.top - entry.getBoundingClientRect().top, width: box.width, height: box.height };
+				const entry = root.querySelector<HTMLElement>(`[data-franchise-id="${id}"]`)!;
+				const layoutTop = (node: HTMLElement): number => {
+					let top = 0;
+					for (let current: HTMLElement | null = node; current; current = current.offsetParent as HTMLElement | null) top += current.offsetTop;
+					return top;
+				};
+				const entryTop = layoutTop(entry);
+				const faces = [...entry.querySelectorAll<HTMLElement>('.card-face:not(.compact-face)')].map(face => {
+					const slot = face.querySelector<HTMLElement>('.card, .status-panel')!;
+					const style = getComputedStyle(slot);
+					return { top: layoutTop(face) - entryTop, width: Number.parseFloat(style.width), height: Number.parseFloat(style.height) };
 				});
 				return faces;
 			}));

@@ -6,7 +6,7 @@ type Box = [number, number, number, number];
 /** Each skeleton's landmarks and the loaded regions they stand in for; all start above the fold. */
 const SCREENS: Record<string, [string, string][]> = {
 	stadiums: [['.stadium-skeleton .tools', '.deck-tools'], ['.stadium-skeleton .grid > :nth-child(2)', '.choice-wrap:nth-child(2)'], ['.stadium-skeleton .commit', '.stadium-deck .commit']],
-	'draft-pack': [['.draft-skeleton .board-columns', '.board-columns'], ['.draft-skeleton .pack', '.foil-pack .pack'], ['.draft-skeleton .field-panel', '.field-panel'], ['.draft-skeleton .slot:nth-of-type(5)', '.field-panel [data-slot="1B"]']],
+	'draft-pack': [['.draft-skeleton .board-columns', '.board-columns'], ['.draft-skeleton .stage', '.foil-pack .stage'], ['.draft-skeleton .field-panel', '.field-panel'], ['.draft-skeleton .slot:nth-of-type(5)', '.field-panel [data-slot="1B"]']],
 	'draft-pool': [['.draft-skeleton .section-heading', '.candidates .section-heading'], ['.draft-skeleton .card-grid > :nth-child(2)', '.candidate-card:nth-child(2)'], ['.draft-skeleton .card-grid > :nth-child(4)', '.candidate-card:nth-child(4)']],
 	lineup: [['.lineup-skeleton .batting .row:nth-child(2)', '.order.batting > li:nth-child(2)'], ['.lineup-skeleton .simulate', '.lineup .simulate']],
 	season: [['.progress-skeleton .track', '.progress-track'], ['.progress-skeleton .button', '.progress-shell > button']],
