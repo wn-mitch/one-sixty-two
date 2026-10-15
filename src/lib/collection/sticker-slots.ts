@@ -19,7 +19,7 @@ export const PROTECTED_LAYER_SELECTOR = [
 export interface SlotPoint { x: number; y: number }
 /**
  * How a card's four stickers line up: one column, one row, a 2×2 block, or a split set of two pairs
- * mirrored across the photo's centre line, side by side (`split`) or stacked (`split-stacked`).
+ * mirrored across the card's centre line, side by side (`split`) or stacked (`split-stacked`).
  */
 export type StickerSetShape = 'column' | 'row' | 'grid' | 'split' | 'split-stacked';
 export interface EraStickerSlots { shape: StickerSetShape; grade: SlotPoint; face: readonly [SlotPoint, SlotPoint, SlotPoint] }
@@ -123,43 +123,49 @@ export function setPoints(shape: StickerSetShape, pitch: number, u: number, v: n
 
 /** Set shapes an era tries, in order, unless it overrides them; each later shape costs a little more. */
 export const DEFAULT_SET_SHAPES: readonly StickerSetShape[] = ['column', 'row', 'grid'];
-/** Eras whose fronts suit another set. The 1970s arch leaves its top corners free beside the arched team name. */
-export const ERA_SET_SHAPES: Readonly<Partial<Record<CardEra, readonly StickerSetShape[]>>> = { '1970s': ['split', 'split-stacked'] };
+/** The 1970s front uses mirrored vertical pairs above its corner badges; the contemporary front uses one column. */
+export const ERA_SET_SHAPES: Readonly<Partial<Record<CardEra, readonly StickerSetShape[]>>> = { '1970s': ['split-stacked'], '2020s': ['column'] };
+/** The contemporary front keeps its vertical set on the right, below the team mark. */
+export const ERA_SET_SIDES: Readonly<Partial<Record<CardEra, 'left' | 'right'>>> = { '2020s': 'right' };
 
 /**
  * Picks an era's sticker set: the grade and three face stickers evenly spaced and sharing an edge,
- * grade first. A column hugs the photo's left or right edge and its top or bottom, whichever clears
- * every protected layer with the least drift, preferring stickers wholly on the photo and off its
- * central subject; with no room for a column it takes a row, then a 2×2 block. A split set sits as
- * high and as far out as it can, its pairs mirrored across the photo's centre line. Every shape uses
- * the same spacing. Returns null when none fits.
+ * grade first. A column hugs the requested photo side, or either side when none is specified,
+ * and its top or bottom, whichever clears every protected layer with the least drift, preferring
+ * stickers wholly on the photo and off its central subject; with no room for a column it takes a
+ * row, then a 2×2 block. A split set sits as high and as far out as it can, its pairs mirrored
+ * across the card's centre line. Every shape uses the same spacing. Returns null when none fits.
  */
-export function solveStickerSlots(era: EraLayout, sizes: Pick<StickerLayout, 'aspect' | 'radius' | 'rim'>, shapes: readonly StickerSetShape[] = DEFAULT_SET_SHAPES): EraStickerSlots | null {
+export function solveStickerSlots(era: EraLayout, sizes: Pick<StickerLayout, 'aspect' | 'radius' | 'rim'>, shapes: readonly StickerSetShape[] = DEFAULT_SET_SHAPES, side?: 'left' | 'right'): EraStickerSlots | null {
 	const { aspect, radius } = sizes;
 	const photo = scaled(era.photo, aspect);
 	const inset = radius + STICKER_MARGIN;
 	const pitch = 2 * radius + STICKER_MARGIN;
-	const axis = (photo.u0 + photo.u1) / 2;
 	const subject = { u0: photo.u0 + (photo.u1 - photo.u0) * 0.3, u1: photo.u1 - (photo.u1 - photo.u0) * 0.3, v0: photo.v0 + (photo.v1 - photo.v0) * 0.08, v1: photo.v0 + (photo.v1 - photo.v0) * 0.6 };
 	const round = (value: number): number => Math.round(value * 1e4) / 1e4;
 	let best: { shape: StickerSetShape; points: SlotPoint[]; cost: number } | null = null;
 	for (const [rank, shape] of shapes.entries()) {
 		const split = shape === 'split' || shape === 'split-stacked';
-		for (let i = 0; i * STEP <= (split ? axis : 1); i++) {
-			const u = i * STEP;
+		// Start split pairs at the exact rim clearance so a narrow corner is not lost
+		// between grid samples. Mirror the card, not subpixel rounding of its photo box.
+		const start = split ? sizes.rim + inset : 0;
+		for (let i = 0; start + i * STEP <= (split ? 0.5 : 1); i++) {
+			const u = start + i * STEP;
 			for (let j = 0; j * STEP <= aspect; j++) {
 				const v = j * STEP;
 				// Rounded before checking, so the committed table is exactly what was checked; a split set mirrors after rounding.
-				const centres = setPoints(shape, pitch, round(u), v, round(axis));
+				const centres = setPoints(shape, pitch, round(u), v, 0.5);
 				const right = Math.max(...centres.map(([cu]) => cu));
 				const bottom = Math.max(...centres.map(([, cv]) => cv));
 				let cost = rank * 0.03;
 				if (split) {
-					// As high as it goes, then as far out: the top corners.
-					cost += v + 0.5 * u;
+					// Vertical pairs hug the badge sides first; horizontal pairs sit in the upper corners.
+					cost += v + (shape === 'split-stacked' ? 4 : 0.5) * u;
 				} else {
 					// Hug a photo side and its top or bottom.
-					cost += Math.min(Math.abs(u - (photo.u0 + inset)), Math.abs(right - (photo.u1 - inset)));
+					const leftGap = Math.abs(u - (photo.u0 + inset));
+					const rightGap = Math.abs(right - (photo.u1 - inset));
+					cost += side === 'right' ? rightGap : side === 'left' ? leftGap : Math.min(leftGap, rightGap);
 					cost += Math.min(Math.abs(v - (photo.v0 + inset)), Math.abs(bottom - (photo.v1 - inset)));
 				}
 				if (right > 1 || bottom > aspect || (best && cost >= best.cost)) continue;

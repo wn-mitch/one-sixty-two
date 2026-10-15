@@ -89,9 +89,9 @@ function violations(card: CardGeometry, era: CardEra): string[] {
 	const shape = ERA_STICKER_SLOTS[era].shape;
 	const off = (values: number[]) => Math.max(...values) - Math.min(...values) > 1;
 	if (card.spots.length === 4 && (shape === 'split' || shape === 'split-stacked')) {
-		// Two pairs mirrored across the photo's centre line: grade and the rarest on the left, the other two on the right.
+		// Two pairs mirrored across the card's centre line: grade and the rarest on the left, the other two on the right.
 		const [a, b, c, d] = card.spots;
-		const axis = card.photo ? (card.photo.left + card.photo.right) / 2 : (card.card.left + card.card.right) / 2;
+		const axis = (card.card.left + card.card.right) / 2;
 		const tops = shape === 'split' ? [a.cy, b.cy, c.cy, d.cy] : [a.cy, c.cy];
 		if (off(tops)) found.push(`${card.variant} split pairs do not share a top edge`);
 		const gaps = shape === 'split' ? [b.cx - a.cx, d.cx - c.cx] : [b.cy - a.cy, d.cy - c.cy];
@@ -120,6 +120,28 @@ for (const era of ERAS) {
 		}
 	});
 }
+
+test('mirrored vertical pairs and the right column survive the feedback viewport', async ({ page }) => {
+	await page.setViewportSize({ width: 1212, height: 788 });
+	await openSlots(page, 'every-era', { mode: 'era', width: 300, overlay: true }, ERAS.length);
+	const cards = await geometry(page);
+	const arch = cards.find(card => card.variant.startsWith('1970s-'))!;
+	const modern = cards.find(card => card.variant.startsWith('2020s-'))!;
+	expect(arch.spots).toHaveLength(4);
+	expect(modern.spots).toHaveLength(4);
+	expect(arch.spots[0].cx).toBeCloseTo(arch.spots[1].cx, 0);
+	expect(arch.spots[2].cx).toBeCloseTo(arch.spots[3].cx, 0);
+	expect(arch.spots[1].cy).toBeGreaterThan(arch.spots[0].cy);
+	for (const layer of arch.layers.filter(box => ['season.roundel', 'logo.roundel'].includes(box.layer))) {
+		for (const spot of arch.spots) expect(spot.cy + spot.r).toBeLessThan(layer.top);
+	}
+	expect(arch.spots[0].cx).toBeLessThan(arch.spots[2].cx);
+	expect(arch.spots[0].cy).toBeCloseTo(arch.spots[2].cy, 0);
+	expect(arch.spots[1].cy).toBeCloseTo(arch.spots[3].cy, 0);
+	for (const spot of modern.spots) expect(spot.cx).toBeGreaterThan((modern.card.left + modern.card.right) / 2);
+	expect(violations(arch, '1970s')).toEqual([]);
+	expect(violations(modern, '2020s')).toEqual([]);
+});
 
 test('the old shared spots fail the same checks, covering the 1990s family name', async ({ page }) => {
 	test.setTimeout(180_000);

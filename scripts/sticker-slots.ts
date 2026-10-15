@@ -12,7 +12,7 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { chromium, type Page } from 'playwright';
 import type { CardEra } from '../src/lib/cards/view-model.ts';
-import { ERA_SET_SHAPES, PROTECTED_LAYER_SELECTOR, solveStickerSlots, type EraLayout, type EraStickerSlots, type LayoutBox, type StickerLayout } from '../src/lib/collection/sticker-slots.ts';
+import { ERA_SET_SHAPES, ERA_SET_SIDES, PROTECTED_LAYER_SELECTOR, solveStickerSlots, type EraLayout, type EraStickerSlots, type LayoutBox, type StickerLayout } from '../src/lib/collection/sticker-slots.ts';
 
 const ERAS: readonly CardEra[] = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'];
 const LAYOUT_PATH = new URL('../src/lib/collection/sticker-layout.json', import.meta.url);
@@ -155,7 +155,7 @@ if (!args.includes('--solve')) writeFileSync(LAYOUT_PATH, `${JSON.stringify(layo
 const slots = {} as Record<CardEra, EraStickerSlots>;
 const unplaced: string[] = [];
 for (const era of ERAS) {
-	const solved = solveStickerSlots(layout.eras[era], layout, ERA_SET_SHAPES[era]);
+	const solved = solveStickerSlots(layout.eras[era], layout, ERA_SET_SHAPES[era], ERA_SET_SIDES[era]);
 	if (!solved) { unplaced.push(era); continue; }
 	slots[era] = solved;
 	console.log(`${era}: ${solved.shape}, grade ${solved.grade.x},${solved.grade.y}  face ${solved.face.map(point => `${point.x},${point.y}`).join('  ')}`);

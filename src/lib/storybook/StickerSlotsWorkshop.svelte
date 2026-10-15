@@ -156,7 +156,7 @@
 		{#each variants as variant (variant.id)}
 			<figure data-variant={variant.id} data-era={variant.era} data-role={variant.role} data-finish={variant.finish} data-name={variant.nameKey} data-photo={variant.photo}>
 				<div class="card-slot">
-					<Card s={variant.view} face="front" interactive={false} capture={false} stickers={variant.stickers} onDetails={() => {}} />
+					<Card s={variant.view} face="front" interactive={false} idle={false} capture={false} stickers={variant.stickers} onDetails={() => {}} />
 					{#if overlay && boxes[variant.id]}
 						<svg class="overlay" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
 							<rect class="frame" x={FRAME} y={FRAME / ASPECT} width={1 - 2 * FRAME} height={1 - 2 * FRAME / ASPECT}><title>inner frame less the sticker margin</title></rect>

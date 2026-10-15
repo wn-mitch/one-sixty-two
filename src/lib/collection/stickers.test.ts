@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryEntry, SavedBatter, SavedPitcher } from '../game/library.ts';
 import type { CardEra } from '../cards/view-model.ts';
-import { ERA_STICKER_SLOTS, ERA_SET_SHAPES, setPoints, solveStickerSlots, STICKER_LAYOUT, STICKER_MARGIN, stickerFits, type EraStickerSlots } from './sticker-slots.ts';
+import { ERA_STICKER_SLOTS, ERA_SET_SHAPES, ERA_SET_SIDES, onPhoto, setPoints, solveStickerSlots, STICKER_LAYOUT, STICKER_MARGIN, stickerFits, type EraStickerSlots } from './sticker-slots.ts';
 import { faceStickers, LEGACY_FACE_SLOTS, familyStickers, RARITY, seasonStickers, STICKER_BY_KIND, STICKER_RULES_VERSION, STICKER_SPOTS, STICKERS, type PlacedSticker } from './stickers.ts';
 
 const batter = (seasonId: string, line: Partial<SavedBatter>): SavedBatter => ({
@@ -173,7 +173,7 @@ describe('sticker rules', () => {
  });
 
  it('commits the slot table its measured layout solves to', () => {
-  for (const era of Object.keys(STICKER_LAYOUT.eras) as CardEra[]) expect(solveStickerSlots(STICKER_LAYOUT.eras[era], STICKER_LAYOUT, ERA_SET_SHAPES[era]), era).toEqual(ERA_STICKER_SLOTS[era]);
+  for (const era of Object.keys(STICKER_LAYOUT.eras) as CardEra[]) expect(solveStickerSlots(STICKER_LAYOUT.eras[era], STICKER_LAYOUT, ERA_SET_SHAPES[era], ERA_SET_SIDES[era]), era).toEqual(ERA_STICKER_SLOTS[era]);
  // The full solve searches every era's measured layout; it runs in seconds alone and longer beside the rest of the suite.
  }, 60_000);
 
@@ -183,7 +183,7 @@ describe('sticker rules', () => {
    const points = [slots.grade, ...slots.face];
    const layout = STICKER_LAYOUT.eras[era];
    for (const point of points) expect(stickerFits(point, layout, STICKER_LAYOUT), `${era} ${point.x},${point.y}`).toBe(true);
-   const axis = layout.photo.x + layout.photo.w / 2;
+   const axis = 0.5;
    const expected = setPoints(slots.shape, pitch, points[0].x, points[0].y * STICKER_LAYOUT.aspect, axis);
    for (const [index, point] of points.entries()) {
     expect(point.x, `${era} sticker ${index} x`).toBeCloseTo(expected[index][0], 3);
@@ -198,14 +198,36 @@ describe('sticker rules', () => {
   expect(stickerFits(ERA_STICKER_SLOTS['1990s'].face[0], layout, STICKER_LAYOUT)).toBe(true);
  });
 
- it('splits the 1970s set into mirrored pairs in the arch\'s upper corners, grade top left', () => {
+ it('places the 1970s stickers in mirrored vertical pairs above the corner badges', () => {
   const slots = ERA_STICKER_SLOTS['1970s'];
-  expect(slots.shape).toMatch(/^split/);
+  const layout = STICKER_LAYOUT.eras['1970s'];
   const [grade, rarest, second, third] = [slots.grade, ...slots.face];
-  expect(grade.x).toBeLessThan(0.5);
-  expect(third.x).toBeGreaterThan(0.5);
-  const photo = STICKER_LAYOUT.eras['1970s'].photo;
-  expect(grade.y).toBeLessThan(photo.y + photo.h / 2);
-  expect(grade.x + third.x).toBeCloseTo(rarest.x + second.x, 3);
+  expect(slots.shape).toBe('split-stacked');
+  expect(grade.x).toBe(rarest.x);
+  expect(second.x).toBe(third.x);
+  expect(grade.x + second.x).toBe(1);
+  expect(grade.y).toBe(second.y);
+  expect(rarest.y).toBe(third.y);
+  expect(rarest.y).toBeGreaterThan(grade.y);
+  for (const point of [grade, rarest, second, third]) {
+   expect(onPhoto(point, layout, STICKER_LAYOUT)).toBe(true);
+   expect(stickerFits(point, layout, STICKER_LAYOUT)).toBe(true);
+  }
+  for (const layer of ['season.roundel', 'logo.roundel']) {
+   const badge = layout.protected.find(box => box.layer === layer)!;
+   expect(rarest.y + STICKER_LAYOUT.radius / STICKER_LAYOUT.aspect).toBeLessThan(badge.y);
+  }
+ });
+
+ it('keeps the 2020s set in a right-side vertical column below the mark', () => {
+  const slots = ERA_STICKER_SLOTS['2020s'];
+  const layout = STICKER_LAYOUT.eras['2020s'];
+  expect(slots.shape).toBe('column');
+  for (const point of [slots.grade, ...slots.face]) {
+   expect(point.x).toBeGreaterThan(layout.photo.x + layout.photo.w / 2);
+   expect(point.x).toBe(slots.grade.x);
+   expect(onPhoto(point, layout, STICKER_LAYOUT)).toBe(true);
+   expect(stickerFits(point, layout, STICKER_LAYOUT)).toBe(true);
+  }
  });
 });
