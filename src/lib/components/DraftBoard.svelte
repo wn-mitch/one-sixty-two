@@ -728,7 +728,7 @@
     </button>
     <div class="draft-menu-panel" id="{uid}-draft-menu" hidden={!draftMenuOpen}>
      <button type="button" disabled={loading} onclick={() => { draftMenuOpen = false; onNew(); }}>New draft…</button>
-     <a href="/about#how-to-play">How to play</a>
+     <a href="/how-to-play">How to play</a>
     </div>
    </div>
   {/if}
@@ -792,6 +792,8 @@
  /* Phones give the roll identity its own row; the labelled pack, field and menu controls share the next. */
  .draft-toolbar { flex-wrap: wrap; }
  .draft-toolbar > :global(.reveal) { flex: 1 1 100%; min-width: 0; }
+ /* Until a roll shows, the pick count is short enough to sit beside Field and the menu on one row. */
+ .draft-toolbar > :global(.reveal.resting) { flex: 1 1 auto; }
  .draft-toolbar .reroll { min-height: 3rem; padding-inline: .6rem; gap: .3rem; margin-right: auto; }
  .reroll svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
  .draft-menu { position: relative; flex: none; }

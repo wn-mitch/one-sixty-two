@@ -1,41 +1,3 @@
-<script lang="ts">
-	import { onMount } from 'svelte';
-	import { fetchJson, loadManifest } from '#lib/game/data.ts';
-	import type { Attribution } from '#lib/game/types.ts';
-	import MediaCredits from '#lib/components/MediaCredits.svelte';
-
-	let attribution = $state<Attribution | null>(null);
-	let archiveUrl = $state('');
-	let loading = $state(true);
-	let error = $state('');
-	let mounted = $state(false);
-	let request = 0;
-
-	async function loadAttribution(): Promise<void> {
-		const current = ++request;
-		loading = true;
-		error = '';
-		try {
-			const manifest = await loadManifest();
-			const loaded = await fetchJson<Attribution>(manifest.attributionUrl);
-			if (current !== request) return;
-			attribution = loaded;
-			archiveUrl = manifest.archiveUrl;
-		} catch (caught) {
-			if (current !== request) return;
-			error = caught instanceof Error ? caught.message : 'The data notice could not be loaded.';
-		} finally {
-			if (current === request) loading = false;
-		}
-	}
-
-	onMount(() => {
-		mounted = true;
-		void loadAttribution();
-		return () => { request++; };
-	});
-</script>
-
 <svelte:head>
 	<title>Rules and data | 162-0</title>
 	<meta name="description" content="How the 162-0 historical baseball draft and plate-appearance simulation work." />
@@ -44,28 +6,12 @@
 <article class="about">
 	<header class="intro">
 		<a class="back-link" href="/">← Back to Play</a>
-		<p class="eyebrow">Rules, model, and data</p>
 		<h1>What happens under the hood</h1>
 		<p class="lede">162-0 turns real historical team-seasons into a transparent plate-appearance game. The choices are yours; the approximations are published here.</p>
 		<nav aria-label="About page sections">
-			<a href="#how-to-play">How to play</a><a href="#draft">Draft</a><a href="#season">Season</a><a href="#simulation">Simulation</a><a href="#head-to-head">Head-to-head</a><a href="#rankings">Rankings</a><a href="#attribution">Data and licence</a><a href="#image-credits">Image credits</a>
+			<a href="#draft">Draft</a><a href="#season">Season</a><a href="#simulation">Simulation</a><a href="#head-to-head">Head-to-head</a><a href="#rankings">Rankings</a><a href="/how-to-play">How to play</a><a href="/credits">Data and image credits</a>
 		</nav>
 	</header>
-
-	<section id="how-to-play">
-		<p class="section-number" aria-hidden="true">00</p>
-		<div>
-			<h2>How to play</h2>
-			<ol>
-				<li><strong>Choose a home stadium.</strong> You play 81 of your 162 games there. Its fences, walls and elevation change how far batted balls carry; it has no rating or bonus.</li>
-				<li><strong>Open a pack.</strong> Each pack is one franchise from one decade. Pick one exact player season from it and place him in an open position he qualifies for.</li>
-				<li><strong>Use extra packs wisely.</strong> Twice per draft you can add another franchise pack before picking, then keep one of the open packs. They do not refill.</li>
-				<li><strong>Fill all sixteen spots.</strong> Nine hitters (C, 1B, 2B, 3B, SS, LF, CF, RF, DH), three starters, a closer and three relievers. Position fit matters as much as the numbers on the card.</li>
-				<li><strong>Play the season.</strong> All 162 games are simulated. Your team is saved in My teams and its cards join your Collection.</li>
-				<li><strong>Earn tokens.</strong> Every completed season of your own earns one token, and your first season earns a bonus token. Spend them in the Shop on cosmetic card finishes; they never change statistics or strength.</li>
-			</ol>
-		</div>
-	</section>
 
 	<section id="draft">
 		<p class="section-number" aria-hidden="true">01</p>
@@ -215,56 +161,11 @@
 					<div><dt>Licence</dt><dd><a href="https://github.com/Neil-Paine-1/MLB-WAR-data-historical/blob/master/LICENSE.txt" rel="license">MIT</a></dd></div>
 					<div><dt>Source</dt><dd><a href="https://github.com/Neil-Paine-1/MLB-WAR-data-historical">github.com/Neil-Paine-1/MLB-WAR-data-historical</a></dd></div>
 				</dl>
-				<p class="muted">The historical WAR/162 scalar stays separate from simulated statistics and from the app’s realized <code>sim-war-v2</code> estimate. Most event and fielding counts come from the Lahman data described below; the separately joined <code>fld162</code> column helps set the bounded aggregate defensive budget. Baseball-Reference and FanGraphs each publish their own WAR definition; JEFFBAGWELL is a third-party average and is labelled as such everywhere it appears.</p>
+				<p class="muted">The historical WAR/162 scalar stays separate from simulated statistics and from the app’s realized <code>sim-war-v2</code> estimate. Most event and fielding counts come from the Lahman data described on <a href="/credits">Data and image credits</a>; the separately joined <code>fld162</code> column helps set the bounded aggregate defensive budget. Baseball-Reference and FanGraphs each publish their own WAR definition; JEFFBAGWELL is a third-party average and is labelled as such everywhere it appears.</p>
 			</div>
 		</div>
 	</section>
 
-	<section id="attribution">
-		<p class="section-number" aria-hidden="true">06</p>
-		<div>
-			<h2>Source, attribution, and download</h2>
-			<p>The browser loads the full required source notice from the same versioned dataset used by the game. The downloadable transformed archive is distributed under Creative Commons Attribution-ShareAlike 3.0 and includes the machine-readable payload, source revision, licence, attribution, and a description of changes.</p>
-
-			<div class="attribution-panel" aria-busy={loading}>
-				{#if loading}
-					<div class="source-skeleton" aria-hidden="true"><span class="sk-line"></span><span class="sk-line" style:--sk-width="82%"></span><span class="sk-line" style:--sk-width="57%"></span></div>
-					<p class="muted" role="status">Loading the versioned source notice…</p>
-				{:else if error}
-					<p class="error" role="alert">{error}</p>
-					<button class="secondary" type="button" onclick={loadAttribution}>Retry source notice</button>
-				{:else if attribution}
-					<p class="notice" role="status">Attribution data loaded from the current game dataset.</p>
-					<dl>
-						<div><dt>Dataset</dt><dd>{attribution.title}</dd></div>
-						<div><dt>Credit</dt><dd>{attribution.credit}</dd></div>
-						<div><dt>Licence</dt><dd><a href={attribution.licenseUrl} rel="license">{attribution.license}</a></dd></div>
-						<div><dt>Source revision</dt><dd><code>{attribution.sourceCommit}</code></dd></div>
-						<div><dt>Changes</dt><dd>{attribution.changes}</dd></div>
-					</dl>
-					<div class="data-actions">
-						<a class="button primary button-link" href={archiveUrl} download>Download transformed data</a>
-						<a class="button secondary button-link" href={attribution.sourceUrl}>Open source dataset</a>
-					</div>
-					<details class="full-notice">
-						<summary>Read the full source notice</summary>
-						<pre>{attribution.fullNotice}</pre>
-					</details>
-				{/if}
-			</div>
-			{#if !mounted}
-				<p class="muted ssr-note">The current versioned source notice loads after this page starts in your browser. All game rules above are available in the prerendered page.</p>
-			{/if}
-		</div>
-	</section>
-
-	<section id="image-credits">
-		<p class="section-number" aria-hidden="true">07</p>
-		<div>
-			<h2>Image provenance and licences</h2>
-			<MediaCredits />
-		</div>
-	</section>
 </article>
 
 <style>
@@ -375,22 +276,8 @@
 		color: var(--muted);
 	}
 
-	.attribution-panel {
-		min-height: 10rem;
-		margin-top: 1.5rem;
-		padding: 1.25rem;
-		border: 1px solid var(--border);
-		border-radius: 1rem;
-		background: var(--surface);
-	}
 
-	.source-skeleton { padding: 0.5rem 0; line-height: 1.4; }
 
-	.attribution-panel dl {
-		display: grid;
-		gap: 0;
-		margin: 1.25rem 0;
-	}
 
 	.ranking-source {
 		margin-top: 1.75rem;
@@ -402,13 +289,6 @@
 
 	.ranking-source dl { margin-top: 0; }
 
-	.attribution-panel dl div {
-		display: grid;
-		grid-template-columns: 8rem minmax(0, 1fr);
-		gap: 1rem;
-		padding: 0.7rem 0;
-		border-bottom: 1px solid var(--border);
-	}
 
 	dt {
 		color: var(--muted);
@@ -427,43 +307,14 @@
 
 	code { font-size: 0.78rem; }
 
-	.data-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.65rem;
-		margin: 1.25rem 0;
-	}
 
-	.button-link {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 2.75rem;
-		padding: 0 1rem;
-		text-decoration: none;
-	}
 
-	.full-notice pre {
-		max-height: 26rem;
-		margin: 1rem 0 0;
-		padding: 1rem;
-		overflow: auto;
-		border-radius: 0.65rem;
-		background: var(--background);
-		color: var(--muted);
-		font: 0.72rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
-		white-space: pre-wrap;
-	}
 
-	.ssr-note { font-size: 0.82rem; }
 
 
 	@media (max-width: 38rem) {
 		.about { width: min(100% - 1.25rem, 70rem); }
 		.about > section { grid-template-columns: 1fr; gap: 0.4rem; }
 		.section-number { margin-bottom: 0.5rem; }
-		.attribution-panel { padding: 1rem; }
-		.attribution-panel dl div { grid-template-columns: 1fr; gap: 0.2rem; }
-		.data-actions { display: grid; }
 	}
 </style>

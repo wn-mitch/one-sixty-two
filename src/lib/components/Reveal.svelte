@@ -34,6 +34,8 @@
 		if (wasConcealed && !concealed && roll) unveiling = true;
 		wasConcealed = concealed;
 	});
+	// Before a roll, and while the pack deals one, the phone bar shows only the pick count so it shares a row with the controls.
+	const resting = $derived(bar && (concealed || !roll));
 	const bannerStyle = $derived(
 		palette ? `--reveal-ground: ${palette.field}; --reveal-ink: ${palette.onField};` : undefined
 	);
@@ -46,6 +48,7 @@
 	class:compact
 	class:bar
 	class:concealed
+	class:resting
 	class:unveiling
 	style={bannerStyle}
 	aria-label="Current draft roll"
@@ -156,6 +159,9 @@
 	.team-colored.bar .eyebrow { opacity: .8; }
 	.bar .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.concealed .team-mark, .concealed .roll-copy { visibility: hidden; }
+	.reveal.bar.resting { padding-left: 0; background: transparent; border-color: transparent; }
+	.resting .team-mark, .resting .roll-copy, .resting h2 { display: none; }
+	.bar.resting .eyebrow { font-size: .8125rem; }
 	.unveiling .roll-copy { animation: grow-sideways var(--motion-deal) var(--ease-out) both; }
 	.unveiling .roll-copy > * { animation: slide-in var(--motion-deal) var(--ease-out) both; }
 	@keyframes grow-sideways {

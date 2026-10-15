@@ -47,10 +47,10 @@
 		Menu
 	</button>
 	<nav bind:this={panel} id={panelId} class="menu-panel" aria-label="More" hidden={!open}>
-		<a href="/about#draft">How to play</a>
+		<a href="/how-to-play">How to play</a>
 		<button type="button" onclick={openSettings}>Settings</button>
 		<a href="/about#simulation">Rules &amp; model</a>
-		<a href="/about#attribution">Data &amp; image credits</a>
+		<a href="/credits">Data &amp; image credits</a>
 		{#if developerDraft}<a class="developer" href="/draft">Draft Mode <span>developer</span></a>{/if}
 	</nav>
 	<Settings bind:this={settings} showTrigger={false} />
