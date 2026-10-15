@@ -197,6 +197,7 @@ export function eraPreset(setup: Setup, era: CardEra): Setup {
 	const plate = ERA_FOIL[era];
 	const tuned = { ...setup.tuned };
 	delete tuned[`plate:${plate}`];
+	delete tuned[`film:${ERA_HOLO[era]}`];
 	if (tuning.scale !== 1) tuned[`plate:${plate}`] = { scale: tuning.scale };
 	return {
 		...setup, era, film: ERA_HOLO[era], finish: '', palette: '', under: '', plate, stock: '', tuned,

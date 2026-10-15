@@ -11,7 +11,10 @@ export default defineFilm({
 	params: {
 		rotation: { value: 0, min: -3.14159, max: 3.14159, step: 0.01, note: 'Turns the complete circle packing, in radians.' },
 		rim: { value: 0.045, min: 0.005, max: 0.16, step: 0.001, note: 'Reflective rim width as a share of each circle radius.' },
-		detail: { value: 14, min: 4, max: 20, step: 1, note: 'Maximum inversion depth; higher reveals smaller tangent circles.' }
+		detail: { value: 14, min: 4, max: 20, step: 1, note: 'Maximum inversion depth; higher reveals smaller tangent circles.' },
+		zoom: { value: 1, min: 0.3, max: 40, step: 0.05, note: 'Magnification of the gasket; zoom in to fill the card with a section of the circle packing.' },
+		focusX: { value: 0, min: -1, max: 1, step: 0.01, note: 'Horizontal focus in enclosing-circle radii: -1 is the left rim, 0 the centre, 1 the right rim.' },
+		focusY: { value: 0, min: -1, max: 1, step: 0.01, note: 'Vertical focus in enclosing-circle radii: -1 is the top rim, 0 the centre, 1 the bottom rim.' }
 	},
 	helpers: `
 const float APOLLONIAN_INNER_RADIUS = 0.4641016151377546;
@@ -34,9 +37,9 @@ vec2 apollonianReflectVector(vec2 direction, vec2 normal) {
 `,
 	glsl: `
 	// One unit is the enclosing circle's radius. At the shipped scale it nearly fills the card's width.
-	float apollonianUnit = 2.18 / scale;
+	float apollonianUnit = 2.18 * zoom / scale;
 	float apollonianPixel = max(footprint / apollonianUnit, 1e-6);
-	vec2 apollonianPoint = (p - v_view.zw - CARD * 0.5) / apollonianUnit;
+	vec2 apollonianPoint = (p - v_view.zw - CARD * 0.5) / apollonianUnit + vec2(focusX, focusY);
 	float apollonianCos = cos(rotation);
 	float apollonianSin = sin(rotation);
 	vec2 apollonianQ = vec2(

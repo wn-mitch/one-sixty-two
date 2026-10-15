@@ -40,10 +40,14 @@ describe('foil lab controls', () => {
 		expect(scene.light.filmTune?.values).toContain(0.4);
 	});
 
-	it('takes an era preset and drops a link it no longer understands', () => {
-		const preset = eraPreset(START, '2000s');
-		expect(preset).toMatchObject({ film: 'hgh-sequence', plate: 'damascus' });
-		expect(valueOf('plate:scale', preset)).toBe(0.45);
+	it('restores the shipped film instead of retaining earlier lab tuning', () => {
+		const dirty = withValue({ ...START, film: 'double-helix' }, 'film:slideWithTilt', 3);
+		const preset = eraPreset(dirty, '2000s');
+		expect(valueOf('film:slideWithTilt', preset)).toBe(0);
+		expect(dirty.tuned['film:double-helix']?.slideWithTilt).toBe(3);
+	});
+
+	it('drops link choices it no longer understands', () => {
 		const parsed = parseSetup({ film: 'lava-lamp', tier: 'platinum' as never, era: '1990s' });
 		expect(parsed).toMatchObject({ film: START.film, tier: START.tier, era: '1990s' });
 	});

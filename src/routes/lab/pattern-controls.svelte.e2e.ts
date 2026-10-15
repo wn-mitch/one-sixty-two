@@ -1,0 +1,194 @@
+import { expect, test, type Page } from '@playwright/test';
+import { FILMS } from '../../lib/cards/surface/holo-films.ts';
+import { filmDials, dialValues } from '../../lib/cards/surface/films/film.ts';
+import { LIGHT_VERTEX, lightFragment } from '../../lib/cards/surface/light-shader.ts';
+import { DEFAULT_LIGHT, programSpec } from '../../lib/cards/surface/light-renderer.ts';
+import { parseSetup } from '../../lib/lab/controls.ts';
+import { encodeLink } from '../../lib/lab/link.ts';
+
+type Pose = { dials?: Record<string, number>; view?: [number, number] };
+
+// Read the production pattern before lighting: a colour sweep alone must not count as geometry moving.
+async function geometry(page: Page, name: string, poses: Pose[]) {
+	const index = FILMS.findIndex(film => film.name === name);
+	const dials = filmDials(FILMS[index]!);
+	const source = lightFragment(programSpec(index, 0, {}));
+	const fragment = source.slice(0, source.indexOf('\nvoid main() {')) + `
+void main() {
+	vec2 groove;
+	float seed, vivid, copper, copperPad, shade, cellSize, ground;
+	footprint = max(length(fwidth(v_card * CARD)), 1e-5);
+	filmPattern(${index}, v_card * CARD + v_view.zw, groove, seed, vivid, copper, copperPad, shade, cellSize, ground);
+	o_color = vec4(seed < 0.0 ? 0.0 : 0.5 + seed * 0.5, copper, vivid, 1.0);
+}`;
+	return page.evaluate(({ vertex, fragment, index, values, shift }) => {
+		const canvas = document.createElement('canvas');
+		canvas.width = 250;
+		canvas.height = 350;
+		const gl = canvas.getContext('webgl2')!;
+		const compile = (type: number, source: string) => {
+			const shader = gl.createShader(type)!;
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader)!);
+			return shader;
+		};
+		const vs = compile(gl.VERTEX_SHADER, vertex);
+		const fs = compile(gl.FRAGMENT_SHADER, fragment);
+		const program = gl.createProgram()!;
+		gl.attachShader(program, vs);
+		gl.attachShader(program, fs);
+		gl.linkProgram(program);
+		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program)!);
+		gl.useProgram(program);
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), canvas.width, canvas.height);
+		gl.uniform1f(gl.getUniformLocation(program, 'u_holoScale'), 8);
+		gl.uniform1f(gl.getUniformLocation(program, 'u_shift'), shift);
+		gl.uniform1i(gl.getUniformLocation(program, 'u_tuneFilm'), index);
+		gl.vertexAttrib2f(0, 0, 0);
+		gl.vertexAttrib4f(1, canvas.width, 0, 0, canvas.height);
+		const result = values.map(({ tune, view }) => {
+			gl.uniform1fv(gl.getUniformLocation(program, 'u_filmTune[0]'), tune);
+			// Keep the same seeded crop while changing only the viewer's tilt.
+			gl.vertexAttrib4f(4, view[0], view[1], 0.37, -0.21);
+			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+			const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+			gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+			const red = (x: number, y: number) => pixels[(Math.floor(y * canvas.height) * canvas.width + Math.floor(x * canvas.width)) * 4]!;
+			const blue = (x: number, y: number) => pixels[(Math.floor(y * canvas.height) * canvas.width + Math.floor(x * canvas.width)) * 4 + 2]!;
+			return {
+				image: canvas.toDataURL(),
+				corners: [[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]].map(([x, y]) => red(x!, y!)),
+				left: red(0.2, 0.5), right: red(0.8, 0.5), top: red(0.5, 0.8), bottom: red(0.5, 0.2),
+				vivid: {
+					corners: [[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]].map(([x, y]) => blue(x!, y!)),
+					left: blue(0.2, 0.5), right: blue(0.8, 0.5), top: blue(0.5, 0.8), bottom: blue(0.5, 0.2)
+				}
+			};
+		});
+		gl.deleteProgram(program);
+		gl.deleteShader(vs);
+		gl.deleteShader(fs);
+		return result;
+	}, {
+		vertex: LIGHT_VERTEX, fragment, index, shift: DEFAULT_LIGHT.shift,
+		values: poses.map(pose => ({ tune: dialValues(Object.fromEntries(Object.entries(dials).map(([key, dial]) => [key, { ...dial, value: pose.dials?.[key] ?? dial.value }]))), view: pose.view ?? [0, 0] }))
+	});
+}
+
+async function renderedDifference(page: Page, reference: string): Promise<number> {
+	return page.evaluate(async reference => {
+		const current = document.querySelector<HTMLCanvasElement>('.lab-card canvas.light')!.toDataURL();
+		const images = await Promise.all([reference, current].map(async source => createImageBitmap(await (await fetch(source)).blob())));
+		const pixels = images.map(image => {
+			const canvas = new OffscreenCanvas(image.width, image.height);
+			const context = canvas.getContext('2d')!;
+			context.drawImage(image, 0, 0);
+			image.close();
+			return context.getImageData(0, 0, canvas.width, canvas.height).data;
+		});
+		if (pixels[0]!.length !== pixels[1]!.length) return Infinity;
+		let error = 0;
+		for (let index = 0; index < pixels[0]!.length; index++) {
+			error += Math.abs(pixels[0]![index]! - pixels[1]![index]!);
+		}
+		return error / pixels[0]!.length;
+	}, reference);
+}
+
+test('Poincare can fill the card and focus on either axis without moving with tilt', async ({ page }) => {
+	await page.goto('/lab');
+	const [whole, filled, rightRim, bottomRim, held] = await geometry(page, 'poincare-disk', [
+		{}, { dials: { zoom: 3 } },
+		{ dials: { zoom: 12, focusX: 1 } },
+		{ dials: { zoom: 12, focusY: 1 } },
+		{ dials: { zoom: 3 }, view: [0.2, -0.15] }
+	]);
+	expect(whole!.corners).toEqual([0, 0, 0, 0]);
+	for (const corner of filled!.corners) expect(corner).toBeGreaterThan(127);
+	expect(rightRim!.left).toBeGreaterThan(127);
+	expect(rightRim!.right).toBe(0);
+	expect(bottomRim!.top).toBeGreaterThan(127);
+	expect(bottomRim!.bottom).toBe(0);
+	expect(held!.image).toBe(filled!.image);
+});
+
+test('Apollonian zoom fills the card and focus reaches either rim without following tilt', async ({ page }) => {
+	await page.goto('/lab');
+	const [whole, filled, rightRim, bottomRim, held] = await geometry(page, 'apollonian', [
+		{}, { dials: { zoom: 3 } },
+		{ dials: { zoom: 12, focusX: 1 } },
+		{ dials: { zoom: 12, focusY: 1 } },
+		{ dials: { zoom: 3 }, view: [0.2, -0.15] }
+	]);
+	for (const corner of whole!.vivid.corners) expect(corner).toBeLessThan(20);
+	for (const corner of filled!.vivid.corners) expect(corner).toBeGreaterThan(128);
+	expect(rightRim!.vivid.left).toBeGreaterThan(128);
+	expect(rightRim!.vivid.right).toBeLessThan(20);
+	expect(bottomRim!.vivid.top).toBeGreaterThan(128);
+	expect(bottomRim!.vivid.bottom).toBeLessThan(20);
+	expect(held!.image).toBe(filled!.image);
+});
+
+test('double helix walking is optional, responds to both tilt axes, and restores the same geometry', async ({ page }) => {
+	await page.goto('/lab');
+	const [fixed, fixedTilt, resting, horizontal, vertical, held, returned] = await geometry(page, 'double-helix', [
+		{}, { view: [0.2, -0.15] },
+		{ dials: { slideWithTilt: 1 } },
+		{ dials: { slideWithTilt: 1 }, view: [0.2, 0] },
+		{ dials: { slideWithTilt: 1 }, view: [0, 0.2] },
+		{ dials: { slideWithTilt: 1 }, view: [0, 0.2] },
+		{ dials: { slideWithTilt: 1 } }
+	]);
+	expect(fixedTilt!.image).toBe(fixed!.image);
+	expect(resting!.image).toBe(fixed!.image);
+	expect(horizontal!.image).not.toBe(resting!.image);
+	expect(vertical!.image).not.toBe(resting!.image);
+	expect(held!.image).toBe(vertical!.image);
+	expect(returned!.image).toBe(resting!.image);
+});
+
+test('film framing and walking dials update the live lab renderer', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.goto('/lab');
+	await page.locator('#lab-film').selectOption('poincare-disk');
+	const canvas = page.locator('.lab-card canvas.light');
+	await expect(canvas).toHaveAttribute('data-presented', '', { timeout: 15000 });
+	const original = await canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL());
+	for (const [dial, value] of [['zoom', '8'], ['focusX', '0.6'], ['focusY', '-0.3']]) {
+		await page.locator(`#lab-film-${dial}`).fill(value!);
+		await page.locator(`#lab-film-${dial}`).press('Tab');
+	}
+	await expect.poll(() => canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL())).not.toBe(original);
+	await page.locator('#lab-film').selectOption('double-helix');
+	await page.getByRole('slider', { name: 'slide with tilt dial', exact: true }).fill('1');
+	await expect(page.locator('#lab-film-slideWithTilt')).toHaveValue('1');
+	await expect(canvas).toHaveAttribute('data-presented', '');
+});
+
+test('the shipped 2000s look renders the selected shared helix and restores it after tuning', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	// Active settings from the selected design; unrelated edits to other films do not belong to this look.
+	const setup = parseSetup({
+		era: '2000s', film: 'double-helix', plate: 'damascus', drift: false,
+		tuned: {
+			'plate:damascus': { scale: 0.45 },
+			'film:double-helix': {
+				ground: 1.5, scale: 1.71633218654434, spacing: 1.17165519877676, pitch: 1.44158543577982,
+				radius: 0.573021788990826, strandWidth: 0.052998375382263, swell: 0.0357702599388379, rungs: 11
+			}
+		},
+		light: { plateTone: 0.4, stain: 0.52, vivid: 2.6 }
+	});
+	await page.goto(`/lab#${encodeLink({ setup, stagger: null, width: 323 })}`);
+	const canvas = page.locator('.lab-card canvas.light');
+	await expect(canvas).toHaveAttribute('data-presented', '', { timeout: 15000 });
+	const selected = await canvas.evaluate(node => (node as HTMLCanvasElement).toDataURL());
+	await page.locator('#lab-film-density').fill('0.7');
+	await page.locator('#lab-film-density').press('Tab');
+	await expect.poll(() => renderedDifference(page, selected)).toBeGreaterThan(5);
+	await page.getByRole('button', { name: 'Use the 2000s look', exact: true }).click();
+	// Re-rendering can change a few edge pixels; a different helix changes the full pattern.
+	await expect.poll(() => renderedDifference(page, selected)).toBeLessThan(0.5);
+});

@@ -10,14 +10,17 @@ export default defineFilm({
 	ground: 0.82,
 	params: {
 		sides: { value: 7, min: 7, max: 12, step: 1, note: 'Polygon sides in the regular hyperbolic {p,3} tiling.' },
-		rotation: { value: 0, min: -3.14159, max: 3.14159, step: 0.01, note: 'Rotate the disk without changing its circular geometry.' }
+		rotation: { value: 0, min: -3.14159, max: 3.14159, step: 0.01, note: 'Rotate the disk without changing its circular geometry.' },
+		zoom: { value: 1, min: 0.3, max: 40, step: 0.05, note: 'Magnification of the disk; zoom in to fill the card with a section of the tiling.' },
+		focusX: { value: 0, min: -1, max: 1, step: 0.01, note: 'Horizontal focus in disk radii: -1 is the left rim, 0 the centre, 1 the right rim.' },
+		focusY: { value: 0, min: -1, max: 1, step: 0.01, note: 'Vertical focus in disk radii: -1 is the top rim, 0 the centre, 1 the bottom rim.' }
 	},
 	glsl: `
 	// p is in physical card units. Keep the disk circular in that space (5 by 7 cards), not card-normalized.
-	vec2 pd_origin = p - v_view.zw - CARD * 0.5;
-	const float pd_diskRadius = 2.18;
+	float pd_diskRadius = 2.18 * zoom * 8.0 / filmScale;
+	vec2 pd_origin = p - v_view.zw - CARD * 0.5 + vec2(focusX, focusY) * pd_diskRadius;
 	float pd_radius = length(pd_origin) / pd_diskRadius;
-	float pd_diskAa = max(length(fwidth(pd_origin / pd_diskRadius)), 0.0012);
+	float pd_diskAa = max(length(fwidth(pd_origin / pd_diskRadius)), 0.000001);
 	float pd_diskMask = 1.0 - smoothstep(1.0 - pd_diskAa * 1.5, 1.0 + pd_diskAa * 1.5, pd_radius);
 	float pd_rim = 1.0 - smoothstep(pd_diskAa * 0.35, pd_diskAa * 1.8, abs(pd_radius - 1.0));
 

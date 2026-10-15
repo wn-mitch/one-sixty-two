@@ -74,12 +74,11 @@ test('preview width resizes every print mode without changing material dials', a
 });
 
 for (const viewport of [{ width: 1440, height: 800 }, { width: 1024, height: 768 }, { width: 820, height: 1180 }, { width: 390, height: 844 }, { width: 320, height: 640 }]) {
-	test(`sequence preview fits at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
+	test(`era preview fits at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
 		await page.setViewportSize(viewport);
 		await page.goto('/lab');
 		await page.locator('#lab-era').selectOption('2000s');
 		await page.getByRole('button', { name: 'Use the 2000s look', exact: true }).click();
-		await expect(page.locator('#lab-film')).toHaveValue('hgh-sequence');
 		await expect(page.getByRole('checkbox', { name: 'Drift', exact: true })).toBeChecked();
 		await expect(page.locator('.lab-card canvas[data-presented]')).toBeVisible({ timeout: 15000 });
 		await expect.poll(() => page.locator('.stage').evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);

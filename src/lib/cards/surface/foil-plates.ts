@@ -45,8 +45,8 @@ export interface PlateTuning { scale: number; tone: number; stain: number; vivid
 const PLATE_TUNING: PlateTuning = { scale: 1, tone: 1, stain: 0.6 };
 /**
  * Each era's plate tuning. Carbon's weave is cut fine so it reads on narrow foil; the sunburst, the weld beads and
- * Damascus's layers are cut broad, and the weld's heat tint and Damascus's dark layers run strong. The 2000s HGH
- * sequence film prints vivid, so its letters stand out of the ground.
+ * Damascus's layers are cut broad, and the weld's heat tint and Damascus's dark layers run strong. The 2000s
+ * double-helix film prints vivid, so its strands and rungs stand out of the ground.
  */
 export const ERA_PLATE_TUNING: Readonly<Record<CardEra, PlateTuning>> = {
 	'1950s': PLATE_TUNING, '1960s': PLATE_TUNING, '1970s': { ...PLATE_TUNING, scale: 0.65, vivid: 1.05 }, '1980s': { scale: 0.75, tone: 3, stain: 1 },

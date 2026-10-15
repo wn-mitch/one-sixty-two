@@ -7,7 +7,7 @@ import { defineFilm } from './film.ts';
 export default defineFilm({
 	name: 'jackpot',
 	animated: true,
-	blend: ['atomic', 'mojo', 'carpet', 'xfractor', 'circuit', 'hgh-sequence', 'cracked-ice', 'dollar'],
+	blend: ['atomic', 'mojo', 'carpet', 'xfractor', 'circuit', 'double-helix', 'cracked-ice', 'dollar'],
 	params: {
 		hold: { value: 0.1, min: 0, max: 10, step: 0.05, note: 'Seconds each era\'s film holds before the next fades in.' },
 		fade: { value: 0.4, min: 0.05, max: 6, step: 0.05, note: 'Seconds each crossfade takes.' }

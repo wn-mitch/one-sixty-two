@@ -82,6 +82,10 @@ Colourways include sunset, mint, rose gold, vaporwave and mono silver. Custom gr
 
 Penrose, Pinwheel, Poincaré disk, Apollonian gasket and Gosper curve films are available in the lab and under Storybook's Workshop/Films. Penrose uses thin and thick quasiperiodic rhombi; Pinwheel uses the five-triangle substitution; Poincaré draws a hyperbolic polygon disk; Apollonian packs tangent circles; Gosper engraves complete order-three flowsnake curves.
 
+Poincaré and Apollonian expose Zoom and Focus X/Y dials to crop into any part of the pattern; focus coordinates run from -1 to 1 in enclosing-circle radii, with positive Y toward the bottom. Scale controls pattern size independently of preview width. Double-helix's Slide with tilt dial walks each column vertically at a different rate: 0 fixes the geometry, 1 gives the full effect, and higher values amplify it. The walk follows the card's tilt rather than elapsed time, so holding a pose holds the pattern and returning restores it.
+
+The 2000s holo uses double-helix ladders with eleven rungs per half turn and vividness 2.6. Use the 2000s look restores its shipped film settings, including fixed geometry with Slide with tilt at 0; HGH sequence and skeletal-formula films remain separate lab options.
+
 Export MP4 renders 360 offline frames at 1080×1080 and 60 fps: one six-second figure-eight tilt with phase-locked film motion. The exporter checks that the first and last rendered pixels match, then muxes H.264 with WebCodecs. Encoding requires a browser with H.264 WebCodecs support; cancellation and encoding failures leave the setup intact.
 
 ## Component workshop

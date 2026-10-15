@@ -66,11 +66,11 @@ export const PALETTES = [rainbow, oilSlick, aurora, thermal, goldLeaf, ice, synt
 /**
  * Each era's holo film: Atomic Age bubbles for the 1950s, a psychedelic mojo swirl for the 1960s, the Atlanta
  * Marriott Marquis lobby carpet for the 1970s, Xfractor grids for the 1980s, a circuit board for the 1990s, the
- * amino-acid sequence of human growth hormone as microtext for the 2000s, cracked ice for the 2010s, and dollar signs for the 2020s.
+ * double-helix ladders for the 2000s, cracked ice for the 2010s, and dollar signs for the 2020s.
  */
 export const ERA_HOLO: Readonly<Record<CardEra, HoloPattern>> = {
 	'1950s': 'atomic', '1960s': 'mojo', '1970s': 'carpet', '1980s': 'xfractor',
-	'1990s': 'circuit', '2000s': 'hgh-sequence', '2010s': 'cracked-ice', '2020s': 'dollar'
+	'1990s': 'circuit', '2000s': 'double-helix', '2010s': 'cracked-ice', '2020s': 'dollar'
 };
 
 /** Every film's number. */

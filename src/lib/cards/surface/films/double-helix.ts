@@ -6,20 +6,25 @@ import { defineFilm } from './film.ts';
  */
 export default defineFilm({
 	name: 'double-helix',
-	ground: 0.62,
+	scale: 1.71633218654434,
+	ground: 1.5,
 	params: {
 		density: { value: 0.3, min: 0.05, max: 1.5, step: 0.005, note: 'Helix size against the card; higher packs more, smaller helices.' },
-		spacing: { value: 1.6, min: 0.6, max: 5, step: 0.05, note: 'Distance between neighbouring helices.' },
-		pitch: { value: 2.4, min: 0.3, max: 10, step: 0.05, note: 'How fast the strands wind down the card.' },
-		radius: { value: 0.55, min: 0.1, max: 1.5, step: 0.01, note: 'How far each strand swings out from the helix axis.' },
-		strandWidth: { value: 0.05, min: 0.01, max: 0.3, step: 0.005, note: 'Half the thickness of each strand.' },
-		swell: { value: 0.04, min: 0, max: 0.2, step: 0.005, note: 'How much a strand thickens where it faces the viewer.' },
-		rungs: { value: 5, min: 1, max: 20, step: 1, note: 'Base-pair rungs per half turn.' }
+		spacing: { value: 1.17165519877676, min: 0.6, max: 5, step: 0.05, note: 'Distance between neighbouring helices.' },
+		pitch: { value: 1.44158543577982, min: 0.3, max: 10, step: 0.05, note: 'How fast the strands wind down the card.' },
+		radius: { value: 0.573021788990826, min: 0.1, max: 1.5, step: 0.01, note: 'How far each strand swings out from the helix axis.' },
+		strandWidth: { value: 0.052998375382263, min: 0.01, max: 0.3, step: 0.005, note: 'Half the thickness of each strand.' },
+		swell: { value: 0.0357702599388379, min: 0, max: 0.2, step: 0.005, note: 'How much a strand thickens where it faces the viewer.' },
+		rungs: { value: 11, min: 1, max: 20, step: 1, note: 'Base-pair rungs per half turn.' },
+		slideWithTilt: { value: 0, min: 0, max: 4, step: 0.05, note: 'Walk the helices vertically with tilt, each column at its own rate. 0 fixes the pattern; 1 gives the full effect.' }
 	},
 	glsl: `
 	cellSize = 1.0 / (filmScale * density);
 	vec2 q = p * filmScale * density;
 	float column = floor(q.x / spacing);
+	// Tilt, not time, drives the walk; a held pose holds the pattern and returning restores it.
+	float walk = dot(v_view.xy, vec2(0.6, 1.0)) * u_shift * slideWithTilt;
+	q.y += walk * (0.6 + 1.4 * hash(vec2(column, 8.0))) * 6.2831853 / pitch;
 	float x = q.x - (column + 0.5) * spacing;
 	float phase = q.y * pitch + column * 1.3;
 	float a = radius * sin(phase);
