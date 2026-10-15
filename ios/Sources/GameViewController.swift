@@ -331,6 +331,27 @@ extension GameViewController: WKNavigationDelegate {
 extension GameViewController: WKUIDelegate {
     func webView(
         _ webView: WKWebView,
+        requestDeviceOrientationAndMotionPermissionFor origin: WKSecurityOrigin,
+        initiatedByFrame frame: WKFrameInfo,
+        decisionHandler: @escaping @MainActor @Sendable (WKPermissionDecision) -> Void
+    ) {
+        var components = URLComponents()
+        components.scheme = origin.protocol
+        components.host = origin.host
+        components.port = origin.port == 0 ? nil : origin.port
+        guard frame.isMainFrame,
+              let url = components.url,
+              let urlPolicy,
+              urlPolicy.isAppURL(url) else {
+            decisionHandler(.deny)
+            return
+        }
+        // The game owns the tilt opt-out and respects the system's Reduce Motion preference.
+        decisionHandler(.grant)
+    }
+
+    func webView(
+        _ webView: WKWebView,
         createWebViewWith configuration: WKWebViewConfiguration,
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures

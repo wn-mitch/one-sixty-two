@@ -18,6 +18,7 @@
     <p class="muted">Offline test data only. This page is never shipped with the game.</p>
     <p id="fixture-status" role="status" aria-live="polite">Fixture ready</p>
     <p id="route-status" role="status">Home route</p>
+    <p id="motion-status" role="status" hidden></p>
 
     <button id="reset-fixture" type="button">Reset fixture</button>
     <button id="record-state" type="button">Record persistent state</button>
@@ -39,6 +40,21 @@
       const OPFS_VALUE = "opfs-value-162";
       const status = document.getElementById("fixture-status");
       const route = document.getElementById("route-status");
+      if (new URLSearchParams(location.search).has("motion")) {
+        const motionStatus = document.getElementById("motion-status");
+        motionStatus.hidden = false;
+        motionStatus.textContent = "Requesting motion access without a tap";
+        const requestMotion = () => Promise.all([
+          DeviceOrientationEvent.requestPermission(),
+          DeviceMotionEvent.requestPermission()
+        ]).then(([orientation, motion]) => {
+          motionStatus.textContent = `Motion access: orientation=${orientation}; motion=${motion}`;
+        }).catch(error => {
+          motionStatus.textContent = `Motion access failed: ${error.message}`;
+        });
+        requestMotion();
+        document.addEventListener("click", requestMotion, { capture: true, once: true });
+      }
       const workerSource = `
         self.onmessage = async (event) => {
           const { action, fileName, value } = event.data;

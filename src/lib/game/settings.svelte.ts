@@ -16,7 +16,7 @@ export interface AppPreferences {
 	playbackSpeed: PlaybackSpeed;
 	/** Desktop drafting also lists players with no open position on the field. */
 	showBlockedCards: boolean;
-	/** Tilt cards with the phone's motion sensor; null keeps the platform default (off where a permission prompt is needed). */
+	/** Tilt cards with the phone's motion sensor; null keeps the default on, requesting access on the first interaction. */
 	phoneTilt: boolean | null;
 	/** Idle cards drift half as far as the full swing. */
 	calmDrift: boolean;

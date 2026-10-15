@@ -31,7 +31,7 @@
 
 	/** Phone tilt only appears where the browser reports a motion sensor and a touch screen. */
 	let tiltState = $state<DeviceTiltState>('unsupported');
-	const phoneTiltOn = $derived(tiltState !== 'denied' && (appSettings.phoneTilt ?? tiltState === 'active'));
+	const phoneTiltOn = $derived(tiltState !== 'denied' && (appSettings.phoneTilt ?? true));
 
 	onMount(() => {
 		const release = appSettings.retain();

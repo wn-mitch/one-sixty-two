@@ -10,6 +10,22 @@ final class OneSixtyTwoUITests: XCTestCase {
     }
 
     @MainActor
+    func testMotionAccessIsGrantedOnFirstInteractionAndAfterRestart() {
+        let (app, webView) = launch(gameURL: fixtureURL + "?motion=1")
+        tapFixture("reset-fixture", label: "Reset fixture", in: webView)
+        let granted = "Motion access: orientation=granted; motion=granted"
+        XCTAssertTrue(
+            waitForText(granted, in: webView),
+            "The first game interaction must grant motion access without a separate permission prompt"
+        )
+        app.terminate()
+        app.launch()
+        tapFixture("reset-fixture", label: "Reset fixture", in: app.webViews["game-webview"])
+        XCTAssertTrue(waitForText(granted, in: app.webViews["game-webview"]))
+        addScreenshot(named: "default-motion-permission")
+    }
+
+    @MainActor
     func testPersistentWebStorageSurvivesRestartAndLocalNavigation() {
         let (app, webView) = launch(gameURL: fixtureURL)
         tapFixture("reset-fixture", label: "Reset fixture", in: webView)

@@ -269,28 +269,50 @@ describe('deviceTilt', () => {
 		return answer();
 	};
 
-	it('needs permission on iOS: off by default, then active once granted from a tap', async () => {
+	it('defaults on in iOS and requests access on the first tap without a settings change', async () => {
 		let answer: 'granted' | 'denied' | 'default' | 'prompt' = 'default';
-		const { source, settings, phone, listen } = fixture({ permission: ios(() => answer) });
+		const { source, phone, listen } = fixture({ permission: ios(() => answer) });
 		const states: string[] = [];
 		source.subscribeState(state => states.push(state));
 		listen();
 		await flush();
 		expect(source.state).toBe('needs-permission');
-		expect(source.enabled).toBe(false);
+		expect(source.enabled).toBe(true);
 		expect(phone.orientation.size).toBe(0);
-		expect(phone.gestures.size).toBe(0);
+		expect(phone.gestures.size).toBe(1);
 
-		// A dismissed or undecided prompt stays askable.
-		expect(await phone.gesture(() => source.request())).toBe('needs-permission');
+		// Undecided responses keep the next interaction eligible to request access.
+		phone.tap();
+		await flush();
+		expect(source.state).toBe('needs-permission');
 		answer = 'prompt';
-		expect(await phone.gesture(() => source.request())).toBe('needs-permission');
+		phone.tap();
+		await flush();
+		expect(source.state).toBe('needs-permission');
 		answer = 'granted';
-		expect(await phone.gesture(() => source.request())).toBe('active');
-		settings.setPhoneTilt(true);
+		phone.tap();
+		await flush();
+		expect(source.state).toBe('active');
 		expect(phone.orientation.size).toBe(1);
 		expect(states.at(-1)).toBe('active');
 		expect(states).not.toContain('denied');
+	});
+
+	it('does not request access after an explicit opt-out or while Reduce Motion is enabled', async () => {
+		const { source, settings, phone, media, listen } = fixture({ permission: ios(() => 'granted') });
+		settings.setPhoneTilt(false);
+		listen();
+		await flush();
+		expect(source.enabled).toBe(false);
+		expect(phone.gestures.size).toBe(0);
+		settings.setPhoneTilt(true);
+		expect(phone.gestures.size).toBe(1);
+		media.set(true);
+		expect(phone.gestures.size).toBe(0);
+		phone.tap();
+		await flush();
+		expect(source.state).toBe('needs-permission');
+		expect(phone.orientation.size).toBe(0);
 	});
 
 	it('records a denial from a tap, including a prompt that throws or rejects', async () => {

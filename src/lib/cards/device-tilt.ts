@@ -133,9 +133,9 @@ export class DeviceTiltSource {
 		return this.#permission === 'granted' ? 'active' : this.#permission === 'denied' ? 'denied' : 'needs-permission';
 	}
 
-	/** The player's choice, or the platform default: on wherever tilt works without asking. */
+	/** On by default; platforms requiring permission ask on the first interaction. */
 	get enabled(): boolean {
-		return this.#settings.phoneTilt ?? this.state === 'active';
+		return this.#settings.phoneTilt ?? true;
 	}
 
 	/**
@@ -230,7 +230,7 @@ export class DeviceTiltSource {
 	#update(): void {
 		const env = this.#env();
 		if (!env || !this.#listeners.size) return;
-		// A saved "on" on iOS needs the grant again after a reload; the next tap asks for it.
+		// iOS needs a user gesture for a new grant, including the default-on first visit.
 		const waiting = this.enabled && this.state === 'needs-permission' && this.#settings.effectiveEnabled;
 		if (waiting && !this.#stopGesture) this.#stopGesture = env.onNextGesture(() => { this.#stopGesture = null; void this.request(); });
 		if (!waiting && this.#stopGesture) { this.#stopGesture(); this.#stopGesture = null; }
