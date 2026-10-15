@@ -1,0 +1,90 @@
+name: OneSixtyTwo
+options:
+  minimumXcodeGenVersion: 2.44.0
+  deploymentTarget:
+    iOS: '18.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    MARKETING_VERSION: '0.1.0'
+    CURRENT_PROJECT_VERSION: '1'
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SUPPORTS_MACCATALYST: NO
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+targets:
+  OneSixtyTwo:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.162-0.ios
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: 162-0
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+  OneSixtyTwoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: Tests
+    dependencies:
+      - target: OneSixtyTwo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.162-0.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+  OneSixtyTwoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: UITests
+    dependencies:
+      - target: OneSixtyTwo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.162-0.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  OneSixtyTwo:
+    build:
+      targets:
+        OneSixtyTwo: all
+    test:
+      targets:
+        - OneSixtyTwoTests
+        - name: OneSixtyTwoUITests
+          skippedTests:
+            - LiveGameSmokeTests
+  OneSixtyTwoLive:
+    build:
+      targets:
+        OneSixtyTwo: all
+    test:
+      targets:
+        - name: OneSixtyTwoUITests
+          selectedTests:
+            - LiveGameSmokeTests

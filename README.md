@@ -120,6 +120,37 @@ One loopback service on port 4747 persists annotations and shares them with both
 
 Application feedback loads only in the development browser. Built Storybook intentionally includes its workshop tools. The browser tests supervise a separate in-memory annotation service on port 4748 and never clear the persistent feedback store.
 
+## iOS host
+
+`ios/` contains a payment-free Swift/UIKit app for iOS 18 and later. Its `WKWebView` loads `https://162-0.dev`, keeping the existing Svelte interface and Rust/WebAssembly engine. The app uses safe areas, supports portrait and landscape on iPhone and iPad, retains same-origin navigation in-app, and opens user-selected external web/mail links through the system. Blob exports and same-origin downloads open the native share sheet, including an anchored popover on iPad. Network, HTTP, and web-process failures show an explicit Retry action.
+
+The default persistent WebKit data store holds the game's existing SQLite/OPFS saves. Returning from the background does not reload the document. This is a separate container from Safari: installing the app does not import browser saves. Uninstall/reinstall recovery, another device, and cross-store wallets are not implemented or promised by this host. It contains no StoreKit products, billing bridge, or paid-token crediting.
+
+The host requires a connection to load the game and uncached assets; it does not bundle an offline copy. Ordinary website deployments change what the installed app loads. A controlled release deployment and a tested native/web compatibility policy remain submission gates.
+
+Install full Xcode with an iOS simulator runtime and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). Native builds need no npm installation, generated game data, or Rust rebuild. The recipes use `/Applications/Xcode.app/Contents/Developer` without changing global `xcode-select`; set `DEVELOPER_DIR` if Xcode is elsewhere.
+
+```sh
+just ios-project
+just ios-build
+# Compile an unsigned Release build against the physical-device SDK:
+just ios-device-build
+# Serve the deterministic fixture in a separate terminal:
+just ios-fixtures
+# Select an installed simulator by name, or pass platform=iOS Simulator,id=<UDID>:
+just ios-test 'platform=iOS Simulator,name=iPhone 17'
+# Opt-in deployed-game smoke; only the simulator's own game state is changed:
+just ios-live-smoke 'platform=iOS Simulator,name=iPhone 17'
+# Install and launch on a simulator that is already booted, without opening its window:
+just ios-run YOUR_SIMULATOR_UDID
+```
+
+`ios/project.yml` is the project source; `ios/OneSixtyTwo.xcodeproj`, generated plists, and `ios/build/` are disposable generated output. Open the generated project in Xcode and select a development team locally for a signed physical-device run. Regeneration replaces project-local signing choices; do not commit credentials or signing identity. The local bundle identifier is `dev.162-0.ios`; confirm its availability in the publisher account before distribution.
+
+Debug launches accept `GAME_URL` as an Xcode scheme environment variable for an HTTPS test deployment or loopback HTTP server. Release builds ignore that override. The deterministic suite uses port 18762 for its fixture and requires port 18763 to be unused for the connection-failure scenario. It exercises real WebKit storage, background/restart behavior, navigation boundaries, and blob export. The opt-in live smoke starts and resumes a Draft Mode run, picks its roster, uses Auto-fix, and plays all six chapters through the WebAssembly engine. Use a dedicated simulator without an unrelated draft in progress. XCTest retains screenshots in the result bundle under `ios/build/Logs/Test/`.
+
+Before TestFlight/public distribution, complete physical-device gameplay and lifecycle checks, oldest-supported-OS checks, app privacy/support declarations, commercial rights review, and store review of the hosted site's outbound support links. Live web content is part of the app's review surface. Purchases remain off until paid-value recovery and verified, duplicate-safe fulfillment pass the gates in `PRODUCT.md`; this iOS host does not supply an Android package.
+
 ## Run
 
 Use Node >=24.12 and npm. Install with `npm ci`, then `npx playwright install chromium` for headless browser tests. The simulation engine is Rust: install [rustup](https://rustup.rs) (it reads the pinned toolchain and wasm target from `rust-toolchain.toml`) and `cargo install wasm-pack`. Every hook that needs the engine runs `just engine`, which rebuilds the wasm package into the ignored `src/lib/engine/pkg/` only when the Rust sources change. Browser tests run the built app on local workerd with file watching disabled; `PLAYWRIGHT_PORT` selects an isolated port.

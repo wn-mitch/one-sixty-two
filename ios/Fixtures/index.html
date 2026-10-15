@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneSixtyTwo iOS fixture</title>
+  <style>
+    :root { color-scheme: dark; font: -apple-system-body; background: #20242b; color: #f4f6f8; }
+    body { margin: 0; padding: 24px; max-width: 640px; }
+    button, a { display: block; margin: 12px 0; padding: 12px; border: 1px solid #8b96a8; border-radius: 8px; color: inherit; background: #303744; font: inherit; text-decoration: none; }
+    #fixture-status, #route-status { min-height: 24px; padding: 8px 0; }
+    .muted { color: #b8c0cc; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>OneSixtyTwo native wrapper fixture</h1>
+    <p class="muted">Offline test data only. This page is never shipped with the game.</p>
+    <p id="fixture-status" role="status" aria-live="polite">Fixture ready</p>
+    <p id="route-status" role="status">Home route</p>
+
+    <button id="reset-fixture" type="button">Reset fixture</button>
+    <button id="record-state" type="button">Record persistent state</button>
+
+    <nav aria-label="Fixture navigation">
+      <a id="internal-link" href="/index.html?route=internal">Open internal route</a>
+      <a id="blank-link" href="/index.html?route=new-window" target="_blank" rel="noopener">Open internal new-window route</a>
+      <a id="blocked-scheme-link" href="file:///private/fixture-denied.html">Try blocked file route</a>
+    </nav>
+
+    <button id="download-png" type="button">Download PNG</button>
+  </main>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "one-sixty-two-ios-fixture-local-v1";
+      const OPFS_FILE = "one-sixty-two-ios-fixture-opfs-v1.txt";
+      const LOCAL_VALUE = "local-value-162";
+      const OPFS_VALUE = "opfs-value-162";
+      const status = document.getElementById("fixture-status");
+      const route = document.getElementById("route-status");
+      const workerSource = `
+        self.onmessage = async (event) => {
+          const { action, fileName, value } = event.data;
+          try {
+            const root = await navigator.storage.getDirectory();
+            if (action === "remove") {
+              await root.removeEntry(fileName).catch((error) => {
+                if (error.name !== "NotFoundError") throw error;
+              });
+              self.postMessage({ ok: true });
+              return;
+            }
+            const handle = await root.getFileHandle(fileName, { create: action === "write" });
+            const access = await handle.createSyncAccessHandle();
+            try {
+              if (action === "write") {
+                const encoded = new TextEncoder().encode(value);
+                access.truncate(0);
+                access.write(encoded, { at: 0 });
+                access.flush();
+                self.postMessage({ ok: true, value });
+                return;
+              }
+              const size = access.getSize();
+              const bytes = new Uint8Array(size);
+              access.read(bytes, { at: 0 });
+              self.postMessage({ ok: true, value: new TextDecoder().decode(bytes) });
+            } finally {
+              access.close();
+            }
+          } catch (error) {
+            self.postMessage({ ok: false, error: String(error && error.message || error) });
+          }
+        };
+      `;
+
+      function setStatus(value) {
+        status.textContent = value;
+      }
+
+      function opfs(action, value) {
+        return new Promise((resolve, reject) => {
+          const workerURL = URL.createObjectURL(new Blob([workerSource], { type: "text/javascript" }));
+          const worker = new Worker(workerURL);
+          URL.revokeObjectURL(workerURL);
+          worker.onmessage = (event) => {
+            worker.terminate();
+            if (event.data.ok) resolve(event.data.value || "");
+            else reject(new Error(event.data.error));
+          };
+          worker.onerror = (event) => {
+            worker.terminate();
+            reject(new Error(event.message || "OPFS worker failed"));
+          };
+          worker.postMessage({ action, fileName: OPFS_FILE, value });
+        });
+      }
+
+      function renderRoute() {
+        const value = new URLSearchParams(window.location.search).get("route");
+        route.textContent = value === "internal"
+          ? "Internal route"
+          : value === "new-window"
+            ? "New-window route"
+            : "Home route";
+      }
+
+      async function restoreState() {
+        const localValue = localStorage.getItem(STORAGE_KEY);
+        if (!localValue) return;
+        try {
+          const opfsValue = await opfs("read");
+          setStatus(`Restored: local-storage=${localValue}; opfs=${opfsValue}`);
+        } catch (error) {
+          setStatus(`Restore failed: ${error.message}`);
+        }
+      }
+
+      document.getElementById("reset-fixture").addEventListener("click", async () => {
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+          await opfs("remove");
+          setStatus("Fixture reset");
+        } catch (error) {
+          setStatus(`Reset failed: ${error.message}`);
+        }
+      });
+
+      document.getElementById("record-state").addEventListener("click", async () => {
+        try {
+          localStorage.setItem(STORAGE_KEY, LOCAL_VALUE);
+          await opfs("write", OPFS_VALUE);
+          setStatus(`Saved: local-storage=${LOCAL_VALUE}; opfs=${OPFS_VALUE}`);
+        } catch (error) {
+          setStatus(`Save failed: ${error.message}`);
+        }
+      });
+
+      const pngBytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="), (character) => character.charCodeAt(0));
+      document.getElementById("download-png").addEventListener("click", () => {
+        const url = URL.createObjectURL(new Blob([pngBytes], { type: "image/png" }));
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = "ios-wrapper-fixture.png";
+        anchor.hidden = true;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      });
+      renderRoute();
+      restoreState();
+    })();
+  </script>
+</body>
+</html>

@@ -35,3 +35,8 @@ smoke-reports/
 # Rust
 /target/
 /src/lib/engine/pkg/
+
+# Native project and simulator output
+/ios/*.xcodeproj/
+/ios/Generated/
+/ios/build/

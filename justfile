@@ -80,3 +80,33 @@ feedback *args:
 feedback-doctor:
     npx --no-install agentation-mcp doctor --http-url http://127.0.0.1:4747
 
+
+# Keep native tooling independent of the selected global command-line tools.
+ios_developer_dir := env_var_or_default("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer")
+
+# Requires Xcode and XcodeGen; no npm assets or Rust rebuild are needed.
+ios-project:
+    xcodegen generate --spec ios/project.yml
+
+ios-build: ios-project
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcodebuild -project ios/OneSixtyTwo.xcodeproj -scheme OneSixtyTwo -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/build build CODE_SIGNING_ALLOWED=NO
+
+
+# Checks device compilation without a signing identity or App Store upload.
+ios-device-build: ios-project
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcodebuild -project ios/OneSixtyTwo.xcodeproj -scheme OneSixtyTwo -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath ios/build build CODE_SIGNING_ALLOWED=NO
+# Run in a separate terminal while the deterministic native suite executes.
+ios-fixtures:
+    python3 -m http.server 18762 --bind 127.0.0.1 --directory ios/Fixtures
+
+ios-test destination='platform=iOS Simulator,name=iPhone 17': ios-project
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcodebuild -project ios/OneSixtyTwo.xcodeproj -scheme OneSixtyTwo -destination '{{destination}}' -derivedDataPath ios/build -parallel-testing-enabled NO test CODE_SIGNING_ALLOWED=NO
+
+# Read-only live-site navigation and device-local draft smoke, not a deployment.
+ios-live-smoke destination='platform=iOS Simulator,name=iPhone 17': ios-project
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcodebuild -project ios/OneSixtyTwo.xcodeproj -scheme OneSixtyTwoLive -destination '{{destination}}' -derivedDataPath ios/build -parallel-testing-enabled NO test CODE_SIGNING_ALLOWED=NO
+
+# Pass a booted simulator UDID; does not open Simulator.app or take focus.
+ios-run device: ios-build
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcrun simctl install '{{device}}' ios/build/Build/Products/Debug-iphonesimulator/OneSixtyTwo.app
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcrun simctl launch '{{device}}' dev.162-0.ios
