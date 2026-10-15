@@ -1,6 +1,6 @@
 # Game design
 
-Status: decisions consolidated through Q59. These documents specify intended behavior, not completed implementation. Classic runs S01–S03 (model `contact-v2`, rules `classic-v6`, replay schema 8): stadium choice before the first roll, fitted contact profiles, physical flight, and time-based fielding. [README](../README.md) and `/about` describe that current behavior; the remaining phases are a proposed implementation plan, and unresolved mechanics and numerical values remain explicit gates.
+Status: decisions consolidated through Q59. These documents specify intended behavior, not completed implementation. Classic runs S01–S03 (model `contact-v2`, rules `classic-v8`, replay schema 8): stadium choice before the first roll, fitted contact profiles, physical flight, and time-based fielding. [README](../README.md) and `/about` describe that current behavior; the remaining phases are a proposed implementation plan, and unresolved mechanics and numerical values remain explicit gates.
 
 ## Start here
 
