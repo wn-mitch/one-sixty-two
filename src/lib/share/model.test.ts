@@ -34,7 +34,6 @@ function fixture(): CreateShareRenderModelInput {
 	};
 	const manifest: Manifest = {
 		jackpot: [],
-		jackpotHeadliners: [],
 		schemaVersion: 1,
 		dataVersion: season.data.dataVersion,
 		sourceCommit: 'synthetic',

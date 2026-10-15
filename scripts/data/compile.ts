@@ -165,28 +165,6 @@ function buildShowcase(candidates: Profile[], source: GroupedWarRows): ShowcaseC
  return showcase;
 }
 
-/** Seasons per roster slot, by modeled value, that jackpot packs deal from: about the best possible roster's depth. */
-const JACKPOT_PER_SLOT = 8;
-
-/**
- * The top `JACKPOT_PER_SLOT` seasons eligible for each roster slot by `valueRuns`, merged and sorted by
- * identity, and the DH tier among them: the hitters exceptional enough to deal for the DH slot alone.
- */
-function jackpotPool(draftable: readonly Profile[], table: { seasonId: string[]; valueRuns: number[] }): { seasons: string[]; headliners: string[] } {
- const values = new Map(table.seasonId.map((seasonId, index) => [seasonId, table.valueRuns[index]]));
- const pool = new Set<string>();
- let headliners: string[] = [];
- for (const slot of SLOTS) {
-  const eligible = draftable
-   .filter(profile => profile.eligibleSlots.includes(slot))
-   .toSorted((left, right) => values.get(right.seasonId)! - values.get(left.seasonId)! || compareId(left.seasonId, right.seasonId));
-  const top = eligible.slice(0, JACKPOT_PER_SLOT).map(profile => profile.seasonId);
-  for (const seasonId of top) pool.add(seasonId);
-  if (slot === 'DH') headliners = top;
- }
- return { seasons: [...pool].sort(compareId), headliners: headliners.sort(compareId) };
-}
-
 export function buildGallery(chunks: Record<string, Profile[]>): Record<string, ShowcaseCard> {
  const gallery: Record<string, ShowcaseCard> = {};
  for (const key of Object.keys(chunks).sort(compareId)) {
@@ -292,9 +270,10 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  };
  const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, contactFits, messages: compiled.diagnostics };
  const showcase = buildShowcase(candidates, joinedWar);
- const { seasons: jackpot, headliners: jackpotHeadliners } = jackpotPool(draftable, draftCards);
+ const jackpot = draftable.map(profile => profile.seasonId)
+  .sort((left, right) => valueRuns.get(right)! - valueRuns.get(left)! || compareId(left, right));
  const gallery = buildGallery(chunks);
- const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, draftCards, parkFits, jackpot, jackpotHeadliners, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
+ const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, draftCards, parkFits, jackpot, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
  const dataVersion = createHash('sha256').update(canonicalJSON(payload)).digest('hex');
  const prefix = `/data/${dataVersion}`;
  const manifest: Manifest = {
@@ -304,8 +283,7 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
   simulationUrl: `${prefix}/simulation.json`, showcaseUrl: `${prefix}/showcase.json`, attributionUrl: `${prefix}/attribution.json`, archiveUrl: `${prefix}/transformed-data.tar.gz`, attribution, approximations: APPROXIMATIONS,
   diagnostics: { ...diagnosticCounts, reportUrl: `${prefix}/diagnostics.json` },
   stadiums: stadiums.summaries,
-  jackpot,
-  jackpotHeadliners
+  jackpot
  };
  const simulation: SimulationData = { ...simulationBase, dataVersion };
  const files: Record<string, unknown> = { 'manifest.json': manifest, 'simulation.json': simulation, 'showcase.json': showcase, 'attribution.json': attribution, 'defense-source.json': DEFENSE_METHOD, 'diagnostics.json': diagnostics, 'draft-cards.json': { ...draftCards, dataVersion } };

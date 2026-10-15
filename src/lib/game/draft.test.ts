@@ -19,8 +19,7 @@ import { decodeReplay, encodeReplay } from './share.ts';
 import { persistDraft, restoreDraft } from './persistence.ts';
 import { brokenDb, memoryDb } from '../storage/test-db.ts';
 import type { Db } from '../storage/sql.ts';
-import { CURRENT_REPLAY_SCHEMA_VERSION, SLOTS, compareId, isJackpot, type Candidate, type Draft, type Manifest, type Roll, type Slot, type TeamRoll } from './types.ts';
-import { draftRules } from './rules.ts';
+import { SLOTS, isJackpot, type Candidate, type Draft, type Manifest, type Roll, type Slot, type TeamRoll } from './types.ts';
 import { randomStream } from './random.ts';
 import { syntheticStadiumSummaries } from '../sim/fixtures.ts';
 
@@ -28,7 +27,6 @@ function makeManifest(candidates: Candidate[], dataVersion = 'synthetic-v1'): Ma
  const franchiseIds = [...new Set(candidates.map(candidate => candidate.franchiseId))].sort();
  return {
   jackpot: [],
-  jackpotHeadliners: [],
   schemaVersion: 1,
   dataVersion,
   sourceCommit: 'synthetic',
@@ -623,103 +621,4 @@ describe('permanent deterministic drafting', () => {
   expect(await persistDraft(db, draft, 'simulating')).toBeNull();
   expect(await restoreDraft(db, manifest)).toEqual({ kind: 'valid', draft, phase: 'simulating' });
  });
-});
-
-describe('jackpot packs', () => {
- const pool: Candidate[] = [];
- for (let franchise = 0; franchise < 24; franchise++) {
-  for (const [index, slot] of SLOTS.entries()) {
-   pool.push({ seasonId: `p${franchise}x${index}:1985:AL:J${franchise}`, playerId: `p${franchise}x${index}`, franchiseId: `J${String(franchise).padStart(2, '0')}`, decade: 1980, eligibleSlots: [slot] });
-  }
- }
- const elite = makeManifest(pool);
- elite.jackpot = pool.filter((_, index) => index % 3 === 0).map(candidate => candidate.seasonId).sort(compareId);
- const { guaranteed, size } = draftRules(CURRENT_REPLAY_SCHEMA_VERSION).jackpots;
-
- /** Drafts the first legal season of every roll, recording each jackpot dealt. */
- function finishWithJackpots(seed: number): { draft: Draft; dealt: string[][] } {
-  let draft = startDraft(elite, seed);
-  const dealt: string[][] = [];
-  while (draft.picks.length < SLOTS.length) {
-   draft = rollDraft(draft, elite);
-   const roll = draft.currentRoll!;
-   if (isJackpot(roll)) {
-    dealt.push(roll.jackpot);
-    expect(availableCandidates(draft, elite).map(candidate => candidate.seasonId).sort(compareId)).toEqual(roll.jackpot);
-   }
-   const candidate = availableCandidates(draft, elite)[0];
-   draft = commitPick(draft, elite, candidate.seasonId, legalSlots(draft, candidate, elite)[0]);
-  }
-  return { draft, dealt };
- }
-
- it('deals at least the guaranteed jackpots, each a legal handful of elite seasons from distinct players', () => {
-  const counts: number[] = [];
-  for (let seed = 1; seed <= 8; seed++) {
-   const { draft, dealt } = finishWithJackpots(seed);
-   counts.push(dealt.length);
-   for (const jackpot of dealt) {
-    expect(jackpot.length).toBeGreaterThan(0);
-    expect(jackpot.length).toBeLessThanOrEqual(size);
-    expect(jackpot.every(seasonId => elite.jackpot.includes(seasonId))).toBe(true);
-    expect(new Set(jackpot.map(seasonId => seasonId.split(':')[0])).size).toBe(jackpot.length);
-   }
-   const players = dealt.flat().map(seasonId => seasonId.split(':')[0]);
-   expect(new Set(players).size, 'a player returned in a later jackpot').toBe(players.length);
-   const taken = draft.picks.filter(pick => pick.jackpot);
-   expect(taken).toHaveLength(dealt.length);
-   for (const pick of taken) {
-    const candidate = elite.candidates.find(item => item.seasonId === pick.seasonId)!;
-    expect(pick).toMatchObject({ franchiseId: candidate.franchiseId, decade: candidate.decade, jackpot: true });
-   }
-  }
-  expect(Math.min(...counts)).toBeGreaterThanOrEqual(guaranteed);
-  // The per-roll chance adds jackpots beyond the guarantee in some drafts.
-  expect(Math.max(...counts)).toBeGreaterThan(guaranteed);
-  // Eight full drafts with legality checks on every pick.
- }, 60_000);
-
- it('replays jackpot picks from the seed and rejects a forged jackpot mark', () => {
-  const { draft } = finishWithJackpots(5);
-  const input = replayInput(draft);
-  expect(validateReplay(input, elite).picks).toEqual(draft.picks);
-  const index = draft.picks.findIndex(pick => pick.jackpot);
-  const { jackpot: _mark, ...unmarked } = draft.picks[index];
-  expect(() => validateReplay({ ...input, picks: input.picks.with(index, unmarked) }, elite)).toThrow('snapshot');
-  const plain = draft.picks.findIndex(pick => !pick.jackpot);
-  expect(() => validateReplay({ ...input, picks: input.picks.with(plain, { ...draft.picks[plain], jackpot: true }) }, elite)).toThrow('snapshot');
- });
-
- it('lets the player choose a jackpot beside a franchise pack by its place on the table', () => {
-  for (let seed = 1; seed <= 200; seed++) {
-   let draft = rollDraft(startDraft(elite, seed), elite);
-   if (isJackpot(draft.currentRoll!)) continue;
-   draft = addPack(draft, elite);
-   if (!isJackpot(draft.packs[1])) continue;
-   const chosen = choosePack(draft, 1);
-   expect(chosen.currentRoll).toEqual(draft.packs[1]);
-   expect(chosen.actions.at(-1)).toEqual({ type: 'choose-pack', pack: 1 });
-   expect(validateDraft(chosen, elite)).toEqual(chosen);
-   return;
-  }
-  throw new Error('No seed added a jackpot beside a franchise pack');
- });
-
- it('leans first-roll jackpots away from DH-only seasons unless they headline the DH tier', () => {
-  const tiered = makeManifest(pool);
-  const designated = pool.filter(candidate => candidate.eligibleSlots[0] === 'DH').map(candidate => candidate.seasonId);
-  const catchers = pool.filter(candidate => candidate.eligibleSlots[0] === 'C').map(candidate => candidate.seasonId);
-  tiered.jackpot = [...designated, ...catchers].sort(compareId);
-  /** The DH-only share of every season the first roll's jackpot dealt across seeds. */
-  const designatedShare = () => {
-   const dealt = Array.from({ length: 300 }, (_, seed) => rollDraft(startDraft(tiered, seed + 1), tiered).currentRoll!)
-    .flatMap(roll => isJackpot(roll) ? roll.jackpot : []);
-   expect(dealt.length).toBeGreaterThan(200);
-   return dealt.filter(seasonId => designated.includes(seasonId)).length / dealt.length;
-  };
-  // Equal pools: a quarter weight leaves DH-only seasons about a fifth of the deal, full weight about half.
-  expect(designatedShare()).toBeLessThan(.3);
-  tiered.jackpotHeadliners = [...designated];
-  expect(designatedShare()).toBeGreaterThan(.4);
- }, 60_000);
 });

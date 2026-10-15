@@ -316,9 +316,17 @@ describe('historical data compiler', () => {
   expect(first.manifest.candidates.some(candidate => candidate.seasonId === 'bullpen:1950:AL:OLD0' && candidate.eligibleSlots.includes('BP'))).toBe(true);
   expect((first.files['F0-1950.json'] as { eligibleSlots: string[] }[]).some(profile => profile.eligibleSlots.includes('BP'))).toBe(true);
   // Collected team bullpens stay in the chunks but are never priced for Draft Mode.
-  const priced = (first.files['draft-cards.json'] as { seasonId: string[] }).seasonId;
+  const cards = first.files['draft-cards.json'] as { seasonId: string[]; valueRuns: number[] };
+  const priced = cards.seasonId;
   expect(priced.some(id => id.startsWith('bullpen:'))).toBe(false);
   expect(priced).toHaveLength(first.manifest.candidates.filter(candidate => !candidate.eligibleSlots.includes('BP')).length);
+  const ranked = cards.seasonId.map((seasonId, index) => ({ seasonId, value: cards.valueRuns[index] }))
+   .sort((left, right) => right.value - left.value || compareId(left.seasonId, right.seasonId));
+  expect(first.manifest.jackpot).toEqual(ranked.map(value => value.seasonId));
+  expect(first.manifest.jackpot).toHaveLength(priced.length);
+  expect(new Set(first.manifest.jackpot).size).toBe(priced.length);
+  expect(first.manifest).not.toHaveProperty('jackpotHeadliners');
+  expect(first.payload).not.toHaveProperty('jackpotHeadliners');
   expect(simulation.opponents).toHaveLength(30);
   for (const team of simulation.opponents) {
    expect(team.starters).toHaveLength(5);

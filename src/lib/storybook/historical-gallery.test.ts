@@ -43,7 +43,6 @@ function manifest(dataVersion: string, profiles: Profile[]): Manifest {
 	}));
 	return {
 		jackpot: [],
-		jackpotHeadliners: [],
 		schemaVersion: 1,
 		dataVersion,
 		sourceCommit: 'fixture',

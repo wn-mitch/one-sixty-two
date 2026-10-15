@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::Path;
 
 const USAGE: &str = "Usage: engine draft-spread --policy random,best,vorp,packs --from N --to N [--seasons N] [--seed N] [--jackpots guaranteed,chance] [--add-below Q]";
-const RULES_VERSION: &str = "classic-v6";
+const RULES_VERSION: &str = "classic-v8";
 
 fn read_json(path: &Path) -> Result<Value, String> {
     let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
@@ -33,8 +33,7 @@ fn load(root: &Path) -> Result<(Pool, Vec<Profile>, ParkRef), String> {
     let values: HashMap<String, (f64, usize)> = column("seasonId")?.iter().zip(column("valueRuns")?).zip(column("pricedSlot")?)
         .filter_map(|((id, value), slot)| Some((id.as_str()?.to_string(), (value.as_f64()?, SLOTS.iter().position(|name| Some(*name) == slot.as_str())?))))
         .collect();
-    let elite: HashSet<&str> = manifest["jackpot"].as_array().ok_or("manifest has no jackpot pool")?.iter().filter_map(Value::as_str).collect();
-    let headliners: HashSet<&str> = manifest["jackpotHeadliners"].as_array().ok_or("manifest has no jackpot headliners")?.iter().filter_map(Value::as_str).collect();
+    let jackpot: HashSet<&str> = manifest["jackpot"].as_array().ok_or("manifest has no jackpot pool")?.iter().filter_map(Value::as_str).collect();
     let mut rows: Vec<&Value> = manifest["candidates"].as_array().ok_or("manifest has no candidates")?.iter().filter(|row| {
         let year: i32 = row["seasonId"].as_str().and_then(|id| id.split(':').nth(1)).and_then(|year| year.parse().ok()).unwrap_or(0);
         (1950..=2025).contains(&year) && values.contains_key(row["seasonId"].as_str().unwrap_or(""))
@@ -49,9 +48,11 @@ fn load(root: &Path) -> Result<(Pool, Vec<Profile>, ParkRef), String> {
         let slots = row["eligibleSlots"].as_array().unwrap().iter().filter_map(|slot| SLOTS.iter().position(|name| Some(*name) == slot.as_str())).fold(0u16, |mask, slot| mask | 1 << slot);
         Card {
             player: index(&players, row["playerId"].as_str().unwrap()), franchise: index(&franchises, row["franchiseId"].as_str().unwrap()),
-            decade: row["decade"].as_i64().unwrap() as i32, slots, value, priced, elite: elite.contains(season_id.as_str()), headliner: headliners.contains(season_id.as_str()), season_id,
+            decade: row["decade"].as_i64().unwrap() as i32, slots, value, priced, season_id,
         }
     }).collect::<Vec<Card>>();
+    let mut jackpot: Vec<usize> = cards.iter().enumerate().filter_map(|(index, card)| jackpot.contains(card.season_id.as_str()).then_some(index)).collect();
+    jackpot.sort_unstable_by(|&left, &right| cards[right].value.total_cmp(&cards[left].value).then_with(|| cards[left].season_id.cmp(&cards[right].season_id)));
     let mut profiles: HashMap<String, Profile> = HashMap::new();
     for url in manifest["chunks"].as_object().ok_or("manifest has no chunks")?.values() {
         let path = root.join("static").join(url.as_str().ok_or("invalid chunk url")?.trim_start_matches('/'));
@@ -63,7 +64,7 @@ fn load(root: &Path) -> Result<(Pool, Vec<Profile>, ParkRef), String> {
     stadiums.sort_by(|a, b| a["ref"]["id"].as_str().cmp(&b["ref"]["id"].as_str()));
     let stadium = &stadiums.first().ok_or("manifest has no stadiums")?["ref"];
     let park = ParkRef { id: stadium["id"].as_str().unwrap().into(), version: stadium["version"].as_str().unwrap().into() };
-    Ok((Pool { cards }, profiles, park))
+    Ok((Pool { cards, jackpot }, profiles, park))
 }
 
 fn request(picks: &[(usize, usize, bool)], pool: &Pool, profiles: &[Profile], park: &ParkRef) -> SeasonRequest {
@@ -157,12 +158,10 @@ mod tests {
                 assert_eq!(cards.iter().map(|card| card.franchise).collect::<HashSet<_>>().len(), SLOTS.len(), "{policy:?} {seed}: distinct franchises");
                 for &(slot, card, jackpot) in &picks {
                     assert!(pool.cards[card].slots & (1 << slot) != 0, "{policy:?} {seed}: ineligible at {}", SLOTS[slot]);
-                    assert!(!jackpot || pool.cards[card].elite, "{policy:?} {seed}: a jackpot dealt a non-elite season");
                     jackpots += usize::from(jackpot);
                 }
             }
         }
-        // A guaranteed jackpot falls back to a franchise only when no elite season fits the open slots.
         assert!(jackpots >= 16 * rules.guaranteed * 9 / 10, "only {jackpots} jackpots in 16 drafts");
     }
 }

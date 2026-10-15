@@ -214,7 +214,6 @@ function buildManifest(profiles: Profile[], candidates: Candidate[], simulationD
   diagnostics: { excludedBatting: 0, excludedPitching: 0, excludedProfiles: 0, estimatedProfiles: 0, reportUrl: '' },
   // No elite seasons, so the scripted workshop drafts deal only franchise packs.
   jackpot: [],
-  jackpotHeadliners: [],
   attribution: {
    title: 'Synthetic Storybook examples',
    credit: 'Illustrative fixture data',

@@ -17,7 +17,6 @@ candidates[0].eligibleSlots = ['C', '1B'];
 candidates[1].eligibleSlots = ['C', '1B'];
 const manifest = {
 	jackpot: [],
-	jackpotHeadliners: [],
 	schemaVersion: 1,
 	dataVersion,
 	sourceCommit: 'synthetic',

@@ -19,9 +19,10 @@ export interface DraftRulePolicy {
  extraPacks: number;
  /**
   * Jackpot packs: `guaranteed` of the draft's rolls (seeded positions) are jackpots, and every other
-  * roll or added pack is one with probability `chance`. Each deals `size` elite seasons.
+  * roll or added pack is one with probability `chance`. Each deals `size` distinct players across open
+  * slots, drawing from each slot's best `shortlist` remaining players.
   */
- jackpots: { guaranteed: number; chance: number; size: number };
+ jackpots: { guaranteed: number; chance: number; size: number; shortlist: number };
 }
 
 const CURRENT_RULE_POLICY: DraftRulePolicy = {
@@ -32,7 +33,7 @@ const CURRENT_RULE_POLICY: DraftRulePolicy = {
  maxYear: MAX_SEASON_YEAR,
  modelVersion: MODEL_VERSION,
  extraPacks: 2,
- jackpots: { guaranteed: 2, chance: 0.2, size: 6 }
+ jackpots: { guaranteed: 2, chance: 0.2, size: 6, shortlist: 8 }
 };
 
 export function draftRules(schemaVersion: ReplaySchemaVersion): DraftRulePolicy {

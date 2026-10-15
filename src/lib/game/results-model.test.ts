@@ -119,7 +119,6 @@ function fixture(): Fixture {
 	};
 	const manifest: Manifest = {
 		jackpot: [],
-		jackpotHeadliners: [],
 		schemaVersion: 1,
 		dataVersion: input.data.dataVersion,
 		sourceCommit: 'test',

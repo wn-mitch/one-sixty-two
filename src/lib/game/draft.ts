@@ -124,32 +124,48 @@ function nextTeamRoll(legal: readonly Candidate[], random: () => number, table: 
  return { franchiseId, decade: decades[Math.floor(random() * decades.length)] };
 }
 
-/** Draw weight of a jackpot season whose only open slot is the DH, unless it is a DH headliner. */
-const DH_ONLY_WEIGHT = 0.25;
-
 /**
- * Up to `size` legal elite seasons, one per player, from players no earlier jackpot in the draft has
- * dealt; null when none remain. Seasons that fit an open slot besides the DH, and DH headliners, draw at
- * full weight; the rest draw at `DH_ONLY_WEIGHT`.
+ * Deal round-robin across open slots from their best remaining distinct players. Unseen players
+ * lead each slot's shortlist; previously dealt, undrafted players return only when that supply ends.
  */
-function nextJackpot(analysis: DraftAnalysis, legal: readonly Candidate[], manifest: Manifest, random: () => number, shown: ReadonlySet<string>, size: number): Roll | null {
- const elite = new Set(manifest.jackpot);
- const headliners = new Set(manifest.jackpotHeadliners);
- let options = legal
-  .filter(candidate => elite.has(candidate.seasonId) && !shown.has(candidate.playerId))
-  .sort((a, b) => compareId(a.seasonId, b.seasonId))
-  .map(candidate => ({
-   candidate,
-   weight: headliners.has(candidate.seasonId) || analysis.slots.some(slot => slot !== 'DH' && candidate.eligibleSlots.includes(slot) && isViableForSlot(analysis, candidate, slot)) ? 1 : DH_ONLY_WEIGHT
-  }));
+function nextJackpot(analysis: DraftAnalysis, legal: readonly Candidate[], manifest: Manifest, random: () => number, shown: ReadonlySet<string>, policy: DraftRulePolicy['jackpots']): Roll | null {
+ const bySeason = new Map(legal.map(candidate => [candidate.seasonId, candidate]));
+ const ranked = manifest.jackpot.flatMap(seasonId => {
+  const candidate = bySeason.get(seasonId);
+  return candidate ? [candidate] : [];
+ });
+ const pools = shuffle(analysis.slots.flatMap(slot => {
+  const players = new Set<string>();
+  const unseen: Candidate[] = [];
+  const seen: Candidate[] = [];
+  for (const candidate of ranked) {
+   if (players.has(candidate.playerId) || !candidate.eligibleSlots.includes(slot) || !isViableForSlot(analysis, candidate, slot)) continue;
+   players.add(candidate.playerId);
+   (shown.has(candidate.playerId) ? seen : unseen).push(candidate);
+  }
+  return players.size ? [{ unseen, seen }] : [];
+ }), random);
+ const dealt = new Set<string>();
  const seasons: string[] = [];
- while (options.length && seasons.length < size) {
-  let target = random() * options.reduce((total, option) => total + option.weight, 0);
-  let index = 0;
-  while (index < options.length - 1 && target >= options[index].weight) target -= options[index++].weight;
-  const chosen = options[index].candidate;
-  seasons.push(chosen.seasonId);
-  options = options.filter(option => option.candidate.playerId !== chosen.playerId);
+ while (seasons.length < policy.size) {
+  const before = seasons.length;
+  for (const pool of pools) {
+   const options: Candidate[] = [];
+   for (const candidates of [pool.unseen, pool.seen]) {
+    for (const candidate of candidates) {
+     if (dealt.has(candidate.playerId)) continue;
+     options.push(candidate);
+     if (options.length === policy.shortlist) break;
+    }
+    if (options.length) break;
+   }
+   if (!options.length) continue;
+   const chosen = options[Math.floor(random() * options.length)];
+   dealt.add(chosen.playerId);
+   seasons.push(chosen.seasonId);
+   if (seasons.length === policy.size) break;
+  }
+  if (seasons.length === before) break;
  }
  return seasons.length ? { jackpot: seasons.sort(compareId) } : null;
 }
@@ -166,7 +182,7 @@ function nextRoll(draft: Draft, manifest: Manifest, random: () => number, table:
  const analysis = analyzeDraft(draft, manifest);
  const legal = legalCandidates(analysis, null);
  const lucky = random() < policy.jackpots.chance;
- const jackpot = forced || lucky ? nextJackpot(analysis, legal, manifest, random, shown, policy.jackpots.size) : null;
+ const jackpot = forced || lucky ? nextJackpot(analysis, legal, manifest, random, shown, policy.jackpots) : null;
  return jackpot ?? nextTeamRoll(legal, random, table);
 }
 
