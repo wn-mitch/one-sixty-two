@@ -513,8 +513,9 @@ test('route teardown cancels resumed hydration without overwriting an unfinished
 	});
 	await page.getByRole('button', { name: 'Resume my team', exact: true }).click();
 	await paused.promise;
+	await page.getByRole('button', { name: 'Menu', exact: true }).click();
 	await page.getByRole('link', { name: 'Rules & model', exact: true }).click();
-	await expect(page).toHaveURL(/\/about$/);
+	await expect(page).toHaveURL(/\/about#simulation$/);
 	gate.resolve();
 	await page.waitForLoadState('networkidle');
 	expect(await deviceDraftText(page)).toBe(unfinished);
@@ -524,7 +525,9 @@ test('keeps completed seasons in history without reopening results or starting a
 	await finishRoster(page, request);
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120_000 });
-	await expect(page.getByRole('link', { name: 'Shop: 1 unlock token', exact: true })).toBeVisible();
+	// The device's first completed season pays its token and the one-time first-season bonus.
+	await expect(page.getByRole('link', { name: 'Shop, 2 tokens', exact: true })).toBeVisible();
+	await expect(page.locator('.reward')).toContainText('1 season token + 1 first-season bonus');
 	await expect.poll(() => deviceDraftText(page)).toBeNull();
 	const token = await page.evaluate(async () => {
 		// The application installs this typed database hook for browser regression tests.
@@ -540,18 +543,18 @@ test('keeps completed seasons in history without reopening results or starting a
 	await expect(page.locator('#results-heading')).toHaveCount(0);
 	expect(await deviceDraftText(page)).toBeNull();
 	await page.goto('/shop');
-	await expect(page.locator('.balance')).toHaveText('1 unlock token');
+	await expect(page.locator('.balance')).toHaveText('2 unlock tokens');
 	await page.goto(`/#replay=${token}`);
 	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120_000 });
 	expect(await deviceDraftText(page)).toBeNull();
 	await page.goto('/shop');
-	await expect(page.locator('.balance')).toHaveText('1 unlock token');
+	await expect(page.locator('.balance')).toHaveText('2 unlock tokens');
 });
 
 test('keeps the Home copy width when centering on ultrawide screens', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.goto('/');
-	const intro = page.locator('.welcome-copy .intro');
+	const intro = page.locator('.welcome-copy .pitch');
 	await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toBeEnabled();
 	await expect(intro).toBeVisible();
 	await page.evaluate(() => document.fonts.ready.then(() => undefined));
@@ -568,21 +571,25 @@ test('confirms a new draft in a modal without moving the page', async ({ page })
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	const savedSeed = () => deviceDraft<Draft>(page).then(draft => draft.seed);
 	const seed = await savedSeed();
-	const newDraft = page.getByRole('button', { name: 'New draft', exact: true }).first();
-	const before = await newDraft.boundingBox();
+	// Phones keep New draft in the draft options menu, away from the labelled Extra pack control.
+	const options = page.getByRole('button', { name: 'Draft options', exact: true });
+	const newDraft = page.getByRole('button', { name: 'New draft…', exact: true });
+	const before = await options.boundingBox();
 
+	await options.click();
 	await newDraft.click();
 	const confirm = page.getByRole('dialog', { name: 'Leave this roster behind?' });
 	await expect(confirm).toBeVisible();
 	expect(await confirm.evaluate(dialog => dialog.matches(':modal'))).toBe(true);
 	await expect(confirm.getByRole('button', { name: 'Keep draft', exact: true })).toBeFocused();
-	expect(await newDraft.boundingBox()).toEqual(before);
+	expect(await options.boundingBox()).toEqual(before);
 
 	await page.keyboard.press('Escape');
 	await expect(confirm).toBeHidden();
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect(await savedSeed()).toBe(seed);
 
+	await options.click();
 	await newDraft.click();
 	await confirm.getByRole('button', { name: 'Discard and start new', exact: true }).click();
 	await expect(confirm).toBeHidden();
