@@ -1,4 +1,30 @@
 import { expect, openStory, test } from './workshop-test.ts';
+import { capturePhotoPixels } from '../../scripts/media/framing-pixels.ts';
+import { test as browserTest } from '@playwright/test';
+
+browserTest('photo audit ignores opaque label ink but retains exposed ink and artwork', async ({ page }) => {
+	await page.setViewportSize({ width: 800, height: 140 });
+	await page.setContent(`<style>
+		body{margin:0}[data-audit-grid]{display:grid;grid-template-columns:repeat(8,100px);width:800px}
+		.tile{position:relative;width:100px;height:140px;background:#456}
+		[data-layer="photo.mask"]{position:absolute;inset:0;background:#abc}
+		[data-layer="season.tab"]{position:absolute;left:10px;top:10px;width:80px;height:40px;background:rgb(255,255,255)}
+		[data-layer="season.year"]{position:absolute;left:5px;top:5px;width:25px;height:20px;font:16px monospace}
+		.clipped [data-layer="season.tab"]{clip-path:polygon(50% 0,100% 100%,0 100%)}
+		.translucent [data-layer="season.tab"]{background:rgba(255,255,255,.5)}
+		</style><div data-audit-grid>${['opaque','clipped','translucent'].map(type =>
+		`<div class="tile ${type}"><div data-layer="photo.mask"></div><div data-layer="season.tab"><span data-layer="season.year">1950</span></div></div>`).join('')}</div>`);
+	const first = await capturePhotoPixels(page, 100);
+	expect(first.map(row => row.geometry.ignoredInk)).toEqual([['season.year'], [], []]);
+	await page.locator('[data-layer="season.year"]').evaluateAll(elements => elements.forEach(element => { element.textContent = '2025'; }));
+	const second = await capturePhotoPixels(page, 100);
+	expect(second[0].pixels).toBe(first[0].pixels);
+	expect(second[1].pixels).not.toBe(first[1].pixels);
+	expect(second[2].pixels).not.toBe(first[2].pixels);
+	await page.locator('.opaque [data-layer="season.tab"]').evaluate(element => { (element as HTMLElement).style.width = '75px'; });
+	expect((await capturePhotoPixels(page, 100))[0].pixels).not.toBe(second[0].pixels);
+	expect(await page.locator('[data-audit-ignore-ink]').count()).toBe(0);
+});
 
 test.describe('media workshop states', () => {
 	test('resolves loading media into the real illustrative SVG consumers', async ({ page }) => {

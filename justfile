@@ -20,8 +20,8 @@ card-framing *args:
     node scripts/media/framing-audit.ts {{args}}
 
 # Reconcile valid captures with individual visual review records.
-card-framing-gallery:
-    node scripts/media/framing-gallery.ts
+card-framing-gallery *args:
+    node scripts/media/framing-gallery.ts {{args}}
 
 media-prepare *args:
     npm run media:prepare -- {{args}}

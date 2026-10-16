@@ -29,6 +29,7 @@ const representativesOnly = process.argv.includes('--representatives');
 const filter = process.argv.find(value => value.startsWith('--filter='))?.slice(9).toLowerCase();
 const sourceFilter = process.argv.find(value => value.startsWith('--sources='))?.slice(10).split(',');
 const idFilter = process.argv.find(value => value.startsWith('--ids='))?.slice(6).split(',');
+const mediaManifestPath = process.argv.find(value => value.startsWith('--media-manifest='))?.slice(17);
 const registryPath = process.argv.find(value => value.startsWith('--registry='))?.slice(11) ?? join(root, 'scripts/media/photo-framing.json');
 const start = Number(process.argv.find(value => value.startsWith('--start='))?.slice(8) ?? 0);
 const width = Number(process.argv.find(value => value.startsWith('--width='))?.slice(8) ?? 240);
@@ -45,8 +46,11 @@ const dataPointer = await read<{ manifestUrl: string }>(asset('/data/current.jso
 const mediaPointer = await read<{ manifestUrl: string }>(asset('/media/current.json'));
 const rankingPointer = await read<{ manifestUrl: string }>(asset('/rankings/current.json'));
 const [manifest, media, rankings] = await Promise.all([
-	read<Manifest>(asset(dataPointer.manifestUrl)), read<MediaManifest>(asset(mediaPointer.manifestUrl)), read<WarRankings>(asset(rankingPointer.manifestUrl))
+	read<Manifest>(asset(dataPointer.manifestUrl)), read<MediaManifest>(mediaManifestPath ?? asset(mediaPointer.manifestUrl)), read<WarRankings>(asset(rankingPointer.manifestUrl))
 ]);
+if (![2, 3].includes(media.schemaVersion) || typeof media.version !== 'string' || !media.players || !media.teams) {
+	throw new Error('Media manifest must use schema 2 or 3 and include version, players, and teams');
+}
 const registry = await read<PhotoFramingRegistry>(registryPath);
 validateFramingRegistry(registry);
 for (const photo of [...Object.values(media.players).flatMap(player => player.photos), ...Object.values(media.teams).flatMap(team => team.photos ?? [])]) {
@@ -103,7 +107,7 @@ for (const entry of requested) aliases.set(entry.renderFingerprint, [...(aliases
 const selected = [...aliases.values()].map(items => items[0]);
 await atomicWrite(join(phase, 'selected.json'), JSON.stringify(requested, null, 2));
 const rendererFiles = (await Promise.all(['src/lib/cards', 'src/lib/media', 'src/routes/card-audit'].map(async directory =>
-	(await readdir(join(root, directory), { recursive: true })).filter(file => /\.(ts|svelte|json)$/.test(file)).map(file => join(directory, file))))).flat().sort();
+	(await readdir(join(root, directory), { recursive: true })).filter(file => /\.(ts|svelte|json)$/.test(file) && !/\.(test|spec)\.ts$/.test(file)).map(file => join(directory, file))))).flat().sort();
 const rendererChecksum = hash((await Promise.all(rendererFiles.map(async file => `${file}\0${await readFile(join(root, file), 'utf8')}`))).join('\0'));
 await appendFile(join(phase, 'runs.jsonl'), JSON.stringify({ startedAt: new Date().toISOString(), dataVersion: manifest.dataVersion, mediaVersion: media.version,
 	registryChecksum: command === 'after' ? hash(JSON.stringify(registry)) : null, rendererChecksum, width, decorated, filter, representativesOnly, expected: selected.length }) + '\n');
@@ -124,7 +128,7 @@ try {
 	await page.addStyleTag({ content: '[data-feedback-tools], [data-feedback-dial-host], agentation-toolbar, [data-agentation-root], [data-feedback-toolbar] { display: none !important; }' });
 	for (let offset = 0; offset < selected.length; offset += 64) {
 		const batch = selected.slice(offset, offset + 64);
-		if (!process.argv.includes('--force') && batch.every(entry => aliases.get(entry.renderFingerprint)!.every(alias => existing.has(`${alias.id}.jpg`) && (!pixelCheck || evidence[alias.id]?.version === 2) && valid[alias.id]?.rendererChecksum === rendererChecksum && valid[alias.id]?.fingerprint === alias.renderFingerprint))) {
+		if (!process.argv.includes('--force') && batch.every(entry => aliases.get(entry.renderFingerprint)!.every(alias => existing.has(`${alias.id}.jpg`) && (!pixelCheck || evidence[alias.id]?.version === 3) && valid[alias.id]?.rendererChecksum === rendererChecksum && valid[alias.id]?.fingerprint === alias.renderFingerprint))) {
 			captured += batch.reduce((count, entry) => count + aliases.get(entry.renderFingerprint)!.length, 0);
 			continue;
 		}
@@ -158,7 +162,7 @@ try {
 				const before = join(out, 'baseline/cards', `${entry.id}.jpg`);
 				const identical = command === 'after' && !decorated && width === 240 && await readFile(before).then(async bytes => bytes.equals(await readFile(tile)), () => false);
 				if (identical) await link(before, target); else await copyFile(tile, target);
-				if (pixels) evidence[entry.id] = { version: 2, ...pixels[index], jpegChecksum: checksum(await readFile(tile)), baselineIdentical: identical };
+				if (pixels) evidence[entry.id] = { version: 3, ...pixels[index], jpegChecksum: checksum(await readFile(tile)), baselineIdentical: identical };
 				for (const alias of aliases.get(entry.renderFingerprint)!.slice(1)) {
 					const path = join(phase, 'cards', `${alias.id}.jpg`);
 					await unlink(path).catch(error => { if (error.code !== 'ENOENT') throw error; });

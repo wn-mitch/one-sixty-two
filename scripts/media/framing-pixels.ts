@@ -10,7 +10,7 @@ export interface PixelGeometry {
 	ignoredInk: string[];
 }
 export interface PixelEvidence {
-	version: 2;
+	version: 2 | 3;
 	pixels: string;
 	geometry: PixelGeometry;
 	jpegChecksum: string;
@@ -54,22 +54,22 @@ export async function capturePhotoPixels(page: Page, width: number, path?: strin
 			while (background && background !== tile) {
 				const s = getComputedStyle(background), r = background.getBoundingClientRect();
 				const opaque = /^rgb\([^/]+\)$/.test(s.backgroundColor) && !s.backgroundColor.startsWith('rgba');
-				if (opaque && s.opacity === '1' && !s.clipPath.includes('polygon') && inkRect.left >= r.left && inkRect.right <= r.right && inkRect.top >= r.top && inkRect.bottom <= r.bottom) break;
+				if (opaque && s.opacity === '1' && inkRect.left >= r.left && inkRect.right <= r.right && inkRect.top >= r.top && inkRect.bottom <= r.bottom) break;
 				background = background.parentElement;
 			}
 			if (!background || background === tile || !background.getAttribute('data-layer')?.startsWith('season.')) continue;
-			// A rectangular interior inset by every corner radius is certainly opaque.
-			const style = getComputedStyle(background);
-			if (style.clipPath !== 'none' || style.transform !== 'none') continue;
-			const r = background.getBoundingClientRect();
-			const radius = Math.min(r.width / 2, r.height / 2, Math.max(...[style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius].map(value => value.includes('%') ? Math.min(r.width, r.height) / 2 : parseFloat(value))));
-			// Conservatively apply the largest corner radius at all four corners.
-			const inside = (x: number, y: number) => {
-				const dx = Math.max(r.left + radius - x, x - (r.right - radius), 0);
-				const dy = Math.max(r.top + radius - y, y - (r.bottom - radius), 0);
-				return dx * dx + dy * dy <= radius * radius;
-			};
-			if (![[inkRect.left, inkRect.top], [inkRect.right, inkRect.top], [inkRect.left, inkRect.bottom], [inkRect.right, inkRect.bottom]].every(([x, y]) => inside(x, y))) continue;
+			// Browser hit testing honors the production label's rounded corners, polygon and skew.
+			// Every label used here is convex; all four ink-box corners must hit its opaque surface.
+			const previous = background.style.getPropertyValue('pointer-events');
+			const priority = background.style.getPropertyPriority('pointer-events');
+			background.style.setProperty('pointer-events', 'auto', 'important');
+			const inside = [[inkRect.left + .05, inkRect.top + .05], [inkRect.right - .05, inkRect.top + .05],
+				[inkRect.left + .05, inkRect.bottom - .05], [inkRect.right - .05, inkRect.bottom - .05]].every(([x, y]) => {
+					const hit = document.elementFromPoint(x, y);
+					return !!hit && background!.contains(hit);
+				});
+			if (previous) background.style.setProperty('pointer-events', previous, priority); else background.style.removeProperty('pointer-events');
+			if (!inside) continue;
 			labels.push({ layer: background.getAttribute('data-layer') ?? '', rect: rect(background), shape: shape(background) });
 			ignoredInk.push(ink.getAttribute('data-layer')!);
 			ink.setAttribute('data-audit-ignore-ink', '');
