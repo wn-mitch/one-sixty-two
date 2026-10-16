@@ -123,15 +123,14 @@ test('Team card grade gallery compares all nine finishes and exposes the back th
 	await expect(gallery.locator('[data-card="club"][data-face="back"]')).toHaveCount(grades.length);
 });
 
-test('unnamed team cards show the park once and format their winning percentage', async ({ page }) => {
+test('unnamed team cards print no name, keep the park in the footer, and format their winning percentage', async ({ page }) => {
 	await openStoryByName(page, 'Modes/My teams', 'All-time leaders');
 	const tile = tiles(page).filter({ hasNotText: 'Example Aces' }).filter({ hasNotText: 'Last fall’s club' });
 	const front = tile.locator('.front');
 	const record = (await front.locator('.record').innerText()).trim();
 	const [wins, losses] = record.split('–').map(Number);
-	const title = await front.locator('.title').innerText();
-	expect(title).not.toContain(record);
-	await expect(front.locator('.park')).toHaveCount(0);
+	await expect(front.locator('.title')).toHaveCount(0);
+	await expect(front.locator('.footer .meta')).toContainText(/\S+ · /);
 	const winningPercentage = front.locator('.stat').filter({ has: page.getByText('Win %', { exact: true }) });
 	await expect(winningPercentage.locator('.value')).toHaveText(`${(wins! / (wins! + losses!) * 100).toFixed(1)}%`);
 	const differential = front.locator('.stat').filter({ has: page.getByText('Run differential', { exact: true }) });

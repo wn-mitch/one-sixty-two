@@ -2,9 +2,12 @@
  import { onMount } from 'svelte';
 	import { loadMedia, selectLogo } from '../media/client.ts';
 	import { logoShapeFor } from '../media/logo-shapes.ts';
+	import { logoField } from '../media/logo-field.ts';
 	import type { MediaManifest } from '../media/types.ts';
- let { franchiseId, year, label, size = 'medium' }: {
+ let { franchiseId, year, label, size = 'medium', field = $bindable(null) }: {
   franchiseId: string; year?: number; label?: string; size?: 'small' | 'medium' | 'large';
+  /** The solid colour the shown mark is printed on, or null when it has none or is not shown. */
+  field?: string | null;
  } = $props();
  let media = $state.raw<MediaManifest | null>(null);
  let failedUrl = $state('');
@@ -15,6 +18,14 @@
 		? `${mark.historical ? `${year} team mark` : 'Current franchise mark'}: ${label ?? team?.name ?? franchiseId}`
 		: `${label ?? team?.name ?? franchiseId}: ${unavailable ? 'image sources unavailable' : media ? failedUrl ? 'logo unavailable' : 'no verified logo' : 'loading logo'}`);
 	const logoShape = $derived(mark ? logoShapeFor(franchiseId) : 'square');
+	$effect(() => {
+		const url = mark && mark.asset.url !== failedUrl ? mark.asset.url : '';
+		field = null;
+		if (!url) return;
+		let current = true;
+		void logoField(url).then(value => { if (current) field = value; });
+		return () => { current = false; };
+	});
  onMount(() => {
   let disposed = false;
   void loadMedia().then(value => { if (!disposed) media = value; }).catch(() => { if (!disposed) unavailable = true; });

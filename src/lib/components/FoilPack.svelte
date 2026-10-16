@@ -149,6 +149,9 @@
 	let markIndex = $state(untrack(() => pickNumber * 7));
 	const frontMark = $derived(marks.length ? marks[markIndex % marks.length] : null);
 	const backMark = $derived(marks.length ? marks[(markIndex + 1) % marks.length] : null);
+	// Each face takes its mark's field, so a mark printed on a solid square fills the whole coin.
+	let frontField = $state<string | null>(null);
+	let backField = $state<string | null>(null);
 
 	/** The coin passes edge-on at each turn boundary, so both faces take the next two marks unseen. */
 	function advanceMarks(): void {
@@ -477,8 +480,8 @@
 			<span class="pack-face" aria-hidden="true">
 				{#if frontMark && backMark}
 					<span class="coin" class:spinning={appSettings.effectiveEnabled} style:--mark-spin="{MOTION.markSpin}ms" bind:this={coin} onanimationiteration={advanceMarks}>
-						<span class="coin-face"><TeamLogo franchiseId={frontMark} size="small" /></span>
-						<span class="coin-face coin-back"><TeamLogo franchiseId={backMark} size="small" /></span>
+						<span class="coin-face" class:fielded={!!frontField} style:--coin-field={frontField}><TeamLogo franchiseId={frontMark} size="small" bind:field={frontField} /></span>
+						<span class="coin-face coin-back" class:fielded={!!backField} style:--coin-field={backField}><TeamLogo franchiseId={backMark} size="small" bind:field={backField} /></span>
 					</span>
 				{/if}
 				<span class="wordmark"><span class="mark"></span>162-0</span>
@@ -577,6 +580,8 @@
 	.coin.spinning { animation: coin-turn var(--mark-spin) linear infinite; }
 	.coin-face { position: absolute; inset: 0; display: grid; place-items: center; border: 2px solid oklch(100% 0 0 / .6); border-radius: 50%; background: oklch(96% .004 255); overflow: hidden; backface-visibility: hidden; box-shadow: inset 0 0 0 3px oklch(16% .012 255 / .9); }
 	.coin-back { transform: rotateY(180deg); }
+	.coin-face.fielded { background: var(--coin-field); }
+	.coin-face.fielded :global(.team-mark) { padding: 0; background: transparent; }
 	/* 58% keeps a square mark's corners (its diagonal is 1.41× its side) inside the rim. */
 	.coin-face :global(.team-mark) { width: 58%; height: auto; aspect-ratio: 1; }
 	.coin-face :global(.team-mark img) { width: 100%; height: 100%; object-fit: contain; }

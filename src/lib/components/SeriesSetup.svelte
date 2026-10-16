@@ -55,6 +55,8 @@
 	const presentations = $derived.by(() => {
 		const output = new Map<SeriesTeamId, {
 			title: string;
+			/** The card's printed name: a saved club's nickname, never its park. */
+			cardTitle: string;
 			recordLabel: string;
 			grade: ReturnType<typeof seasonGrade>;
 			stats: { label: string; value: string; primary?: boolean }[];
@@ -81,6 +83,7 @@
 			const differential = saved ? saved.runs.scored - saved.runs.allowed : 0;
 			output.set(team.id, {
 				title: saved ? saved.nickname || club.stadiumName : fields[team.id].name.trim() || team.label,
+				cardTitle: saved ? saved.nickname ?? '' : fields[team.id].name.trim() || team.label,
 				recordLabel: saved ? `${saved.record.wins}–${saved.record.losses}` : 'Replay ready',
 				grade: saved ? seasonGrade(saved.record.wins, saved.record.losses) : null,
 				stats: saved
@@ -119,7 +122,7 @@
 					<div class="chosen-club">
 						<div class="club-card">
 							<ClubCard
-								title={presentation.title}
+								title={presentation.cardTitle}
 								parkName={club.stadiumName}
 								recordLabel={presentation.recordLabel}
 								grade={presentation.grade}

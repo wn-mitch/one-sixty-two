@@ -101,7 +101,7 @@
 					<figure data-gallery-grade={grade}>
 						<figcaption><strong>{grade}</strong><span>{gradeRange(grade)}</span></figcaption>
 						<ClubCard
-							title={entry.nickname ?? 'Example Aces'}
+							title={entry.nickname}
 							parkName={entry.stadium?.name ?? 'No home park'}
 							recordLabel={`${entry.record.wins}–${entry.record.losses}`}
 							{grade}
