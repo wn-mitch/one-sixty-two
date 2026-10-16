@@ -5,8 +5,6 @@
 </script>
 
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import { guide } from '../game/guide.svelte.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
 	import { EASE_IN_OUT, EASE_OUT, MOTION } from '../motion-timing.ts';
 	import TokenAmount from './TokenAmount.svelte';
@@ -14,17 +12,13 @@
 	let { reward, ownSeason }: { reward: SeasonReward | null; ownSeason: boolean } = $props();
 	const earned = $derived(ownSeason && reward ? reward.season + reward.bonus : 0);
 	const breakdown = $derived(reward ? `${reward.season} season ${reward.season === 1 ? 'token' : 'tokens'}${reward.bonus ? ` + ${reward.bonus} first-season bonus` : ''}` : '');
-	const guiding = $derived(ownSeason && guide.shows('results'));
-	let wasGuided = false;
 	let announcement = $state('');
-	$effect(() => { if (guiding) wasGuided = true; });
-	onDestroy(() => { if (wasGuided) guide.done('results'); });
 
 	function celebrate(node: HTMLAnchorElement, receipt: SeasonReward) {
 		if (presented.has(receipt)) return;
 		presented.add(receipt);
 		const total = receipt.season + receipt.bonus;
-		announcement = `${total} ${total === 1 ? 'token' : 'tokens'} earned: ${breakdown}. Added to your Shop wallet. Your team is saved in My teams and its cards are in Collection.`;
+		announcement = `${total} ${total === 1 ? 'token' : 'tokens'} earned: ${breakdown}. Added to your Shop wallet.`;
 		const release = appSettings.retain();
 		const animations = new Set<Animation>();
 		let ghost: HTMLElement | null = null;
@@ -129,37 +123,20 @@
 	{#if reward && earned > 0}
 		{#key reward}
 			<div class="earned-receipt">
-				<a class="reward-chip" href="/shop" aria-label={`${earned} ${earned === 1 ? 'token' : 'tokens'} earned: ${breakdown}. Choose a card finish in the Shop`} use:celebrate={reward}>
-					<span class="earned-amount" aria-hidden="true">+<TokenAmount amount={earned} /></span><span>Earned · Shop <span aria-hidden="true">↗</span></span>
+				<a class="reward-chip" href="/shop" title={breakdown} aria-label={`${earned} ${earned === 1 ? 'token' : 'tokens'} earned: ${breakdown}. Choose a card finish in the Shop`} use:celebrate={reward}>
+					<span class="earned-amount" aria-hidden="true">+<TokenAmount amount={earned} /></span><span>Earned <span aria-hidden="true">↗</span></span>
 				</a>
-				<div class="receipt-copy"><p>{breakdown}</p><p>Team saved in <a href="/seasons">My teams</a> · Cards in <a href="/collection">Collection</a></p></div>
 			</div>
 		{/key}
 	{/if}
-	<details class="results-help" open={guiding}>
-		<summary>About these results</summary>
-		<p>Card fronts show each player's historical season. Awards and totals describe your simulated season.</p>
-		{#if guiding}
-			<p>Season tokens unlock cosmetic card finishes in the <a href="/shop">Shop</a>. Finishes never change statistics.</p>
-			<div class="guide-actions"><button type="button" class="quiet" onclick={() => guide.done('results')}>Got it</button><button type="button" class="quiet" onclick={() => guide.skip()}>Skip guidance</button></div>
-		{/if}
-	</details>
 </div>
 
 <style>
-	.results-outcome { display: grid; gap: var(--space-1); min-width: 0; }
-	.earned-receipt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
-	.reward-chip { display: inline-flex; flex: none; align-items: center; gap: var(--space-3); min-height: 2.75rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; font: 650 var(--text-sm)/1.2 var(--font-control); }
+	.results-outcome { min-width: 0; justify-self: end; }
+	.earned-receipt { display: flex; align-items: center; }
+	.reward-chip { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); text-decoration: none; font: 650 var(--text-sm)/1.2 var(--font-control); }
 	.reward-chip:hover { background: var(--surface-hover); color: var(--text); }
 	.earned-amount { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--accent); font-size: var(--text-lg); font-weight: 750; }
-	.receipt-copy { font-size: var(--text-xs); color: var(--muted); }
-	.receipt-copy p { margin: 0; }
-	.receipt-copy p:first-child { color: var(--text); }
-	.results-help { color: var(--muted); font-size: var(--text-sm); }
-	.results-help summary { width: fit-content; }
-	.results-help p { margin: 0 0 var(--space-2); }
-	.guide-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-	.guide-actions button { padding-inline: var(--space-3); font-size: var(--text-sm); }
 	:global(.reward-splash) { position: fixed; z-index: 40; pointer-events: none; border: var(--space-1) dotted var(--accent); border-radius: 50%; }
 	:global(.reward-splash)::after { content: ''; position: absolute; inset: var(--space-2); border: 1px solid var(--accent); border-radius: 50%; }
 </style>

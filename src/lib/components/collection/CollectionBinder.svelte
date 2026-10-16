@@ -186,12 +186,11 @@
 		<a class="button primary" href="/?build=1">Build my team</a>
 	</section>
 {:else}
+	<div class="binder">
 	<div class="summary" id="collection-views">
-		<section class="collection-status" aria-label="Collection progress">
-			<header class="status-heading">
-				<span>Collection index</span>
-				<span class="inventory-count">{cards.length.toLocaleString('en-US')} {cards.length === 1 ? 'card' : 'cards'}</span>
-			</header>
+		<details class="collection-status">
+			<summary>Collection index</summary>
+			<div class="status-body">
 			<div class="status-row">
 				<span class="status-label" id="collection-seasons-label">Player-seasons</span>
 				<span class="status-value"><strong>{progress.owned.toLocaleString('en-US')}</strong><span> / {progress.total.toLocaleString('en-US')}</span></span>
@@ -205,23 +204,22 @@
 				<span class="status-percent">{completionPercent(album.earned, album.total)}</span>
 			</div>
 			<p class="status-foot">{album.held.toLocaleString('en-US')} stickers on your cards</p>
-		</section>
+			</div>
+		</details>
 		<div class="views" role="group" aria-label="Show">
 			<button type="button" aria-pressed={view === 'cards'} onclick={() => { view = 'cards'; }}>Cards</button>
 			<button type="button" aria-pressed={view === 'stickers'} onclick={() => { view = 'stickers'; chosen = null; stackKey = null; }}>Stickers</button>
 		</div>
-		{#if view === 'cards'}
-			<div class="modes" role="group" aria-label="Card layout">
-				<button type="button" aria-pressed={display === 'players'} onclick={() => { display = 'players'; grouping = 'none'; chosen = null; stackKey = null; }}>Player stacks</button>
-				<button type="button" aria-pressed={display === 'seasons'} onclick={() => { display = 'seasons'; chosen = null; stackKey = null; }}>All seasons</button>
-			</div>
-		{/if}
 	</div>
 
 	{#if view === 'stickers'}
 		<StickerAlbum {album} onChoose={kind => void chooseSticker(kind)} />
 	{:else}
-	<CardBrowser label="Your collection" bind:query searchLabel="Find a card" onBeforeSearch={beforeSearch} onSearch={afterSearch}
+			<div class="modes" role="group" aria-label="Card layout">
+				<button type="button" aria-pressed={display === 'players'} onclick={() => { display = 'players'; grouping = 'none'; chosen = null; stackKey = null; }}>Player stacks</button>
+				<button type="button" aria-pressed={display === 'seasons'} onclick={() => { display = 'seasons'; chosen = null; stackKey = null; }}>All seasons</button>
+			</div>
+	<CardBrowser compact label="Your collection" bind:query searchLabel="Find a card" onBeforeSearch={beforeSearch} onSearch={afterSearch}
 		sorts={SORTS} {sort} {descending} onSort={chooseSort}
 		filters={positions} filter={activePosition} filterLegend="Played at" filterToggle="Filters" onFilter={value => reshuffle(() => position = value)}>
 		{#snippet filterExtras()}
@@ -286,7 +284,7 @@
 							</span>
 							<span class="caption">
 								<span class="name" title={face?.full ?? stack.label}>{face?.full ?? stack.label}</span>
-								<span class="meta"><span>{stack.cards.length} {stack.cards.length === 1 ? 'season' : 'seasons'}</span><span class="draft-count" title={`Cover season drafted ${cover.times} times`}>drafted x{cover.times}</span></span>
+								<span class="meta"><span>{stack.cards.length} {stack.cards.length === 1 ? 'season' : 'seasons'}</span>{#if sort === 'bestWar'}<span>Best WAR: {metric(stack.cards[0])?.toFixed(1) ?? '—'}</span>{/if}{#if cover.times > 1}<span class="draft-count" title={`Cover season drafted ${cover.times} times`}>drafted x{cover.times}</span>{/if}</span>
 							</span>
 						</button>
 					</li>
@@ -303,7 +301,7 @@
 							<span class="art" aria-hidden="true">
 								{#if face}<Card s={face} face="front" stickers={card.stickers} onDetails={noDetails} />{:else}<span class="placeholder"></span>{/if}
 							</span>
-							<span class="caption"><span class="name" title={card.label}>{card.label}</span><span class="meta"><span class="draft-count" title={`Drafted ${card.times} times`}>drafted x{card.times}</span></span></span>
+							<span class="caption"><span class="name" title={card.label}>{card.label}</span>{#if sort === 'bestWar' || card.times > 1}<span class="meta">{#if sort === 'bestWar'}<span>Best WAR: {metric(card)?.toFixed(1) ?? '—'}</span>{/if}{#if card.times > 1}<span class="draft-count" title={`Drafted ${card.times} times`}>drafted x{card.times}</span>{/if}</span>{/if}</span>
 						</button>
 					</li>
 				{/each}
@@ -327,18 +325,21 @@
 		</div>
 	</CardBrowser>
 	{/if}
+	</div>
 {/if}
 
 <style>
+	.binder { min-width: 0; }
 	.empty { display: grid; justify-items: start; gap: var(--space-3); padding: var(--space-8) 0; }
 	.empty h2 { margin: 0; }
 	.empty p { margin: 0; }
 	.button { min-height: 2.75rem; display: inline-flex; align-items: center; padding-inline: var(--space-4); border-radius: var(--radius, .5rem); background: var(--accent); color: var(--background); font-weight: 750; text-decoration: none; }
-	.summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-4); scroll-margin-top: 72px; }
-	.collection-status { flex: 0 1 38rem; min-width: 0; width: 100%; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-	.status-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-2); margin-bottom: var(--space-2); border-bottom: 1px solid var(--border); color: var(--muted); }
-	.status-heading > :first-child { font-weight: 700; text-transform: uppercase; letter-spacing: .1em; font-size: .65rem; }
-	.inventory-count { color: var(--text); font-weight: 650; }
+	.summary { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-3); scroll-margin-top: 72px; }
+	.collection-status { order: 1; min-width: 0; color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+	.collection-status summary { text-align: right; }
+	.collection-status[open] { flex: 1 1 100%; order: 2; }
+	.collection-status[open] summary { text-align: left; }
+	.status-body { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 	.status-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(2rem, 6rem) 4.5em; align-items: center; gap: var(--space-3); padding-block: var(--space-1); }
 	.status-label { color: var(--text); }
 	.status-value, .status-percent { white-space: nowrap; text-align: right; color: var(--muted); }
@@ -348,12 +349,13 @@
 	meter::-webkit-meter-optimum-value { background: var(--accent); }
 	meter::-moz-meter-bar { background: var(--accent); }
 	.status-foot { margin: var(--space-2) 0 0; color: var(--muted); font-size: .65rem; }
-	@media (max-width: 30rem) { .collection-status { padding-inline: var(--space-3); } .status-row { gap: var(--space-2); grid-template-columns: minmax(0, 1fr) auto 2rem 4.5em; } }
-	.views { display: inline-flex; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
-	.views button { min-height: 2.75rem; padding: 0 var(--space-4); border: 0; background: transparent; color: var(--muted); font-weight: 700; }
-	.views button[aria-pressed='true'], .modes button[aria-pressed='true'] { background: var(--text); color: var(--background); }
-	.modes { display: inline-flex; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
-	.modes button { min-height: 2.75rem; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--muted); font-weight: 700; }
+	@media (max-width: 30rem) { .status-row { gap: var(--space-2); grid-template-columns: minmax(0, 1fr) auto 2rem 4.5em; } }
+	.views { display: inline-flex; gap: var(--space-4); border-bottom: 1px solid var(--border); }
+	.views button { min-height: 2.75rem; padding: var(--space-2) 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-weight: 700; }
+	.views button[aria-pressed='true'] { border-bottom-color: var(--text); color: var(--text); }
+	.modes { display: flex; gap: var(--space-1); margin-bottom: var(--space-2); }
+	.modes button { min-height: 2.75rem; padding: 0 var(--space-3); border: 1px solid transparent; background: transparent; color: var(--muted); font-weight: 700; }
+	.modes button[aria-pressed='true'] { border-color: var(--border); background: var(--surface); color: var(--text); }
 	.extras { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
 	.rail-control select { width: 100%; }
 	label { display: grid; gap: var(--space-1); color: var(--muted); font-size: var(--text-xs); }
@@ -378,8 +380,9 @@
 	.cover-button { min-height: 2.75rem; padding: 0 var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--muted); font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; }
 	.cover-button:hover { background: var(--surface-raised); color: var(--text); }
 	.preference-status { margin: 0; color: var(--muted); font-size: var(--text-xs); }
-	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(10.5rem, 42vw), 1fr)); gap: var(--space-5) var(--space-4); margin: 0; padding: 0; list-style: none; }
-	.tile { display: grid; align-content: start; gap: var(--space-3); width: 100%; height: 100%; padding: var(--space-2); border: 1px solid transparent; border-radius: .5rem; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(10.5rem, 42vw), 1fr)); gap: var(--space-4) var(--space-3); margin: 0; padding: 0; list-style: none; }
+	@media (max-width: 30rem) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-2); } }
+	.tile { display: grid; align-content: start; gap: var(--space-2); width: 100%; height: 100%; padding: var(--space-1); border: 1px solid transparent; border-radius: var(--radius); background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
 	.tile:hover { background: var(--surface); }
 	.tile[aria-pressed='true'] { border-color: var(--focus); background: var(--surface); }
 	.tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -392,7 +395,7 @@
 	.caption { display: grid; align-content: start; gap: .125rem; min-width: 0; }
 	.draft-count { flex: none; color: var(--muted); font-size: var(--text-xs); font-weight: 500; font-variant-numeric: tabular-nums; }
 	.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 750; font-size: var(--text-sm); line-height: 1.25; }
-	.meta { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-1); white-space: nowrap; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; font-variant-numeric: tabular-nums; }
+	.meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1); white-space: nowrap; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; font-variant-numeric: tabular-nums; }
 	.shelf { display: grid; gap: var(--space-3); }
 	.shelf h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: var(--space-2) 0 0; padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); font-size: var(--text-lg); }
 	.shelf-count { color: var(--muted); font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; }

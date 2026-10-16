@@ -17,14 +17,12 @@ test('Team gallery sorts clubs and opens a club from the all-time leaders', asyn
 	await expect(tiles(page).last()).toContainText('Last fall’s club');
 
 	const leaders = page.getByRole('region', { name: 'All-time leaders' });
-	const wins = leaders.locator('.board').filter({ has: page.getByRole('heading', { name: 'Wins', exact: true }) });
-	await expect(wins.getByRole('listitem').first()).toContainText('Last fall’s club');
-	await expect(wins.getByRole('listitem').first()).toContainText('112');
+	await expect(leaders.getByRole('heading', { name: 'Wins', exact: true })).toHaveCount(0);
 	const avg = leaders.locator('.board').filter({ has: page.getByRole('heading', { name: 'Batting average', exact: true }) });
 	await expect(avg.getByRole('listitem')).toHaveCount(6);
-	await expect(wins.locator('[data-card="club"]')).toHaveCount(3);
-	await expect(avg.locator('[data-identity]')).toHaveCount(6);
-	expect(await leaders.locator('ol').evaluateAll(lists => lists.every(list => list.scrollHeight <= list.clientHeight))).toBe(true);
+	const row = await avg.getByRole('listitem').evaluateAll(items => items.map(item => item.getBoundingClientRect().toJSON()));
+	expect(row.every(item => Math.abs(item.y - row[0]!.y) < 1 && item.width >= 44 && item.width <= 88)).toBe(true);
+	await expect(leaders.getByRole('button', { name: /^Turn over / })).toHaveCount(0);
 	const leader = avg.getByRole('listitem').last();
 	const team = await leader.locator('.team').innerText();
 	await leader.getByRole('button').click();
@@ -125,6 +123,25 @@ test('Team card grade gallery compares all nine finishes and exposes the back th
 	await expect(gallery.locator('[data-card="club"][data-face="back"]')).toHaveCount(grades.length);
 });
 
+test('unnamed team cards show the park once and format their winning percentage', async ({ page }) => {
+	await openStoryByName(page, 'Modes/My teams', 'All-time leaders');
+	const tile = tiles(page).filter({ hasNotText: 'Example Aces' }).filter({ hasNotText: 'Last fall’s club' });
+	const front = tile.locator('.front');
+	const record = (await front.locator('.record').innerText()).trim();
+	const [wins, losses] = record.split('–').map(Number);
+	const title = await front.locator('.title').innerText();
+	expect(title).not.toContain(record);
+	await expect(front.locator('.park')).toHaveCount(0);
+	const winningPercentage = front.locator('.stat').filter({ has: page.getByText('Win %', { exact: true }) });
+	await expect(winningPercentage.locator('.value')).toHaveText(`${(wins! / (wins! + losses!) * 100).toFixed(1)}%`);
+	const differential = front.locator('.stat').filter({ has: page.getByText('Run differential', { exact: true }) });
+	await expect(differential).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+	for (const width of [390, 1512]) {
+		await page.setViewportSize({ width, height: 844 });
+		expect(await front.evaluate(node => node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight)).toBe(true);
+	}
+});
+
 test('Team gallery fits a phone without sideways scroll', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openStoryByName(page, 'Modes/My teams', 'Tale of the tape');
@@ -178,7 +195,9 @@ test('Collection groups cards by team or era with completion that leaves bullpen
 	await expect(all.first()).toBeVisible();
 	const total = await all.count();
 	// The example binder holds one team bullpen, which is collected but not counted.
+	await page.locator('details.collection-status > summary').click();
 	await expect(page.getByRole('meter', { name: 'Player-seasons' })).toHaveAttribute('value', String(total - 1));
+	await page.getByRole('button', { name: 'Filters', exact: true }).click();
 	for (const grouping of ['Team', 'Era']) {
 		await page.getByLabel('Group').selectOption({ label: grouping });
 		const shelves = page.locator('section.shelf');

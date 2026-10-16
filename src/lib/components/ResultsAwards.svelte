@@ -2,6 +2,7 @@
 	import Card from '../cards/Card.svelte';
 	import type { CardViewModel } from '../cards/view-model.ts';
 	import type { FeaturedResult, ResultsCard } from '../game/results-types.ts';
+	import InfoTooltip from './InfoTooltip.svelte';
 
 	let {
 		featured,
@@ -43,10 +44,8 @@
 
 <section class="awards" aria-labelledby="awards-heading">
 	<div class="section-heading">
-		<div>
-			<h3 id="awards-heading">Season awards</h3>
-			<p class="awards-note">Awards measure your simulated season. Card fronts show each player’s historical season, so the numbers can differ.</p>
-		</div>
+		<h3 id="awards-heading">Season awards</h3>
+		<InfoTooltip label="season awards" text="Awards and totals measure your simulated season. Card fronts show each player’s historical season, so the numbers can differ." />
 	</div>
 	<div class="award-rail" bind:this={rail} onscroll={trackRail}>
 		{#each featured as entry (entry.card.seasonId)}
@@ -107,7 +106,7 @@
 
 <style>
 	.awards { display: grid; gap: var(--space-3); min-width: 0; }
-	.section-heading { display: flex; align-items: end; justify-content: space-between; gap: var(--space-6); }
+	.section-heading { display: flex; align-items: center; gap: var(--space-2); }
 	.section-heading h3 { font-size: var(--text-xl); }
 	.award-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-4); min-width: 0; padding: var(--space-1) var(--space-1) var(--space-2); }
 	.award-entry { display: grid; align-content: start; gap: var(--space-2); min-width: 0; --award-tone: var(--accent); }
@@ -121,7 +120,6 @@
 	.award-copy { display: grid; gap: .1rem; }
 	.award-copy strong { overflow-wrap: anywhere; font-size: var(--text-lg); line-height: 1.15; }
 	.award-copy span { color: var(--muted); font-size: var(--text-xs); }
-	.awards-note { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
 	.primary-metric { display: grid; gap: .1rem; padding-top: var(--space-2); border-top: 1px solid var(--border); }
 	.primary-metric strong { color: var(--award-tone); font-size: var(--text-2xl); line-height: 1; letter-spacing: -.03em; }
 	.primary-metric.red strong { color: var(--error); }
@@ -142,7 +140,6 @@
 		.award-entry > :not(.award-card) { grid-column: 2; }
 		.award-copy strong { font-size: var(--text-base); }
 		.primary-metric strong { font-size: var(--text-xl); white-space: nowrap; }
-		.section-heading { display: block; }
 	}
 	/* The rail swipes sideways only on narrower screens; there its dots show how many awards there are and which is in view. */
 	.rail-dots { display: none; }
@@ -155,7 +152,6 @@
 		.award-entry { scroll-snap-align: start; }
 	}
 	@media (max-width: 40rem) {
-		.section-heading { display: block; }
 		.award-rail { grid-auto-columns: minmax(13rem, calc(100% - 3rem)); margin-inline: calc(var(--space-4) * -1); padding-inline: var(--space-4); scroll-padding-inline: var(--space-4); }
 	}
 </style>

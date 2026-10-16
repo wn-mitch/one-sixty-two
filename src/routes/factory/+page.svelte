@@ -11,12 +11,16 @@
 	import { deviceDb } from '#lib/storage/db.ts';
 	import { toasts } from '#lib/toast.svelte.ts';
 
-	// The card factory: one era at a time, choose that era's finish for one tier. Choices override the
-	// deck-wide finish from the Shop for that era only; everything is drawn from material swatches.
+	// The factory equips finishes by era and tier; Shop only unlocks types.
+	// Existing saved deck defaults remain available when an era has no override.
 	const TIERS: readonly { value: CustomTier; label: string }[] = [
 		{ value: 'gem', label: 'Gem holo' }, { value: 'foil', label: 'Silver foil' }, { value: 'emboss', label: 'Gold emboss' }
 	];
 	const DECK = 'deck';
+	// Match Shop's comparison stock. Catalogue samples do not depend on the editor's era or draft,
+	// so choosing a scope cannot rebuild every map and compile a new film/plate combination per tile.
+	const sampleEra: CardEra = '1990s';
+	const colorways = COLORWAYS.map(option => ({ ...option, appearance: appearanceFor('film:refractor', option.id) }));
 	let tier = $state<CustomTier>('gem');
 	let era = $state<CardEra>('1980s');
 	let busy = $state(false);
@@ -27,7 +31,7 @@
 	const saved = (forTier: CustomTier, forEra: CardEra): EquippedFinish | undefined => snapshot?.eras[forTier]?.[forEra];
 	const deckChoice = $derived(snapshot?.equipped[tier]);
 	const owns = (id: string) => !!snapshot?.owned.includes(id);
-	const items = $derived(itemsForTier(tier));
+	const items = $derived(itemsForTier(tier).map(item => ({ ...item, appearance: appearanceFor(item.id) })));
 	const nameOf = (id: string | null) => {
 		const item = id && COSMETICS.find(entry => entry.id === id);
 		return item ? finishName(item) : 'Era original';
@@ -136,8 +140,8 @@
 							selected={!usingDeck && draft.itemId === null} status="Free" disabled={busy}
 							onChoose={() => choosePattern(null)} /></li>
 						{#each items as item (item.id)}
-							<li><FinishChoice compact name={finishName(item)} {tier} {era}
-								appearance={appearanceFor(item.id, tier === 'gem' ? resolved.colorway : null)}
+							<li><FinishChoice compact name={finishName(item)} {tier} era={sampleEra}
+								appearance={item.appearance} finishId={item.id}
 								selected={draft.itemId === item.id} cost={item.cost} status={owns(item.id) ? 'Owned' : null}
 								disabled={busy} onChoose={() => choosePattern(item.id)} /></li>
 						{/each}
@@ -153,9 +157,9 @@
 								appearance={appearanceFor(resolved.itemId)}
 								selected={resolved.colorway === null} status="Free" disabled={busy}
 								onChoose={() => chooseColorway(null)} /></li>
-							{#each COLORWAYS as option (option.id)}
-								<li><FinishChoice compact name={finishName(option)} {tier} {era}
-									appearance={appearanceFor(resolved.itemId, option.id)}
+							{#each colorways as option (option.id)}
+								<li><FinishChoice compact name={finishName(option)} {tier} era={sampleEra}
+									appearance={option.appearance} finishId={`colorway:${option.id}`}
 									selected={resolved.colorway === option.id} status={owns(`colorway:${option.id}`) ? 'Owned' : null}
 									disabled={busy} onChoose={() => chooseColorway(option.id)} /></li>
 							{/each}
@@ -169,7 +173,7 @@
 	{/if}
 	<details class="factory-help">
 		<summary>About era finishes</summary>
-		<p>Each choice applies only to this era and tier. Deck default follows your Shop finish; Era original restores the era’s own pattern. Each new pattern or colorway costs 1 token. Owned finishes are free to reuse. Cosmetic only, saved on this device.</p>
+		<p>Shop unlocks finish types; Card factory equips them. Each choice applies only to this era and tier. Deck default keeps your saved deck-wide finish; Era original restores the era’s own pattern. Catalogue patterns use their original colors on shared stock; colorway samples use Refractor. The larger preview shows your exact era, pattern and colorway together. Each new pattern or colorway costs 1 token. Owned finishes are free to reuse. Cosmetic only, saved on this device.</p>
 	</details>
 </main>
 

@@ -44,7 +44,7 @@
 									{:else}
 										{@render teamCard(leader.entryKey)}
 									{/if}
-									<div class="standing"><span class="rank">#{index + 1}</span><strong class="value">{leader.display}</strong></div>
+									<div class="standing"><strong class="value">{leader.display}</strong></div>
 									{#if leader.player}<span class="team" title={leader.team}>{leader.team}</span>{/if}
 								</li>
 							{/each}
@@ -67,16 +67,15 @@
 	.board { display: grid; gap: var(--space-2); min-width: 0; }
 	h4 { margin: 0; font: 800 var(--text-lg) / 1.2 'Barlow Condensed', sans-serif; }
 	.note, .empty { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
-	ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+	ol { display: grid; grid-template-columns: repeat(6, minmax(2.75rem, 1fr)); align-items: start; gap: var(--space-1); overflow-x: auto; margin: -3px; padding: 3px; list-style: none; }
 	li { min-width: 0; }
 	.player-card { display: block; width: 100%; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: inherit; text-align: left; }
-	.player-card:hover:not(:disabled) { background: transparent; }
+	.player-card, li :global(.tile) { cursor: pointer; outline: 1px solid var(--border); outline-offset: 1px; }
+	.player-card:hover:not(:disabled), li :global(.tile:hover) { background: transparent; outline: 2px solid var(--accent); }
 	.player-card:active:not(:disabled) { transform: none; }
 	.player-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 	.unavailable { display: grid; place-items: center; aspect-ratio: 5 / 7; padding: var(--space-2); box-sizing: border-box; border: 1px solid var(--border); background: var(--surface-raised); font-size: var(--text-sm); }
-	.standing { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-1); padding-top: var(--space-1); font-variant-numeric: tabular-nums; }
-	.rank { color: var(--muted); font-size: var(--text-xs); }
-	.value { font-size: var(--text-base); font-weight: 800; }
+	.standing { display: flex; justify-content: center; padding-top: var(--space-1); font-variant-numeric: tabular-nums; }
+	.value { font-size: var(--text-xs); font-weight: 800; }
 	.team { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-xs); }
-	@container (max-width: 22rem) { ol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

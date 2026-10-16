@@ -527,14 +527,15 @@ test('keeps completed seasons in history without reopening results or starting a
 	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120_000 });
 	// The device's first completed season pays its token and the one-time first-season bonus.
 	await expect(page.getByRole('link', { name: 'Shop, 2 tokens', exact: true })).toBeVisible();
-	await expect(page.locator('.earned-receipt')).toContainText('1 season token + 1 first-season bonus');
+	await expect(page.locator('.earned-receipt .reward-chip')).toHaveAccessibleName(/2 tokens earned: 1 season token \+ 1 first-season bonus/);
 	await expect(page.locator('.results-outcome [role="status"]')).toContainText('2 tokens earned');
 	await expect(page.locator('[data-reward-flight], .reward-splash')).toHaveCount(0);
 	await expect(page.locator('.guide-tip')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Got it', exact: true }).click();
-	await expect(page.locator('.results-help')).not.toHaveAttribute('open');
-	await page.getByText('About these results', { exact: true }).click();
-	await expect(page.getByText(/Card fronts show each player's historical season/)).toBeVisible();
+	await expect(page.getByText('About these results', { exact: true })).toHaveCount(0);
+	await page.getByRole('button', { name: 'About season awards', exact: true }).focus();
+	await expect(page.getByRole('tooltip')).toContainText('Card fronts show each player’s historical season');
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('tooltip')).toHaveCount(0);
 	await expect.poll(() => deviceDraftText(page)).toBeNull();
 	const token = await page.evaluate(async () => {
 		// The application installs this typed database hook for browser regression tests.
@@ -554,7 +555,7 @@ test('keeps completed seasons in history without reopening results or starting a
 	await page.goto(`/#replay=${token}`);
 	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120_000 });
 	await expect(page.locator('.reward-chip, [data-reward-flight], .reward-splash')).toHaveCount(0);
-	await expect(page.locator('.results-help')).not.toHaveAttribute('open');
+	await expect(page.getByText('About these results', { exact: true })).toHaveCount(0);
 	await expect(page.locator('.results-outcome [role="status"]')).toBeEmpty();
 	expect(await deviceDraftText(page)).toBeNull();
 	await page.goto('/shop');
@@ -596,6 +597,7 @@ test('confirms a new draft in a modal without moving the page', async ({ page })
 
 	await page.keyboard.press('Escape');
 	await expect(confirm).toBeHidden();
+	await expect(options).toBeFocused();
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect(await savedSeed()).toBe(seed);
 

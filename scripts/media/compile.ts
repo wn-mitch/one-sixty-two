@@ -19,6 +19,8 @@ import {
 import { inventoryMetadata } from './inventory.ts';
 import { prepareReviewedPhoto, prepareTeamPhoto, validateReviews, validateTeamPhotoReviews } from './reviews.ts';
 import { captureLabel } from '../../src/lib/media/photo-policy.ts';
+import { applyPhotoFraming, validateFramingRegistry } from '../../src/lib/media/framing.ts';
+import type { PhotoFramingRegistry } from '../../src/lib/media/types.ts';
 import type {
 	AtmosphereSourceRegistry,
 	CommonsMetadata,
@@ -205,6 +207,7 @@ export async function generateMedia(input: {
 	playerSources: PlayerSourceRegistry;
 	reviewedPlayerPhotos: ReviewedPlayerPhotos;
 	photoReviews?: PhotoReview[];
+	photoFraming?: PhotoFramingRegistry;
 	teamPhotoReviews?: TeamPhotoReview[];
 	atmosphereSources: AtmosphereSourceRegistry;
 	cacheDir: string;
@@ -212,6 +215,8 @@ export async function generateMedia(input: {
 	offline: boolean;
 	log(message: string): void;
 }): Promise<GeneratedMedia> {
+	const framing = input.photoFraming ?? { schemaVersion: 1, entries: [] };
+	validateFramingRegistry(framing);
 	validateTeamSources(input.teamSources, input.dataManifest.franchises);
 	validateAtmosphereSources(input.atmosphereSources, input.dataManifest);
 	validateTeamPhotoReviews(input.teamPhotoReviews ?? [], new Set(input.dataManifest.franchises.map(franchise => franchise.id)));
@@ -426,6 +431,7 @@ export async function generateMedia(input: {
 			(team.photos ??= []).push(await prepareTeamPhoto(review, input.cacheDir, stagingDirectory, input.offline));
 		}
 
+		for (const photo of [...Object.values(generatedPlayers).flatMap(player => player.photos), ...Object.values(generatedTeams).flatMap(team => team.photos ?? [])]) applyPhotoFraming(photo, framing);
 		const generatedAtmosphere: Record<string, AtmospherePhoto> = {};
 		for (const source of acceptedAtmosphere) {
 			const asset = preparedAtmosphere.get(source.metadata.pageId);

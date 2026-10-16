@@ -158,18 +158,19 @@
  .award-chips li { padding: .25rem .5rem; border-radius: 999px; font-size: .68rem; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
  .award-chips li[data-tone='gold'] { background: oklch(84% .12 85); color: oklch(28% .07 75); }
  .award-chips li[data-tone='red'] { background: oklch(75% .12 25); color: oklch(25% .09 25); }
- .results-back table { align-self: start; width: calc(100% - 2rem); margin: .6rem 1rem 0; border-collapse: collapse; font-size: .78rem; font-variant-numeric: tabular-nums; }
+ .results-back table { align-self: start; table-layout: fixed; width: calc(100% - 2rem); margin: .6rem 1rem 0; border-collapse: collapse; font-size: .78rem; font-variant-numeric: tabular-nums; }
  caption { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
- .results-back th, .results-back td { height: 1.75rem; padding: .22rem .35rem; color: var(--back-ink); border-bottom: 1px solid color-mix(in srgb, var(--back-ink) 22%, transparent); }
+ .results-back th, .results-back td { height: 1.75rem; padding: .22rem .2rem; white-space: normal; overflow-wrap: anywhere; color: var(--back-ink); border-bottom: 1px solid color-mix(in srgb, var(--back-ink) 22%, transparent); }
  .results-back thead th { font-size: .63rem; letter-spacing: .06em; text-transform: uppercase; }
- .results-back th:first-child { text-align: left; }
+ .results-back th:first-child { width: 40%; text-align: left; }
+ .results-back th:nth-child(2) { width: 25%; }
  .results-back th:not(:first-child), .results-back td { text-align: right; }
  .results-back tbody th { font-weight: 700; }
  .results-back tbody td:nth-child(2) { font-weight: 800; }
- .rank span { display: inline-block; min-width: 3.6rem; padding: .12rem .3rem; border-radius: .2rem; text-align: center; }
+ .rank span { display: inline-block; max-width: 100%; padding: .12rem .2rem; border-radius: .2rem; text-align: center; }
  .best .rank span { background: oklch(84% .12 85); color: oklch(28% .07 75); font-weight: 850; }
  .worst .rank span { background: oklch(75% .12 25); color: oklch(25% .09 25); font-weight: 850; }
- .results-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: auto; padding: .55rem 1rem .7rem; font-size: .7rem; font-weight: 750; }
+ .results-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-top: auto; padding: .55rem 1rem .7rem; font-size: .7rem; font-weight: 750; }
  .footer-controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: .5rem; }
  .results-footer button { min-height: 44px; padding: .35rem .65rem; font-size: .875rem; }
  .simplified { --back-ground: var(--surface) !important; --back-ink: var(--text) !important; padding: 1rem; color: var(--text); background: var(--surface); font: 1rem/1.5 system-ui, sans-serif; }

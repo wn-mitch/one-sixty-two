@@ -1,5 +1,5 @@
 <script lang="ts">
- import { onMount, tick, untrack } from 'svelte';
+ import { getContext, onMount, tick, untrack } from 'svelte';
  import { goto } from '$app/navigation';
  import { page } from '$app/state';
  import Welcome from '#lib/components/Welcome.svelte';
@@ -27,6 +27,14 @@
  type GameSession = import('#lib/game/session.svelte.ts').Session;
 
  let session = $state.raw<GameSession | null>(null);
+ const siteActions = getContext<{ newDraft?: () => void } | undefined>('classic-actions');
+ $effect(() => {
+  const current = session;
+  if (!siteActions || !current || !['stadium', 'lineup', 'simulating'].includes(current.phase)) return;
+  const requestNew = () => current.requestNew();
+  siteActions.newDraft = requestNew;
+  return () => { if (siteActions.newDraft === requestNew) siteActions.newDraft = undefined; };
+ });
  // Storage problems are toasts, not a paragraph that shifts the screen.
  $effect(() => { const notice = session?.storageNotice; if (notice) toasts.show(notice, { id: 'storage', tone: 'error' }); });
  $effect(() => { const notice = session?.resumeNotice; if (notice) toasts.show(notice, { id: 'resume' }); });
@@ -256,7 +264,6 @@
    <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} firstSeasonBonus={shopState.snapshot?.firstSeasonBonus ?? false} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
   {:else if currentSession.draft && currentSession.manifest}
    {#if currentSession.phase === 'stadium'}
-    <div class="draft-top"><p class="eyebrow">Home stadium</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if StadiumDeck}
      <StadiumDeck manifest={currentSession.manifest} busy={currentSession.busy} onSelect={id => void currentSession.selectStadium(id)} />
     {:else if !phaseLoadError}<StadiumSkeleton />{/if}
@@ -265,13 +272,11 @@
      <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onAddPack={() => currentSession.addPack()} onChoosePack={pack => void currentSession.choosePack(pack)} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
     {:else if !phaseLoadError}<DraftSkeleton pool={currentSession.phase === 'choosing' && currentSession.draft.packs.length <= 1} />{/if}
    {:else if currentSession.phase === 'lineup'}
-    <div class="draft-top"><p class="eyebrow">Roster complete</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     <GuideTip step="roster" text="Your team is complete. Adjust the batting order and bullpen roles if you like, then play all 162 games." />
     {#if Lineup}
      <Lineup draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onReassign={(id, slot) => currentSession.reassign(id, slot)} onOrder={(kind, order) => currentSession.order(kind, order)} onRoles={reliefRoles => currentSession.roles(reliefRoles)} onsimulate={() => void currentSession.simulate()} />
     {:else if !phaseLoadError}<LineupSkeleton />{/if}
    {:else if currentSession.phase === 'simulating'}
-    <div class="draft-top"><p class="eyebrow">Season in play</p><button class="quiet" disabled={currentSession.loading} onclick={() => currentSession.requestNew()}>New draft</button></div>
     {#if Progress}
      <Progress completed={currentSession.completed} revealed={currentSession.revealed} result={currentSession.result} onskip={() => currentSession.skip()} />
     {:else if !phaseLoadError}<ProgressSkeleton />{/if}
@@ -298,10 +303,5 @@
   margin-inline: auto;
   padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right));
  }
- .draft-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
- .draft-top button { flex: none; white-space: nowrap; }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
- @media (max-width: 24rem) {
-  .draft-top .eyebrow { max-width: 10rem; }
- }
 </style>

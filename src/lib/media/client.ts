@@ -1,4 +1,5 @@
 import { fetchJson } from '../game/data.ts';
+import { framingMatchesPhoto } from './framing.ts';
 import type { MediaAsset, MediaManifest, MediaPointer, PlayerPhoto, TeamPhoto } from './types.ts';
 import { comparePhotos, compareTeamPhotos, isCaptureDate, isPhotoCrop, reusablePhotoLicense } from './photo-policy.ts';
 
@@ -41,7 +42,7 @@ export function validateMedia(value: unknown, version: string): asserts value is
    if (!Array.isArray(team.photos)) throw new Error('Team photos are incompatible');
    const sources = new Set<string>();
    for (const photo of team.photos) {
-    if (!asset(photo, version) || !record(photo) || photo.subject !== 'team' || photo.franchiseId !== franchiseId
+    if (!asset(photo, version) || !record(photo) || !framingMatchesPhoto(photo) || photo.subject !== 'team' || photo.franchiseId !== franchiseId
      || photo.review !== 'approved' || typeof photo.caption !== 'string' || !photo.caption.trim()
      || typeof photo.sourceId !== 'string' || !photo.sourceId.trim() || sources.has(photo.sourceId)
      || !reusablePhotoLicense(photo.license) || !isCaptureDate(photo.captureDate)
@@ -62,7 +63,7 @@ export function validateMedia(value: unknown, version: string): asserts value is
   if (!record(player) || typeof player.name !== 'string' || !Number.isInteger(player.firstYear) || !Number.isInteger(player.lastYear)
    || Number(player.firstYear) > Number(player.lastYear) || !Array.isArray(player.photos)) throw new Error('Portrait career dates are incompatible');
   for (const photo of player.photos) {
-   if (!asset(photo, version) || !record(photo)
+   if (!asset(photo, version) || !record(photo) || !framingMatchesPhoto(photo)
     || (photo.captureEvidenceUrl !== undefined && !httpsUrl(photo.captureEvidenceUrl))
     || (photo.identityEvidenceUrl !== undefined && !httpsUrl(photo.identityEvidenceUrl))) {
     throw new Error('Portrait capture date or evidence is incompatible');

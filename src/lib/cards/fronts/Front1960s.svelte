@@ -22,7 +22,7 @@
 				<div data-layer="material.photo-bevel" style="position:absolute; inset:0; border-radius:2.6cqw; box-shadow:calc(var(--lx, -.45) * -.8cqw) calc(var(--ly, -.75) * -.8cqw) 1cqw rgba(0,0,0,.45), calc(var(--lx, -.45) * .5cqw) calc(var(--ly, -.75) * .5cqw) .6cqw rgba(255,255,255,.6);"></div>
 			{/if}
 			<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; inset:0; border-radius:2.6cqw; overflow:hidden; background:${s.k.accent};`}>
-				<PhotoMask {s} />
+				<PhotoMask front {s} />
 			</div>
 			<div data-rt data-layer="season.pill" data-surface="frame" style={`position:absolute; left:2.6cqw; top:2.6cqw; padding:1cqw 2.6cqw; border-radius:99cqw; background:${s.k.accent}; color:${s.k.onAccent}; display:flex; align-items:center; gap:1.4cqw; font-weight:800; font-size:4.8cqw; line-height:1;`}>
 				<span data-layer="season.year">{s.year}</span>

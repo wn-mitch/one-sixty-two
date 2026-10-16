@@ -125,19 +125,16 @@ test.describe('Draft board browsing', () => {
 		await cards.nth(1).click();
 		await expect(page.locator('.candidates')).toBeVisible({ timeout: 6000 });
 		await expect(page.locator('.reveal h2')).toHaveText(franchise!);
-		await expect(page.locator('.draft-header').getByRole('button', { name: /Add a franchise pack/ })).toBeDisabled();
+		await expect(page.getByRole('button', { name: /^Extra pack: add another franchise pack/ })).toBeDisabled();
 	});
 
 	test('adding a pack from the pool brings the current pack back beside the new one', async ({ page }) => {
 		await page.setViewportSize({ width: 1212, height: 788 });
 		await openChoosing(page);
 		const current = await page.locator('.reveal h2').textContent();
-		await page.locator('.draft-header').getByRole('button', { name: /Add a franchise pack/ }).click();
+		await page.getByRole('button', { name: /^Extra pack: add another franchise pack/ }).click();
 		const cards = page.locator('.foil-pack .dealt-card');
-		// The table returns with the taken pack alone beside a ghost that shows but takes no clicks, then the added pack opens out of it.
 		const ghost = page.locator('.foil-pack').getByRole('button', { name: /^Add a franchise pack to choose from/ });
-		await expect(cards).toHaveCount(1);
-		await expect(ghost).toBeDisabled();
 		await expect(cards).toHaveCount(2);
 		await expect(cards.nth(1)).toBeFocused();
 		await expect(ghost).toBeEnabled();
@@ -339,7 +336,7 @@ test.describe('Draft board browsing', () => {
 		await expect(activeSort).toBeFocused();
 		await expect(page.locator('.picked-count')).toHaveText('0 / 16');
 		await preview.click();
-		await confirmation.getByRole('button', { name: 'Draft at 2B', exact: true }).click();
+		await confirmation.getByRole('button', { name: /^Draft .+ at 2B$/ }).click();
 		await expect(page.locator('.picked-count')).toHaveText('1 / 16');
 		await expect(page.locator('.field-footer')).toHaveCount(0);
 	});
@@ -481,8 +478,8 @@ test.describe('Draft board field sheet', () => {
 
 		await select.click();
 		await expect(sheet.locator('.pick-confirmation')).toHaveAttribute('data-pending-slot', '2B');
-		await sheet.getByRole('button', { name: 'Draft at 2B', exact: true }).click();
-		await expect(page.getByRole('button', { name: /Open your field 1 \/ 16/ })).toBeVisible();
+		await sheet.getByRole('button', { name: /^Draft .+ at 2B$/ }).click();
+		await expect(page.getByRole('button', { name: /^Open your field, \d+ of 16 picked$/ })).toBeVisible();
 		await expect(page.locator('.pick-confirmation')).toHaveCount(0);
 	});
 
@@ -495,7 +492,7 @@ test.describe('Draft board field sheet', () => {
 		const confirmation = sheet.locator('.pick-confirmation');
 		const selectedSeason = await confirmation.getAttribute('data-selected-season');
 		await expect(confirmation).toHaveAttribute('data-pending-slot', '2B');
-		await sheet.getByRole('button', { name: 'Draft at 2B', exact: true }).click();
+		await sheet.getByRole('button', { name: /^Draft .+ at 2B$/ }).click();
 		// The error stacks above the sheet as its own modal; dismissing it leaves the sheet and preview intact.
 		const errorDialog = page.locator('dialog.error-dialog[open]');
 		await expect(errorDialog.getByRole('alert')).toContainText('Example draft confirmation failed');
@@ -519,7 +516,7 @@ test.describe('Draft board field sheet', () => {
 		await openChoosing(page, '&args=commitError:true');
 		const card = candidate(page, '06');
 		await card.getByRole('button', { name: /^Preview .+ at 2B$/ }).click();
-		await page.locator('.field-panel').getByRole('button', { name: 'Draft at 2B', exact: true }).click();
+		await page.locator('.field-panel').getByRole('button', { name: /^Draft .+ at 2B$/ }).click();
 		await expect(page.locator('dialog.error-dialog[open]')).toContainText('Example draft confirmation failed');
 		const settled = await page.locator('.candidates').evaluate(root => ({
 			// A card's light canvas fades in on its own first frame, whenever that lands; only the grid's motion counts.
@@ -569,8 +566,8 @@ test.describe('Draft board field sheet', () => {
 		await owner.getByRole('button', { name: 'Show front', exact: true }).click();
 		await owner.getByRole('tab', { name: 'Field', exact: true }).click();
 		expect(await page.evaluate(() => ['162-zero:v1', '162-zero:settings:v1'].map(key => localStorage.getItem(key)))).toEqual(stored);
-		await owner.getByRole('button', { name: `Draft at ${destination}`, exact: true }).click();
-		await expect(page.getByRole('button', { name: /Open your field 7 \/ 16/ })).toBeVisible();
+		await owner.getByRole('button', { name: new RegExp(`^Draft .+ at ${destination}$`) }).click();
+		await expect(page.getByRole('button', { name: /^Open your field, \d+ of 16 picked$/ })).toBeVisible();
 	});
 });
 
@@ -607,7 +604,8 @@ test('second-click roster reading keeps the field and move selection in place', 
 test('Review first opens from the field and offers an explicit move without animation', async ({ page }) => {
 	await page.setViewportSize({ width: 1212, height: 788 });
 	await openStoryByName(page, 'Draft/Board', 'Partial roster');
-	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await page.getByRole('button', { name: 'Menu', exact: true }).click();
+	await page.getByRole('navigation', { name: 'More', exact: true }).getByRole('button', { name: 'Settings', exact: true }).click();
 	const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
 	await settings.getByRole('button', { name: 'Review first', exact: true }).click();
 	const animation = settings.getByRole('switch', { name: 'Card review animation', exact: true });

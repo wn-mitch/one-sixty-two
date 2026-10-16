@@ -73,7 +73,7 @@
 	{#if stats.length}
 		<span class="stats">
 			{#each stats as stat (stat.label)}
-				<span class="stat" class:primary={stat.primary}>
+				<span class="stat" class:featured={stat.primary}>
 					<span class="label">{stat.label}</span>
 					<span class="value" data-fit data-max={compact ? '6.4' : '8'} data-min="4" data-lines="1">{stat.value}</span>
 				</span>
@@ -125,7 +125,7 @@
 						{/each}
 					</span>
 					<span class="title" data-fit data-max="12" data-min="7" data-wrap-min="6" data-lines="2" data-max-h="16">{title}</span>
-					<span class="park" data-fit data-max="4.8" data-min="3.2" data-wrap-min="3.2" data-lines="2" data-max-h="8">{parkName}</span>
+					{#if parkName !== title}<span class="park" data-fit data-max="4.8" data-min="3.2" data-wrap-min="3.2" data-lines="2" data-max-h="8">{parkName}</span>{/if}
 					{@render evidence()}
 					{@render statistics()}
 					{@render brandCorner()}
@@ -138,7 +138,7 @@
 						{@render seal()}
 					</span>
 					<span class="back-title" data-fit data-max="8" data-min="5.6" data-wrap-min="4.8" data-lines="2" data-max-h="12">{title}</span>
-					<span class="park" data-fit data-max="4.8" data-min="3.2" data-wrap-min="3.2" data-lines="2" data-max-h="8">{parkName}</span>
+					{#if parkName !== title}<span class="park" data-fit data-max="4.8" data-min="3.2" data-wrap-min="3.2" data-lines="2" data-max-h="8">{parkName}</span>{/if}
 					{@render evidence()}
 					{@render statistics(true)}
 					<span class="roster-heading"><span>Roster</span><span>{roster.length} selections</span></span>
@@ -203,7 +203,7 @@
 	.park { display: block; flex: none; margin-top: var(--club-gap); color: var(--tintOnDark); font-weight: 700; font-size: 4.8cqw; line-height: 1; letter-spacing: .04em; text-transform: uppercase; overflow-wrap: anywhere; }
 	.stats { display: grid; flex: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--club-gap); margin-top: var(--club-pad); }
 	.stat { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; gap: var(--club-unit); padding-top: var(--club-gap); border-top: 1px solid var(--club-rule); }
-	.stat.primary { border-top-color: var(--tintOnDark); }
+	.stat.featured { border-top-color: var(--tintOnDark); }
 	.label { font-weight: 700; font-size: 3.2cqw; line-height: 1; letter-spacing: .06em; text-transform: uppercase; }
 	.value { display: block; font-weight: 800; font-size: 8cqw; line-height: .95; font-variant-numeric: tabular-nums; white-space: nowrap; }
 	.footer { display: block; flex: none; margin-top: var(--club-gap); color: var(--mutedOnDark); font-weight: 600; font-size: 3.2cqw; line-height: 1.1; letter-spacing: .04em; text-transform: uppercase; }

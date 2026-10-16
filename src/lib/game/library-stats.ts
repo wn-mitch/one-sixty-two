@@ -86,7 +86,6 @@ export function libraryLeaders(entries: readonly Entry[], limit = 5): LeaderGrou
  const count = (value: number) => String(value);
  return {
   teams: [
-   board('wins', 'Wins', teams.map(row => ({ ...row, value: row.entry.record.wins })), count, false, undefined, limit),
    board('run-differential', 'Run differential', teams.map(row => ({ ...row, value: row.entry.runs.scored - row.entry.runs.allowed })), signed, false, undefined, limit)
   ],
   batting: [

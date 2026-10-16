@@ -16,7 +16,7 @@
 			<div data-layer="material.photo-bevel" style="position:absolute; left:0; right:0; top:0; height:100cqw; border-radius:0; box-shadow:calc(var(--lx, -0.45) * -0.8cqw) calc(var(--ly, -0.75) * -0.8cqw) 1cqw rgba(0,0,0,0.45), calc(var(--lx, -0.45) * 0.5cqw) calc(var(--ly, -0.75) * 0.5cqw) 0.6cqw rgba(255,255,255,0.6);"></div>
 		{/if}
 		<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:0; right:0; top:0; height:100cqw; overflow:hidden; background:${s.k.accent};`}>
-			<PhotoMask {s} />
+			<PhotoMask front {s} />
 		</div>
 
 		<div data-rt data-layer="season.chip" data-surface="frame" style={`position:absolute; top:4.4cqw; left:4.4cqw; padding:1.1cqw 2.4cqw; background:${s.k.field}; color:${s.k.onField}; display:flex; align-items:center; gap:1.4cqw; font-weight:800; font-size:5cqw; line-height:1;`}>

@@ -6,7 +6,7 @@ import { shopState } from '../cosmetics/store.svelte.ts';
  * never grant or forfeit the first-season bonus. Storage failures only mean tips may show again.
  */
 export const GUIDE_STORAGE_KEY = '162-zero:guide:v1';
-export const GUIDE_STEPS = ['stadium', 'pack', 'place', 'extra', 'roster', 'results'] as const;
+export const GUIDE_STEPS = ['stadium', 'pack', 'extra', 'roster'] as const;
 export type GuideStep = typeof GUIDE_STEPS[number];
 type Stored = { skipped: boolean; done: GuideStep[] };
 
@@ -26,14 +26,10 @@ class Guide {
 	#write(): void {
 		try { localStorage.setItem(GUIDE_STORAGE_KEY, JSON.stringify(this.#state)); } catch { /* this tab keeps its progress */ }
 	}
-	/**
-	 * Guidance runs for a device that has never completed a season (the profile still due the first-season
-	 * bonus) and keeps running through the season it started, even after that season pays the bonus.
-	 */
+	/** Guidance ends when the device completes its first season or the player dismisses every tip. */
 	get active(): boolean {
 		const { skipped, done } = this.#state;
-		if (skipped || done.includes('results')) return false;
-		return done.length > 0 || shopState.snapshot?.firstSeasonBonus === true;
+		return !skipped && done.length < GUIDE_STEPS.length && shopState.snapshot?.firstSeasonBonus === true;
 	}
 	shows(step: GuideStep): boolean {
 		return this.active && !this.#state.done.includes(step);

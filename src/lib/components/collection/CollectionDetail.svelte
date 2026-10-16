@@ -5,7 +5,7 @@
 	import type { CardViewModel } from '../../cards/view-model.ts';
 	import type { CollectedCard } from '../../collection/collection.ts';
 	import { nextTier } from '../../collection/album.ts';
-	import { faceStickers, STICKER_BY_KIND, STICKERS, type PlacedSticker, type StickerFamily } from '../../collection/stickers.ts';
+	import { faceStickers, stickerDefinition, STICKER_BY_KIND, STICKERS, type PlacedSticker, type StickerFamily } from '../../collection/stickers.ts';
 	import type { SavedBatter, SavedPitcher } from '../../game/library.ts';
 	import { innings, onBase, ra9, rate } from '../../game/library-stats.ts';
 	import StickerBadge from '../../collection/StickerBadge.svelte';
@@ -43,9 +43,9 @@
 			if (family) byFamily.set(family, [...(byFamily.get(family) ?? []), sticker]);
 		}
 		return [...byFamily].map(([family, stickers]) => {
-			const top = stickers.map(sticker => ({ sticker, definition: STICKER_BY_KIND.get(sticker.kind)! })).sort((a, b) => b.definition.tier - a.definition.tier)[0];
+			const top = stickers.map(sticker => ({ sticker, definition: stickerDefinition(sticker)! })).sort((a, b) => b.definition.tier - a.definition.tier)[0];
 			return { family, definition: top.definition, hidden: top.sticker.hidden, earnedAt: top.sticker.earnedAt, next: nextTier(card, top.definition) };
-		}).sort((a, b) => STICKERS.indexOf(a.definition) - STICKERS.indexOf(b.definition));
+		}).sort((a, b) => STICKERS.indexOf(STICKER_BY_KIND.get(a.definition.kind)!) - STICKERS.indexOf(STICKER_BY_KIND.get(b.definition.kind)!));
 	});
 	const shownFamilies = $derived(editing ? families : families.filter(item => !item.hidden));
 	const hiddenCount = $derived(families.filter(item => item.hidden).length);

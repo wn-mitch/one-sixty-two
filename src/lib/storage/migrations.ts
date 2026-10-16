@@ -297,6 +297,48 @@ export const MIGRATIONS: readonly Migration[] = [
     }
    }
   }
+ },
+ {
+  version: 11,
+  up(db) {
+   // MVP credit is part of the roster history, not the current library. Keep it monotonic when a
+   // season is saved again, and retain provenance for an award whose library season was deleted.
+   exec(db, "ALTER TABLE rostered ADD COLUMN is_mvp INTEGER NOT NULL DEFAULT 0 CHECK (is_mvp IN (0, 1))");
+   exec(db, `UPDATE rostered SET is_mvp = 1
+    WHERE EXISTS (
+     SELECT 1 FROM seasons
+     WHERE seasons.key = rostered.season_key
+       AND CASE WHEN json_valid(seasons.mvp_json) THEN json_extract(seasons.mvp_json, '$.seasonId') ELSE NULL END = rostered.season_id
+    )`);
+   exec(db, `UPDATE rostered SET is_mvp = 1
+    WHERE EXISTS (
+     SELECT 1 FROM stickers
+     WHERE stickers.season_id = rostered.season_id
+       AND stickers.season_key = rostered.season_key
+       AND stickers.kind = 'mvp'
+    )`);
+   exec(db, `CREATE TRIGGER rostered_mvp_after_insert AFTER INSERT ON rostered
+    WHEN NEW.is_mvp = 0 AND EXISTS (
+     SELECT 1 FROM seasons
+     WHERE seasons.key = NEW.season_key
+       AND CASE WHEN json_valid(seasons.mvp_json) THEN json_extract(seasons.mvp_json, '$.seasonId') ELSE NULL END = NEW.season_id
+    )
+    BEGIN
+     UPDATE rostered SET is_mvp = 1
+     WHERE season_id = NEW.season_id AND season_key = NEW.season_key;
+    END`);
+   exec(db, `CREATE TRIGGER rostered_mvp_after_update
+    AFTER UPDATE OF season_id, season_key, rostered_at, label, slot, wins, losses, line_json ON rostered
+    WHEN NEW.is_mvp = 0 AND EXISTS (
+     SELECT 1 FROM seasons
+     WHERE seasons.key = NEW.season_key
+       AND CASE WHEN json_valid(seasons.mvp_json) THEN json_extract(seasons.mvp_json, '$.seasonId') ELSE NULL END = NEW.season_id
+    )
+    BEGIN
+     UPDATE rostered SET is_mvp = 1
+     WHERE season_id = NEW.season_id AND season_key = NEW.season_key;
+    END`);
+  }
  }
 ];
 

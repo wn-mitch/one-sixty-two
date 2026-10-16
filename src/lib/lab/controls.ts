@@ -7,6 +7,7 @@ import { ERA_FOIL, ERA_PLATE_TUNING, PLATES } from '#lib/cards/surface/foil-plat
 import { DEFAULT_LIGHT } from '#lib/cards/surface/light-renderer.ts';
 import { DEFAULT_CUSTOM_GRADIENT, normalizeGradient } from '#lib/cards/surface/palettes/custom.ts';
 import { STOCKS, type Stock } from '#lib/cards/surface/surfaces.ts';
+import { finishName } from '#lib/cosmetics/catalogue.ts';
 
 /**
  * What the foil lab can change and what each choice applies to. A setup is one plain `Setup`; every control
@@ -42,6 +43,10 @@ export interface Setup {
 }
 
 export const filmNames = FILMS.map(film => film.name);
+const filmOptions = FILMS.map(film => ({
+	value: film.name,
+	label: film.name === 'hgh' || film.name === 'hgh-sequence' ? finishName(film) : film.name
+}));
 export const finishNames = FILM_FINISHES.map(finish => finish.name);
 export const paletteNames = PALETTES.map(palette => palette.name);
 export const plateNames = PLATES.map(plate => plate.name);
@@ -117,10 +122,10 @@ export function optionsOf(key: ChoiceKey): { value: string; label: string }[] {
 		case 'tier': return [...TIERS];
 		case 'era': return plain(CARD_ERAS);
 		case 'stock': return [{ value: '', label: "era's own" }, ...plain(stockNames)];
-		case 'film': return plain(filmNames);
+		case 'film': return [...filmOptions];
 		case 'finish': return [{ value: '', label: "film's own" }, ...plain(finishNames)];
 		case 'palette': return [{ value: '', label: "film's own" }, ...plain(paletteNames)];
-		case 'under': return [{ value: '', label: "film's own" }, { value: 'none', label: 'none' }, ...plain(filmNames)];
+		case 'under': return [{ value: '', label: "film's own" }, { value: 'none', label: 'none' }, ...filmOptions];
 		case 'plate': return plain(plateNames);
 	}
 }
@@ -201,7 +206,7 @@ export function eraPreset(setup: Setup, era: CardEra): Setup {
 	if (tuning.scale !== 1) tuned[`plate:${plate}`] = { scale: tuning.scale };
 	return {
 		...setup, era, film: ERA_HOLO[era], finish: '', palette: '', under: '', plate, stock: '', tuned,
-		light: { ...setup.light, plateTone: tuning.tone, stain: tuning.stain, vivid: tuning.vivid ?? 1 }
+		light: { ...setup.light, plateDepth: DEFAULT_LIGHT.plateDepth, plateTone: tuning.tone, stain: tuning.stain, vivid: tuning.vivid ?? 1 }
 	};
 }
 

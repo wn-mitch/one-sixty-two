@@ -34,7 +34,7 @@ async function finishSeason(page: Page): Promise<void> {
 	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
 	await page.getByRole('button', { name: 'Skip animation', exact: true }).click();
 	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 60_000 });
-	await expect(page.locator('.earned-receipt')).toContainText('1 season token + 1 first-season bonus');
+	await expect(page.locator('.earned-receipt .reward-chip')).toHaveAccessibleName(/2 tokens earned: 1 season token \+ 1 first-season bonus/);
 }
 
 test('one earned chip rises above the phone actions, flies into the wallet and splashes without changing its balance', async ({ page, request }) => {
@@ -80,7 +80,7 @@ test('reduced motion interrupts the token flight and enabling motion does not re
 	await expect(chip).toHaveCSS('opacity', '1');
 	await expect(page.getByRole('link', { name: 'Shop, 2 tokens', exact: true })).toBeVisible();
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
-	await page.getByText('About these results', { exact: true }).click();
+	await page.getByRole('button', { name: 'About season awards', exact: true }).focus();
 	await expect(page.locator('[data-reward-flight], .reward-splash')).toHaveCount(0);
 	await expect(chip).toHaveCSS('opacity', '1');
 });

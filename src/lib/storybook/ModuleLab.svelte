@@ -9,6 +9,7 @@
 	import { filmDials, type Dial } from '#lib/cards/surface/films/film.ts';
 	import { plateDials } from '#lib/cards/surface/plates/plate.ts';
 	import type { Finish } from '#lib/cards/finish.ts';
+	import { finishName } from '#lib/cosmetics/catalogue.ts';
 	import StoryFrame from './StoryFrame.svelte';
 
 	/**
@@ -117,7 +118,7 @@
 							<div class="face" data-surface="ring" data-surface-shape="box"></div>
 							<canvas class="light" aria-hidden="true" use:lightCanvas={card.light}></canvas>
 						</div>
-						<figcaption><b>{name}</b><span>{card.label}</span></figcaption>
+						<figcaption><b>{finishName({ name })}</b><span>{card.label}</span></figcaption>
 					</figure>
 				{/each}
 			</div>

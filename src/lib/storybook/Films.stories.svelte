@@ -22,8 +22,8 @@
 <Story exportName="Carpet" name="carpet" args={{ kind: 'film', name: 'carpet' }} />
 <Story exportName="Circuit" name="circuit" args={{ kind: 'film', name: 'circuit' }} />
 <Story exportName="Dollar" name="dollar" args={{ kind: 'film', name: 'dollar' }} />
-<Story exportName="Hgh" name="hgh" args={{ kind: 'film', name: 'hgh' }} />
-<Story exportName="HghSequence" name="hgh-sequence" args={{ kind: 'film', name: 'hgh-sequence' }} />
+<Story exportName="Hgh" name="Biology" args={{ kind: 'film', name: 'hgh' }} />
+<Story exportName="HghSequence" name="Proteins" args={{ kind: 'film', name: 'hgh-sequence' }} />
 <Story exportName="QrCode" name="qr-code" args={{ kind: 'film', name: 'qr-code' }} />
 <Story exportName="DoubleHelix" name="double-helix" args={{ kind: 'film', name: 'double-helix' }} />
 <Story exportName="Julia" name="julia" args={{ kind: 'film', name: 'julia' }} />
@@ -41,3 +41,4 @@
 <Story exportName="Matrix" name="matrix" args={{ kind: 'film', name: 'matrix' }} />
 <Story exportName="SpiralMoire" name="spiral-moire" args={{ kind: 'film', name: 'spiral-moire' }} />
 <Story exportName="Wallpaper" name="wallpaper" args={{ kind: 'film', name: 'wallpaper' }} />
+<Story exportName="Smoke" name="Smoke" args={{ kind: 'film', name: 'smoke' }} />

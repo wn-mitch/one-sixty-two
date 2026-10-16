@@ -51,6 +51,14 @@ describe('reviewed image acquisition and offline compilation', () => {
 		validateMedia(manifest, manifest.version);
 		const photo = selectTeamPhoto(manifest, 'T0', 2025)!;
 		expect(photo).toMatchObject({ subject: 'team', width: 80, height: 40, year: 1988, review: 'approved' });
+		const framing = { sourceId: photo.sourceId!, sourceChecksum: photo.evidence!.sourceChecksum,
+			derivativeChecksum: photo.url.split('/').at(-1)!.replace('.webp', ''), subtype: 'team-group' as const,
+			subjectBounds: { x: 0, y: 0, width: 1, height: 1 }, focalPoint: { x: .5, y: .5 },
+			fit: { mode: 'contain' as const, position: { x: .5, y: .5 } } };
+		const framed = await generateMedia({ ...input, photoFraming: { schemaVersion: 1, entries: [framing] } });
+		validateMedia(framed.manifest, framed.manifest.version);
+		expect(selectTeamPhoto(framed.manifest, 'T0', 2025)?.framing).toEqual({ ...framing, schemaVersion: 1 });
+		expect(framed.manifest.version).not.toBe(manifest.version);
 		expect(await readFile(join(root, 'published', manifest.version, 'NOTICE.txt'), 'utf8')).toContain('T0 1988 team photo');
 		expect((await generateMedia(input)).manifest.version).toBe(manifest.version);
 		input.teamPhotoReviews[0] = { ...team, evidence: { ...team.evidence, sourceChecksum: '0'.repeat(64) } };

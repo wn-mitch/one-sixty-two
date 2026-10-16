@@ -3,7 +3,7 @@
 	import Card from '../cards/Card.svelte';
 	import type { CardViewModel } from '../cards/view-model.ts';
 	import StickerBadge from '../collection/StickerBadge.svelte';
-	import { STICKER_BY_KIND, STICKER_SPOTS, type PlacedSticker, type StickerFamily } from '../collection/stickers.ts';
+	import { stickerDefinition, STICKER_BY_KIND, STICKER_SPOTS, type PlacedSticker, type StickerDefinition, type StickerFamily } from '../collection/stickers.ts';
 	import { cardStickers } from '../collection/store.svelte.ts';
 	import type { NewCard, NewSticker } from '../collection/collection.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
@@ -36,7 +36,7 @@
 	const summary = $derived([
 		newCards.length ? `${newCards.length} new ${newCards.length === 1 ? 'card' : 'cards'}` : '',
 		personal ? `${personal} new ${personal === 1 ? 'sticker' : 'stickers'}` : '',
-		...teamStickers.map(({ kind }) => short(kind))
+		...teamStickers.map(({ kind }) => short(STICKER_BY_KIND.get(kind)!))
 	].filter(Boolean).join(' · '));
 
 	let open = $state(false);
@@ -47,7 +47,7 @@
 	});
 	const noCardDetails = () => {};
 	/** A sticker's short face text: "60 HR", "162–0". */
-	const short = (kind: string) => { const [top, bottom] = STICKER_BY_KIND.get(kind)!.label; return bottom.startsWith('–') ? `${top}${bottom}` : `${top} ${bottom}`; };
+	const short = (definition: StickerDefinition) => { const [top, bottom] = definition.label; return bottom.startsWith('–') ? `${top}${bottom}` : `${top} ${bottom}`; };
 	const TEAM_FAMILIES: ReadonlySet<StickerFamily> = new Set(['grade', 'team']);
 	/** The card's saved stickers, plus any just earned that the sticker store has not loaded yet, at their default spots. */
 	function shownStickers(seasonId: string, kinds: readonly string[]): PlacedSticker[] {
@@ -98,7 +98,8 @@
 							{#if stickers.length}
 								<ul class="earned" aria-label={`New stickers for ${entry.label}`}>
 									{#each stickers as item (item.kind)}
-										<li title={item.title}><span class="badge" aria-hidden="true"><StickerBadge definition={STICKER_BY_KIND.get(item.kind)!} /></span><span aria-hidden="true">{short(item.kind)}</span><span class="sr-only">{item.title}</span></li>
+										{@const definition = stickerDefinition(cardStickers(entry.seasonId).find(sticker => sticker.kind === item.kind) ?? item)!}
+										<li title={definition.title}><span class="badge" aria-hidden="true"><StickerBadge {definition} /></span><span aria-hidden="true">{short(definition)}</span><span class="sr-only">{definition.title}</span></li>
 									{/each}
 								</ul>
 							{:else}

@@ -8,10 +8,10 @@
 	import { CARD_ERAS } from '../cards/era.ts';
 	import { ERA_FOIL } from '../cards/surface/foil-plates.ts';
 	import { ERA_HOLO } from '../cards/surface/holo-films.ts';
-	import { appearanceFor, COLORWAYS, finishName, itemsForTier, type CustomTier, type CosmeticItem } from '../cosmetics/catalogue.ts';
-	import { unlocksFor, type ShopSnapshot } from '../cosmetics/ledger.ts';
+	import { appearanceFor, finishName, itemsForTier, type CustomTier, type CosmeticItem } from '../cosmetics/catalogue.ts';
+	import type { ShopSnapshot } from '../cosmetics/ledger.ts';
 	// Players browse two families of finishes; a foil plate unlock covers both foil tiers.
-	let { tier = $bindable<CustomTier>('gem'), snapshot, cards, loading, error, busy, onRetry, onUnlock, onEquip }: {
+	let { tier = $bindable<CustomTier>('gem'), snapshot, cards, loading, error, busy, onRetry, onUnlock }: {
 		tier?: CustomTier;
 		snapshot: ShopSnapshot | null;
 		cards: readonly CardViewModel[];
@@ -19,9 +19,7 @@
 		error: string;
 		busy: boolean;
 		onRetry: () => void;
-		/** Unlocks the finish and applies it to `tier` in one step. */
-		onUnlock: (tier: CustomTier, id: string | null, colorway: string | null) => void;
-		onEquip: (tier: CustomTier, id: string | null, colorway: string | null) => void;
+		onUnlock: (id: string) => void;
 	} = $props();
 	const FAMILIES = [
 		{ value: 'foil', label: 'Foil finishes' },
@@ -29,8 +27,9 @@
 	] as const;
 	const TIER_NAMES: Record<CustomTier, string> = { foil: 'Silver foil', emboss: 'Gold emboss', gem: 'Gem' };
 	const BATCH_SIZE = 12;
+	const uid = $props.id();
 	const family = $derived(tier === 'gem' ? 'gem' : 'foil');
-	let choice = $state<{ tier: CustomTier; id: string | null; colorway: string | null } | null>(null);
+	let choice = $state<{ tier: CustomTier; id: string } | null>(null);
 	let previewId = $state('');
 	let visibleCount = $state(BATCH_SIZE);
 	let sentinel = $state<HTMLLIElement>();
@@ -40,21 +39,15 @@
 	let returnFocus: HTMLElement | null = null;
 	const items = $derived(itemsForTier(tier));
 	const eraDefaults = $derived(Object.entries(tier === 'gem' ? ERA_HOLO : ERA_FOIL));
-	const equipped = $derived(snapshot?.equipped[tier]);
-	const selectedId = $derived(choice?.tier === tier ? choice.id : equipped?.itemId ?? items[0]?.id ?? null);
-	const colorway = $derived(choice?.tier === tier ? choice.colorway : equipped?.colorway ?? null);
+	const selectedId = $derived(choice?.tier === tier ? choice.id : items[0]?.id);
 	const shownItems = $derived(items.slice(0, visibleCount));
 	const hasMore = $derived(shownItems.length < items.length);
 	const selected = $derived(items.find(item => item.id === selectedId));
-	// What applying the current choice still needs to unlock: its pattern and, on Gem, its colorway.
-	const needed = $derived(unlocksFor(selectedId, colorway).filter(id => !snapshot?.owned.includes(id)));
-	const owned = $derived(needed.length === 0);
-	const ownsColorway = (id: string) => !!snapshot?.owned.includes(`colorway:${id}`);
-	const applied = $derived((equipped?.itemId ?? null) === selectedId && (equipped?.colorway ?? null) === colorway);
+	const owned = $derived(!!selectedId && !!snapshot?.owned.includes(selectedId));
 	const preview = $derived(cards.find(card => card.seasonId === previewId) ?? cards[0]);
 	const tierName = $derived(TIER_NAMES[tier]);
-	const finish = $derived(selectedId === null ? null : appearanceFor(selectedId, colorway));
-	const short = $derived(!!snapshot && !owned && snapshot.balance < needed.length);
+	const finish = $derived(selectedId ? appearanceFor(selectedId) : null);
+	const short = $derived(!!snapshot && !!selected && !owned && snapshot.balance < selected.cost);
 	const noDetails = () => {};
 	// Catalogue swatches share one era and lighting so every finish is compared on the same stock.
 	const sampleEra = '1990s';
@@ -87,10 +80,10 @@
 		// Switching between Silver and Gold keeps the plate being previewed.
 		const keep = choice && choice.tier !== 'gem' && next !== 'gem' ? choice.id : undefined;
 		tier = next;
-		choice = keep === undefined ? null : { tier: next, id: keep, colorway: null };
+		choice = keep === undefined ? null : { tier: next, id: keep };
 	}
-	async function choose(id: string | null, trigger: HTMLElement): Promise<void> {
-		choice = { tier, id, colorway: tier === 'gem' && id !== null ? colorway : null };
+	async function choose(id: string, trigger: HTMLElement): Promise<void> {
+		choice = { tier, id };
 		if (wide) return;
 		// Phones open the finish in a sheet over the catalogue, which stays exactly where it was.
 		returnFocus = trigger;
@@ -116,14 +109,13 @@
 		observer.observe(sentinel);
 		return () => observer.disconnect();
 	});
-	const ownership = (id: string) => equipped?.itemId === id ? 'Applied' : snapshot?.owned.includes(id) ? 'Owned' : null;
 </script>
 
 {#snippet detail()}
 	<div class="detail">
-		<h2 id="detail-heading">{selected ? finishName(selected) : 'Original finish'}</h2>
+		<h2 id="detail-heading">{selected ? finishName(selected) : 'Finish preview'}</h2>
 		{#if tier !== 'gem'}
-			<div class="tier-choice" role="group" aria-label="Preview and apply on">
+			<div class="tier-choice" role="group" aria-label="Preview on">
 				<button type="button" aria-pressed={tier === 'foil'} onclick={() => chooseTier('foil')}>Silver foil cards</button>
 				<button type="button" aria-pressed={tier === 'emboss'} onclick={() => chooseTier('emboss')}>Gold emboss cards</button>
 			</div>
@@ -143,25 +135,18 @@
 				</details>
 			{/if}
 		{:else}<p class="muted">No preview card is available for this tier.</p>{/if}
-		{#if tier === 'gem' && selectedId !== null}
-			<label class="colorway">Holo colorway
-				<select value={colorway ?? ''} onchange={event => { choice = { tier, id: selectedId, colorway: event.currentTarget.value || null }; }}>
-					<option value="">Film original</option>
-					{#each COLORWAYS as option (option.id)}<option value={option.id}>{finishName(option)}{ownsColorway(option.id) ? '' : ' · 1 token'}</option>{/each}
-				</select>
-			</label>
-		{/if}
 		<div class="commit">
-			{#if selectedId === null}
-				<button class="primary" type="button" disabled={busy || !snapshot || applied} onclick={() => onEquip(tier, null, null)}>{applied ? `Applied to ${tierName} cards` : `Restore original ${tierName} finish`}</button>
-			{:else if owned}
-				<button class="primary" type="button" disabled={busy || !snapshot || applied} onclick={() => onEquip(tier, selectedId, colorway)}>{applied ? `Applied to ${tierName} cards` : `Apply to ${tierName} cards`}</button>
-			{:else}
-				<button class="primary unlock" type="button" aria-label={`Unlock and apply to ${tierName} cards, ${needed.length} ${needed.length === 1 ? 'token' : 'tokens'}`} disabled={busy || !snapshot || short} onclick={() => onUnlock(tier, selectedId, colorway)}>Unlock &amp; apply · <TokenAmount amount={needed.length} /></button>
-				{#if needed.length > 1}<p class="muted">Pattern + colorway</p>{/if}
-				{#if short}<p class="muted">{needed.length - (snapshot?.balance ?? 0)} more {needed.length - (snapshot?.balance ?? 0) === 1 ? 'token' : 'tokens'} needed. <a href="/">Play to earn</a></p>{/if}
+			{#if owned}
+				<a class="button primary" href="/factory">Card factory <span aria-hidden="true">↗</span></a>
+			{:else if selected}
+				<button class="primary unlock" type="button"
+					aria-label={`Unlock ${finishName(selected)}, ${selected.cost} ${selected.cost === 1 ? 'token' : 'tokens'}`}
+					aria-describedby={short ? `${uid}-balance-hint` : undefined}
+					disabled={busy || !snapshot || short} onclick={() => onUnlock(selected.id)}>
+					<span>Unlock</span><TokenAmount amount={selected.cost} />
+				</button>
+				{#if short}<span class="sr-only" id={`${uid}-balance-hint`}>Insufficient tokens. Complete a season to earn more.</span>{/if}
 			{/if}
-			{#if tier !== 'gem'}<p class="muted">For Silver foil &amp; Gold emboss cards.</p>{/if}
 		</div>
 	</div>
 {/snippet}
@@ -169,21 +154,18 @@
 <CardBrowser label="Shop finishes" {wide} {busy} searchable={false}
 	filters={FAMILIES} filter={family} filterLegend="Finishes"
 	onFilter={value => chooseFamily(value as 'foil' | 'gem')}>
-	{#snippet rail()}
-		<button class="original quiet" type="button" disabled={busy} aria-pressed={selectedId === null} aria-label={`Original finish${equipped ? '' : ', applied'}`} onclick={event => void choose(null, event.currentTarget)}>Original finish</button>
-	{/snippet}
 
 <div class="shop-layout">
 	<section class="catalogue" aria-labelledby="catalogue-heading">
 		<h2 id="catalogue-heading" class="sr-only">{family === 'gem' ? 'Holo patterns' : 'Foil finishes'}</h2>
 		<ul class="finish-grid" aria-label={family === 'gem' ? 'Holo patterns' : 'Foil finishes'}>
 			{#each shownItems as item (item.id)}
-				{@const state = ownership(item.id)}
+				{@const state = snapshot?.owned.includes(item.id) ? 'Owned' : null}
 				{@const eras = eraDefaults.filter(([, pattern]) => pattern === (item.film ?? item.plate)).map(([era]) => era).join(', ')}
 				{@const equippedLabel = equippedLabelFor(item)}
 				<li>
 					<FinishChoice name={finishName(item)} {tier} era={sampleEra}
-						appearance={appearanceFor(item.id, tier === 'gem' ? colorway : null)}
+						appearance={appearanceFor(item.id)}
 						selected={selectedId === item.id} cost={item.cost} status={state} finishId={item.id}
 						description={eras ? `${eras} default` : undefined} {equippedLabel}
 						onChoose={trigger => void choose(item.id, trigger)} />
@@ -210,9 +192,7 @@
 </dialog>
 
 <style>
-	.original { margin-bottom: var(--space-3); color: var(--muted); font-size: var(--text-sm); }
-	.original[aria-pressed='true'] { color: var(--text); border-color: var(--border); }
-	.unlock { display: flex; align-items: center; justify-content: center; gap: var(--space-2); }
+	.unlock { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); text-align: left; }
 	.shop-layout { display: grid; gap: var(--space-8); min-width: 0; }
 	h2 { font-size: var(--text-xl); }
 	.detail { display: grid; gap: var(--space-3); min-width: 0; align-content: start; }
@@ -223,10 +203,8 @@
 	.preview-card { width: min(100%, 13rem); justify-self: center; }
 	.preview-options { font-size: var(--text-sm); color: var(--muted); }
 	.preview-options summary { min-height: 2.75rem; align-content: center; }
-	.colorway { display: grid; gap: var(--space-2); font-size: var(--text-sm); font-weight: 650; }
 	select { width: 100%; min-width: 0; }
 	.commit { display: grid; gap: var(--space-2); }
-	.commit p { margin: 0; font-size: var(--text-sm); }
 	.catalogue { min-width: 0; }
 	.finish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 	.load-more { grid-column: 1 / -1; display: flex; justify-content: center; }
@@ -241,7 +219,6 @@
 	@media (min-width: 64rem) {
 		.shop-layout { grid-template-columns: minmax(0, 1fr) 20rem; align-items: start; gap: var(--space-8); }
 		.side { position: sticky; top: var(--space-6); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-		.original { width: 100%; margin-top: var(--space-2); padding-inline: 10px; text-align: left; }
 		.finish-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	}
 	@media (min-width: 72rem) { .finish-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

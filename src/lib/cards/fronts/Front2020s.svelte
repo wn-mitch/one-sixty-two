@@ -17,7 +17,7 @@
 				<div data-layer="material.photo-bevel" style="position:absolute; inset:0; filter:drop-shadow(calc(var(--lx, -0.45) * -0.8cqw) calc(var(--ly, -0.75) * -0.8cqw) 0.8cqw rgba(0,0,0,0.6)) drop-shadow(calc(var(--lx, -0.45) * 0.4cqw) calc(var(--ly, -0.75) * 0.4cqw) 0.3cqw rgba(255,255,255,0.45));"><div style="position:absolute; inset:0; background:#000; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 9cqw), calc(100% - 14cqw) 100%, 0 100%);"></div></div>
 			{/if}
 			<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; inset:0; overflow:hidden; background:${s.k.raised}; clip-path:polygon(0 0, 100% 0, 100% calc(100% - 9cqw), calc(100% - 14cqw) 100%, 0 100%);`}>
-				<PhotoMask
+				<PhotoMask front
 					{s}
 					emptyColor={s.k.onRaised}
 					emptyStyle={`background:repeating-linear-gradient(135deg, rgba(255,255,255,.07) 0 1.1cqw, rgba(0,0,0,0) 1.1cqw 2.2cqw), ${s.k.raised};`}

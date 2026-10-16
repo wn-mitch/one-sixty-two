@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
 	import { seasonGrade } from '../game/grade.ts';
-	import { stars as starSeasons, teamTitle } from '../game/library-stats.ts';
+	import { stars as starSeasons } from '../game/library-stats.ts';
 	import type { SeriesClub, SeriesClubStatus } from '../game/series-session.svelte.ts';
 	import type { Manifest } from '../game/types.ts';
 	import type { SeriesField } from '../game/replay-link.ts';
@@ -80,13 +80,13 @@
 			const saved = club.entry;
 			const differential = saved ? saved.runs.scored - saved.runs.allowed : 0;
 			output.set(team.id, {
-				title: saved ? teamTitle(saved) : fields[team.id].name.trim() || team.label,
+				title: saved ? saved.nickname || club.stadiumName : fields[team.id].name.trim() || team.label,
 				recordLabel: saved ? `${saved.record.wins}–${saved.record.losses}` : 'Replay ready',
 				grade: saved ? seasonGrade(saved.record.wins, saved.record.losses) : null,
 				stats: saved
 					? [
-						{ label: 'Runs', value: `${differential > 0 ? '+' : differential < 0 ? '−' : ''}${Math.abs(differential)}`, primary: true },
-						{ label: 'Win %', value: (saved.record.wins / Math.max(1, saved.record.wins + saved.record.losses)).toFixed(3).replace(/^0/, '') }
+						{ label: 'Run differential', value: `${differential > 0 ? '+' : differential < 0 ? '−' : ''}${Math.abs(differential)}`, primary: true },
+						{ label: 'Win %', value: `${(saved.record.wins / Math.max(1, saved.record.wins + saved.record.losses) * 100).toFixed(1)}%` }
 					]
 					: [{ label: 'Roster', value: `${roster.length}`, primary: true }, { label: 'Source', value: 'Replay' }],
 				footer: saved ? 'Saved season' : 'Validated replay',

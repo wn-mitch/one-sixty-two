@@ -33,6 +33,7 @@ import gosper from './films/gosper.ts';
 import matrix from './films/matrix.ts';
 import spiralMoire from './films/spiral-moire.ts';
 import wallpaper from './films/wallpaper.ts';
+import smoke from './films/smoke.ts';
 import smooth from './finishes/smooth.ts';
 import bump from './finishes/bump.ts';
 import brushed from './finishes/brushed.ts';
@@ -54,8 +55,8 @@ import monoSilver from './palettes/mono-silver.ts';
 import custom from './palettes/custom.ts';
 
 /** Every holo film, in the order the shader numbers them. */
-export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper, matrix, spiralMoire, wallpaper] as const satisfies readonly Film[];
-export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper', 'matrix', 'spiral-moire', 'wallpaper'];
+export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper, matrix, spiralMoire, wallpaper, smoke] as const satisfies readonly Film[];
+export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper', 'matrix', 'spiral-moire', 'wallpaper', 'smoke'];
 export type HoloPattern = (typeof HOLO_PATTERNS)[number];
 
 /** Films that move with time; the light engine keeps redrawing cards that show one. */

@@ -33,6 +33,8 @@ export function itemsForTier(tier: Finish): readonly CosmeticItem[] {
 
 /** A finish's player-facing name: `diamond-plate` reads as Diamond Plate. */
 export function finishName(item: Pick<CosmeticItem, 'name'>): string {
+ if (item.name === 'hgh') return 'Biology';
+ if (item.name === 'hgh-sequence') return 'Proteins';
  return item.name.split(/[-_\s]+/).filter(Boolean).map(word => word[0]!.toUpperCase() + word.slice(1)).join(' ');
 }
 

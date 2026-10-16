@@ -7,13 +7,14 @@
 	import FlipIcon from '../../cards/FlipIcon.svelte';
 
 	/** One saved club as a team card. Ctrl/Cmd-click adds it to a comparison. */
-	let { entry, stars, tally, selected, onSelect }: {
+	let { entry, stars, tally, selected, onSelect, flippable = true }: {
 		entry: LibraryView;
 		/** Star cards by value, best first; empty while profiles load. */
 		stars: readonly { seasonId: string; view: CardViewModel }[];
 		tally: { won: number; lost: number };
 		selected: boolean;
 		onSelect: (event: MouseEvent | KeyboardEvent) => void;
+		flippable?: boolean;
 	} = $props();
 
 	let face = $state<'front' | 'back'>('front');
@@ -21,16 +22,16 @@
 	const played = $derived(new Date(entry.savedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }));
 	const differential = $derived(entry.runs.scored - entry.runs.allowed);
 	const stats = $derived([
-		{ label: 'Runs', value: `${differential > 0 ? '+' : differential < 0 ? '−' : ''}${Math.abs(differential)}`, primary: true },
-		{ label: 'Win %', value: (entry.record.wins / Math.max(1, entry.record.wins + entry.record.losses)).toFixed(3).replace(/^0/, '') },
+		{ label: 'Run differential', value: `${differential > 0 ? '+' : differential < 0 ? '−' : ''}${Math.abs(differential)}`, primary: true },
+		{ label: 'Win %', value: `${(entry.record.wins / Math.max(1, entry.record.wins + entry.record.losses) * 100).toFixed(1)}%` },
 		...(tally.won || tally.lost ? [{ label: 'H2H', value: `${tally.won}–${tally.lost}` }] : [])
 	]);
 </script>
 
 <div class="club-tile">
-<button type="button" class="tile" aria-pressed={selected} onclick={onSelect} data-entry={entry.key}>
+<button type="button" class="tile" aria-label={teamTitle(entry)} aria-pressed={selected} onclick={onSelect} data-entry={entry.key}>
 	<ClubCard
-		title={teamTitle(entry)}
+		title={entry.nickname || entry.stadium?.name || 'Season team'}
 		parkName={entry.stadium?.name ?? 'No home park'}
 		recordLabel={`${entry.record.wins}–${entry.record.losses}`}
 		{grade}
@@ -40,11 +41,14 @@
 		roster={entry.roster}
 		{stars}
 		retired={entry.status === 'retired'}
+		interactive={flippable}
 	/>
 </button>
+	{#if flippable}
 	<button type="button" class="turn" aria-label={`${face === 'front' ? 'Turn over' : 'Show front'} ${teamTitle(entry)}`} aria-pressed={face === 'back'} onclick={() => face = face === 'front' ? 'back' : 'front'}>
 		<FlipIcon />
 	</button>
+	{/if}
 </div>
 
 <style>

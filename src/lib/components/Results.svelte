@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import CardReview from '../cards/CardReview.svelte';
+	import Card from '../cards/Card.svelte';
+	import InspectionBack from '../cards/InspectionBack.svelte';
 	import type { CardViewModel } from '../cards/view-model.ts';
 	import { challengeSeriesPath, type Challenge } from '../game/challenge.ts';
 	import { createResultsModel } from '../game/results-model.ts';
@@ -50,7 +52,7 @@
 		newCards?: readonly NewCard[];
 		/** Tokens this season's save just granted; null or zero when nothing new was earned. */
 		reward?: SeasonReward | null;
-		/** Only an own season participates in first-season guidance and earned-token feedback. */
+		/** Only an own season participates in earned-token feedback. */
 		ownSeason?: boolean;
 	}
 
@@ -97,6 +99,7 @@
 	let turned = $state(true);
 	let textBack = $state(false);
 	let selectedMode = $state<'simulated' | 'actual'>('simulated');
+	let handDirection = $state<-1 | 1>(1);
 	let resultsHeading = $state<HTMLHeadingElement>();
 	const resultsReviewId = 'results-card-review';
 
@@ -140,24 +143,33 @@
 		inspectionSource = trigger;
 		inspectedSeasonId = seasonId;
 		inspectionOpened = true;
+		await tick();
+		document.querySelector<HTMLButtonElement>(`#${resultsReviewId} .reader-return`)?.focus({ preventScroll: true });
 	}
 
 	/** The full hand in draft order, so the raised card steps through every player. */
-	const handOrder = $derived(resultsModel.cards.filter(card => cardViews.has(card.seasonId)));
+	const handOrder = $derived(resultsModel.cards.filter(card => cardViews.has(card.seasonId)).sort((a, b) => a.pickNumber - b.pickNumber));
 	const handIndex = $derived(handOrder.findIndex(card => card.seasonId === inspectedSeasonId));
 
-	async function stepHand(direction: -1 | 1): Promise<void> {
-		if (handIndex < 0 || !handOrder.length) return;
-		const next = handOrder[(handIndex + direction + handOrder.length) % handOrder.length];
-		// Keep the face the player was looking at; only the card changes.
-		const face = { turned, textBack, selectedMode };
-		inspectedSeasonId = next.seasonId;
+	function handOffset(index: number): number {
+		const length = handOrder.length;
+		const offset = (index - handIndex + length) % length;
+		return offset > length / 2 ? offset - length : offset;
+	}
+	function noCardDetails(): void {}
+
+	async function selectHand(index: number, direction: -1 | 1): Promise<void> {
+		if (!inspectionOpened || handIndex < 0 || !handOrder.length || index === handIndex) return;
+		handDirection = direction;
+		inspectedSeasonId = handOrder[index].seasonId;
 		await tick();
-		({ turned, textBack, selectedMode } = face);
-		// The card lands back where this player sits on the page, not where the first card was opened.
+		// Return to this player's source, while dismissal restores the original activating control.
 		inspectionSource = [...document.querySelectorAll<HTMLElement>(`button[aria-controls="${resultsReviewId}"][aria-expanded="true"]`)]
 			.find(button => button.getClientRects().length > 0) ?? inspectionSource;
-		document.querySelector<HTMLButtonElement>(`#${resultsReviewId} [data-hand-step="${direction}"]`)?.focus({ preventScroll: true });
+	}
+
+	function stepHand(direction: -1 | 1): void {
+		void selectHand((handIndex + direction + handOrder.length) % handOrder.length, direction);
 	}
 
 	function handKeys(event: KeyboardEvent): void {
@@ -244,12 +256,12 @@
 				<a class="button" href={headToHeadHref}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5"></path></svg>Head-to-head with this team</a>
 				<button class="new-draft" type="button" onclick={onNew}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>New draft</button>
 			</div>
+			<ResultsReward {reward} {ownSeason} />
 		</div>
 
 	</header>
 
 
-	<ResultsReward {reward} {ownSeason} />
 
 	<div class="awards-share">
 		<ResultsAwards featured={resultsModel.featured} {cardViews} selectedSeasonId={inspectedSeasonId} reviewId={resultsReviewId} onInspect={inspectCard} />
@@ -279,28 +291,49 @@
 	{#snippet handNav()}
 		{@const previous = handOrder[(handIndex - 1 + handOrder.length) % handOrder.length]}
 		{@const next = handOrder[(handIndex + 1) % handOrder.length]}
-		<button type="button" class="hand-step" data-hand-step="-1" aria-label={`Previous card: ${previous.profile.displayName}`} onclick={() => void stepHand(-1)}><span aria-hidden="true">‹</span></button>
-		<span class="hand-count" aria-live="polite">{handIndex + 1} / {handOrder.length}</span>
-		<span class="hand-gap" aria-hidden="true"></span>
-		<button type="button" class="hand-step" data-hand-step="1" aria-label={`Next card: ${next.profile.displayName}`} onclick={() => void stepHand(1)}><span aria-hidden="true">›</span></button>
+		<button type="button" class="hand-step previous" data-hand-step="-1" aria-label={`Previous card: ${previous.profile.displayName}`} onclick={() => stepHand(-1)}><span aria-hidden="true">‹</span></button>
+		<button type="button" class="hand-step next" data-hand-step="1" aria-label={`Next card: ${next.profile.displayName}`} onclick={() => stepHand(1)}><span aria-hidden="true">›</span></button>
+		<div class="hand-dots" role="group" aria-label="Cards in draft order">
+			{#each handOrder as card, index (card.seasonId)}
+				<button type="button" class="hand-dot" aria-label={`Pick ${card.pickNumber}: ${card.profile.displayName}, ${card.profile.year}`} aria-current={index === handIndex ? 'true' : undefined} onclick={() => void selectHand(index, handOffset(index) < 0 ? -1 : 1)}></button>
+			{/each}
+		</div>
+		<span class="sr-only" aria-live="polite">Pick {inspectedCard?.pickNumber} of {handOrder.length}: {inspectedCard?.profile.displayName}</span>
+	{/snippet}
+	{#snippet handDeck()}
+		<div class="hand-deck" aria-hidden="true" inert>
+			{#each handOrder as card, index (card.seasonId)}
+				{@const offset = handOffset(index)}
+				<div class="hand-neighbor" data-hand-offset={offset} style:--hand-offset={offset} style:--hand-depth={Math.abs(offset)} style:--hand-angle={offset < 0 ? '40deg' : '-40deg'} style:z-index={3 - Math.abs(offset)}>
+					{#if offset !== 0 && Math.abs(offset) <= 2}
+						{@const view = cardViews.get(card.seasonId)!}
+						{#if turned}<InspectionBack s={view} view={card.inspection[selectedMode]} simplified={textBack} onDetails={noCardDetails} />
+						{:else}<Card s={view} face="front" interactive={false} onDetails={noCardDetails} />{/if}
+					{/if}
+				</div>
+			{/each}
+		</div>
 	{/snippet}
 	{#if inspectedCard && inspectedView}
-		{#key inspectedSeasonId}
-			<CardReview
-				id={resultsReviewId}
-				s={inspectedView}
-				inspection={inspectedCard.inspection}
-				bind:turned
-				bind:textBack
-				bind:selectedMode
-				bind:opened={inspectionOpened}
-				sourceElement={inspectionSource}
-				raisedOnly
-				flipInPlace
-				onClose={closeInspection}
-				readerNav={handOrder.length > 1 ? handNav : undefined}
-			/>
-		{/key}
+		<CardReview
+			id={resultsReviewId}
+			s={inspectedView}
+			inspection={inspectedCard.inspection}
+			bind:turned
+			bind:textBack
+			bind:selectedMode
+			bind:opened={inspectionOpened}
+			sourceElement={inspectionSource}
+			raisedOnly
+			flipInPlace
+			pairFaces={false}
+			showControl={false}
+			onClose={closeInspection}
+			readerNav={handOrder.length > 1 ? handNav : undefined}
+			readerDeck={handDeck}
+			deckPosition={{ key: inspectedCard.seasonId, direction: handDirection }}
+			onStep={stepHand}
+		/>
 	{/if}
 
 
@@ -494,10 +527,23 @@
 	.sort-header.sorted { color: var(--text); }
 	.sort-header span { font-size: .6em; }
 
-	.hand-step { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; font-size: 1.5rem; line-height: 1; }
-	.hand-count { margin-left: var(--space-2); color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-	/* Leaves the middle of the row to the turn button. */
-	.hand-gap { flex: 1; }
+	.hand-step { position: absolute; top: calc((100% - 6.25rem) / 2); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; font-size: 1.5rem; line-height: 1; translate: 0 -50%; }
+	.hand-step.previous { right: calc(100% + .5rem); }
+	.hand-step.next { left: calc(100% + .5rem); }
+	.hand-dots { position: absolute; top: calc(100% - 2.75rem); left: 50%; translate: -50% 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; width: min(30rem, calc(100vw - 1rem)); }
+	.hand-dot { display: grid; place-items: center; flex: 1 0 24px; max-width: 2rem; min-width: 24px; height: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; }
+	.hand-dot::after { content: ''; width: .375rem; height: .375rem; border-radius: 50%; background: var(--muted); }
+	.hand-dot[aria-current='true']::after { width: .625rem; height: .625rem; background: var(--accent); }
+	.hand-deck { position: absolute; z-index: -1; inset: 0; perspective: 1000px; pointer-events: none; }
+	.hand-neighbor { position: absolute; inset: 0 0 auto; width: 100%; opacity: .6; transform: translateX(calc(var(--hand-offset) * 60%)) translateZ(calc(var(--hand-depth) * -160px)) rotateY(var(--hand-angle)) scale(.82); transition: transform var(--motion-card-flight) var(--ease-out), opacity var(--motion-card-flight) var(--ease-out); }
+	.hand-neighbor[data-hand-offset='0'] { transform: none; opacity: 0; }
+	.hand-neighbor:not([data-hand-offset='-2'], [data-hand-offset='-1'], [data-hand-offset='0'], [data-hand-offset='1'], [data-hand-offset='2']) { visibility: hidden; }
+	:global([data-motion='off']) .hand-neighbor { transition: none; }
+	@media (prefers-reduced-motion: reduce) { .hand-neighbor { transition: none; } }
+	@media (max-width: 25rem) {
+		.hand-dots { top: calc(100% - 5.5rem); }
+		.hand-step { top: calc((100% - 9rem) / 2); }
+	}
 	@media (min-width: 48rem) {
 		.scoreboard {
 			grid-template-columns: minmax(15rem, 1fr) auto;

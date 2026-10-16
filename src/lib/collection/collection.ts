@@ -32,13 +32,27 @@ export function collectionStatements(entry: LibraryEntry, earnedAt: string): Sta
  return statements;
 }
 
-interface StickerRow extends Row { season_id: string; kind: string; earned_at: string; season_key: string | null; x: number; y: number; hidden: number }
+interface StickerRow extends Row {
+ season_id: string; kind: string; earned_at: string; season_key: string | null; x: number; y: number; hidden: number;
+}
+interface CountedStickerRow extends StickerRow { mvp_count: number | null }
 
-const placed = (row: StickerRow): PlacedSticker => ({ kind: row.kind, x: row.x, y: row.y, hidden: row.hidden !== 0, earnedAt: row.earned_at });
+const placed = (row: CountedStickerRow): PlacedSticker => {
+ const sticker = { kind: row.kind, x: row.x, y: row.y, hidden: row.hidden !== 0, earnedAt: row.earned_at };
+ return row.kind === 'mvp' ? { ...sticker, count: row.mvp_count ?? 1 } : sticker;
+};
+
+/** MVP awards are counted from deduplicated roster history; a pre-count legacy sticker is one known award. */
+const stickerQuery = `SELECT stickers.*,
+ CASE WHEN stickers.kind = 'mvp' THEN max(1, (
+  SELECT count(*) FROM rostered
+  WHERE rostered.season_id = stickers.season_id AND rostered.is_mvp = 1
+ )) END AS mvp_count
+ FROM stickers`;
 
 /** Every card's stickers, keyed by player-season. */
 export async function loadStickers(db: Db): Promise<Map<string, PlacedSticker[]>> {
- const rows = await db.all<StickerRow>('SELECT * FROM stickers ORDER BY season_id, earned_at, kind');
+ const rows = await db.all<CountedStickerRow>(`${stickerQuery} ORDER BY stickers.season_id, stickers.earned_at, stickers.kind`);
  const byCard = new Map<string, PlacedSticker[]>();
  for (const row of rows) byCard.set(row.season_id, [...(byCard.get(row.season_id) ?? []), placed(row)]);
  return byCard;
@@ -46,7 +60,7 @@ export async function loadStickers(db: Db): Promise<Map<string, PlacedSticker[]>
 
 /** Stickers one saved season earned, for its results. */
 export async function stickersFromSeason(db: Db, seasonKey: string): Promise<{ seasonId: string; sticker: PlacedSticker }[]> {
- const rows = await db.all<StickerRow>('SELECT * FROM stickers WHERE season_key = ? ORDER BY season_id, kind', [seasonKey]);
+ const rows = await db.all<CountedStickerRow>(`${stickerQuery} WHERE stickers.season_key = ? ORDER BY stickers.season_id, stickers.kind`, [seasonKey]);
  return rows.map(row => ({ seasonId: row.season_id, sticker: placed(row) }));
 }
 

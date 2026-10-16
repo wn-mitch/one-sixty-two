@@ -17,7 +17,7 @@
 		{/if}
 		<div data-layer="frame.photo-keyline" data-surface="stamp" style={`position:absolute; left:3.2cqw; right:3.2cqw; top:29.8cqw; height:76cqw; background:var(--stamp, ${s.k.paper});`}></div>
 		<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:4.4cqw; right:4.4cqw; top:31cqw; height:73.6cqw; overflow:hidden; background:${s.k.accent};`}>
-			<PhotoMask s={s} emptyStyle={`background:repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 1.1cqw, rgba(0,0,0,0) 1.1cqw 2.2cqw), ${s.k.accent};`} />
+			<PhotoMask front s={s} emptyStyle={`background:repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 1.1cqw, rgba(0,0,0,0) 1.1cqw 2.2cqw), ${s.k.accent};`} />
 		</div>
 
 		<div data-layer="logo.disc" data-surface="stamp" style={`position:absolute; top:4.4cqw; right:4.4cqw; width:22cqw; height:22cqw; border-radius:${s.logoShape === 'square' ? '0' : '50%'}; background:var(--stamp, ${s.k.paper}); box-shadow:inset 0 0 0 0.9cqw ${s.k.accent};`}>

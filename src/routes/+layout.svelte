@@ -17,6 +17,8 @@
 
 	let { children }: LayoutProps = $props();
 	const pendingScreens = setContext('screen-loading', new SvelteMap<symbol, string>());
+	const classicActions = $state<{ newDraft?: () => void }>({});
+	setContext('classic-actions', classicActions);
 	const changingPage = $derived(!!navigating.to && navigating.to.url.pathname !== navigating.from?.url.pathname);
 	const loadingLabel = $derived([...pendingScreens.values()].at(-1) ?? 'Loading…');
 	const sitePreview = sitePreviewImage();
@@ -119,7 +121,7 @@
 				aria-label={balance === null ? 'Shop' : `Shop, ${balance} ${balance === 1 ? 'token' : 'tokens'}`}>
 				<span>Shop</span><span class="shop-balance" data-token-wallet aria-hidden="true"><TokenAmount amount={balance} /></span>
 			</a>
-			<SiteMenu />
+			<SiteMenu onNew={classicActions.newDraft} />
 		</nav>
 	</header>
 	{@render children()}

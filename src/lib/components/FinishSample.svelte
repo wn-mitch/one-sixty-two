@@ -4,6 +4,7 @@
 	import type { CardEra } from '../cards/era.ts';
 	import { ERA_FOIL } from '../cards/surface/foil-plates.ts';
 	import { ERA_HOLO } from '../cards/surface/holo-films.ts';
+	import { stockFor } from '../cards/surface/surfaces.ts';
 	import { CardLight, LightEngine, lightCanvas } from '../cards/surface/card-light.ts';
 	import { tilt, type CardFinish } from '../cards/motion.ts';
 
@@ -18,15 +19,15 @@
 	const palette = $derived(tier === 'gem' ? appearance?.palette : undefined);
 	const finish = $derived((tier === 'foil' ? 'silver' : tier === 'emboss' ? 'gold' : tier) as CardFinish);
 	const identity = $derived(`finish-sample:${tier}:${era}:${plate ?? ''}:${film ?? ''}:${palette ?? ''}`);
+	// This swatch's map contains only stock and a tier-specific ring, not its shader's film or plate.
+	const mapKey = $derived(JSON.stringify([tier, stockFor(era)]));
 	$effect(() => {
-		void tier;
-		void era;
+		void mapKey;
 		LightEngine.shared()?.invalidate(light);
 	});
 	$effect(() => {
-		void plate;
-		void film;
-		void palette;
+		// Era also supplies plate tuning and the pattern seed, even when the chosen material is unchanged.
+		void identity;
 		LightEngine.shared()?.dirty(light);
 	});
 </script>

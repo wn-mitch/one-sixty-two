@@ -19,6 +19,8 @@ function entry(key: string, wins: number, savedAt: string, hr = 10): LibraryEntr
   roster: [{ seasonId: SLUGGER, label: 'Slugger 2001', slot: 'LF' }, { seasonId: ARM, label: 'Arm 1999', slot: 'SP1' }]
  };
 }
+const mvpEntry = (key: string, wins: number, savedAt: string, seasonId: string, hr = 10): LibraryEntry =>
+ ({ ...entry(key, wins, savedAt, hr), mvp: { seasonId, label: seasonId } });
 const save = (item: LibraryEntry) => [...seasonStatements(item, item.savedAt), ...collectionStatements(item, item.savedAt)];
 const day = (index: number) => new Date(Date.UTC(2026, 0, index + 1)).toISOString();
 
@@ -36,6 +38,35 @@ describe('collection', () => {
   expect(slugger.stickers.map(sticker => [sticker.kind, sticker.earnedAt])).toEqual([['grade-f', day(0)], ['hr-40', day(0)], ['wins-100', day(0)]]);
   // Every card on a complete season earns its grade once; a later season with the same grade, below every team tier, adds nothing.
   expect((await stickersFromSeason(db, 'k2'))).toEqual([]);
+ });
+ it('counts distinct completed MVP awards once per season and keeps the award after deletion', async () => {
+  const { db } = await memoryDb();
+  await db.run(save(mvpEntry('k1', 100, day(0), SLUGGER)));
+  await db.run(save(mvpEntry('k2', 90, day(1), SLUGGER)));
+  await moveSticker(db, SLUGGER, 'mvp', 0.3, 1.5);
+  await setStickerHidden(db, SLUGGER, 'mvp', true);
+  // Re-saving k2 twice is the same season, while k3 rosters the card without making it MVP.
+  await db.run(save(mvpEntry('k2', 90, day(2), SLUGGER)));
+  await db.run(save(mvpEntry('k2', 90, day(2), ARM)));
+  await db.run(save(mvpEntry('k3', 80, day(3), ARM)));
+
+  const sluggerMvp = (await loadStickers(db)).get(SLUGGER)!.find(sticker => sticker.kind === 'mvp')!;
+  expect(sluggerMvp).toMatchObject({ count: 2, x: 0.3, y: 0.92, hidden: true });
+  expect((await stickersFromSeason(db, 'k1')).find(item => item.sticker.kind === 'mvp')?.sticker).toMatchObject({ count: 2, x: 0.3, hidden: true });
+  expect((await loadStickers(db)).get(SLUGGER)!.find(sticker => sticker.kind === 'grade-f')).not.toHaveProperty('count');
+  expect(await db.all('SELECT season_key, is_mvp FROM rostered WHERE season_id = ? ORDER BY season_key', [SLUGGER])).toEqual([
+   { season_key: 'k1', is_mvp: 1 }, { season_key: 'k2', is_mvp: 1 }, { season_key: 'k3', is_mvp: 0 }
+  ]);
+  expect((await loadStickers(db)).get(ARM)!.find(sticker => sticker.kind === 'mvp')).toMatchObject({ count: 2 });
+
+  await db.run([{ sql: "DELETE FROM seasons WHERE key IN ('k1', 'k2', 'k3')" }]);
+  expect((await loadStickers(db)).get(SLUGGER)!.find(sticker => sticker.kind === 'mvp')).toMatchObject({ count: 2, x: 0.3, hidden: true });
+  expect((await loadStickers(db)).get(ARM)!.find(sticker => sticker.kind === 'mvp')).toMatchObject({ count: 2 });
+ });
+ it('defaults an orphan legacy MVP sticker to one award', async () => {
+  const { db } = await memoryDb();
+  await db.run([{ sql: 'INSERT INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)', bind: ['orphan', 'mvp', 'legacy', null, 0.1, 0.2, 0] }]);
+  expect((await loadStickers(db)).get('orphan')).toEqual([{ kind: 'mvp', count: 1, x: 0.1, y: 0.2, hidden: false, earnedAt: 'legacy' }]);
  });
 
  it('reports only player-seasons no earlier season rostered as new cards, even after a re-save', async () => {

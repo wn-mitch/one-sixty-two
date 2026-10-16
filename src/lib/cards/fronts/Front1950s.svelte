@@ -19,7 +19,7 @@
 			<div data-layer="material.photo-bevel" aria-hidden="true" style="position:absolute; left:5cqw; right:5cqw; top:5cqw; height:93cqw; border-radius:0.8cqw; box-shadow:calc(var(--lx, -0.45) * -0.8cqw) calc(var(--ly, -0.75) * -0.8cqw) 1cqw rgba(0,0,0,0.45), calc(var(--lx, -0.45) * 0.5cqw) calc(var(--ly, -0.75) * 0.5cqw) 0.6cqw rgba(255,255,255,0.6);"></div>
 		{/if}
 		<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:5cqw; right:5cqw; top:5cqw; height:93cqw; overflow:hidden; border-radius:0.8cqw; background:${s.k.accent};`}>
-			<PhotoMask s={s}>
+			<PhotoMask front s={s}>
 				<div data-layer="frame.photo-hairline" aria-hidden="true" style="position:absolute; inset:1.4cqw; border:0.3cqw solid rgba(255,255,255,.9); border-radius:0.4cqw; pointer-events:none;"></div>
 			</PhotoMask>
 		</div>

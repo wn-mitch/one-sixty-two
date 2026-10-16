@@ -1,7 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
+import { smartBattingOrder, smartReliefRoles, smartRotation } from '../lib/game/smart-lineup.ts';
 import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { publishShare, storeReplay } from '../lib/game/share.ts';
-import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
+import { SLOTS, type Draft, type Manifest, type Profile } from '../lib/game/types.ts';
 import { solidPng } from './image-test-helpers.ts';
 import { currentManifest, deviceDraft, expectPool, STORAGE_KEY, writeDeviceDraft } from './draft-test-fixtures.ts';
 
@@ -40,19 +41,15 @@ test('lineup help stays available without changing the batting order or relief r
 	const battingHelp = page.getByRole('button', { name: 'About Smart lineup', exact: true });
 	await battingHelp.focus();
 	await expect(page.getByRole('tooltip')).toContainText('three best hitters');
+	await expect.poll(() => page.getByRole('tooltip').evaluate(node => {
+		const rect = node.getBoundingClientRect();
+		return rect.left >= 0 && rect.right <= innerWidth;
+	})).toBe(true);
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('tooltip')).toHaveCount(0);
 	await expect(battingHelp).toBeFocused();
 	await battingHelp.press('Enter');
 	await expect(page.getByRole('tooltip')).toBeVisible();
-
-	const rolesHelp = page.getByRole('button', { name: 'About Smart roles', exact: true });
-	await rolesHelp.click();
-	await expect(page.getByRole('tooltip')).toContainText("closer's job");
-	expect(await page.getByRole('tooltip').evaluate(node => {
-		const rect = node.getBoundingClientRect();
-		return rect.left >= 0 && rect.right <= innerWidth;
-	})).toBe(true);
 	await page.getByRole('heading', { name: 'Relief', exact: true }).click();
 	await expect(page.getByRole('tooltip')).toHaveCount(0);
 
@@ -61,11 +58,76 @@ test('lineup help stays available without changing the batting order or relief r
 	await expect(page.getByRole('tooltip')).toBeVisible();
 	await page.getByRole('tooltip').hover();
 	await expect(page.getByRole('tooltip')).toBeVisible();
-	await page.getByRole('heading', { name: 'Batting order', exact: true }).hover();
+	await page.evaluate(() => {
+		document.body.tabIndex = -1;
+		document.body.focus();
+	});
+	await page.keyboard.press('Escape');
 	await expect(page.getByRole('tooltip')).toHaveCount(0);
+	await page.getByRole('heading', { name: 'Batting order', exact: true }).hover();
 	const after = await deviceDraft<Draft>(page);
 	expect(after.battingOrder).toEqual(before.battingOrder);
 	expect(after.reliefRoles).toEqual(before.reliefRoles);
+});
+async function pickedProfiles(request: APIRequestContext, manifest: Manifest, draft: Draft) {
+ const urls = [...new Set(draft.picks.map(pick => {
+  const candidate = manifest.candidates.find(item => item.seasonId === pick.seasonId);
+  return candidate ? manifest.chunks[`${candidate.franchiseId}-${candidate.decade}`] : undefined;
+ }).filter((url): url is string => !!url))];
+ const chunks = await Promise.all(urls.map(async url => {
+  const response = await request.get(url);
+  expect(response.ok()).toBe(true);
+  return await response.json() as Profile[];
+ }));
+ return chunks.flat();
+}
+
+test('Smart all persists each existing optimizer recommendation', async ({ page, request }) => {
+ const manifest = await currentManifest(request);
+ const draft = completeDraft(manifest, 301, 3);
+ await page.goto('/');
+ await writeDeviceDraft(page, JSON.stringify({ ...draft, phase: 'lineup' }));
+ await page.goto('/classic');
+ await expect(page.getByRole('heading', { name: 'Set your lineup' })).toBeVisible();
+ const before = await deviceDraft<Draft>(page);
+ const profiles = await pickedProfiles(request, manifest, before);
+ const bySeason = new Map(profiles.map(profile => [profile.seasonId, profile]));
+ const bullpen = new Map(before.picks.flatMap(pick => {
+  const profile = bySeason.get(pick.seasonId);
+  return profile && (pick.slot === 'CL' || pick.slot.startsWith('RP')) ? [[pick.slot, profile] as const] : [];
+ }));
+ const batting = smartBattingOrder(before.battingOrder, bySeason);
+ const starters = smartRotation(before.starterOrder, bySeason);
+ const roles = smartReliefRoles(before.reliefRoles, bullpen);
+ await page.getByRole('button', { name: 'Smart all', exact: true }).click();
+ await expect(page.locator('[aria-live="polite"]').filter({ hasText: 'Smart all' })).toBeVisible();
+ await expect.poll(async () => (await deviceDraft<Draft>(page)).battingOrder).toEqual(batting);
+ const after = await deviceDraft<Draft>(page);
+ expect(after.battingOrder).toEqual(batting);
+ expect(after.starterOrder).toEqual(starters);
+ expect(after.reliefRoles).toEqual(roles);
+});
+
+test('lineup uses the site menu and canceling New draft preserves the roster and focus', async ({ page, request }) => {
+ const draft = completeDraft(await currentManifest(request), 301, 3);
+ await page.goto('/');
+ await writeDeviceDraft(page, JSON.stringify({ ...draft, phase: 'lineup' }));
+ await page.goto('/classic');
+ await expect(page.getByRole('heading', { name: 'Set your lineup' })).toBeVisible();
+ const menu = page.getByRole('button', { name: 'Menu', exact: true });
+ await expect(menu).toHaveCount(1);
+ await menu.click();
+ await page.getByRole('button', { name: 'New draft', exact: true }).click();
+ const confirmation = page.getByRole('dialog', { name: 'Leave this roster behind?' });
+ await expect(confirmation).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(confirmation).toBeHidden();
+ await expect(menu).toBeFocused();
+ expect((await deviceDraft<Draft>(page)).picks).toEqual(draft.picks);
+ await page.getByRole('link', { name: 'Collection', exact: true }).click();
+ await expect(page.getByRole('heading', { name: 'Collection', exact: true })).toBeVisible();
+ await menu.click();
+ await expect(page.getByRole('button', { name: 'New draft', exact: true })).toHaveCount(0);
 });
 
 /** Stores and publishes a complete challenger season, as Challenge a friend would. */

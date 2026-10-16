@@ -203,23 +203,81 @@ test.describe('application workshop stories', () => {
 		const review = page.locator('#results-card-review');
 		await expect(review.locator('[data-card-reader]:popover-open')).toBeVisible();
 		await expect(inspect).toHaveAttribute('aria-expanded', 'true');
-		// The raised card steps through the whole hand by button or arrow key.
+		// The dots retain original draft order, independent of awards and field-slot order.
 		const first = await review.getAttribute('data-season-id');
-		const count = review.locator('.hand-count');
-		const [, start, total] = (await count.textContent())!.match(/(\d+) \/ (\d+)/)!.map(Number);
-		expect(total).toBe(example.draft.picks.length);
+		const start = example.draft.picks.findIndex(pick => pick.seasonId === first);
+		const total = example.draft.picks.length;
+		const dots = review.getByRole('group', { name: 'Cards in draft order' }).getByRole('button');
+		await expect(dots).toHaveCount(total);
+		await expect(dots.nth(start)).toHaveAttribute('aria-current', 'true');
+		await expect(review.locator('.hand-neighbor[data-hand-offset="-1"] .results-back')).toHaveCount(1);
+		await expect(review.locator('.hand-neighbor[data-hand-offset="1"] .results-back')).toHaveCount(1);
+		const active = await review.locator('[data-flip]').boundingBox();
+		const previousArrow = await review.getByRole('button', { name: /^Previous card: / }).boundingBox();
+		const nextArrow = await review.getByRole('button', { name: /^Next card: / }).boundingBox();
+		const dotTrack = await review.locator('.hand-dots').boundingBox();
+		expect(previousArrow!.x + previousArrow!.width).toBeLessThan(active!.x);
+		expect(nextArrow!.x).toBeGreaterThan(active!.x + active!.width);
+		expect(dotTrack!.y).toBeGreaterThan(active!.y + active!.height);
 		await page.getByRole('button', { name: /^Next card: / }).click();
-		await expect(count).toHaveText(`${start % total + 1} / ${total}`);
-		await expect(review).not.toHaveAttribute('data-season-id', first!);
+		await expect(dots.nth((start + 1) % total)).toHaveAttribute('aria-current', 'true');
+		await expect(review).toHaveAttribute('data-season-id', example.draft.picks[(start + 1) % total].seasonId);
 		await expect(page.getByRole('button', { name: /^Next card: / })).toBeFocused();
 		await page.keyboard.press('ArrowLeft');
 		await expect(review).toHaveAttribute('data-season-id', first!);
+		// Browsing preserves historical/text presentation, then the front after flipping.
+		await review.getByRole('button', { name: 'Historical season', exact: true }).click();
+		await review.getByRole('button', { name: /^Show text version for / }).click();
+		await page.keyboard.press('ArrowRight');
+		await expect(review.getByRole('button', { name: 'Historical season', exact: true })).toHaveAttribute('aria-pressed', 'true');
+		await expect(review.locator('[data-flip]')).toHaveAttribute('data-text-back', 'true');
+		await review.getByRole('button', { name: 'Show front', exact: true }).click();
+		await page.keyboard.press('ArrowRight');
+		await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'front');
+		// Direct pick navigation and wrap both follow the same original hand.
+		await dots.last().click();
+		await expect(review).toHaveAttribute('data-season-id', example.draft.picks.at(-1)!.seasonId);
+		await page.keyboard.press('ArrowRight');
+		await expect(review).toHaveAttribute('data-season-id', example.draft.picks[0].seasonId);
+		await expect(dots.first()).toHaveAttribute('aria-current', 'true');
+		await page.keyboard.press('ArrowLeft');
+		await expect(review).toHaveAttribute('data-season-id', example.draft.picks.at(-1)!.seasonId);
 		await page.keyboard.press('Escape');
 		await expect(review).toHaveCount(0);
 		await expect(inspect).toHaveAttribute('aria-expanded', 'false');
 		await expect(inspect).toBeFocused();
 		await page.getByRole('button', { name: /new draft/i }).click();
 		await expect(page.locator('.draft-board')).toBeVisible();
+	});
+
+	test('keeps the results hand reachable on a narrow screen with reduced motion and touch browsing', async ({ page }) => {
+		await page.setViewportSize({ width: 320, height: 874 });
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await openStory(page, 'results-season--complete');
+		await waitForResult(page);
+		await page.locator('.award-card').first().click();
+		const review = page.locator('#results-card-review');
+		const reader = review.locator('[data-card-reader]');
+		const first = await review.getAttribute('data-season-id');
+		const index = example.draft.picks.findIndex(pick => pick.seasonId === first);
+		const previous = review.getByRole('button', { name: /^Previous card: / });
+		const next = review.getByRole('button', { name: /^Next card: / });
+		await expect(previous).toBeInViewport();
+		await expect(next).toBeInViewport();
+		await expect(review.locator('.hand-dots')).toBeInViewport();
+		expect(await review.locator('.hand-dot').evaluateAll(buttons => buttons.every(button => button.getBoundingClientRect().width >= 24))).toBe(true);
+		expect(await review.locator('.back').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+		await expect(reader).toHaveCSS('touch-action', 'pan-y pinch-zoom');
+		await next.click();
+		await expect(review).toHaveAttribute('data-season-id', example.draft.picks[(index + 1) % example.draft.picks.length].seasonId);
+		expect(await review.locator('[data-flip]').evaluate(node => node.getAnimations().length)).toBe(0);
+		await reader.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 80, clientY: 300 });
+		await reader.dispatchEvent('pointerup', { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 160, clientY: 305 });
+		await expect(review).toHaveAttribute('data-season-id', first!);
+		await expect(review.locator('[data-cardbox]')).toHaveAttribute('data-face', 'back');
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+		await page.keyboard.press('Escape');
+		await expect(review).toHaveCount(0);
 	});
 
 	test('keeps dense season totals and the last statistic reachable on a phone', async ({ page }) => {

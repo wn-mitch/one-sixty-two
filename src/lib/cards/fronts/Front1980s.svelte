@@ -16,7 +16,7 @@
 			<div data-layer="material.photo-bevel" style="position:absolute; left:5.3cqw; right:5.3cqw; top:5.3cqw; height:87.4cqw; border-radius:0; box-shadow:calc(var(--lx, -.45) * -.8cqw) calc(var(--ly, -.75) * -.8cqw) 1cqw rgba(0,0,0,.45), calc(var(--lx, -.45) * .5cqw) calc(var(--ly, -.75) * .5cqw) .6cqw rgba(255,255,255,.6);"></div>
 		{/if}
 		<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:6cqw; right:6cqw; top:6cqw; height:86cqw; overflow:hidden; background:${s.k.accent}; box-shadow:0 0 0 .7cqw ${s.k.fieldOnStock};`}>
-			<PhotoMask {s} focus="50% 22%" />
+			<PhotoMask front {s} focus="50% 22%" />
 		</div>
 
 		<!-- Keep the badge's outer border inside the prism finish rim. -->

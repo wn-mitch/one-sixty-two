@@ -45,6 +45,7 @@ async function compilerFingerprint(dataManifestPath: string): Promise<string> {
 		join(root, 'src', 'lib', 'media', 'types.ts'),
 		join(root, 'src', 'lib', 'media', 'client.ts'),
 		join(root, 'src', 'lib', 'media', 'photo-policy.ts'),
+		join(root, 'src', 'lib', 'media', 'framing.ts'),
 		...mediaFiles.map((name) => join(root, 'scripts', 'media', name))
 	]) hash.update(path).update(await readFile(path));
 	return hash.digest('hex');
@@ -102,6 +103,7 @@ const photoReviews = await readJson<PhotoReview[]>(join(root, 'scripts', 'media'
 const teamPhotoReviews = await readJson<TeamPhotoReview[]>(join(root, 'scripts', 'media', 'team-photo-reviews.json'), 'team photo reviews');
 const atmosphereSources = await readJson<AtmosphereSourceRegistry>(join(root, 'scripts', 'media', 'atmosphere-sources.json'), 'atmosphere source registry');
 const tables = await acquireTables(offline);
+const photoFraming = await readJson<import('../src/lib/media/types.ts').PhotoFramingRegistry>(join(root, 'scripts', 'media', 'photo-framing.json'), 'photo framing registry');
 const generated = await generateMedia({
 	dataManifest,
 	tables,
@@ -109,6 +111,7 @@ const generated = await generateMedia({
 	playerSources,
 	reviewedPlayerPhotos,
 	photoReviews,
+	photoFraming,
 	teamPhotoReviews,
 	atmosphereSources,
 	cacheDir,

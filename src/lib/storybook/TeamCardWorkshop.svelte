@@ -55,8 +55,8 @@
 	function statsFor(team: LibraryView): ClubCardStat[] {
 		const differential = team.runs.scored - team.runs.allowed;
 		return [
-			{ label: 'Runs', value: `${differential > 0 ? '+' : differential < 0 ? '−' : ''}${Math.abs(differential)}`, primary: true },
-			{ label: 'Win %', value: (team.record.wins / Math.max(1, team.record.wins + team.record.losses)).toFixed(3).replace(/^0/, '') }
+			{ label: 'Run differential', value: `${differential > 0 ? '+' : differential < 0 ? '−' : ''}${Math.abs(differential)}`, primary: true },
+			{ label: 'Win %', value: `${(team.record.wins / Math.max(1, team.record.wins + team.record.losses) * 100).toFixed(1)}%` }
 		];
 	}
 

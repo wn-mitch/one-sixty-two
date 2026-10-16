@@ -11,6 +11,7 @@
  import InspectionBack from './InspectionBack.svelte';
  import { flip } from './motion.ts';
  import { autonomousMotion } from './motion-runtime.ts';
+ import { EASE_OUT, MOTION } from '../motion-timing.ts';
 
 let {
  s,
@@ -28,6 +29,9 @@ let {
  raisedOnly = false,
  flipInPlace = false,
  readerNav,
+ readerDeck,
+ deckPosition,
+ onStep,
  pairFaces = true,
  wall = false,
  stickers,
@@ -50,6 +54,9 @@ let {
  flipInPlace?: boolean;
  /** Controls beside the raised reader's turn button, such as stepping through a hand of cards. */
  readerNav?: Snippet;
+ readerDeck?: Snippet;
+ deckPosition?: { key: string; direction: -1 | 1 };
+ onStep?: (direction: -1 | 1) => void;
  /** Raise the front beside the back where the screen has room; off where the pair would cover its source. */
  pairFaces?: boolean;
  /** The front drifts and catches the light on its own until it is hovered. */
@@ -220,6 +227,65 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
  return { destroy: () => node.removeEventListener('click', handleClick) };
 }
 
+/** Hand browsing moves independently of the turn/return transform owned by flip. */
+function browse(node: HTMLElement, position: { key: string; direction: -1 | 1; opened: boolean } | undefined) {
+ if (!position) return {};
+ let previousKey = position.key;
+ let animation: Animation | undefined;
+ const unsubscribe = appSettings.subscribe(settings => { if (!settings.animateCards) animation?.cancel(); });
+ return {
+  update(next: typeof position) {
+   if (!next?.opened) { animation?.cancel(); return; }
+   if (next.key === previousKey) return;
+   previousKey = next.key;
+   animation?.cancel();
+   if (!appSettings.animateCards) return;
+   animation = node.animate([
+    { translate: `${next.direction * 60}% 0 -160px`, rotate: `y ${next.direction * -40}deg`, scale: '.82' },
+    { translate: '0 0 0', rotate: 'y 0deg', scale: '1' }
+   ], { duration: MOTION.cardFlight / appSettings.snapshot.cardSpeed, easing: EASE_OUT });
+  },
+  destroy() { animation?.cancel(); unsubscribe(); }
+ };
+}
+
+function swipeHand(node: HTMLElement) {
+ let start: { x: number; y: number; id: number } | undefined;
+ let suppressClick = false;
+ const down = (event: PointerEvent) => {
+  if (!onStep || !readerOpen || event.pointerType !== 'touch' || !event.isPrimary) return;
+  if (event.target instanceof Element && event.target.closest('button, a, input, select, textarea')) return;
+  start = { x: event.clientX, y: event.clientY, id: event.pointerId };
+  suppressClick = false;
+ };
+ const up = (event: PointerEvent) => {
+  if (!start || start.id !== event.pointerId) return;
+  const dx = event.clientX - start.x;
+  const dy = event.clientY - start.y;
+  start = undefined;
+  if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  suppressClick = true;
+  onStep?.(dx < 0 ? 1 : -1);
+ };
+ const cancel = () => { start = undefined; };
+ const click = (event: MouseEvent) => {
+  if (!suppressClick) return;
+  suppressClick = false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+ };
+ node.addEventListener('pointerdown', down);
+ node.addEventListener('pointerup', up);
+ node.addEventListener('pointercancel', cancel);
+ node.addEventListener('click', click, true);
+ return { destroy() {
+  node.removeEventListener('pointerdown', down);
+  node.removeEventListener('pointerup', up);
+  node.removeEventListener('pointercancel', cancel);
+  node.removeEventListener('click', click, true);
+ } };
+}
+
 </script>
 
 <div
@@ -234,7 +300,7 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
   </button>
  {/if}
   <div class="slot" aria-hidden="true"></div>
-  <div bind:this={stack} class="reader" class:paired class:front-up={frontUp} data-card-reader popover="manual" tabindex="-1">
+  <div bind:this={stack} class="reader" class:deck-reader={!!readerDeck} class:paired class:front-up={frontUp} data-card-reader popover="manual" tabindex="-1" use:swipeHand>
    {#if paired && readerOpen}
     <!-- The face the raised card is not showing. -->
     <div class="companion" data-card-companion aria-hidden="true" inert out:fade={{ duration: appSettings.animateCards ? 160 : 0 }}>
@@ -243,7 +309,8 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
      {:else}<Card {s} face="back" {onDetails} />{/if}
     </div>
    {/if}
-   <div class="stack" class:turned class:back-layout={backDisplayed && (appSettings.animateCards || turned)} data-flip data-text-back={textBack} data-motion-reduced={!appSettings.animateCards} use:flip={{ turned, opened: readerOpen, sourceElement, onReturned: flightReturned }} use:surfaceFlip>
+   {#if readerDeck && readerOpen}<div class="reader-deck-art" data-motion-reduced={!appSettings.animateCards}>{@render readerDeck()}</div>{/if}
+   <div class="stack" class:turned class:back-layout={backDisplayed && (appSettings.animateCards || turned)} data-flip data-text-back={textBack} data-motion-reduced={!appSettings.animateCards} use:flip={{ turned, opened: readerOpen, sourceElement, onReturned: flightReturned }} use:browse={deckPosition ? { ...deckPosition, opened: readerOpen } : undefined} use:surfaceFlip>
     <div class="front" inert={turned} aria-hidden={turned}>
      {#if onFrontSelect}
       <button type="button" class="select-front" aria-label="Select {s.year} {s.full}" onclick={frontClick} ondblclick={raiseFront}><Card {s} face="front" interactive {wall} {stickers} {freshStickers} {onDetails} /></button>
@@ -331,6 +398,19 @@ function surfaceFlip(node: HTMLElement): { destroy(): void } {
  @keyframes companion-in { from { opacity: 0; transform: translateX(2rem); } }
  :global([data-motion='off']) .companion { animation: none; }
  @media (prefers-reduced-motion: reduce) { .companion { animation: none; } }
+ /* The hand occupies the same top layer; only its active card owns flip and return flights. */
+ .cardbox .reader.deck-reader:popover-open { width: min(410px, calc(100vw - 7rem), calc((100dvh - 11rem) * 5 / 7)); translate: -50% -50%; padding-bottom: 3rem; perspective: 1000px; isolation: isolate; touch-action: pan-y pinch-zoom; }
+ .deck-reader .stack { z-index: 1; }
+ .deck-reader .reader-return { position: relative; z-index: 2; }
+ .deck-reader .reader-nav { z-index: 2; inset: 0; height: auto; }
+ .reader-deck-art { position: absolute; z-index: 0; inset: 0 0 6.5rem; clip-path: inset(-1rem calc((100% - 100vw + 1rem) / 2) -1rem); pointer-events: none; }
+ .deck-reader .back-layout .back { max-height: calc(100dvh - 11rem); }
+ .reader-deck-art[data-motion-reduced='true'] :global(.hand-neighbor) { transition: none; }
+ @media (max-width: 25rem) {
+  .cardbox .reader.deck-reader:popover-open { padding-bottom: 5.75rem; width: min(410px, calc(100vw - 7rem), calc((100dvh - 14rem) * 5 / 7)); }
+  .deck-reader .back-layout .back { max-height: calc(100dvh - 14rem); }
+  .reader-deck-art { bottom: 9.25rem; }
+ }
  .front :global(.card) { transition: opacity 80ms var(--ease-out); }
  .stack[data-motion-reduced='true'] .front :global(.card) { transition: none; }
  .stack[data-motion-reduced='true'], .stack[data-motion-reduced='true'] .back, .stack[data-motion-reduced='true'].back-layout .front { transform: none; }

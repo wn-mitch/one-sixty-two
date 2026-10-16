@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readLibrary } from '../game/library.ts';
+import { readLibrary, type LibraryEntry } from '../game/library.ts';
 import { loadSeriesHistory } from '../game/series-history.ts';
-import type { LibraryEntry } from '../game/library.ts';
+import { collectionStatements } from '../collection/collection.ts';
+import { seasonStatements } from './season-rows.ts';
 import { completionReward, readShop } from '../cosmetics/ledger.ts';
 import { NO_LEGACY } from './legacy.ts';
 import { migrate, MIGRATIONS, SCHEMA_VERSION, type Migration } from './migrations.ts';
@@ -56,7 +57,12 @@ describe('device database migrations', () => {
   const before = { library: await readLibrary(db), rostered: await db.all('SELECT * FROM rostered'), draft: await db.all('SELECT json FROM draft') };
   expect(await db.all("SELECT name FROM sqlite_master WHERE name = 'draft_runs'")).toEqual([]);
   expect(migrate(raw, NO_LEGACY)).toEqual({ from: 2, to: SCHEMA_VERSION });
-  expect({ library: await readLibrary(db), rostered: await db.all('SELECT * FROM rostered'), draft: await db.all('SELECT json FROM draft') }).toEqual(before);
+  const after = { library: await readLibrary(db), rostered: await db.all('SELECT * FROM rostered'), draft: await db.all('SELECT json FROM draft') };
+  expect({ ...after, rostered: after.rostered.map(({ is_mvp: _isMvp, ...row }) => row) }).toEqual(before);
+  expect(await db.all('SELECT season_id, is_mvp FROM rostered WHERE season_key = ? ORDER BY season_id', ['k1'])).toEqual([
+   { season_id: 'b:2001:NL:SFN', is_mvp: 1 },
+   { season_id: 'p:1999:AL:BOS', is_mvp: 0 }
+  ]);
   expect(before.rostered).toHaveLength(2);
   expect(await db.all('SELECT * FROM draft_runs')).toEqual([]);
  });
@@ -157,6 +163,37 @@ describe('device database migrations', () => {
    { season_id: 'f', kind: 'war-22', earned_at: '2026-01-01', season_key: 'k1', x: 0.9, y: 0.9, hidden: 0 }
   ]);
  });
+ it('backfills MVP credit from retained seasons and deleted-season sticker provenance', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 10));
+  const retained = entry('retained', 120);
+  const deleted = entry('deleted', 100);
+  await db.run([
+   ...seasonStatements(deleted, deleted.savedAt), ...collectionStatements(deleted, deleted.savedAt),
+   ...seasonStatements(retained, retained.savedAt), ...collectionStatements(retained, retained.savedAt),
+   { sql: "UPDATE stickers SET x = 0.3, y = 0.92, hidden = 1 WHERE kind = 'mvp' AND season_key = 'deleted'" },
+   { sql: "DELETE FROM seasons WHERE key = 'deleted'" }
+  ]);
+  const before = {
+   seasons: await db.all('SELECT * FROM seasons'),
+   rostered: await db.all('SELECT * FROM rostered'),
+   stickers: await db.all('SELECT * FROM stickers')
+  };
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 10, to: SCHEMA_VERSION });
+  const after = {
+   seasons: await db.all('SELECT * FROM seasons'),
+   rostered: await db.all('SELECT * FROM rostered'),
+   stickers: await db.all('SELECT * FROM stickers')
+  };
+  expect(after.seasons).toEqual(before.seasons);
+  expect(after.stickers).toEqual(before.stickers);
+  expect(after.rostered.map(({ is_mvp: _isMvp, ...row }) => row)).toEqual(before.rostered);
+  expect(await db.all('SELECT season_key, season_id, is_mvp FROM rostered ORDER BY season_key, season_id')).toEqual([
+   { season_key: 'deleted', season_id: 'b:2001:NL:SFN', is_mvp: 1 },
+   { season_key: 'deleted', season_id: 'p:1999:AL:BOS', is_mvp: 0 },
+   { season_key: 'retained', season_id: 'b:2001:NL:SFN', is_mvp: 1 },
+   { season_key: 'retained', season_id: 'p:1999:AL:BOS', is_mvp: 0 }
+  ]);
+ });
 
  it('seeds zero-credit receipts for existing and deleted history without altering historical data', async () => {
   const { db, raw } = await memoryDb({
@@ -180,7 +217,17 @@ describe('device database migrations', () => {
   const before = await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)));
   const runs = await db.all('SELECT * FROM draft_runs');
   expect(migrate(raw, NO_LEGACY)).toEqual({ from: 8, to: SCHEMA_VERSION });
-  expect(await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)))).toEqual(before);
+  const after = await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)));
+  expect(after.slice(0, 3)).toEqual(before.slice(0, 3));
+  expect(after[3].map(({ is_mvp: _isMvp, ...row }) => row)).toEqual(before[3]);
+  expect(after.slice(4)).toEqual(before.slice(4));
+  expect(await db.all('SELECT season_id, season_key, is_mvp FROM rostered ORDER BY season_key, season_id')).toEqual([
+   { season_id: 'b:2001:NL:SFN', season_key: 'deleted', is_mvp: 1 },
+   { season_id: 'p:1999:AL:BOS', season_key: 'deleted', is_mvp: 0 },
+   { season_id: 'b:2001:NL:SFN', season_key: 'kept', is_mvp: 1 },
+   { season_id: 'p:1999:AL:BOS', season_key: 'kept', is_mvp: 0 },
+   { season_id: 'other', season_key: 'rostered-only', is_mvp: 0 }
+  ]);
   expect(await db.all('SELECT * FROM draft_runs')).toEqual(runs.map(run => ({ ...run, resume_state: 'active' })));
   expect(await db.all('SELECT key, credit FROM shop_completions ORDER BY key')).toEqual([
    { key: 'classic:deleted', credit: 0 },

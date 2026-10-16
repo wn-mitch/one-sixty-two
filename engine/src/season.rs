@@ -146,12 +146,7 @@ impl Engine {
                     result.highlight_trace = Some(trace.clone());
                 }
             }
-            if let Some(moment) = &game.lowlight {
-                if result.lowlight.as_ref().is_none_or(|worst| moment.swing < worst.swing) {
-                    result.lowlight = Some(moment.clone());
-                    result.lowlight_trace = Some(trace.clone());
-                }
-            }
+            select_lowlight(game.win, game.lowlight.as_ref(), &trace, &mut result.lowlight, &mut result.lowlight_trace);
             trace.clear();
             result.starter_starts[challenge.starter_index] += 1;
             accumulate_box(&mut totals, challenge_box)?;
@@ -172,6 +167,16 @@ impl Engine {
         result.batting = totals.batting;
         result.pitching = totals.pitching;
         Ok(result)
+    }
+}
+
+fn select_lowlight(win: bool, moment: Option<&crate::types::SeasonMoment>, trace: &[WinPoint], lowlight: &mut Option<crate::types::SeasonMoment>, lowlight_trace: &mut Option<Vec<WinPoint>>) {
+    if win { return; }
+    if let Some(moment) = moment {
+        if lowlight.as_ref().is_none_or(|worst| moment.swing < worst.swing) {
+            *lowlight = Some(moment.clone());
+            *lowlight_trace = Some(trace.to_vec());
+        }
     }
 }
 
@@ -284,4 +289,45 @@ pub fn build_schedule(seed: u32, opponent_ids: &[&str]) -> Result<Vec<ScheduleGa
         let opponent = opponent_ids.iter().position(|id| *id == set.opponent).expect("scheduled opponent exists");
         std::iter::repeat_n(ScheduleGame { opponent, is_home: set.is_home }, set.games)
     }).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Half, MomentOutcome, MomentPlay, SeasonMoment};
+
+    #[test]
+    fn lowlight_ignores_wins_and_keeps_the_worst_loss_trace() {
+        let mut moment = SeasonMoment {
+            play: MomentPlay { outs_after: 1, contact: None, runners: Vec::new() },
+            game_number: 1, opponent_name: "Opponent".into(), is_home: true, inning: 9,
+            half: Half::Bottom, outs_before: 0, bases_before: 0,
+            challenge_runs_before: 0, opponent_runs_before: 1,
+            challenge_runs_after: 0, opponent_runs_after: 1,
+            batter_name: "Batter".into(), batter_season_id: "batter".into(),
+            pitcher_name: "Pitcher".into(), pitcher_season_id: "pitcher".into(),
+            challenge_batting: true, outcome: MomentOutcome::Strikeout, runs_scored: 0,
+            win_before: 0.9, win_after: 0.1, swing: -0.8,
+        };
+        let mut selected = None;
+        let mut selected_trace = None;
+        let winning_trace = [WinPoint { half: 18, win: 1.0 }];
+        for _ in 0..162 {
+            select_lowlight(true, Some(&moment), &winning_trace, &mut selected, &mut selected_trace);
+        }
+        assert!(selected.is_none());
+        assert!(selected_trace.is_none());
+
+        for (number, swing) in [(2, -0.2), (3, -0.5), (4, -0.3)] {
+            moment.game_number = number;
+            moment.swing = swing;
+            let trace = [WinPoint { half: number, win: 0.0 }];
+            select_lowlight(false, Some(&moment), &trace, &mut selected, &mut selected_trace);
+        }
+        moment.swing = -0.9;
+        select_lowlight(true, Some(&moment), &winning_trace, &mut selected, &mut selected_trace);
+        assert_eq!(selected.as_ref().unwrap().game_number, 3);
+        assert_eq!(selected.as_ref().unwrap().swing, -0.5);
+        assert_eq!(selected_trace.unwrap(), vec![WinPoint { half: 3, win: 0.0 }]);
+    }
 }

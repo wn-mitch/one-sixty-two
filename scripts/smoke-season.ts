@@ -50,6 +50,16 @@ function assertConcreteSeason(result: SeasonResult): void {
 		assert.notEqual(game.challengeRuns, game.opponentRuns, `Game ${game.number} ended tied`);
 		assert.equal(game.win, game.challengeRuns > game.opponentRuns, `Game ${game.number} has an inconsistent result`);
 	}
+	const eligible = result.games.filter(game => !game.win).flatMap(game => game.lowlight ? [game.lowlight] : []);
+	const worst = eligible.reduce<typeof result.lowlight>((selected, moment) => !selected || moment.swing < selected.swing ? moment : selected, null);
+	assert.deepStrictEqual(result.lowlight, worst, 'Season lowlight must be the worst swing from a loss');
+	if (worst) {
+		assert.equal(result.games[worst.gameNumber - 1].win, false, 'Lowlight game must be a loss');
+		assert.ok(result.lowlightTrace?.length, 'Lowlight must retain its game trace');
+		assert.equal(result.lowlightTrace.at(-1)?.win, 0, 'Lowlight trace must end in a loss');
+	} else {
+		assert.equal(result.lowlightTrace, null, 'A season without an eligible lowlight has no trace');
+	}
 }
 
 async function main(): Promise<void> {

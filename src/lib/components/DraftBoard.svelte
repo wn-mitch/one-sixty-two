@@ -125,13 +125,14 @@
  const shortName = (name: string) => name.split(' ').filter(part => !/^(Jr\.?|Sr\.?|II|III|IV)$/.test(part)).at(-1) ?? name;
  const selectedName = $derived(selectedProfile ? shortName(selectedProfile.displayName) : '');
  const pitcherOnly = $derived(destinations.length > 0 && destinations.every(slot => !HITTER_SLOTS.includes(slot as HitterSlot)));
- /** The next step, always in words beside the Draft button, so a disabled button never needs explaining by colour. */
+ /** Explain only a missing destination; the chosen card and slot already identify a valid pick. */
  const placementGuide = $derived(!selectedProfile ? '' : !destinations.length
   ? `No open spot fits ${selectedName}. Move a hitter to make room, or cancel.`
   : !pendingSlot ? `Choose ${pitcherOnly ? 'a pitching slot' : 'a highlighted position'} for ${selectedName}.`
-  : `${selectedName} will fill ${pendingSlot}. This uses pick ${draft.picks.length + 1} of ${rosterSlots.length}.`);
+  : '');
  const extraLeft = $derived(extraPacksLeft(draft));
  let draftMenuOpen = $state(false);
+ let draftMenuTrigger = $state<HTMLButtonElement>();
  const canConfirm = $derived(phase === 'choosing' && !busy && !leaving && !movingSeasonId && !!selectedProfile && !!pendingSlot && destinations.includes(pendingSlot));
 
  function clearTransient(): void {
@@ -673,11 +674,9 @@
   </div>
  {:else if selectedProfile}
   <div class="pick-confirmation" data-pending-slot={pendingSlot ?? ''} data-selected-season={selectedSeasonId}>
-   <GuideTip step="place" text={`Fill all ${rosterSlots.length} spots. Where a player can play matters as much as his numbers, so the best card isn't always the best pick.`} />
-   <p class="selected-identity"><strong>{selectedProfile.displayName}</strong> · {selectedProfile.year} {selectedProfile.historicalTeam}</p>
-   <p class="placement-hint" id="{uid}-placement-hint" aria-live="polite">{placementGuide}</p>
+  {#if placementGuide}<p class="placement-hint" id="{uid}-placement-hint" aria-live="polite">{placementGuide}</p>{/if}
    <div class="confirmation-actions">
-    <button type="button" class="primary" disabled={!canConfirm} aria-describedby="{uid}-placement-hint" onclick={() => void confirmPick()}>{pendingSlot ? `Draft ${selectedName} at ${pendingSlot}` : `Draft ${selectedName}`}</button>
+    <button type="button" class="primary" disabled={!canConfirm} aria-label={pendingSlot ? `Draft ${selectedName} at ${pendingSlot}` : `Draft ${selectedName}`} aria-describedby={placementGuide ? `${uid}-placement-hint` : undefined} onclick={() => void confirmPick()}>{pendingSlot ? `Draft at ${pendingSlot}` : 'Draft'}</button>
     {#if pendingSlot && destinations.length > 1}<button type="button" class="secondary" onclick={() => pendingSlot = null}>Change slot</button>{/if}
     <button type="button" class="quiet" onclick={cancelSelection}>Cancel</button>
    </div>
@@ -708,8 +707,7 @@
    <a class="shop-link" href="/shop" aria-label={shopState.snapshot ? `Shop, ${shopState.snapshot.balance} ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop'}>
     <span>Shop</span><span class="shop-balance" aria-hidden="true"><TokenAmount amount={shopState.snapshot?.balance ?? null} /></span>
    </a>
-   <SiteMenu />
-   <button class="secondary new-draft" disabled={loading} onclick={onNew}>New draft</button>
+   <SiteMenu onNew={onNew} />
   </header>
  {/if}
  <!-- Phones keep the roll and the field together in one sticky bar above the pool. -->
@@ -722,12 +720,12 @@
     <span class="field-count">· {draft.picks.length}/{rosterSlots.length}</span>
    </button>
    <div class="draft-menu">
-    <button type="button" class="secondary draft-menu-trigger" aria-expanded={draftMenuOpen} aria-controls="{uid}-draft-menu" onclick={() => draftMenuOpen = !draftMenuOpen}>
+    <button bind:this={draftMenuTrigger} type="button" class="secondary draft-menu-trigger" aria-expanded={draftMenuOpen} aria-controls="{uid}-draft-menu" onclick={() => draftMenuOpen = !draftMenuOpen}>
      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="3.5" cy="8" r="1.2"></circle><circle cx="8" cy="8" r="1.2"></circle><circle cx="12.5" cy="8" r="1.2"></circle></svg>
      <span class="sr-only">Draft options</span>
     </button>
     <div class="draft-menu-panel" id="{uid}-draft-menu" hidden={!draftMenuOpen}>
-     <button type="button" disabled={loading} onclick={() => { draftMenuOpen = false; onNew(); }}>New draft…</button>
+     <button type="button" disabled={loading} onclick={() => { draftMenuOpen = false; draftMenuTrigger?.focus({ preventScroll: true }); onNew(); }}>New draft…</button>
      <a href="/how-to-play">How to play</a>
     </div>
    </div>
@@ -836,7 +834,6 @@
  .confirmation-actions button, .move-controls button, .field-header button { min-height: 44px; }
  .pick-confirmation p, .move-controls p { margin: 0 0 .6rem; font-size: .85rem; overflow-wrap: anywhere; }
  .placement-hint { color: var(--muted); font-size: .85rem; }
- .selected-identity strong { color: var(--text); }
  .wide .move-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
  .wide .move-controls p { flex-basis: 100%; }
  .wide .confirmation-actions { gap: .4rem; }
@@ -849,6 +846,5 @@
  .shop-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; padding-inline: .75rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: 650 .875rem/1 var(--font-control); text-decoration: none; }
  .shop-link:hover { border-color: var(--accent); background: var(--surface); }
  .shop-balance { color: var(--accent); font-weight: 750; }
- .new-draft { flex: none; padding-inline: .75rem; font-size: .875rem; }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 </style>

@@ -35,7 +35,7 @@
 	{/if}
 	<div data-layer="frame.arch-keyline" data-surface="ink" style={`position:absolute; left:5.6cqw; right:5.6cqw; top:22.6cqw; height:70.8cqw; background:${s.k.field}; border-radius:44.4cqw 44.4cqw 2.2cqw 2.2cqw / 29.4cqw 29.4cqw 2.2cqw 2.2cqw;`}></div>
 	<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:7cqw; right:7cqw; top:24cqw; height:68cqw; overflow:hidden; background:${s.k.accent}; border-radius:43cqw 43cqw 1.4cqw 1.4cqw / 28cqw 28cqw 1.4cqw 1.4cqw;`}>
-		<PhotoMask {s} />
+		<PhotoMask front {s} />
 	</div>
 
 	<div data-layer="name.band" data-surface="frame" style={`position:absolute; left:0; right:0; top:88.5cqw; padding:2cqw 18cqw 1.8cqw; background:${s.k.field}; color:${s.k.onField}; text-align:center;`}>

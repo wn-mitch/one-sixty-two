@@ -12,6 +12,7 @@
  import { createOrderMotion, type OrderMotion } from './order-motion.ts';
  import { arriveAtTop, clearStage, flyInto, riseIn, stash, take } from './phase-motion.ts';
  import { MOTION } from '../motion-timing.ts';
+ import InfoTooltip from './InfoTooltip.svelte';
  import { smartBattingOrder, smartReliefRoles, smartRotation } from '../game/smart-lineup.ts';
  let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onRoles, onsimulate }: {
   draft: Draft;
@@ -27,8 +28,6 @@
   onsimulate: () => void;
  } = $props();
  let announcement = $state('');
- const helpId = $props.id();
- let activeHelp = $state<string | null>(null);
  type OrderKind = 'batting' | 'starter';
  type Drag = {
   kind: OrderKind; seasonId: string; pointerId: number; handle: HTMLButtonElement;
@@ -101,6 +100,16 @@
   if (busy) return;
   onRoles(smartRoles);
   announcement = `Smart roles set: ${smartRoles.map(assignment => `${bullpenProfiles.get(assignment.slot)?.displayName ?? assignment.slot} ${ROLE_NAMES[assignment.primary]}`).join(', ')}.`;
+ }
+
+ function applySmartAll(): void {
+  if (busy || drag) return;
+  animateOrder(lineupRoot?.querySelector<HTMLElement>('[data-order-kind="batting"]') ?? null, () => {
+   onOrder('batting', smartBatting);
+   onOrder('starter', smartStarters);
+   onRoles(smartRoles);
+  });
+  announcement = 'Smart all set the batting order, starting rotation, and relief roles.';
  }
 
  function rolesFor(slot: BullpenSlot): ReliefAssignment | undefined {
@@ -358,12 +367,11 @@
  });
 </script>
 
-<svelte:window onpointermove={moveDrag} onpointerup={finishDrag} onpointercancel={cancelPointer} onblur={() => cancelDrag()} onkeydown={event => { cancelDragKey(event); if (event.key === 'Escape') activeHelp = null; }} onpointerdown={event => { if (!(event.target instanceof Element && event.target.closest('.smart-help'))) activeHelp = null; }} onclickcapture={preventDragClick} />
+<svelte:window onpointermove={moveDrag} onpointerup={finishDrag} onpointercancel={cancelPointer} onblur={() => cancelDrag()} onkeydown={event => cancelDragKey(event)} onclickcapture={preventDragClick} />
 
 <section bind:this={lineupRoot} class="lineup" aria-label="Set your lineup" aria-busy={busy} inert={leaving}>
  <header>
-  <h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">Set your lineup</h2>
-  <p class="muted">Drag the numbers or use the arrows to set the order. Tap a card to inspect its season.</p>
+  <div class="lineup-heading"><h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">Set your lineup</h2>{@render smartButton('Smart all', battingIsSmart && startersAreSmart && rolesAreSmart, applySmartAll, 'Smart all applies the batting order, starting rotation, and relief-role recommendations together.')}</div>
   {#if !rankings && (rankingLoading || rankingError)}
    <p class="muted">{rankingLoading ? 'Season value rankings are loading.' : 'Season value rankings are unavailable.'} Your lineup can still be edited.</p>
   {/if}
@@ -375,9 +383,8 @@
    {@render orderList('batting', draft.battingOrder)}
   </section>
   <section aria-labelledby="rotation-heading">
-   <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3>{@render smartButton('Ace first', startersAreSmart, () => applySmartOrder('starter'))}</div>
+   <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3>{@render smartButton('Ace first', startersAreSmart, () => applySmartOrder('starter'), 'The three starters cycle in this order, 54 starts each, without injuries or fatigue. The order decides which games each one gets. Ace first gives your best arm opening day.')}</div>
    {@render orderList('starter', draft.starterOrder)}
-   <p class="workload muted">The three starters cycle in this order, 54 starts each, without injuries or fatigue. The order only decides which games each one gets: the opponent, its starter, and the park. Ace first gives your best arm opening day.</p>
    <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3>{@render smartButton('Smart roles', rolesAreSmart, applySmartRoles, "Smart roles gives your best arm the closer's job, the next two setup, and the rest middle and long relief. Roles decide who pitches when, a backup role is used only after a day off, no one pitches three days running, and a league-average relief pool covers the rest. See Rules & model for details.")}</div>
    <ul class="order fixed" aria-labelledby="relief-heading">
     {#if closer}
@@ -403,16 +410,11 @@
 
 {#snippet smartButton(label: string, applied: boolean, apply: () => void, help?: string)}
  <div class="smart-controls">
+  {#if help}<InfoTooltip label={label} text={help} />{/if}
   <button type="button" class="secondary smart" disabled={busy || applied || !complete} title={applied ? 'Already in this order' : undefined} onclick={apply}>
    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 4.5h10M3 8h7M3 11.5h4"></path></svg>
    {label}
   </button>
-  {#if help}
-   <div class="smart-help" role="group" aria-label={`${label} help`} onpointerenter={event => { if (event.pointerType !== 'touch') activeHelp = label; }} onpointerleave={event => { if (!event.currentTarget.contains(document.activeElement)) activeHelp = null; }}>
-    <button type="button" class="quiet help-trigger" aria-label={`About ${label}`} aria-describedby={activeHelp === label ? `${helpId}-${label.replaceAll(' ', '-')}` : undefined} onfocus={() => activeHelp = label} onblur={() => activeHelp = null} onclick={() => activeHelp = label}>?</button>
-    {#if activeHelp === label}<div class="smart-tooltip" role="tooltip" id={`${helpId}-${label.replaceAll(' ', '-')}`}>{help}</div>{/if}
-   </div>
-  {/if}
  </div>
 {/snippet}
 
@@ -506,6 +508,8 @@
 <style>
  .lineup { min-width: 0; }
  header { margin-block: var(--space-6) var(--space-8); }
+ .lineup-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+ .lineup-heading .smart-controls { flex: none; }
  h2 { margin: 0 0 var(--space-2); font-size: var(--text-2xl); }
  header > .muted { max-width: 60ch; font-size: var(--text-sm); margin: 0; }
  .lineup-columns { display: grid; gap: var(--space-8); }
@@ -517,8 +521,6 @@
  .smart svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
  .section-heading { position: relative; align-items: center; }
  .smart-controls { display: flex; align-items: center; gap: var(--space-1); }
- .help-trigger { width: 2.75rem; min-height: 2.75rem; padding: 0; color: var(--muted); }
- .smart-tooltip { position: absolute; z-index: 5; top: calc(100% - var(--space-2) - 1px); right: 0; width: min(22rem, calc(100vw - 3rem)); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-raised); color: var(--text); font-size: var(--text-sm); line-height: 1.5; font-weight: 400; }
 
  /* Narrow: number | card | identity over meta | stacked arrows. */
  .order { list-style: none; padding: 0; margin: 0; }

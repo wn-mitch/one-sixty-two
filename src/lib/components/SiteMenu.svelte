@@ -1,18 +1,18 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
-	import { afterNavigate } from '$app/navigation';
-	import Settings from './Settings.svelte';
-	import { draftModeEnabled } from '#lib/app/features.ts';
+ import { onMount, tick } from 'svelte';
+ import { afterNavigate } from '$app/navigation';
+ import Settings from './Settings.svelte';
+ import { draftModeEnabled } from '#lib/app/features.ts';
 
-	// Less frequent destinations live here so the header keeps Play, My teams, Collection and Shop legible.
-	let open = $state(false);
-	let developerDraft = $state(false);
-	let settings = $state<ReturnType<typeof Settings>>();
-	let trigger = $state<HTMLButtonElement>();
-	let panel = $state<HTMLElement>();
-	const uid = $props.id();
-	const panelId = `${uid}-menu`;
-	let initialNavigation = true;
+ let { onNew }: { onNew?: () => void } = $props();
+ let open = $state(false);
+ let developerDraft = $state(false);
+ let settings = $state<ReturnType<typeof Settings>>();
+ let trigger = $state<HTMLButtonElement>();
+ let panel = $state<HTMLElement>();
+ const uid = $props.id();
+ const panelId = `${uid}-menu`;
+ let initialNavigation = true;
 
 	onMount(() => { developerDraft = draftModeEnabled(); });
 	afterNavigate(() => {
@@ -54,7 +54,7 @@
 		Menu
 	</button>
 	<nav bind:this={panel} id={panelId} class="menu-panel" aria-label="More" hidden={!open}>
-		<a href="/how-to-play">How to play</a>
+		{#if onNew}<button type="button" onclick={() => { close(); onNew?.(); }}>New draft</button>{/if}
 		<button type="button" onclick={openSettings}>Settings</button>
 		<a href="/about#simulation">Rules &amp; model</a>
 		<a href="/credits">Data &amp; image credits</a>

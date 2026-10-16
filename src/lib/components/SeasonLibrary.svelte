@@ -185,7 +185,7 @@
 						{#snippet teamCard(key: string)}
 							{@const entry = entries.find(item => item.key === key)}
 							{#if entry}
-								<LibraryTile {entry} stars={fan(entry)} tally={seriesTally(history, entry.key)} selected={false} onSelect={() => pick(key)} />
+								<LibraryTile {entry} stars={fan(entry)} tally={seriesTally(history, entry.key)} selected={false} flippable={false} onSelect={() => pick(key)} />
 							{/if}
 						{/snippet}
 					</LibraryLeaders>

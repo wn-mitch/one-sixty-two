@@ -5,7 +5,7 @@
  import type { PlacedSticker } from '../collection/stickers.ts';
  import CardFlip from './CardFlip.svelte';
 
- let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, showHeading = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, flipInPlace = false, onMove, moveRequested = $bindable(false), readerNav, pairFaces = true, wall = false, stickers, freshStickers }: {
+ let { id, s, inspection, turned = $bindable(false), opened = $bindable(false), textBack = $bindable(false), selectedMode = $bindable<'simulated' | 'actual'>('simulated'), showControl = true, showHeading = true, onFrontSelect, onClose, sourceElement, raisedOnly = false, flipInPlace = false, onMove, moveRequested = $bindable(false), readerNav, readerDeck, deckPosition, onStep, pairFaces = true, wall = false, stickers, freshStickers }: {
   id?: string;
   s: CardViewModel;
   inspection?: ResultsInspection;
@@ -24,6 +24,10 @@
   moveRequested?: boolean;
   /** Controls beside the raised card's turn button. */
   readerNav?: Snippet;
+  /** A browsable hand behind the active card, with its original-order navigation. */
+  readerDeck?: Snippet;
+  deckPosition?: { key: string; direction: -1 | 1 };
+  onStep?: (direction: -1 | 1) => void;
   /** Raise the front beside the back on wide screens. */
   pairFaces?: boolean;
   /** The front drifts and catches the light on its own until it is hovered. */
@@ -43,7 +47,7 @@ let heading = $state<HTMLHeadingElement>();
   const nextSeason = seasonKey;
   if (nextSeason !== observedSeason) {
    observedSeason = nextSeason;
-   untrack(() => { turned = initial.turned; opened = initial.opened; textBack = initial.textBack; selectedMode = initial.selectedMode; });
+   if (!readerDeck) untrack(() => { turned = initial.turned; opened = initial.opened; textBack = initial.textBack; selectedMode = initial.selectedMode; });
   }
  });
 
@@ -93,14 +97,14 @@ let heading = $state<HTMLHeadingElement>();
   {#snippet backControls()}
    {#if inspection}
     <div class="season-toggle" role="group" aria-label="Season statistics">
-     <button type="button" aria-label="Your simulated season" aria-pressed={selectedMode === 'simulated'} onclick={() => selectMode('simulated')}>Your simulated season</button>
-     <button type="button" aria-label="Historical season" aria-pressed={selectedMode === 'actual'} onclick={() => selectMode('actual')}>Historical season</button>
+     <button type="button" aria-label="Your simulated season" aria-pressed={selectedMode === 'simulated'} onclick={() => selectMode('simulated')}>162-0 season</button>
+     <button type="button" aria-label="Historical season" aria-pressed={selectedMode === 'actual'} onclick={() => selectMode('actual')}>Actual season</button>
     </div>
    {/if}
    {#if textBack}<button type="button" class="back-text-toggle" aria-pressed={textBack} aria-controls="{reviewId}-back" onclick={toggleText}>Text version</button>{/if}
    {#if onMove}<button type="button" onclick={moveCard}>Move card</button>{/if}
   {/snippet}
- <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} {flipInPlace} {readerNav} {pairFaces} {wall} {stickers} {freshStickers} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
+ <CardFlip {s} bind:turned bind:opened {textBack} {showControl} {onFrontSelect} {sourceElement} {raisedOnly} {flipInPlace} {readerNav} {readerDeck} {deckPosition} {onStep} {pairFaces} {wall} {stickers} {freshStickers} onReturned={raisedOnly ? returned : undefined} inspectionView={view} backId="{reviewId}-back" onDetails={showTextVersion} backControls={inspection || textBack || onMove ? backControls : undefined} />
 </div>
 </section>
 
@@ -112,8 +116,8 @@ let heading = $state<HTMLHeadingElement>();
  .review-artwork { width: min(100%, 410px); margin-inline: auto; }
  .raised-only, .raised-only .review-artwork { display: contents; }
  /* A two-part switch in the card's own ink, so it reads as part of the back rather than page chrome. */
- .season-toggle { display: inline-flex; padding: 2px; border: 1px solid currentColor; border-radius: 999px; }
- .season-toggle button { min-height: 2.5rem; padding: 0 .85rem; border: 0; border-radius: 999px; color: inherit; background: transparent; font: 750 .75rem/1 system-ui, sans-serif; letter-spacing: .02em; white-space: nowrap; }
+ .season-toggle { display: inline-flex; max-width: 100%; padding: 2px; border: 1px solid currentColor; border-radius: 999px; }
+ .season-toggle button { min-width: 0; min-height: 2.75rem; padding: 0 .55rem; border: 0; border-radius: 999px; color: inherit; background: transparent; font: 750 .75rem/1.2 system-ui, sans-serif; letter-spacing: .02em; }
  .season-toggle button:hover { background: color-mix(in oklch, currentColor 12%, transparent); }
  .season-toggle button[aria-pressed='true'] { color: var(--back-ground, var(--background)); background: var(--back-ink, var(--text)); }
  .back-text-toggle { min-height: 44px; }

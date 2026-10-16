@@ -23,7 +23,7 @@
 		{#if s.fin.gem}<div data-layer="material.gem-ring" data-surface="ring" data-surface-shape="box" style="position:absolute; left:12.7cqw; right:2.7cqw; top:2.7cqw; height:82.6cqw; border-radius:0.4cqw; background:var(--gem-ring, transparent);"></div>{/if}
 		{#if s.fin.emboss}<div data-layer="material.photo-bevel" style="position:absolute; left:14cqw; right:4cqw; top:4cqw; height:80cqw; border-radius:0; box-shadow:calc(var(--lx, -0.45) * -0.8cqw) calc(var(--ly, -0.75) * -0.8cqw) 1cqw rgba(0,0,0,0.45), calc(var(--lx, -0.45) * 0.5cqw) calc(var(--ly, -0.75) * 0.5cqw) 0.6cqw rgba(255,255,255,0.6);"></div>{/if}
 		<div data-layer="photo.mask" data-surface="photo" style={`position:absolute; left:14cqw; right:4cqw; top:4cqw; height:80cqw; overflow:hidden; background:${s.k.accent};`}>
-			<PhotoMask {s} />
+			<PhotoMask front {s} />
 		</div>
 		<div data-layer="frame.photo-rail" data-surface="stamp" style={`position:absolute; left:14cqw; right:4cqw; top:85cqw; height:1.2cqw; background:var(--stamp, ${s.k.accent});`}></div>
 

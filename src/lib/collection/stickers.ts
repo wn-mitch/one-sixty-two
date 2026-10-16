@@ -16,8 +16,8 @@ export * from './sticker-ladders.ts';
 /**
  * Stickers are cosmetic marks a card earns on the player's own teams. They are derived only from
  * saved season lines and team records, never reach a draft or the simulation, and are earned once
- * per player-season and kind. Thresholds sit near the top decile and top two percent of simulated
- * Classic seasons.
+ * per player-season and kind, with MVP wins counted across distinct completed seasons. Thresholds
+ * sit near the top decile and top two percent of simulated Classic seasons.
  */
 export const STICKER_RULES_VERSION = 'stickers-v5';
 
@@ -181,18 +181,30 @@ export function seasonStickers(entry: Pick<LibraryEntry, 'record' | 'roster' | '
  return earned;
 }
 
-export interface PlacedSticker { kind: string; x: number; y: number; hidden: boolean; earnedAt: string }
+export interface PlacedSticker {
+ kind: string; x: number; y: number; hidden: boolean; earnedAt: string;
+ /** Distinct completed seasons won as MVP; omitted single-award fixtures count as one. */
+ count?: number;
+}
+
+/** Resolves earned-count text without changing the catalogue's shared definitions. */
+export function stickerDefinition(sticker: Pick<PlacedSticker, 'kind' | 'count'>): StickerDefinition | undefined {
+ const definition = STICKER_BY_KIND.get(sticker.kind);
+ if (!definition || definition.family !== 'mvp') return definition;
+ const count = sticker.count ?? 1;
+ return { ...definition, label: [`${count}×`, 'Team MVP'], title: count === 1 ? definition.title : `${definition.title} ×${count}` };
+}
 
 /** The highest visible tier of each family a card holds, in a stable order; unknown kinds are skipped. */
 export function familyStickers(stickers: readonly PlacedSticker[]): (PlacedSticker & { definition: StickerDefinition })[] {
  const best = new Map<StickerFamily, PlacedSticker & { definition: StickerDefinition }>();
  for (const sticker of stickers) {
-  const definition = STICKER_BY_KIND.get(sticker.kind);
+  const definition = stickerDefinition(sticker);
   if (!definition || sticker.hidden) continue;
   const current = best.get(definition.family);
   if (!current || definition.tier > current.definition.tier) best.set(definition.family, { ...sticker, definition });
  }
- return [...best.values()].sort((a, b) => STICKERS.indexOf(a.definition) - STICKERS.indexOf(b.definition));
+ return [...best.values()].sort((a, b) => STICKERS.indexOf(STICKER_BY_KIND.get(a.kind)!) - STICKERS.indexOf(STICKER_BY_KIND.get(b.kind)!));
 }
 
 /** How many non-grade stickers a card face shows beside its grade. */
@@ -231,7 +243,7 @@ export function faceStickers(stickers: readonly PlacedSticker[], { era, table = 
   .map(sticker => slots && unmoved(sticker) ? { ...sticker, ...slots.grade } : sticker);
  const rare = families.filter(sticker => sticker.definition.family !== 'grade')
   .map(sticker => ({ sticker, rate: earnRate(sticker.definition, table) }))
-  .sort((a, b) => a.rate - b.rate || (a.rate === 0 ? b.sticker.definition.tier - a.sticker.definition.tier : 0) || STICKERS.indexOf(a.sticker.definition) - STICKERS.indexOf(b.sticker.definition))
+  .sort((a, b) => a.rate - b.rate || (a.rate === 0 ? b.sticker.definition.tier - a.sticker.definition.tier : 0) || STICKERS.indexOf(STICKER_BY_KIND.get(a.sticker.kind)!) - STICKERS.indexOf(STICKER_BY_KIND.get(b.sticker.kind)!))
   .slice(0, FACE_RARE_STICKERS)
   .map(({ sticker }, index) => unmoved(sticker) ? { ...sticker, ...(slots ? slots.face[index] : LEGACY_FACE_SLOTS[index]) } : sticker);
  return [...grade, ...rare];

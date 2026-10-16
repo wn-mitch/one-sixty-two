@@ -20,6 +20,9 @@ export type CardMediaStatus = 'loading' | 'ready' | 'unavailable';
 
 export interface CardStat { l: string; v: string; role?: 'BAT' | 'PIT'; name?: string }
 export interface CardMedia {
+	framing?: import('../media/types.ts').PhotoFraming;
+	width?: number;
+	height?: number;
 	subject?: 'team';
 	url: string;
 	year?: number;
@@ -234,7 +237,7 @@ function position(profile: Profile, slot: RosterSlot | null | undefined, role: C
 }
 function selectedPhoto(photo: PlayerPhoto | TeamPhoto, year: number): CardMedia {
 	const team = 'subject' in photo && photo.subject === 'team';
-	return { ...(team ? { subject: 'team' as const } : {}), url: photo.url, year: photo.year, dateLabel: captureLabel(photo), contextLabel: team ? photo.caption : photoContextLabel(photo, year), selectedSeason: exactSeason(photo, year), credit: photo.credit || 'credit unverified', license: photo.license || 'credit unverified', licenseUrl: photo.licenseUrl, sourceUrl: photo.sourceUrl, captureEvidenceUrl: photo.captureEvidenceUrl, identityEvidenceUrl: photo.identityEvidenceUrl, rightsEvidenceUrl: photo.evidence?.rightsUrl };
+	return { width: photo.width, height: photo.height, framing: photo.framing, ...(team ? { subject: 'team' as const } : {}), url: photo.url, year: photo.year, dateLabel: captureLabel(photo), contextLabel: team ? photo.caption : photoContextLabel(photo, year), selectedSeason: exactSeason(photo, year), credit: photo.credit || 'credit unverified', license: photo.license || 'credit unverified', licenseUrl: photo.licenseUrl, sourceUrl: photo.sourceUrl, captureEvidenceUrl: photo.captureEvidenceUrl, identityEvidenceUrl: photo.identityEvidenceUrl, rightsEvidenceUrl: photo.evidence?.rightsUrl };
 }
 function selectedLogo(asset: MediaAsset, historical: boolean): CardMedia {
 	return { url: asset.url, credit: asset.credit || 'credit unverified', license: asset.license || 'credit unverified', licenseUrl: asset.licenseUrl, sourceUrl: asset.sourceUrl, historical };

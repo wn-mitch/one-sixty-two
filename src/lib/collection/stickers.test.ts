@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LibraryEntry, SavedBatter, SavedPitcher } from '../game/library.ts';
 import type { CardEra } from '../cards/view-model.ts';
 import { ERA_PLACEMENT, ERA_STICKER_SLOTS, onPhoto, setPoints, STICKER_LAYOUT, STICKER_MARGIN, stickerFits, type EraStickerSlots } from './sticker-slots.ts';
-import { faceStickers, LEGACY_FACE_SLOTS, familyStickers, RARITY, seasonStickers, STICKER_BY_KIND, STICKER_RULES_VERSION, STICKER_SPOTS, STICKERS, type PlacedSticker } from './stickers.ts';
+import { faceStickers, LEGACY_FACE_SLOTS, familyStickers, RARITY, seasonStickers, stickerDefinition, STICKER_BY_KIND, STICKER_RULES_VERSION, STICKER_SPOTS, STICKERS, type PlacedSticker } from './stickers.ts';
 
 const batter = (seasonId: string, line: Partial<SavedBatter>): SavedBatter => ({
  seasonId, label: seasonId, slot: 'LF', PA: 650, AB: 560, H: 140, doubles: 30, triples: 2, HR: 15, BB: 40, HBP: 5, SF: 5, RBI: 80, SB: 5, war: 3, ...line
@@ -142,6 +142,37 @@ describe('sticker rules', () => {
   expect(familyStickers([sticker('hr-40'), sticker('hr-60'), sticker('wins-100'), sticker('unknown'), sticker('closer-zero')]).map(item => item.kind)).toEqual(['wins-100', 'hr-60']);
   expect(familyStickers([sticker('hr-40', true), sticker('hr-60', true)])).toEqual([]);
   expect(faceStickers([sticker('closer-zero'), sticker('unknown')])).toEqual([]);
+ });
+
+ it('prints MVP counts without mutating the catalogue or changing other stickers', () => {
+  const original = STICKER_BY_KIND.get('mvp')!;
+  expect(stickerDefinition({ kind: 'mvp' })).toMatchObject({ label: ['1×', 'Team MVP'], title: 'Team MVP' });
+  expect(stickerDefinition({ kind: 'mvp', count: 1 })).toMatchObject({ label: ['1×', 'Team MVP'], title: 'Team MVP' });
+  expect(stickerDefinition({ kind: 'mvp', count: 12 })).toMatchObject({ label: ['12×', 'Team MVP'], title: 'Team MVP ×12', tier: 1 });
+  expect(original).toMatchObject({ label: ['Team', 'MVP'], title: 'Team MVP', tier: 1 });
+  expect(STICKERS.find(sticker => sticker.kind === 'mvp')).toBe(original);
+  expect(stickerDefinition({ kind: 'hr-40', count: 12 })).toBe(STICKER_BY_KIND.get('hr-40'));
+  expect(stickerDefinition({ kind: 'unknown', count: 12 })).toBeUndefined();
+ });
+
+ it('keeps counted MVPs in catalogue and rarity order and respects hidden placement', () => {
+  const sticker = (kind: string): PlacedSticker => ({ kind, ...STICKER_SPOTS[STICKER_BY_KIND.get(kind)!.family], hidden: false, earnedAt: '' });
+  const mvp = { ...sticker('mvp'), count: 3, x: 0.3, y: 0.6 };
+  const held = [sticker('hr-20'), mvp, sticker('wins-20'), sticker('grade-a')];
+  const ordered = ['grade-a', 'wins-20', 'mvp', 'hr-20'];
+  expect(familyStickers(held).map(item => item.kind)).toEqual(ordered);
+  const table = { cards: 100, reached: { 'wins-20': 5, mvp: 5, 'hr-20': 5 } };
+  const face = faceStickers(held, { table });
+  expect(face.map(item => item.kind)).toEqual(ordered);
+  expect(face.find(item => item.kind === 'mvp')).toMatchObject({
+   count: 3, x: 0.3, y: 0.6, definition: { label: ['3×', 'Team MVP'], title: 'Team MVP ×3' }
+  });
+  expect(faceStickers(held, { table: { cards: 100, reached: { 'wins-20': 2, mvp: 6, 'hr-20': 4 } } }).map(item => item.kind))
+   .toEqual(['grade-a', 'wins-20', 'hr-20', 'mvp']);
+  const hidden = held.map(item => item.kind === 'mvp' ? { ...item, hidden: true } : item);
+  expect(familyStickers(hidden).map(item => item.kind)).toEqual(['grade-a', 'wins-20', 'hr-20']);
+  expect(faceStickers(hidden, { table }).map(item => item.kind)).toEqual(['grade-a', 'wins-20', 'hr-20']);
+  expect(mvp.count).toBe(3);
  });
 
  it('ranks the face from a rarity table that covers every season sticker under the current rules', () => {

@@ -263,6 +263,17 @@ test('concentric spirals keep their origin, bend independently, and can wind in 
 	expect(returned!.image).toBe(base!.image);
 });
 
+
+test('Smoke drifts with time, repeats a held frame, and stops at zero speed', async ({ page }) => {
+	await page.goto('/lab');
+	const [initial, drifted, held, stopped, stoppedLater] = await geometry(page, 'smoke', [
+		{}, { time: 8 }, { time: 8 },
+		{ dials: { speed: 0 } }, { dials: { speed: 0 }, time: 8 }
+	], true);
+	expect(drifted!.image).not.toBe(initial!.image);
+	expect(held!.image).toBe(drifted!.image);
+	expect(stoppedLater!.image).toBe(stopped!.image);
+});
 test('film framing and walking dials update the live lab renderer', async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.goto('/lab');

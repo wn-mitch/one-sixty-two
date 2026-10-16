@@ -4,12 +4,13 @@ import { definePlate } from './plate.ts';
 export default definePlate({
 	name: 'carbon',
 	feature: 0.11,
+	gain: 0.325616399082569,
 	params: {
-		weave: { value: 9, min: 2, max: 40, step: 0.1, note: 'Tows per card unit; higher is a tighter weave.' },
-		fibres: { value: 40, min: 0, max: 200, step: 1, note: 'How finely the fibre lines run along each tow.' },
-		sheen: { value: 0.15, min: 0, max: 1, step: 0.01, note: 'How strongly the fibre lines ripple each tow.' },
+		weave: { value: 5.99827981651376, min: 2, max: 40, step: 0.1, note: 'Tows per card unit; higher is a tighter weave.' },
+		fibres: { value: 140, min: 0, max: 200, step: 1, note: 'How finely the fibre lines run along each tow.' },
+		sheen: { value: 0.870508409785933, min: 0, max: 1, step: 0.01, note: 'How strongly the fibre lines ripple each tow.' },
 		black: { value: 0.85, min: 0, max: 1, step: 0.01, note: 'How dark the black tows run.' },
-		edge: { value: 0.6, min: 0, max: 2, step: 0.01, note: 'How dark the gaps between tows run.' }
+		edge: { value: 2, min: 0, max: 2, step: 0.01, note: 'How dark the gaps between tows run.' }
 	},
 	helpers: `
 // Carbon fibre: a 2x2 twill of tows, each rounded across its width and running across or down. The tows

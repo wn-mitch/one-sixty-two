@@ -131,7 +131,7 @@
 <ScreenLoading active={loading} label="Loading your collection…" />
 
 <main class="page">
-	<header class="intro"><h1>Collection</h1></header>
+	<header class="intro"><h1>Collection</h1>{#if !loading && !error}<span class="card-count">{cards.length.toLocaleString('en-US')} {cards.length === 1 ? 'card' : 'cards'}</span>{/if}</header>
 	{#if loading}
 		<p class="muted" role="status">Loading your collection…</p>
 	{:else if error}
@@ -142,6 +142,8 @@
 </main>
 
 <style>
-	.page { display: grid; gap: var(--space-4); width: min(100%, 84rem); padding-block: var(--space-8); }
-	h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.03em; }
+	.page { display: grid; gap: var(--space-3); width: min(100%, 84rem); padding-block: var(--space-4); }
+	.intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+	h1 { margin: 0; font-size: var(--text-2xl); letter-spacing: -.03em; }
+	.card-count { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 </style>

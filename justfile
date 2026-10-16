@@ -15,6 +15,14 @@ media-audit:
 media-review *args:
     npm run media:review -- {{args}}
 
+# Inventory and capture full card fronts for local visual framing review.
+card-framing *args:
+    node scripts/media/framing-audit.ts {{args}}
+
+# Reconcile valid captures with individual visual review records.
+card-framing-gallery:
+    node scripts/media/framing-gallery.ts
+
 media-prepare *args:
     npm run media:prepare -- {{args}}
 

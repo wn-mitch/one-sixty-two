@@ -14,6 +14,7 @@
  let {
   label,
   wide: wideOverride,
+  compact = false,
   busy = false,
   searchable = true,
   query = $bindable(''),
@@ -38,6 +39,8 @@
   label: string;
   /** Rail beside the cards; defaults to screens at least 48rem wide. */
   wide?: boolean;
+  /** Collection toolbar: no sidebar, select sorting, and disclosed filters at every width. */
+  compact?: boolean;
   busy?: boolean;
   /** Without search, phones show the filters directly, since nothing else shares their row. */
   searchable?: boolean;
@@ -66,13 +69,13 @@
 
  const uid = $props.id();
  const wideScreen = new MediaQuery('(min-width: 48rem)');
- const wide = $derived(wideOverride ?? wideScreen.current);
+ const wide = $derived(!compact && (wideOverride ?? wideScreen.current));
  let filtersOpen = $state(false);
  const activeFilter = $derived(filters.find(option => option.value === filter));
  const firstFilter = $derived(filters[0]?.value);
 </script>
 
-<section class="browser" class:wide class:unsearched={!searchable} aria-label={label} aria-busy={busy}>
+<section class="browser" class:wide class:compact class:unsearched={!searchable} aria-label={label} aria-busy={busy}>
  <div class="rail">
   {#if searchable}
   <div class="search-row">
@@ -89,6 +92,19 @@
   </div>
   {/if}
   {#if sorts.length}
+  {#if compact}
+  <div class="sort-select">
+   <label for="{uid}-sort" class="sr-only">Sort by</label>
+   <select id="{uid}-sort" value={sort} disabled={busy} onchange={event => onSort?.(event.currentTarget.value)}>
+    {#each sorts as option (option.value)}<option value={option.value}>{option.label ?? option.value}</option>{/each}
+   </select>
+   {#if descending !== undefined}
+    <button type="button" class="secondary sort-direction" disabled={busy} aria-label={`Sort direction: ${descending ? 'high to low' : 'low to high'}`} onclick={() => onSort?.(sort)}>
+     <span aria-hidden="true">{descending ? '↓' : '↑'}</span>
+    </button>
+   {/if}
+  </div>
+  {:else}
   <div class="sort-row" class:many={sorts.length > 4} role="group" aria-labelledby="{uid}-sort-label">
    <span id="{uid}-sort-label" class="sort-label">Sort by</span>
    <span class="sort-options" class:stacked={sorts.length > 2}>
@@ -102,6 +118,7 @@
     {/each}
    </span>
   </div>
+  {/if}
   {/if}
   {#if filters.length}
    <!-- Phones keep the filters behind their toggle so the first cards sit near the top. -->
@@ -162,6 +179,13 @@
  .sort-row.many { flex-wrap: wrap; gap: var(--space-2); }
  .sort-row.many .sort-options { flex-basis: 100%; }
  .sort-row.many .sort-options button { padding-inline: var(--space-1); white-space: nowrap; }
+ .compact .rail { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+ .compact .search-row { flex: 1 1 16rem; margin: 0; }
+ .compact .filter-panel { flex-basis: 100%; margin: 0; padding-block: var(--space-2); }
+ .compact .filters-toggle, .compact input[type='search'] { min-height: 2.75rem; }
+ .sort-select { display: flex; align-items: center; gap: var(--space-1); }
+ .sort-select select { min-width: 0; }
+ .sort-direction { width: 2.75rem; padding-inline: var(--space-2); }
  @media (min-width: 48rem) {
   .wide { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 28px; align-items: start; }
   .wide .rail { position: sticky; top: 72px; max-height: calc(100dvh - 88px); overflow-y: auto; overscroll-behavior: contain; padding: 0 .25rem .25rem; }
