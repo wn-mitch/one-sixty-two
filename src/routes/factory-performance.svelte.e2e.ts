@@ -15,7 +15,7 @@ async function settledWork(page: Page): Promise<MaterialWork> {
 	return page.evaluate(() => ({ ...(window as unknown as ProbedWindow).__factoryMaterialWork }));
 }
 
-test('factory scope changes reuse catalogue materials and keep the exact live preview', async ({ page }) => {
+test('factory pattern changes reuse every tile material and keep the exact live preview', async ({ page }) => {
 	// Count real driver calls, without replacing the shader renderer or relying on frame timing thresholds.
 	await page.addInitScript(() => {
 		const work: MaterialWork = { links: 0, uploads: 0, lastWork: performance.now() };
@@ -36,52 +36,37 @@ test('factory scope changes reuse catalogue materials and keep the exact live pr
 			}
 		});
 	});
-	await page.goto('/factory');
-	const sample = page.locator('.preview [data-finish-sample]');
-	await expect(sample.locator('canvas[data-presented]')).toBeVisible({ timeout: 30_000 });
+	await page.goto('/factory?era=2010s');
+	const sample = page.locator('.preview');
+	await expect(sample.locator('canvas[data-presented]').first()).toBeVisible({ timeout: 30_000 });
 	await page.evaluate(() => document.fonts.ready.then(() => undefined));
-	const catalogue = page.locator('.controls [data-finish-id] [data-finish-sample]');
-	const catalogueState = () => catalogue.evaluateAll(nodes => nodes.map(node => ({
-		era: node.getAttribute('data-card'), film: node.getAttribute('data-film'),
-		plate: node.getAttribute('data-plate'), palette: node.getAttribute('data-palette'),
-		identity: node.getAttribute('data-identity')
-	})));
-	const initialCatalogue = await catalogueState();
-	let before = await settledWork(page);
-
-	await page.getByRole('button', { name: /^1990s,/ }).click();
-	await expect(sample).toHaveAttribute('data-card', '1990s');
-	await expect(sample).toHaveAttribute('data-film', ERA_HOLO['1990s']);
-	await expect(sample).toHaveAttribute('data-plate', ERA_FOIL['1990s']);
-	let after = await settledWork(page);
-	// Only the main preview, Deck default, Era original and Film original need the new stock's two maps.
-	expect(after.uploads - before.uploads).toBeLessThanOrEqual(8);
-	expect(after.links - before.links).toBeLessThanOrEqual(1);
-	expect(await catalogueState()).toEqual(initialCatalogue);
-
-	await page.getByRole('button', { name: /^2000s,/ }).click();
-	await expect(sample).toHaveAttribute('data-card', '2000s');
-	before = await settledWork(page);
-	await page.getByRole('button', { name: /^2010s,/ }).click();
-	await expect(sample).toHaveAttribute('data-card', '2010s');
 	await expect(sample).toHaveAttribute('data-film', ERA_HOLO['2010s']);
 	await expect(sample).toHaveAttribute('data-plate', ERA_FOIL['2010s']);
-	after = await settledWork(page);
-	// Both eras use chrome stock: changing the film and era tuning must reuse every existing map.
-	expect(after.uploads).toBe(before.uploads);
-	expect(await catalogueState()).toEqual(initialCatalogue);
+	const tiles = page.locator('.tray [data-finish-id] [data-finish-sample]');
+	const eras = () => tiles.evaluateAll(nodes => [...new Set(nodes.map(node => node.getAttribute('data-card')))]);
+	expect(await eras()).toEqual(['2010s']);
+	let before = await settledWork(page);
 
 	const patterns = page.getByRole('group', { name: 'Holo pattern', exact: true });
-	const colors = page.getByRole('group', { name: 'Colorway', exact: true });
-	before = after;
 	await patterns.getByRole('button', { name: 'Refractor, 1 token', exact: true }).click();
+	await expect(sample).toHaveAttribute('data-film', 'refractor');
+	let after = await settledWork(page);
+	// Choosing a pattern changes one card's film: the era's stock maps already exist and no tile is rebuilt.
+	expect(after.uploads).toBe(before.uploads);
+	expect(after.links - before.links).toBeLessThanOrEqual(1);
+
+	await page.getByRole('tab', { name: /^Colorway/ }).click();
+	const colors = page.getByRole('group', { name: 'Colorway', exact: true });
+	await expect(colors).toBeVisible();
+	before = await settledWork(page);
 	await colors.getByRole('button', { name: 'Ice, 1 token', exact: true }).click();
 	await expect(sample).toHaveAttribute('data-film', 'refractor');
 	await expect(sample).toHaveAttribute('data-palette', String(COLORWAYS.find(option => option.id === 'ice')!.palette));
 	await expect(sample).toHaveAttribute('data-card', '2010s');
 	after = await settledWork(page);
+	// A colorway is a palette on an existing film program and stock.
 	expect(after.uploads).toBe(before.uploads);
-	expect(await catalogueState()).toEqual(initialCatalogue);
-	await expect(page.getByRole('button', { name: '2010s, Deck default', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	expect(after.links).toBe(before.links);
+	expect(await eras()).toEqual(['2010s']);
 	await expect(page.locator('.balance')).toHaveText('0 unlock tokens');
 });

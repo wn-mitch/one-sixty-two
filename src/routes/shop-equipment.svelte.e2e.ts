@@ -41,35 +41,38 @@ test('shop marks effective holo equipment across deck and era precedence', async
 	await expect(atomic.locator('.equipped-tag')).toHaveAttribute('title', 'Equipped for Gem cards in 1950s');
 	await expect(refractor.locator('.equipped-tag')).toHaveCount(0);
 
-	await refractor.click();
-	const shopSheet = page.getByRole('dialog', { name: 'Refractor' });
-	await shopSheet.getByRole('button', { name: 'Apply to Gem cards', exact: true }).click();
-	await expect(choice(page, 'Refractor, Applied').locator('.equipped-tag')).toHaveAttribute(
+	// The Shop only unlocks; a deck-wide choice is a saved state the factory's Deck default follows.
+	await page.evaluate(async () => {
+		const device = window as unknown as { __deviceDb: Db };
+		await device.__deviceDb.run([{ sql: 'INSERT INTO shop_equipped (tier, item_id, colorway) VALUES (?, ?, NULL)', bind: ['gem', 'film:refractor'] }]);
+	});
+	await openHoloShop(page);
+	await expect(choice(page, 'Refractor, Owned').locator('.equipped-tag')).toHaveAttribute(
 		'title',
 		'Equipped for Gem cards in 1950s, 1960s, 1970s, 1980s, 1990s, 2000s, 2010s, 2020s'
 	);
 	await expect(atomic.locator('.equipped-tag')).toHaveCount(0);
 
 	await page.goto('/factory');
-	await page.getByRole('button', { name: /^1980s,/ }).click();
+	await page.getByRole('link', { name: /^1980s,/ }).click();
 	await page.getByRole('group', { name: 'Holo pattern', exact: true }).getByRole('button', { name: 'Atomic, Owned', exact: true }).click();
 	await page.getByRole('button', { name: 'Apply to 1980s cards', exact: true }).click();
 
 	await openHoloShop(page);
 	await expect(choice(page, 'Atomic, Owned').locator('.equipped-tag')).toHaveAttribute('title', 'Equipped for Gem cards in 1980s');
-	await expect(choice(page, 'Refractor, Applied').locator('.equipped-tag')).toHaveAttribute(
+	await expect(choice(page, 'Refractor, Owned').locator('.equipped-tag')).toHaveAttribute(
 		'title',
 		'Equipped for Gem cards in 1950s, 1960s, 1970s, 1990s, 2000s, 2010s, 2020s'
 	);
 
 	await page.goto('/factory');
-	await page.getByRole('button', { name: /^1980s,/ }).click();
+	await page.getByRole('link', { name: /^1980s,/ }).click();
 	await page.getByRole('button', { name: 'Era original, Free', exact: true }).click();
 	await page.getByRole('button', { name: 'Apply to 1980s cards', exact: true }).click();
 
 	await openHoloShop(page);
 	await expect(choice(page, 'Xfractor, Owned').locator('.equipped-tag')).toHaveAttribute('title', 'Equipped for Gem cards in 1980s');
-	await expect(choice(page, 'Refractor, Applied').locator('.equipped-tag')).toHaveAttribute(
+	await expect(choice(page, 'Refractor, Owned').locator('.equipped-tag')).toHaveAttribute(
 		'title',
 		'Equipped for Gem cards in 1950s, 1960s, 1970s, 1990s, 2000s, 2010s, 2020s'
 	);

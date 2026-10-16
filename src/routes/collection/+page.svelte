@@ -131,7 +131,7 @@
 <ScreenLoading active={loading} label="Loading your collection…" />
 
 <main class="page">
-	<header class="intro"><h1>Collection</h1>{#if !loading && !error}<span class="card-count">{cards.length.toLocaleString('en-US')} {cards.length === 1 ? 'card' : 'cards'}</span>{/if}</header>
+	<header class="intro"><h1>Collection</h1>{#if !loading && !error}<span class="card-count">{cards.length.toLocaleString('en-US')} {cards.length === 1 ? 'card' : 'cards'}</span>{/if}<a class="button secondary factory-link" href="/factory">Card factory</a></header>
 	{#if loading}
 		<p class="muted" role="status">Loading your collection…</p>
 	{:else if error}
@@ -146,4 +146,5 @@
 	.intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
 	h1 { margin: 0; font-size: var(--text-2xl); letter-spacing: -.03em; }
 	.card-count { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+	.factory-link { margin-left: auto; align-self: center; }
 </style>

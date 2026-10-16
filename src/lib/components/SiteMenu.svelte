@@ -56,6 +56,7 @@
 	<nav bind:this={panel} id={panelId} class="menu-panel" aria-label="More" hidden={!open}>
 		{#if onNew}<button type="button" onclick={() => { close(); onNew?.(); }}>New draft</button>{/if}
 		<button type="button" onclick={openSettings}>Settings</button>
+		<a href="/factory">Card factory</a>
 		<a href="/about#simulation">Rules &amp; model</a>
 		<a href="/credits">Data &amp; image credits</a>
 		{#if developerDraft}<a class="developer" href="/draft">Draft Mode <span>developer</span></a>{/if}

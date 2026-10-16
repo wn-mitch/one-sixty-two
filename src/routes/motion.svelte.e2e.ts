@@ -2,9 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function openSettings(page: Page) {
 	const menu = page.locator('.menu-panel:not([hidden])');
-	if (!(await menu.isVisible())) {
-		await page.getByRole('button', { name: 'Menu', exact: true }).first().click();
-	}
+	// A click that lands before the page hydrates is lost, so retry until the panel opens.
+	await expect(async () => {
+		if (!(await menu.isVisible())) await page.getByRole('button', { name: 'Menu', exact: true }).first().click();
+		await expect(menu).toBeVisible({ timeout: 1000 });
+	}).toPass();
 	await menu.getByRole('button', { name: 'Settings', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Settings' });
 	await expect(dialog).toBeVisible();
