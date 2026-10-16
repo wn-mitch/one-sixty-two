@@ -2,18 +2,19 @@ import { defineFilm } from './film.ts';
 
 /**
  * Poincare disk: reflections in the two radial mirrors and the orthogonal edge circle fold the disk into one
- * (pi/p, pi/3, pi/2) hyperbolic triangle. The default p=7 therefore makes a genuine regular {7,3} tiling;
+ * (pi/p, pi/3, pi/2) hyperbolic triangle, so each p makes a genuine regular {p,3} tiling; the default is {12,3}, and
  * the Euclidean cells contract toward the unit-circle rim because the model is conformal.
  */
 export default defineFilm({
 	name: 'poincare-disk',
-	ground: 0.82,
+	ground: 1.06,
+	scale: 0.436,
 	params: {
-		sides: { value: 7, min: 7, max: 12, step: 1, note: 'Polygon sides in the regular hyperbolic {p,3} tiling.' },
+		sides: { value: 12, min: 7, max: 12, step: 1, note: 'Polygon sides in the regular hyperbolic {p,3} tiling.' },
 		rotation: { value: 0, min: -3.14159, max: 3.14159, step: 0.01, note: 'Rotate the disk without changing its circular geometry.' },
-		zoom: { value: 1, min: 0.3, max: 40, step: 0.05, note: 'Magnification of the disk; zoom in to fill the card with a section of the tiling.' },
-		focusX: { value: 0, min: -1, max: 1, step: 0.01, note: 'Horizontal focus in disk radii: -1 is the left rim, 0 the centre, 1 the right rim.' },
-		focusY: { value: 0, min: -1, max: 1, step: 0.01, note: 'Vertical focus in disk radii: -1 is the top rim, 0 the centre, 1 the bottom rim.' }
+		zoom: { value: 0.92, min: 0.3, max: 40, step: 0.05, note: 'Magnification of the disk; zoom in to fill the card with a section of the tiling.' },
+		focusX: { value: -0.015, min: -1, max: 1, step: 0.01, note: 'Horizontal focus in disk radii: -1 is the left rim, 0 the centre, 1 the right rim.' },
+		focusY: { value: 0.001, min: -1, max: 1, step: 0.01, note: 'Vertical focus in disk radii: -1 is the top rim, 0 the centre, 1 the bottom rim.' }
 	},
 	glsl: `
 	// p is in physical card units. Keep the disk circular in that space (5 by 7 cards), not card-normalized.

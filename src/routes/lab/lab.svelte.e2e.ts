@@ -33,6 +33,7 @@ test('count dials stay integral and respect their bounds', async ({ page }) => {
 	await page.locator('#lab-film').selectOption('poincare-disk');
 	const dial = page.getByRole('slider', { name: 'sides dial', exact: true });
 	const value = page.locator('#lab-film-sides');
+	await dial.press('Home');
 	await dial.press('Shift+ArrowRight');
 	await expect(value).toHaveValue('8');
 	await dial.press('End');

@@ -190,10 +190,11 @@ test('Gosper is one connected sampled curve rather than a repeating tile', async
 test('Poincare can fill the card and focus on either axis without moving with tilt', async ({ page }) => {
 	await page.goto('/lab');
 	const [whole, filled, rightRim, bottomRim, held] = await geometry(page, 'poincare-disk', [
-		{}, { dials: { zoom: 3 } },
-		{ dials: { zoom: 12, focusX: 1 } },
-		{ dials: { zoom: 12, focusY: 1 } },
-		{ dials: { zoom: 3 }, view: [0.2, -0.15] }
+		{ dials: { scale: 1, zoom: 1, focusX: 0, focusY: 0 } },
+		{ dials: { scale: 1, zoom: 3, focusX: 0, focusY: 0 } },
+		{ dials: { scale: 1, zoom: 12, focusX: 1, focusY: 0 } },
+		{ dials: { scale: 1, zoom: 12, focusX: 0, focusY: 1 } },
+		{ dials: { scale: 1, zoom: 3, focusX: 0, focusY: 0 }, view: [0.2, -0.15] }
 	]);
 	expect(whole!.corners).toEqual([0, 0, 0, 0]);
 	for (const corner of filled!.corners) expect(corner).toBeGreaterThan(127);
