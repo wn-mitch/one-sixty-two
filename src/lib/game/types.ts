@@ -88,7 +88,7 @@ export interface Manifest {
  diagnostics: { excludedBatting: number; excludedPitching: number; excludedProfiles: number; estimatedProfiles: number; reportUrl: string };
  /** The 2025 reference stadium deck, one per current franchise. */
  stadiums: StadiumSummary[];
- /** All draftable seasons, ranked by descending draft-card valueRuns, then ascending season identity. */
+ /** Draftable seasons whose dealt card is a gem, ranked by descending draft-card valueRuns, then ascending season identity. */
  jackpot: string[];
 }
 /** A 2025 club: the closer, its next three relievers by relief outs as named relievers, and the rest of its relief pooled as the remainder arm. */

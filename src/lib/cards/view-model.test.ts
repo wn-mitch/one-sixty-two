@@ -169,6 +169,16 @@ describe('shared historical OPS fallback', () => {
   });
   expect(createCardViewModel({ profile: twoWay, slot: 'DH' }).st2).toMatchObject({ l: 'OPS', v: '1.500' });
   expect(createCardViewModel({ profile: twoWay, slot: 'SP1' }).st2).toMatchObject({ l: 'ERA', v: '3.00' });
+  expect(createCardViewModel({ profile: twoWay }).pos).toBe('DH · SP');
+ });
+
+ it('labels a pitcher with token plate appearances by his pitching slot alone', () => {
+  const starter = profile({
+   eligibleSlots: ['SP1', 'SP2', 'SP3'],
+   primaryHitterSlot: 'DH',
+   pitching: { G: 34, GS: 34, IPouts: 793, H: 204, HR: 9, BB: 68, HBP: 12, SO: 292, BFP: 1044, ER: 60, SV: 0 }
+  });
+  expect(createCardViewModel({ profile: starter }).pos).toBe('SP1');
  });
 });
 

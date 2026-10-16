@@ -1,3 +1,5 @@
+import { HITTER_SLOTS, type RosterSlot } from '../game/types.ts';
+
 export type Finish = 'base' | 'foil' | 'emboss' | 'gem';
 export type FinishRole = 'hitter' | 'starter' | 'closer' | 'bullpen';
 
@@ -30,6 +32,18 @@ export const FIN = Object.freeze({
 
 export function materialFor(finish: Finish): Readonly<FinishMaterial> {
 	return FIN[finish];
+}
+
+const isHitterSlot = (slot: RosterSlot): boolean => (HITTER_SLOTS as readonly string[]).includes(slot);
+
+/**
+ * The cut set a card uses: a slotted card by its slot, an unslotted card (as a pack deals it)
+ * by its eligible slots, hitting first.
+ */
+export function finishRoleFor(eligibleSlots: readonly RosterSlot[], slot?: RosterSlot | null, bullpen = false): FinishRole {
+	if (bullpen || slot === 'BP') return 'bullpen';
+	if (slot ? isHitterSlot(slot) : eligibleSlots.some(isHitterSlot)) return 'hitter';
+	return slot === 'CL' || (!slot && eligibleSlots.includes('CL') && !eligibleSlots.some(value => value.startsWith('SP'))) ? 'closer' : 'starter';
 }
 
 /**

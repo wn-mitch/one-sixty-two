@@ -10,7 +10,7 @@ import { seasonEstimates } from '../components/season-estimates.ts';
 import { isHitter } from '../components/candidate-ranking.ts';
 import { STOCK, roles } from './tokens.ts';
 import type { Roles } from './tokens.ts';
-import { finishFor, materialFor } from './finish.ts';
+import { finishFor, finishRoleFor, materialFor } from './finish.ts';
 import type { FinishMaterial, FinishRole } from './finish.ts';
 
 import type { CardEra } from './era.ts';
@@ -230,7 +230,8 @@ function representedDefense(profile: Profile, slot: RosterSlot | null | undefine
 function position(profile: Profile, slot: RosterSlot | null | undefined, role: CardRole): string {
 	if (role === 'bullpen') return 'BP';
 	if (slot && slot !== 'BP') return slot;
-	const batting = profile.primaryHitterSlot;
+	// A pitcher's token plate appearances give him a primary hitter slot he cannot be drafted into.
+	const batting = profile.primaryHitterSlot && profile.eligibleSlots.includes(profile.primaryHitterSlot) ? profile.primaryHitterSlot : undefined;
 	const pitching = profile.eligibleSlots.find(value => !isHitter(value) && value !== 'BP');
 	if (batting && pitching) return `${batting} · ${pitching.replace(/[123]$/, '')}`;
 	return (role === 'batting' ? batting : pitching) ?? EM_DASH;
@@ -311,11 +312,6 @@ function logoRows(logo: CardMedia | null, mediaStatus: CardMediaStatus): Supplem
 		{ k: 'Credit', v: logo.credit }, { k: 'Licence', v: logo.license, href: logo.licenseUrl },
 		{ k: 'Source', v: logo.sourceUrl, href: logo.sourceUrl }
 	] };
-}
-function finishRole(profile: Profile, slot: RosterSlot | null | undefined, role: CardRole): FinishRole {
-	if (role === 'bullpen') return 'bullpen';
-	if (role === 'batting') return 'hitter';
-	return slot === 'CL' || (!slot && profile.eligibleSlots.includes('CL') && !profile.eligibleSlots.some(value => value.startsWith('SP'))) ? 'closer' : 'starter';
 }
 
 export function createCardViewModel(input: CreateCardViewModelInput): CardViewModel {
@@ -410,7 +406,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 		logoLabel,
 		logoShape,
 		k: roles({ primary: media?.teams[profile.franchiseId]?.color || STOCK, secondary: STOCK }),
-		fin: materialFor(finishFor(finishRole(profile, slot, role), ranking?.battingWAR162, ranking?.pitchingWAR162)),
+		fin: materialFor(finishFor(finishRoleFor(profile.eligibleSlots, slot, role === 'bullpen'), ranking?.battingWAR162, ranking?.pitchingWAR162)),
 		mediaStatus
 	};
 	const supplemental: Supplemental = profile.bullpen ? {

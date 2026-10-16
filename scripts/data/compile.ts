@@ -5,7 +5,7 @@ import { createContactReference, type MatchupQuery } from '../../src/lib/engine/
 import { contactRecord, FIT_TOLERANCE, type ContactModel } from '../../src/lib/sim/contact-profile.ts';
 import { stadiumRef } from '../../src/lib/sim/park.ts';
 import { compileStadiums, type StadiumCatalog } from './stadiums.ts';
-import { finishFor, type Finish, type FinishRole } from '../../src/lib/cards/finish.ts';
+import { finishFor, finishRoleFor, type Finish, type FinishRole } from '../../src/lib/cards/finish.ts';
 import { buildDraftCardTable, buildParkFits } from '../../src/lib/draft/salary.ts';
 import { cachedParkBasis } from './contact-model.ts';
 import { applyDefense } from './defense.ts';
@@ -78,7 +78,7 @@ const DEFENSE_METHOD = {
  }
 } as const;
 
-interface ShowcaseWar {
+export interface ShowcaseWar {
  battingWAR162: number | null;
  pitchingWAR162: number | null;
 }
@@ -121,6 +121,21 @@ function showcaseOption(profile: Profile, role: ShowcaseRole, value: ShowcaseWar
 function showcaseFinish(option: ShowcaseOption, value: ShowcaseWar | undefined): Finish {
  const role: FinishRole = option.role === 'hitter' ? 'hitter' : option.slot === 'CL' ? 'closer' : 'starter';
  return finishFor(role, value?.battingWAR162, value?.pitchingWAR162);
+}
+
+/**
+ * Draftable seasons a jackpot may deal, ranked by descending valueRuns, then ascending season identity:
+ * only those whose unslotted card, as the pack shows it, prints in the gem finish. WAR counts only for
+ * roles the season can fill, matching the published rankings the cards read.
+ */
+export function jackpotSeasons(draftable: readonly Pick<Profile, 'seasonId' | 'eligibleSlots'>[], war: ReadonlyMap<string, ShowcaseWar>, valueRuns: ReadonlyMap<string, number>): string[] {
+ return draftable.filter(profile => {
+  const value = war.get(profile.seasonId);
+  const batting = profile.eligibleSlots.some(slot => (HITTER_SLOTS as readonly string[]).includes(slot));
+  const pitching = profile.eligibleSlots.some(slot => slot.startsWith('SP') || slot === 'CL');
+  return finishFor(finishRoleFor(profile.eligibleSlots), batting ? value?.battingWAR162 : null, pitching ? value?.pitchingWAR162 : null) === 'gem';
+ }).map(profile => profile.seasonId)
+  .sort((left, right) => valueRuns.get(right)! - valueRuns.get(left)! || compareId(left, right));
 }
 
 function compareShowcaseOption(a: ShowcaseOption, b: ShowcaseOption): number {
@@ -270,8 +285,7 @@ export function compileData(tables: Tables, attribution: Attribution, sourceComm
  };
  const diagnostics = { ...diagnosticCounts, defense: defenseDiagnostics, contactFits, messages: compiled.diagnostics };
  const showcase = buildShowcase(candidates, joinedWar);
- const jackpot = draftable.map(profile => profile.seasonId)
-  .sort((left, right) => valueRuns.get(right)! - valueRuns.get(left)! || compareId(left, right));
+ const jackpot = jackpotSeasons(draftable, cardWar, valueRuns);
  const gallery = buildGallery(chunks);
  const payload = { schemaVersion: 1, sourceCommit, chunks, gallery, showcase, simulation: simulationBase, draftCards, parkFits, jackpot, franchises, coverage, attribution, defensiveMethod: DEFENSE_METHOD, approximations: APPROXIMATIONS, diagnostics };
  const dataVersion = createHash('sha256').update(canonicalJSON(payload)).digest('hex');

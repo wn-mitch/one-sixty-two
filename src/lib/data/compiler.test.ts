@@ -3,13 +3,13 @@ import { parseCsv, type CsvRow } from '../../../scripts/data/acquire.ts';
 import { buildBaselines } from '../../../scripts/data/baselines.ts';
 import { applyDefense } from '../../../scripts/data/defense.ts';
 import { buildBullpenCandidates } from '../../../scripts/data/bullpens.ts';
-import { buildGallery, canonicalJSON, compileData } from '../../../scripts/data/compile.ts';
+import { buildGallery, canonicalJSON, compileData, jackpotSeasons } from '../../../scripts/data/compile.ts';
 import { battingColumns, battingCounts, groupCounts, pitchingColumns, pitchingCounts, seasonKey } from '../../../scripts/data/counts.ts';
 import { buildFielding, leagueFielding } from '../../../scripts/data/fielding.ts';
 import { assignHitters } from '../../../scripts/data/opponents.ts';
 import { groupJoinedWarRows } from '../../../scripts/data/source-join.ts';
 import { compileProfiles, percentile } from '../../../scripts/data/profiles.ts';
-import { POSITIONS, SLOTS, compareId, type DefensiveEnvironment, type Rates, type ShowcaseCard } from '../game/types.ts';
+import { POSITIONS, SLOTS, compareId, type DefensiveEnvironment, type Profile, type Rates, type RosterSlot, type ShowcaseCard } from '../game/types.ts';
 import { validateProfile } from '../sim/validation.ts';
 import { syntheticAttribution, syntheticTables } from './compiler-fixtures.ts';
 import { readFileSync } from 'node:fs';
@@ -322,9 +322,9 @@ describe('historical data compiler', () => {
   expect(priced).toHaveLength(first.manifest.candidates.filter(candidate => !candidate.eligibleSlots.includes('BP')).length);
   const ranked = cards.seasonId.map((seasonId, index) => ({ seasonId, value: cards.valueRuns[index] }))
    .sort((left, right) => right.value - left.value || compareId(left.seasonId, right.seasonId));
-  expect(first.manifest.jackpot).toEqual(ranked.map(value => value.seasonId));
-  expect(first.manifest.jackpot).toHaveLength(priced.length);
-  expect(new Set(first.manifest.jackpot).size).toBe(priced.length);
+  // This fixture's WAR source matches no season, so no card is a gem and no jackpot can be dealt.
+  expect(ranked.length).toBe(priced.length);
+  expect(first.manifest.jackpot).toEqual([]);
   expect(first.manifest).not.toHaveProperty('jackpotHeadliners');
   expect(first.payload).not.toHaveProperty('jackpotHeadliners');
   expect(simulation.opponents).toHaveLength(30);
@@ -358,4 +358,34 @@ describe('historical data compiler', () => {
   expect(percentile([0, 0, 1], 0)).toBe(0.25);
   expect(percentile([0, 0, 1], 1)).toBe(1);
  });
+});
+
+describe('jackpot pool', () => {
+ const season = (seasonId: string, eligibleSlots: RosterSlot[]): Pick<Profile, 'seasonId' | 'eligibleSlots'> => ({ seasonId, eligibleSlots });
+ const pool = [
+  season('gem-hitter', ['SS', 'DH']),
+  season('near-hitter', ['CF', 'DH']),
+  season('gem-starter', ['SP1', 'SP2', 'SP3']),
+  season('swing-arm', ['SP1', 'SP2', 'SP3', 'CL']),
+  season('gem-closer', ['CL']),
+  season('mound-cameo', ['1B', 'DH']),
+  season('two-way', ['RF', 'DH', 'SP1', 'SP2', 'SP3'])
+ ];
+ const war = new Map([
+  ['gem-hitter', { battingWAR162: 6.2, pitchingWAR162: null }],
+  ['near-hitter', { battingWAR162: 5.99, pitchingWAR162: null }],
+  ['gem-starter', { battingWAR162: null, pitchingWAR162: 6 }],
+  // A closer-grade 3 WAR is a gem only on a card that uses closer cuts; a swing arm's unslotted card does not.
+  ['swing-arm', { battingWAR162: null, pitchingWAR162: 3 }],
+  ['gem-closer', { battingWAR162: null, pitchingWAR162: 2.6 }],
+  // Pitching WAR on a season that cannot pitch is not on its card.
+  ['mound-cameo', { battingWAR162: 1, pitchingWAR162: 9 }],
+  ['two-way', { battingWAR162: 1, pitchingWAR162: 6.5 }]
+ ]);
+ const value = new Map(pool.map((profile, index) => [profile.seasonId, index === 4 ? 100 : 10 - index]));
+
+ it('keeps only seasons whose dealt card is a gem, ranked by value', () => {
+  expect(jackpotSeasons(pool, war, value)).toEqual(['gem-closer', 'gem-hitter', 'gem-starter', 'two-way']);
+ });
+
 });
