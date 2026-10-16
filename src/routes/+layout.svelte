@@ -132,6 +132,7 @@
 				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/credits">Full attribution, data download &amp; image credits</a>.</p>
 		</div>
 		<div class="footer-links">
+			<a class="support-link" href="/privacy">Privacy policy</a>
 			{#if externalSupport}
 				<a class="support-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer">Support the developer <span aria-hidden="true">↗</span></a>
 			{/if}

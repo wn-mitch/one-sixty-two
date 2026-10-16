@@ -49,7 +49,7 @@ Sharing publishes two 1080×1920 PNGs, a field layout and a four-by-four full-ca
 
 ## Accessibility & Inclusion
 
-WCAG AA text and control contrast, visible keyboard focus, labelled scrolling tables, at least 44px primary touch targets, textual win/loss indicators, and reduced-motion support. A single Motion toggle persists the on/off preference when storage is available and remains usable for the session when it is not. Motion amount and speed are fixed; the operating system's reduced-motion preference always overrides the toggle. No audio or external analytics.
+WCAG AA text and control contrast, visible keyboard focus, labelled scrolling tables, at least 44px primary touch targets, textual win/loss indicators, and reduced-motion support. A single Motion toggle persists the on/off preference when storage is available and remains usable for the session when it is not. Motion amount and speed are fixed; the operating system's reduced-motion preference always overrides the toggle. No audio or advertising trackers. Production hosting supplies Cloudflare traffic and performance analytics, disclosed in `/privacy`.
 
 ## Voluntary Support
 
