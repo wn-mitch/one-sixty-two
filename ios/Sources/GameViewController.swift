@@ -64,6 +64,8 @@ final class GameViewController: UIViewController {
         webView.accessibilityIdentifier = "game-webview"
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = false
+        webView.backgroundColor = Self.charcoal
+        webView.scrollView.backgroundColor = Self.charcoal
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -189,7 +191,9 @@ final class GameViewController: UIViewController {
     }
 
 
-    private static let charcoal = UIColor(red: 0.08, green: 0.09, blue: 0.12, alpha: 1)
+    // Matches WebKit's sRGB rendering of --background (oklch(16% 0.009 255)) in src/routes/layout.css.
+    // The safe areas, loading states, and web content share one continuous ground.
+    private static let charcoal = UIColor(red: 11 / 255, green: 14 / 255, blue: 16 / 255, alpha: 1)
 }
 
 extension GameViewController: WKNavigationDelegate {
