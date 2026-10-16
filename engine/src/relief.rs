@@ -13,7 +13,7 @@ pub enum ReliefRole {
     Setup,
     /// Other relief innings; may stay a second inning after an efficient first.
     Middle,
-    /// A starter gone before the 6th, or a deficit of 4 or more; stays up to three innings.
+    /// A starter gone before the 6th, or either club ahead by 4+; stays up to three innings.
     Long,
     /// Enters mid-inning from the 6th with a runner in scoring position and a lead of 0-3.
     Stopper,

@@ -62,7 +62,7 @@
   closer: 'Pitches the 9th with a lead of 3 runs or fewer.',
   setup: 'Pitches the 8th, then the 7th, with a lead of 3 or fewer once the starter is out.',
   middle: 'Takes any other relief inning; stays a second inning after a quick first.',
-  long: 'Takes over when the starter leaves before the 6th or the team trails by 4 or more; stays up to 3 innings.',
+  long: 'Takes over when the starter leaves before the 6th or either team leads by 4 or more; stays up to 3 innings.',
   stopper: 'Comes in mid-inning from the 6th with a runner in scoring position and a lead of 3 or fewer.'
  };
  const relievers = $derived(RELIEF_SLOTS.flatMap(slot => {
@@ -385,7 +385,7 @@
   <section aria-labelledby="rotation-heading">
    <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3>{@render smartButton('Ace first', startersAreSmart, () => applySmartOrder('starter'), 'The three starters cycle in this order, 54 starts each, without injuries or fatigue. The order decides which games each one gets. Ace first gives your best arm opening day.')}</div>
    {@render orderList('starter', draft.starterOrder)}
-   <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3>{@render smartButton('Smart roles', rolesAreSmart, applySmartRoles, "Smart roles gives your best arm the closer's job, the next two setup, and the rest middle and long relief. Roles decide who pitches when, a backup role is used only after a day off, no one pitches three days running, and a league-average relief pool covers the rest. See Rules & model for details.")}</div>
+   <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3>{@render smartButton('Smart roles', rolesAreSmart, applySmartRoles, "Smart roles gives your best arm the closer's job, the next two setup, and the rest middle and long relief. Roles set first choices; backup roles need a day off. If those choices are unavailable, remaining named arms pitch before the league-average pool, with primary closers last. Rest limits still apply. See Rules & model for details.")}</div>
    <ul class="order fixed" aria-labelledby="relief-heading">
     {#if closer}
      {@render fixedPlayer(closer, 'CL')}

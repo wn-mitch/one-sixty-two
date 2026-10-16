@@ -72,11 +72,22 @@ impl Workload {
         true
     }
 
-    /// Long relief for an early exit or a deficit of 4 or more, else middle relief, else the remainder.
+    /// Prefer Long for early exits or a margin of 4+, otherwise Middle. Exhaust named arms
+    /// before the remainder, keeping a primary closer last in the emergency order.
     fn relieve(&mut self, team: &TeamInput, lead: i32) {
-        let long = self.inning < LATE_INNING || lead <= -4;
+        let long = self.inning < LATE_INNING || lead <= -4 || lead >= 4;
         if long && self.call(team, ReliefRole::Long, false) { return; }
         if self.call(team, ReliefRole::Middle, false) { return; }
+        let eligible = |index: usize| self.ready(team, index) && team.roles[index].is_some();
+        let pick = team.named_relief()
+            .find(|&index| eligible(index) && team.roles[index].unwrap().primary != ReliefRole::Closer)
+            .or_else(|| team.named_relief().find(|&index| eligible(index)));
+        if let Some(index) = pick {
+            self.used[index] = true;
+            self.current = index;
+            self.entered = team.roles[index].map(|roles| roles.primary);
+            return;
+        }
         self.current = team.bullpen_index;
         self.entered = None;
     }
@@ -208,10 +219,10 @@ mod tests {
         let staff = staff();
         let mut team = team(&staff);
         assert_eq!(relief_innings(&team, &[(7, 2), (8, 2), (9, 2)], 3, 3), [3, 2, 1]);
-        // Outside a 0-3 lead: RP3 (Middle) goes two efficient innings, then RP2 (secondary Middle), then the remainder.
-        assert_eq!(relief_innings(&team, &[(6, 5), (7, 5), (8, 5), (9, 5)], 3, 3), [4, 4, 3, 3]);
-        // A laborious first inning ends the outing; the closer never stays for a second inning.
-        assert_eq!(relief_innings(&team, &[(6, 5), (7, 5), (8, 5)], 3, 5), [4, 3, 5]);
+        // A narrow deficit goes to Middle, which can stay for a second efficient inning.
+        assert_eq!(relief_innings(&team, &[(6, -1), (7, -1), (8, -1), (9, -1)], 3, 3), [4, 4, 3, 3]);
+        // After laborious innings, remaining named arms precede the generic pool.
+        assert_eq!(relief_innings(&team, &[(6, -1), (7, -1), (8, -1)], 3, 5), [4, 3, 2]);
         assert_eq!(relief_innings(&team, &[(9, 0), (10, 0)], 3, 3), [1, 4]);
         // With RP2 out the 7th goes to middle relief: RP1 is kept for the 8th and the closer for the 9th.
         team.available[3] = false;
@@ -223,7 +234,7 @@ mod tests {
         let staff = staff();
         let mut team = team(&staff);
         team.rested[3] = false;
-        assert_eq!(relief_innings(&team, &[(6, 5), (7, 5), (8, 5)], 3, 5), [4, 5, 5]);
+        assert_eq!(relief_innings(&team, &[(6, -1), (7, -1), (8, -1)], 3, 5), [4, 2, 3]);
         // The tired RP2 still takes its primary Setup inning.
         assert_eq!(relief_innings(&team, &[(7, 1)], 3, 3), [3]);
         team.available[2] = false;
@@ -231,6 +242,27 @@ mod tests {
         // With both setup men out, the 8th falls to the closer's secondary Setup role.
         team.available[3] = false;
         assert_eq!(relief_innings(&team, &[(8, 1)], 3, 3), [1]);
+    }
+
+    #[test]
+    fn long_only_arm_covers_large_leads_and_deficits_for_three_innings() {
+        let staff = staff();
+        let mut team = team(&staff);
+        team.roles[2] = Some(Roles { primary: Long, secondary: None });
+        for lead in [-4, 4] {
+            assert_eq!(relief_innings(&team, &[(6, lead), (7, lead), (8, lead), (9, lead)], 3, 5), [2, 2, 2, 4]);
+        }
+    }
+
+    #[test]
+    fn fallback_uses_available_named_arms_once_and_closer_last() {
+        let staff = staff();
+        let mut team = team(&staff);
+        team.roles[2] = Some(Roles { primary: Long, secondary: None });
+        team.available[3] = false;
+        // Middle first; unused Long then covers three innings, even in a close game.
+        // The unavailable setup arm is skipped and no pitcher re-enters.
+        assert_eq!(relief_innings(&team, &[(6, -1), (7, -1), (8, -1), (9, -1), (10, -1), (11, -1)], 3, 5), [4, 2, 2, 2, 1, 5]);
     }
 
     #[test]
