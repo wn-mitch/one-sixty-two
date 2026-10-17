@@ -24,8 +24,8 @@
 <Skeleton label="Loading the lineup…">
  <div class="lineup-skeleton">
   <div class="header">
-   <span class="sk-line heading" style:--sk-width="13rem"></span>
-   <div class="intro"><span class="sk-line"></span><span class="sk-line" style:--sk-width="40%"></span></div>
+   <span class="heading"><span class="sk-line" style:--sk-width="13rem"></span><span class="sk-line second" style:--sk-width="6rem"></span></span>
+   <span class="sk smart"></span>
   </div>
   <div class="columns">
    <div class="column">
@@ -48,15 +48,18 @@
 
 <style>
  .lineup-skeleton { min-width: 0; }
- .header { margin-block: var(--space-6) var(--space-8); }
- .heading { margin-bottom: var(--space-2); font-size: var(--text-2xl); line-height: 1.15; }
- .intro { max-width: 60ch; font-size: var(--text-sm); line-height: 1.5; }
+ /* The title beside Smart all; phones wrap the title onto a second line. */
+ .header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-block: var(--space-6) var(--space-8); }
+ .heading { flex: 0 1 13rem; min-width: 0; margin-bottom: var(--space-2); font-size: var(--text-2xl); line-height: 1.15; }
+ .heading .second { display: none; }
+ @media (max-width: 30rem) { .heading .second { display: flex; } }
+ .header .smart { width: 145px; }
  .columns { display: grid; gap: var(--space-8); }
  .column { min-width: 0; }
  .section-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); font-size: var(--text-lg); line-height: 1.15; }
  .section-heading .sk-line { flex: 0 1 10rem; }
  .relief { margin-top: var(--space-8); }
- .smart { flex: none; width: 8.5rem; height: 2.5rem; }
+ .smart { flex: none; width: 165px; height: 44px; }
  .order { display: grid; gap: var(--space-2); padding-top: var(--space-3); container-type: inline-size; }
  /* Rows keep the loaded heights: phones wrap each batter's stats under the name; pitchers carry a role line. */
  .row { display: grid; grid-template-columns: 3.25rem 56px minmax(0, 1fr) 2.75rem; grid-template-areas: 'num card identity move' 'num card meta move'; align-items: center; gap: var(--space-1) var(--space-3); box-sizing: border-box; height: 144.2px; padding: var(--space-2) var(--space-2) var(--space-2) 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }

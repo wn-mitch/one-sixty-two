@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { CardEra } from '../../src/lib/cards/view-model.ts';
-import { ERA_STICKER_SLOTS, onPhoto, PROTECTED_LAYER_SELECTOR, STICKER_LAYOUT, STICKER_MARGIN } from '../../src/lib/collection/sticker-slots.ts';
+import { ERA_PLACEMENT, ERA_STICKER_SLOTS, onPhoto, PROTECTED_LAYER_SELECTOR, STICKER_LAYOUT, STICKER_MARGIN } from '../../src/lib/collection/sticker-slots.ts';
 import { test, expect, openStory } from './workshop-test';
 
 const ERAS = Object.keys(ERA_STICKER_SLOTS) as CardEra[];
@@ -61,21 +61,23 @@ async function geometry(page: Page): Promise<CardGeometry[]> {
 
 const gap = (cx: number, cy: number, box: Rect) => Math.hypot(Math.max(box.left - cx, 0, cx - box.right), Math.max(box.top - cy, 0, cy - box.bottom));
 
-/** Every way a card's stickers break the placement rules, one line each. */
+/** Every way a card's stickers break the placement rules, one line each, under the era's own relaxations. */
 function violations(card: CardGeometry, era: CardEra): string[] {
 	const found: string[] = [];
+	const placement = ERA_PLACEMENT[era] ?? {};
 	const width = card.card.right - card.card.left;
 	const height = card.card.bottom - card.card.top;
 	const margin = STICKER_MARGIN * width;
 	const rim = STICKER_LAYOUT.rim * width + margin;
 	for (const [index, spot] of card.spots.entries()) {
 		const reach = spot.r + margin - TOLERANCE;
+		const identityReach = spot.r + (placement.identityMargin ?? STICKER_MARGIN) * width - TOLERANCE;
 		for (const layer of card.layers) {
-			if (gap(spot.cx, spot.cy, layer) < reach) found.push(`${card.variant} sticker ${index} is within its margin of ${layer.layer}`);
+			if (gap(spot.cx, spot.cy, layer) < identityReach) found.push(`${card.variant} sticker ${index} is within its margin of ${layer.layer}`);
 		}
 		const frame = { left: card.card.left + rim, top: card.card.top + rim, right: card.card.right - rim, bottom: card.card.bottom - rim };
 		if (spot.cx - spot.r < frame.left - TOLERANCE || spot.cx + spot.r > frame.right + TOLERANCE || spot.cy - spot.r < frame.top - TOLERANCE || spot.cy + spot.r > frame.bottom + TOLERANCE) found.push(`${card.variant} sticker ${index} is within its margin of the inner frame`);
-		if (card.photo) {
+		if (card.photo && !placement.overlapFrame) {
 			// Wholly on the photo or wholly off it (and off the gem ring), a margin from the edge either way.
 			const photo = { x: (card.photo.left - card.card.left) / width, y: (card.photo.top - card.card.top) / height, w: (card.photo.right - card.photo.left) / width, h: (card.photo.bottom - card.photo.top) / height };
 			const centre = { x: (spot.cx - card.card.left) / width, y: (spot.cy - card.card.top) / height };
@@ -121,7 +123,7 @@ for (const era of ERAS) {
 	});
 }
 
-test('mirrored vertical pairs and the right column survive the feedback viewport', async ({ page }) => {
+test('mirrored vertical pairs and the contemporary column survive the feedback viewport', async ({ page }) => {
 	await page.setViewportSize({ width: 1212, height: 788 });
 	await openSlots(page, 'every-era', { mode: 'era', width: 300, overlay: true }, ERAS.length);
 	const cards = await geometry(page);
@@ -138,7 +140,8 @@ test('mirrored vertical pairs and the right column survive the feedback viewport
 	expect(arch.spots[0].cx).toBeLessThan(arch.spots[2].cx);
 	expect(arch.spots[0].cy).toBeCloseTo(arch.spots[2].cy, 0);
 	expect(arch.spots[1].cy).toBeCloseTo(arch.spots[3].cy, 0);
-	for (const spot of modern.spots) expect(spot.cx).toBeGreaterThan((modern.card.left + modern.card.right) / 2);
+	const centre = (modern.card.left + modern.card.right) / 2;
+	for (const spot of modern.spots) expect(ERA_PLACEMENT['2020s']?.side === 'left' ? spot.cx < centre : spot.cx > centre).toBe(true);
 	expect(violations(arch, '1970s')).toEqual([]);
 	expect(violations(modern, '2020s')).toEqual([]);
 });

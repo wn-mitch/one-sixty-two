@@ -40,7 +40,11 @@
     <span class="sk control" style:width="78px"></span>
    </div>
   {:else}
-   <div class="draft-toolbar"><span class="sk reveal"></span><span class="sk control" style:width="96px"></span><span class="sk control" style:width="48px"></span></div>
+   <div class="draft-toolbar">
+    <span class="sk reveal"></span>
+    {#if pool}<span class="sk control reroll" style:width="134px"></span>{/if}
+    <span class="sk control" style:width="96px"></span><span class="sk control" style:width="48px"></span>
+   </div>
   {/if}
   <div class="board-columns">
    <div class="draft-browser">
@@ -78,7 +82,10 @@
  /* Phones: the roll bar, Field and New draft share one sticky row above the pack or pool. */
  .draft-toolbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .5rem; padding-block: .5rem; background: var(--background); }
  .reveal { flex: 1; height: 48px; }
- .pool .reveal { height: 65px; }
+ /* With a roll showing, the pool gives its identity a row and the reroll, field and menu controls share the next. */
+ .pool .draft-toolbar { flex-wrap: wrap; }
+ .pool .draft-toolbar .reveal { flex: 1 1 100%; }
+ .draft-toolbar .reroll { margin-right: auto; }
  .control { flex: none; height: 44px; }
  .draft-toolbar .control { height: 48px; }
  .board-columns { display: grid; min-width: 0; }

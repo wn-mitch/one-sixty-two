@@ -11,7 +11,7 @@
   </div>
   <div class="awards-share">
    <div class="awards">
-    <div class="heading"><span class="sk-line" style:--sk-width="7rem"></span></div>
+    <div class="heading"><span class="sk-line" style:--sk-width="7rem"></span><span class="sk info"></span></div>
     <div class="rail">
      {#each { length: 4 } as _}
       <div class="entry">
@@ -35,17 +35,22 @@
  .record-block { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); min-width: 0; }
  /* The loaded pieces' sizes: the score, the newspaper clipping, the grade cards and the season ledger. */
  .score { width: 14.25rem; height: var(--text-score); }
- .clipping { flex: 1 1 16rem; height: 4.5rem; }
+ /* The headline takes one line beside the score from 30rem, two on phones. */
+ .clipping { flex: 1 1 16rem; max-width: 32rem; height: 47px; }
  .grades { width: 31rem; max-width: 100%; height: 5.625rem; }
  .ledger { width: 18rem; max-width: 100%; height: 2.75rem; }
  .grades, .ledger { display: flex; gap: var(--space-3); }
  .grades .sk, .ledger .sk { flex: 1; }
- .actions { display: grid; gap: var(--space-2); }
- .actions .sk { height: 2.75rem; }
+ /* The bottom padding stands for the loaded actions' empty outcome row and its gap. */
+ .actions { display: grid; gap: var(--space-2); padding-bottom: var(--space-2); }
+ .actions .sk { height: 50px; }
  .actions .sk + .sk { display: none; }
  .awards-share { display: grid; gap: var(--space-8); min-width: 0; }
  .awards { min-width: 0; }
- .heading { margin-bottom: var(--space-3); font-size: var(--text-xl); line-height: 1.15; }
+ /* The awards title beside its info button. */
+ .heading { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); font-size: var(--text-xl); line-height: 1.15; }
+ .heading .sk-line { flex: 0 1 7rem; }
+ .info { flex: none; width: 44px; height: 44px; border-radius: 50%; }
  /* Award entries as ResultsAwards lays them out: a 2×2 grid beside sharing, a swipeable rail below that. */
  .rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(13rem, 16rem); gap: var(--space-4); min-width: 0; padding: var(--space-1) var(--space-1) var(--space-2); overflow: hidden; }
  .entry { display: grid; align-content: start; gap: var(--space-2); min-width: 0; }
@@ -57,7 +62,8 @@
  .share { min-height: 40rem; }
  @media (min-width: 48rem) {
   .scoreboard { grid-template-columns: minmax(15rem, 1fr) auto; align-items: center; gap: var(--space-6) var(--space-8); }
-  .actions { width: 16.125rem; }
+  .actions { width: 21.875rem; }
+  .actions .sk { height: 2.75rem; }
   .actions .sk + .sk { display: block; height: 2.25rem; }
  }
  @media (min-width: 64rem) { .awards-share { grid-template-columns: minmax(0, 1fr) 24rem; align-items: start; } }
@@ -69,6 +75,7 @@
   .name { font-size: var(--text-base); }
   .metric { font-size: var(--text-xl); }
  }
+ @media (max-width: 30rem) { .clipping { height: 4.5rem; } }
  @media (max-width: 40rem) {
   .scoreboard { padding: var(--space-4); }
   .score { width: 12rem; height: var(--text-3xl); }
