@@ -22,6 +22,7 @@ import {
 } from './types.ts';
 import { analyzeDraft, canFinishDraft, isViableForSlot, type DraftAnalysis } from './draft-analysis.ts';
 import { randomStream, shuffle } from './random.ts';
+import { dailySeed, dailyStadium, isDailyDate } from './daily.ts';
 import { draftRules, type DraftRulePolicy } from './rules.ts';
 
 function requireCurrentRules(draft: Draft): DraftRulePolicy {
@@ -29,7 +30,7 @@ function requireCurrentRules(draft: Draft): DraftRulePolicy {
  return draftRules(CURRENT_REPLAY_SCHEMA_VERSION);
 }
 
-function emptyDraft(manifest: Manifest, seed: number): Draft {
+function emptyDraft(manifest: Manifest, seed: number, daily?: string): Draft {
  const policy = draftRules(CURRENT_REPLAY_SCHEMA_VERSION);
  return {
   schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION,
@@ -44,13 +45,19 @@ function emptyDraft(manifest: Manifest, seed: number): Draft {
   battingOrder: [],
   starterOrder: [],
   reliefRoles: [],
-  actions: []
+  actions: [],
+  ...(daily === undefined ? {} : { daily })
  };
 }
 
 export function createDraft(manifest: Manifest, seed: number): Draft {
  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Invalid draft seed');
  return emptyDraft(manifest, seed);
+}
+
+/** The daily run for `date`: its seed and home stadium are the day's, already pinned. */
+export function createDailyDraft(manifest: Manifest, date: string): Draft {
+ return applyStadium(emptyDraft(manifest, dailySeed(date), date), manifest, dailyStadium(date, manifest).ref.id, null);
 }
 
 export function openSlots(draft: Draft): Slot[] {
@@ -190,6 +197,7 @@ function applyStadium(draft: Draft, manifest: Manifest, stadiumId: string, stadi
  if (draft.homeStadium || draft.actions.length || draft.picks.length || draft.currentRoll) throw new Error('The home stadium is already chosen');
  const stadium = manifest.stadiums.find(item => item.ref.id === stadiumId);
  if (!stadium || (stadiumVersion !== null && stadium.ref.version !== stadiumVersion)) throw new Error('Choose a stadium from the current deck');
+ if (draft.daily !== undefined && stadium.ref.id !== dailyStadium(draft.daily, manifest).ref.id) throw new Error('The daily run plays in the day’s stadium');
  const { id, version } = stadium.ref;
  return { ...draft, homeStadium: { id, version }, actions: [{ type: 'select-stadium', stadiumId: id, stadiumVersion: version }] };
 }
@@ -394,7 +402,8 @@ function jackpotPlayers(roll: Roll | undefined, manifest: Manifest): string[] {
 /** Rebuilds the draft from its actions, with every player an earlier jackpot dealt. */
 function replayActions(input: Replay, manifest: Manifest): { draft: Draft; random: () => number; shown: Set<string> } {
  if (!Array.isArray(input.actions)) throw new Error('Invalid draft actions');
- let draft = emptyDraft(manifest, input.seed);
+ if (input.daily !== undefined && (!isDailyDate(input.daily) || input.seed !== dailySeed(input.daily))) throw new Error('Invalid daily run');
+ let draft = emptyDraft(manifest, input.seed, input.daily);
  const random = randomStream(input.seed, 'draft');
  const shown = new Set<string>();
  for (const value of input.actions) {
@@ -507,6 +516,7 @@ function validateWithRules(value: unknown, manifest: Manifest, requireCurrentRol
  if (requireCurrentRoll && !Object.prototype.hasOwnProperty.call(input, 'currentRoll')) throw new Error('Invalid saved roll');
  const { draft } = replayChronology(input, manifest);
  if (!samePicks(input.picks, draft.picks) || !sameStadium(input.homeStadium, draft.homeStadium)) throw new Error('Invalid draft snapshot');
+ if (draft.daily !== undefined && !draft.homeStadium) throw new Error('Invalid daily run');
  if (requireCurrentRoll && (!Array.isArray(input.packs) || input.packs.length !== draft.packs.length ||
   input.packs.some((pack, index) => !sameRoll(pack, draft.packs[index])))) throw new Error('Invalid saved roll');
  if (!sameRoll(input.currentRoll, draft.currentRoll)) {
@@ -530,7 +540,8 @@ export function validateReplay(value: unknown, manifest: Manifest): Draft {
  return validateWithRules(value, manifest, false, true);
 }
 
+/** The replay contract in canonical key order; `daily` appears only on a daily run, so other drafts keep their keys. */
 export function replayInput(draft: Draft): Replay {
- const { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions } = draft;
- return { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions };
+ const { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions, daily } = draft;
+ return { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions, ...(daily === undefined ? {} : { daily }) };
 }

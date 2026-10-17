@@ -61,7 +61,7 @@
 		season = null;
 		publication = null;
 		shareStatus = '';
-		reward = initial === 'firstSeasonReward' ? { season: 1, bonus: 1 } : null;
+		reward = initial === 'firstSeasonReward' ? { season: 1, bonus: 1, daily: 0 } : null;
 		void getExampleSeason()
 			.then((value) => {
 				if (currentRequest !== request) return;

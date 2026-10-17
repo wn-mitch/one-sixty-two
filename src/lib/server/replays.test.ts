@@ -122,7 +122,9 @@ describe('replay R2 storage', () => {
 			{ ...current, picks: current.picks.map((pick, index) => index ? pick : { ...pick, slot: 'XX' }) },
 			{ ...current, starterOrder: [...current.starterOrder, 'extra'] },
 			{ ...current, actions: [...current.actions, { type: 'trade' }] },
-			{ ...current, actions: Array.from({ length: 513 }, () => ({ type: 'roll' })) }
+			{ ...current, actions: Array.from({ length: 513 }, () => ({ type: 'roll' })) },
+			{ ...current, daily: '2026-02-30' },
+			{ ...current, daily: null }
 		]) {
 			const bucket = new MemoryBucket();
 			await expect(storeReplay(bucket, malformed, dataVersion)).rejects.toThrow('invalid');
@@ -132,6 +134,14 @@ describe('replay R2 storage', () => {
 		const stored = await storeReplay(bucket, { ...current, playerName: 'Someone', result: { wins: 162 } }, dataVersion);
 		expect(stored.id).toBe((await storeReplay(new MemoryBucket(), current, dataVersion)).id);
 		expect(Object.keys(JSON.parse(new TextDecoder().decode(bucket.objects.get(stored.key)!)))).not.toContain('playerName');
+	});
+
+	it('keeps a daily run’s date, so a shared daily still shows its mark', async () => {
+		const bucket = new MemoryBucket();
+		const daily = { ...finish(), daily: '2026-10-17' };
+		const stored = await storeReplay(bucket, daily, dataVersion);
+		expect((await loadReplay(bucket, stored.id, dataVersion)).daily).toBe('2026-10-17');
+		expect(stored.id).not.toBe((await storeReplay(bucket, finish(), dataVersion)).id);
 	});
 
 	it('reads only the small current-data pointer from the deployed asset binding', async () => {

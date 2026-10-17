@@ -10,14 +10,14 @@
 	import TokenAmount from './TokenAmount.svelte';
 
 	let { reward, ownSeason }: { reward: SeasonReward | null; ownSeason: boolean } = $props();
-	const earned = $derived(ownSeason && reward ? reward.season + reward.bonus : 0);
-	const breakdown = $derived(reward ? `${reward.season} season ${reward.season === 1 ? 'token' : 'tokens'}${reward.bonus ? ` + ${reward.bonus} first-season bonus` : ''}` : '');
+	const earned = $derived(ownSeason && reward ? reward.season + reward.bonus + reward.daily : 0);
+	const breakdown = $derived(reward ? `${reward.season} season ${reward.season === 1 ? 'token' : 'tokens'}${reward.daily ? ` + ${reward.daily} daily bonus` : ''}${reward.bonus ? ` + ${reward.bonus} first-season bonus` : ''}` : '');
 	let announcement = $state('');
 
 	function celebrate(node: HTMLAnchorElement, receipt: SeasonReward) {
 		if (presented.has(receipt)) return;
 		presented.add(receipt);
-		const total = receipt.season + receipt.bonus;
+		const total = receipt.season + receipt.bonus + receipt.daily;
 		announcement = `${total} ${total === 1 ? 'token' : 'tokens'} earned: ${breakdown}. Added to your Shop wallet.`;
 		const release = appSettings.retain();
 		const animations = new Set<Animation>();

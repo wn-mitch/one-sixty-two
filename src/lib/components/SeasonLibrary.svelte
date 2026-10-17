@@ -50,9 +50,12 @@
 	const sorted = $derived([...entries].sort((a, b) => sort === 'wins'
 		? b.record.wins - a.record.wins || b.savedAt.localeCompare(a.savedAt)
 		: b.savedAt.localeCompare(a.savedAt)));
+	/** Daily runs get their own shelf, newest day first; the sort and grade grouping order the other clubs. */
+	const dailies = $derived(entries.filter(entry => entry.daily).sort((a, b) => b.daily!.localeCompare(a.daily!)));
+	const clubs = $derived(sorted.filter(entry => !entry.daily));
 	const gradeGroups = $derived.by(() => {
 		const groups = new Map<SeasonGrade | null, LibraryView[]>();
-		for (const entry of sorted) {
+		for (const entry of clubs) {
 			const grade = seasonGrade(entry.record.wins, entry.record.losses);
 			const clubs = groups.get(grade);
 			if (clubs) clubs.push(entry);
@@ -151,7 +154,15 @@
 	{:else}
 		<div class="columns">
 			<div class="gallery">
-				{#if groupByGrade}
+				{#if dailies.length}
+					<section class="dailies" id="dailies" aria-labelledby="dailies-heading">
+						<h2 id="dailies-heading">Daily runs <span class="count" aria-label={`${dailies.length} daily runs`}>{dailies.length}</span></h2>
+						{@render tiles(dailies, 'Daily runs')}
+					</section>
+				{/if}
+				{#if !clubs.length}
+					<!-- Every saved club is a daily run. -->
+				{:else if groupByGrade}
 					{#each gradeGroups as group (group.grade)}
 						<section class="grade-group" aria-label={`${group.grade ?? 'Ungraded'} teams`}>
 							<h2>
@@ -162,7 +173,8 @@
 						</section>
 					{/each}
 				{:else}
-					{@render tiles(sorted, 'Saved clubs')}
+					{#if dailies.length}<h2 class="clubs-heading">Teams</h2>{/if}
+					{@render tiles(clubs, 'Saved clubs')}
 				{/if}
 			</div>
 			<div class="panel" class:leader-panel={selected.length === 0} bind:this={panel}>
@@ -211,7 +223,9 @@
 	.empty p { margin: 0; }
 	.columns { display: grid; gap: var(--space-6); align-items: start; min-width: 0; }
 	.gallery { display: grid; gap: var(--space-6); min-width: 0; }
-	.grade-group { display: grid; gap: var(--space-3); min-width: 0; }
+	.grade-group, .dailies { display: grid; gap: var(--space-3); min-width: 0; scroll-margin-top: var(--space-4); }
+	.dailies h2, .clubs-heading { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-xl); }
+	.clubs-heading { margin-bottom: calc(var(--space-3) - var(--space-6)); }
 	.grade-group h2 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-xl); }
 	.count { color: var(--muted); font: 600 var(--text-sm) / 1 'Barlow', sans-serif; }
 	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: var(--space-3); min-width: 0; margin: 0; padding: 0; list-style: none; }

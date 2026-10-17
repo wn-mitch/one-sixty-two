@@ -29,7 +29,7 @@
 	const balance = $derived(shopState.snapshot?.balance ?? null);
 	// The iOS app marks itself before the page runs; the website alone shows the external support link.
 	let externalSupport = $state(false);
-	const playing = $derived(['/', '/classic', '/draft'].includes(page.url.pathname) || /^\/(r|c)\//.test(page.url.pathname));
+	const playing = $derived(['/', '/classic', '/daily', '/draft'].includes(page.url.pathname) || /^\/(r|c)\//.test(page.url.pathname));
 	// Roster links (/r, /c) set their own preview from the published season image.
 	const rosterLink = $derived(/^\/(r|c)\//.test(page.url.pathname));
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
@@ -87,7 +87,7 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 	<meta name="theme-color" content="oklch(16% 0.009 255)" />
-	{#if page.url.pathname === '/' || page.url.pathname === '/classic'}
+	{#if page.url.pathname === '/' || page.url.pathname === '/classic' || page.url.pathname === '/daily'}
 		<title>162-0 | The undefeated baseball challenge</title>
 		<meta name="description" content="Roll a franchise and decade. Draft sixteen historical selections. Can your team survive 162 games without a loss?" />
 		<meta property="og:type" content="website" />

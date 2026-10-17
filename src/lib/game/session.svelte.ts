@@ -1,12 +1,13 @@
 import { goto } from '$app/navigation';
 import { loadRollProfiles, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
-import { addPack, choosePack, commitPick, createDraft, reassignPick, rollDraft, rollLabel, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
-import { libraryKey, saveSeason } from './library.ts';
+import { addPack, choosePack, commitPick, createDailyDraft, createDraft, reassignPick, rollDraft, rollLabel, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
+import { dailyRewardKey, libraryKey, saveSeason } from './library.ts';
 import { newCards, newStickers, type NewCard, type NewSticker } from '../collection/collection.ts';
 import { refreshStickers } from '../collection/store.svelte.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import { grantedReward, type SeasonReward } from '../cosmetics/ledger.ts';
-import { clearCompletedDraft, persistDraft, restoreDraft, RESUME_NOTICE, type Restore, type SavedPhase } from './persistence.ts';
+import { clearCompletedDraft, DAILY_STORAGE_NOTICE, persistDraft, restoreDaily, restoreDraft, RESUME_NOTICE, type DailyRun, type Restore, type SavedPhase } from './persistence.ts';
+import { dailyDate, dailyLabel, dailyStadium } from './daily.ts';
 import { deviceDb } from '../storage/db.ts';
 import { newSeed } from './random.ts';
 import { challengeFor, claimChallenge, type Challenge } from './challenge.ts';
@@ -64,11 +65,16 @@ export class Session {
  newCards = $state.raw<NewCard[]>([]);
  /** Tokens this season's save granted just now; null until saved, and nothing new on a revisit. */
  reward = $state.raw<SeasonReward | null>(null);
+ /** Today's daily and this device's run of it; null until read. */
+ daily = $state.raw<{ date: string; run: DailyRun } | null>(null);
  nativeShareReady = $state(false);
  imageDownloadFallback = $state(false);
  textCopyFallback = $state(false);
  private selected = new Map<string, Profile>();
+ /** The Classic draft's last saved phase. */
  private savedPhase: SavedPhase = 'draft';
+ /** The phase the draft being resumed was saved at, Classic or daily. */
+ private resumePhase: SavedPhase = 'draft';
  private archivedDraft: Draft | null = null;
  private savePending: Promise<void> = Promise.resolve();
  get canAutoResume(): boolean { return !!this.savedDraft && this.savedPhase !== 'results'; }
@@ -262,6 +268,8 @@ export class Session {
    }
    else if (saved.kind === 'incompatible') this.resumeNotice = saved.message;
    else if (saved.kind === 'unavailable') this.storageNotice = saved.message;
+   await this.refreshDaily();
+   if (epoch !== this.epoch) return;
    this.retryAction = null;
   } catch (error) {
    if (epoch !== this.epoch) return;
@@ -285,12 +293,17 @@ export class Session {
    if (!notice) {
     void refreshShop();
     try {
-     const reward = await grantedReward(db, `classic:${await libraryKey(draft)}`, now.toISOString());
+     const reward = await grantedReward(db, `classic:${await libraryKey(draft)}`, now.toISOString(), draft.daily === undefined ? null : dailyRewardKey(draft.daily));
      if (epoch === this.epoch) this.reward = reward;
     } catch { /* the reward is saved; only its announcement is lost */ }
     if (this.draft === draft) this.archivedDraft = draft;
-    if (this.savedDraft === draft) this.savedDraft = null;
-    notice = await clearCompletedDraft(db, draft);
+    if (draft.daily === undefined) {
+     if (this.savedDraft === draft) this.savedDraft = null;
+     notice = await clearCompletedDraft(db, draft);
+    } else if (this.daily?.date === draft.daily) {
+     // The save recorded the day's result with the season.
+     this.daily = { date: draft.daily, run: { kind: 'complete', record: { wins: result.wins, losses: result.losses } } };
+    }
     try {
      const key = await libraryKey(draft);
      const [earned, added] = await Promise.all([newStickers(db, key, now.toISOString(), profiles), newCards(db, key, profiles)]);
@@ -308,7 +321,8 @@ export class Session {
   if (!this.draft || this.shared) return;
   const draft = this.draft;
   const epoch = this.epoch;
-  this.savedPhase = phase;
+  if (draft.daily === undefined) this.savedPhase = phase;
+  else if (this.daily?.date === draft.daily && this.daily.run.kind !== 'complete') this.daily = { date: draft.daily, run: { kind: 'active', draft, phase } };
   // Writes queue in order on the database worker; the notice reflects the latest outcome.
   this.savePending = this.savePending.then(async () => {
    const notice = await deviceDb()
@@ -332,7 +346,47 @@ export class Session {
   if (this.loading || !this.manifest || !this.savedDraft) return;
   this.clearShareState();
   this.draft = this.savedDraft;
+  this.resumePhase = this.savedPhase;
   await this.restoreActive();
+ }
+ /** Reads today's daily from the device: on load, on returning home, and when the day turns over. */
+ async refreshDaily(): Promise<void> {
+  if (!this.manifest || this.shared) return;
+  const manifest = this.manifest;
+  const date = dailyDate();
+  let run: DailyRun;
+  try {
+   await this.savePending;
+   run = await restoreDaily((await deviceDb()).db, manifest, date);
+  } catch { run = { kind: 'unavailable', message: DAILY_STORAGE_NOTICE }; }
+  if (manifest !== this.manifest) return;
+  // The run on screen is newer than any write still queued for it.
+  if (this.draft?.daily === date && this.phase !== 'start') return;
+  this.daily = { date, run };
+  if (run.kind === 'unplayed' && run.notice) this.resumeNotice = run.notice;
+ }
+ /** Starts today's daily with its seed and stadium pinned, or resumes it; a finished day does nothing. */
+ async playDaily(): Promise<void> {
+  if (!this.manifest || this.loading || !this.daily) return;
+  if (this.daily.date !== dailyDate()) { await this.refreshDaily(); return; }
+  const { date, run } = this.daily;
+  if (run.kind === 'active') {
+   this.clearShareState();
+   this.draft = run.draft;
+   this.resumePhase = run.phase;
+   await this.restoreActive();
+   return;
+  }
+  if (run.kind !== 'unplayed') return;
+  this.stopRun();
+  this.clearShareState();
+  ++this.epoch;
+  this.shared = false;
+  this.draft = createDailyDraft(this.manifest, date);
+  this.resetRun();
+  this.phase = 'ready';
+  this.save('draft');
+  this.announce = `The daily for ${dailyLabel(date)} plays at ${dailyStadium(date, this.manifest).name}. Open the pack for your first franchise.`;
  }
  private async restoreActive(): Promise<void> {
   if (!this.draft) return;
@@ -347,7 +401,7 @@ export class Session {
    else if (this.draft.picks.length === draftRules(this.draft.schemaVersion).slots.length) {
     this.phase = 'lineup';
     this.loading = false;
-    if (this.savedPhase === 'simulating' || this.savedPhase === 'results' || this.shared) await this.simulate();
+    if (this.resumePhase === 'simulating' || this.resumePhase === 'results' || this.shared) await this.simulate();
    } else if (this.draft.packs.length) {
     // Two or three open packs wait for the player's choice; the pool loads once one is chosen.
     this.phase = 'choosing';
@@ -367,13 +421,17 @@ export class Session {
   this.epoch += 1;
   this.loading = false;
   this.confirmNew = false;
-  if (this.draft) this.savedDraft = this.draft === this.archivedDraft ? null : this.draft;
+  // A daily keeps its own slot, which every save already updates.
+  if (this.draft && this.draft.daily === undefined) this.savedDraft = this.draft === this.archivedDraft ? null : this.draft;
   this.phase = 'start';
+  void this.refreshDaily();
  }
  requestNew(): void {
   if (this.loading) return;
-  const active = this.draft === this.archivedDraft ? this.savedDraft : this.draft ?? this.savedDraft;
-  if (active && this.phase !== 'results') { this.confirmNew = true; return; }
+  // Only a Classic draft in progress is replaced; a daily on screen keeps its own slot.
+  const daily = this.draft?.daily !== undefined;
+  const active = daily || this.draft === this.archivedDraft ? this.savedDraft : this.draft ?? this.savedDraft;
+  if (active && (daily || this.phase !== 'results')) { this.confirmNew = true; return; }
   void this.startNew();
  }
  async startNew(): Promise<void> {
@@ -402,6 +460,12 @@ export class Session {
   this.draft = createDraft(this.manifest, newSeed());
   claimChallenge(this.draft.seed);
   this.savedDraft = null;
+  this.resetRun();
+  this.phase = 'stadium';
+  this.save('stadium');
+ }
+ /** Clears everything the previous run left on screen before a new draft starts. */
+ private resetRun(): void {
   this.selected.clear();
   this.profiles = [];
   this.pool = [];
@@ -413,8 +477,6 @@ export class Session {
   this.error = '';
   this.incompatible = false;
   this.confirmNew = false;
-  this.phase = 'stadium';
-  this.save('stadium');
  }
  /** Pins the home stadium, saves it, then takes the first roll. */
  async selectStadium(stadiumId: string): Promise<void> {

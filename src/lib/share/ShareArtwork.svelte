@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import GradeBadge from '../components/GradeBadge.svelte';
 	import { gradeRange, seasonGrade } from '../game/grade.ts';
+	import { dailyLabel } from '../game/daily.ts';
 	import ShareFan from './ShareFan.svelte';
 	import ShareField from './ShareField.svelte';
 	import type { ShareFormat, ShareRenderModel } from './types.ts';
@@ -50,6 +51,7 @@
 		<div class="title">
 			<strong class="wordmark"><i aria-hidden="true"></i>162-0</strong>
 			<span class="park">{model.homeStadium.name}</span>
+			{#if model.daily}<span class="daily">Daily <b>{dailyLabel(model.daily)}</b></span>{/if}
 		</div>
 		<div class="result">
 			<div class="final"><small>Final record</small><div class="record" aria-label={`${record.wins} wins and ${record.losses} losses`}>
@@ -81,6 +83,8 @@
 	.wordmark { display:inline-flex; align-items:center; gap:1.9cqw; font-size:5.4cqw; font-weight:850; letter-spacing:-.04em; }
 	.wordmark i { display:block; width:2.3cqw; height:2.3cqw; border:.4cqw solid currentColor; transform:rotate(45deg); }
 	.park { color:oklch(76% .018 255); font:italic 800 4.2cqw / 1 'Barlow Condensed', sans-serif; text-transform:uppercase; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.daily { justify-self:start; padding:.8cqw 1.8cqw; border:.3cqw solid oklch(83% .16 120); color:oklch(83% .16 120); font:italic 800 3.6cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; }
+	.daily b { color:oklch(97% .006 255); font-weight:800; }
 	.result { flex:none; display:flex; align-items:center; gap:2.6cqw; }
 	.final { display:grid; justify-items:end; gap:1cqw; }
 	.final small { color:oklch(76% .018 255); font:700 2.8cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.08em; text-transform:uppercase; }

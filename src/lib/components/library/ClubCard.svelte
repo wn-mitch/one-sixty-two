@@ -24,6 +24,7 @@
 		roster,
 		stars = [],
 		retired = false,
+		daily = null,
 		face = 'front',
 		interactive = true
 	}: {
@@ -37,6 +38,8 @@
 		roster: readonly ClubCardRosterItem[];
 		stars?: readonly ClubCardStar[];
 		retired?: boolean;
+		/** The daily run's date label, such as `Oct 17`, for a club drafted in the daily. */
+		daily?: string | null;
 		face?: 'front' | 'back';
 		interactive?: boolean;
 	} = $props();
@@ -74,6 +77,10 @@
 		identity: `${title}|${recordLabel}|${parkName}|${footer}`
 	}));
 </script>
+
+{#snippet dailyMark()}
+	{#if daily}<span class="daily">Daily <span>{daily}</span></span>{/if}
+{/snippet}
 
 {#snippet seal()}
 	<span class="seal" class:perfect={grade === 'Perfect'}>
@@ -119,6 +126,7 @@
 				<span class="print">
 					<span class="edition">
 						<span class="record">{recordLabel}</span>
+						{@render dailyMark()}
 						{@render seal()}
 					</span>
 					<span class="collage" aria-hidden="true">
@@ -144,6 +152,7 @@
 				<span class="print">
 					<span class="edition">
 						<span class="record">{recordLabel}</span>
+						{@render dailyMark()}
 						{@render seal()}
 					</span>
 					{#if title}<span class="back-title" data-fit data-max="8" data-min="5.6" data-wrap-min="4.8" data-lines="2" data-max-h="12">{title}</span>{/if}
@@ -195,6 +204,8 @@
 	.print { position: relative; display: flex; flex-direction: column; box-sizing: border-box; height: 100%; min-width: 0; padding: var(--club-pad); background: var(--dark); color: var(--paper); overflow: hidden; }
 	.edition { display: flex; align-items: center; justify-content: space-between; flex: none; gap: var(--club-gap); min-height: 12cqw; margin-bottom: var(--club-gap); }
 	.record { font-size: 12cqw; line-height: .9; font-weight: 800; font-variant-numeric: tabular-nums; }
+	.daily { flex: 0 1 auto; min-width: 0; margin-left: auto; padding: var(--club-unit) var(--club-gap); border: 1px solid var(--tintOnDark); color: var(--tintOnDark); font-weight: 800; font-style: italic; font-size: 3.6cqw; line-height: 1; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: rotate(-4deg); }
+	.daily span { color: var(--paper); }
 	.seal { position: relative; display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center; width: 14cqw; height: 12cqw; box-sizing: border-box; border: var(--club-unit) double var(--club-shade); outline: 1px solid var(--club-shine); outline-offset: calc(var(--club-unit) * -2); background: var(--club-finish); color: var(--ink); }
 	.seal-grade { position: relative; z-index: 1; font-size: 7.8cqw; font-weight: 900; line-height: .9; white-space: nowrap; }
 	.seal.perfect .seal-grade { font-size: 3.6cqw; font-style: italic; text-transform: uppercase; }

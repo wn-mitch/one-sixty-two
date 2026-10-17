@@ -53,14 +53,15 @@ export function firstSeasonBonus(stamp: string): Statement[] {
  }];
 }
 
-export type SeasonReward = { season: number; bonus: number };
+/** Tokens one save granted: the season's own, the first-season bonus, and a daily run's bonus. */
+export type SeasonReward = { season: number; bonus: number; daily: number };
 
 /** Tokens granted by the write stamped `stamp`; a revisit keeps its earlier stamp and so reads as nothing new. */
-export async function grantedReward(db: Db, key: string, stamp: string): Promise<SeasonReward> {
+export async function grantedReward(db: Db, key: string, stamp: string, dailyKey: string | null = null): Promise<SeasonReward> {
  const rows = await db.all<Row & { key: string; credit: number }>(
-  'SELECT key, credit FROM shop_completions WHERE completed_at = ? AND key IN (?, ?)', [stamp, key, FIRST_SEASON_BONUS_KEY]);
- const credit = (wanted: string) => rows.find(row => row.key === wanted)?.credit ?? 0;
- return { season: credit(key), bonus: credit(FIRST_SEASON_BONUS_KEY) };
+  'SELECT key, credit FROM shop_completions WHERE completed_at = ? AND key IN (?, ?, ?)', [stamp, key, FIRST_SEASON_BONUS_KEY, dailyKey]);
+ const credit = (wanted: string | null) => rows.find(row => row.key === wanted)?.credit ?? 0;
+ return { season: credit(key), bonus: credit(FIRST_SEASON_BONUS_KEY), daily: credit(dailyKey) };
 }
 
 const ownStatement = (id: string): Statement => ({

@@ -1,3 +1,4 @@
+import { isDailyDate } from '../game/daily.ts';
 import { CURRENT_REPLAY_SCHEMA_VERSION, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, SLOTS, type DraftAction, type Pick, type Replay, validateReliefRoles } from '../game/types.ts';
 
 export const REPLAY_MAX_BYTES = 16 * 1024;
@@ -133,7 +134,8 @@ function canonicalReplay(value: unknown, dataVersion: string): { input: Replay; 
 		!Array.isArray(picks) || picks.length !== SLOTS.length ||
 		!Array.isArray(replay.battingOrder) || replay.battingOrder.length !== HITTER_SLOTS.length || !replay.battingOrder.every(isString) ||
 		!Array.isArray(replay.starterOrder) || replay.starterOrder.length !== 3 || !replay.starterOrder.every(isString) ||
-		!Array.isArray(replay.actions) || replay.actions.length > MAX_ACTIONS) {
+		!Array.isArray(replay.actions) || replay.actions.length > MAX_ACTIONS ||
+		(replay.daily !== undefined && !isDailyDate(replay.daily))) {
 		throw new ReplayInvalidError();
 	}
 	const input: Replay = {
@@ -149,7 +151,8 @@ function canonicalReplay(value: unknown, dataVersion: string): { input: Replay; 
 		battingOrder: [...replay.battingOrder as string[]],
 		starterOrder: [...replay.starterOrder as string[]],
 		reliefRoles: reliefRoles(replay.reliefRoles),
-		actions: replay.actions.map(action)
+		actions: replay.actions.map(action),
+		...(replay.daily === undefined ? {} : { daily: replay.daily as string })
 	};
 	const bytes = new TextEncoder().encode(JSON.stringify(input));
 	if (bytes.byteLength > REPLAY_MAX_BYTES) throw new ReplayInvalidError();

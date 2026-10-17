@@ -339,6 +339,26 @@ export const MIGRATIONS: readonly Migration[] = [
      WHERE season_id = NEW.season_id AND season_key = NEW.season_key;
     END`);
   }
+ },
+ {
+  version: 12,
+  up(db) {
+   // A saved season from a daily run keeps its day. Existing seasons predate the daily and stay null.
+   exec(db, 'ALTER TABLE seasons ADD COLUMN daily TEXT');
+   // One row per daily started on this device; its existence spends the day's one attempt. `json` is the
+   // run in progress until its season is saved, then the result stays here even if the season is deleted.
+   exec(db, `CREATE TABLE daily_runs (
+    date TEXT PRIMARY KEY NOT NULL,
+    started_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    json TEXT,
+    season_key TEXT,
+    wins INTEGER,
+    losses INTEGER,
+    CHECK ((season_key IS NULL) = (wins IS NULL) AND (wins IS NULL) = (losses IS NULL)),
+    CHECK (json IS NOT NULL OR season_key IS NOT NULL)
+   )`);
+  }
  }
 ];
 

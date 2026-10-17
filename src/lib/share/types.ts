@@ -78,6 +78,8 @@ export interface ShareRenderModel {
 	/** Season ids of the nine hitters in batting order and the three starters in rotation order. */
 	battingOrder: readonly string[];
 	starterOrder: readonly string[];
+	/** The daily run's day, `YYYY-MM-DD`; absent for any other season. */
+	daily?: string;
 }
 
 export interface SharePublicationImage {

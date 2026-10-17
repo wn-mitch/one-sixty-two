@@ -6,6 +6,7 @@
 	import ClubCard from './ClubCard.svelte';
 	import { CLUB_MATERIALS } from './club-card-material.ts';
 	import FlipIcon from '../../cards/FlipIcon.svelte';
+	import { dailyLabel } from '../../game/daily.ts';
 
 	/** One saved club as a team card. Ctrl/Cmd-click adds it to a comparison. */
 	let { entry, stars, tally, selected, onSelect, flippable = true }: {
@@ -42,6 +43,7 @@
 		roster={entry.roster}
 		{stars}
 		retired={entry.status === 'retired'}
+		daily={entry.daily ? dailyLabel(entry.daily) : null}
 		interactive={flippable}
 	/>
 </button>

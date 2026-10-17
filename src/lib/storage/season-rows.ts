@@ -3,7 +3,7 @@ import { json, parseJson, type Row, type Statement } from './sql.ts';
 
 /**
  * Statements that store one library entry: the season row (keeping the first save date and any
- * nickname already on it) and one card row per roster pick with its season line.
+ * nickname already on it), its daily date when it has one, and one card row per roster pick with its season line.
  */
 export function seasonStatements(entry: LibraryEntry, touchedAt: string): Statement[] {
  const batting = new Map(entry.batting.map((line, index) => [line.seasonId, { line, index }]));
@@ -19,6 +19,8 @@ export function seasonStatements(entry: LibraryEntry, touchedAt: string): Statem
    bind: [entry.key, entry.savedAt, touchedAt, entry.token, entry.schemaVersion, entry.modelVersion, entry.dataVersion, entry.record.wins, entry.record.losses,
     entry.runs.scored, entry.runs.allowed, entry.stadium ? json(entry.stadium) : null, entry.mvp ? json(entry.mvp) : null, entry.nickname ?? null]
   },
+  // A separate statement, so the schema-1 legacy import, which predates the column, can reuse this builder.
+  ...(entry.daily ? [{ sql: 'UPDATE seasons SET daily = ? WHERE key = ?', bind: [entry.daily, entry.key] }] : []),
   { sql: 'DELETE FROM season_cards WHERE season_key = ?', bind: [entry.key] },
   ...entry.roster.map((card, position): Statement => {
    const hit = batting.get(card.seasonId);
@@ -35,6 +37,7 @@ export function seasonStatements(entry: LibraryEntry, touchedAt: string): Statem
 export interface SeasonRow extends Row {
  key: string; saved_at: string; token: string; schema_version: number; model_version: string; data_version: string;
  wins: number; losses: number; runs_scored: number; runs_allowed: number; stadium_json: string | null; mvp_json: string | null; nickname: string | null;
+ daily: string | null;
 }
 export interface CardRow extends Row {
  season_key: string; position: number; season_id: string; slot: string; label: string;
@@ -60,7 +63,8 @@ export function seasonEntries(rows: readonly SeasonRow[], cards: readonly CardRo
    stadium,
    roster: own.map(card => ({ seasonId: card.season_id, label: card.label, slot: card.slot as LibraryEntry['roster'][number]['slot'] })),
    ...(mvp ? { mvp } : {}),
-   ...(row.nickname ? { nickname: row.nickname } : {})
+   ...(row.nickname ? { nickname: row.nickname } : {}),
+   ...(row.daily ? { daily: row.daily } : {})
   };
  });
 }

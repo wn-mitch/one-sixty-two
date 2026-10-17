@@ -71,6 +71,18 @@ export async function deviceDraftText(page: Page): Promise<string | null> {
  });
 }
 
+/** Rows from the page's device database. */
+export async function deviceRows(page: Page, sql: string, bind: unknown[] = []): Promise<Record<string, unknown>[]> {
+ await deviceHook(page);
+ return page.evaluate(([query, values]) => (window as unknown as { __deviceDb: DeviceDb }).__deviceDb.all(query, values), [sql, bind] as const);
+}
+
+/** Runs statements in one transaction against the page's device database. */
+export async function runDeviceSql(page: Page, statements: { sql: string; bind?: unknown[] }[]): Promise<void> {
+ await deviceHook(page);
+ await page.evaluate(values => (window as unknown as { __deviceDb: DeviceDb }).__deviceDb.run(values), statements);
+}
+
 /** Replaces the saved draft in the page's device database. */
 export async function writeDeviceDraft(page: Page, value: string): Promise<void> {
  await deviceHook(page);

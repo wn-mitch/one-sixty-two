@@ -29,6 +29,7 @@
 	import SeasonMoments from './SeasonMoments.svelte';
 	import ShareBlock from './ShareBlock.svelte';
 	import { tableScroll } from './table-scroll.ts';
+	import { dailyLabel } from '../game/daily.ts';
 	import { BATTING_COLUMNS, nextSort, PITCHING_COLUMNS, sortLines, type SortDirection, type StatColumn } from './stat-sort.ts';
 
 	interface Props {
@@ -235,6 +236,7 @@
 				<i aria-hidden="true">–</i>
 				<span>{result.losses}<small>L</small></span>
 			</h2>
+			{#if draft.daily}<p class="daily-stamp">Daily <span>{dailyLabel(draft.daily)}</span></p>{/if}
 			{#if phrase}<SeasonClipping {phrase} />{/if}
 			<ResultsGrades wins={result.wins} {grade} {rosterGrade} {expected} />
 			<dl class="season-ledger">
@@ -466,6 +468,9 @@
 		font-style: normal;
 		font-weight: 500;
 	}
+	/* The daily run's mark: same seed and park for every player that day. */
+	.daily-stamp { flex: none; margin: 0; padding: var(--space-1) var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); font: italic 800 var(--text-lg) / 1 'Barlow Condensed', sans-serif; letter-spacing: .06em; text-transform: uppercase; transform: rotate(-3deg); }
+	.daily-stamp span { color: var(--text); }
 	/* One compact line under the record: label and value pairs, separated by thin rules. */
 	.season-ledger { display: flex; flex-wrap: wrap; gap: var(--space-1) 0; margin: 0; }
 	/* Each label sits over its value, so the three facts fit beside the grades on wide screens. */

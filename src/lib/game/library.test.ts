@@ -86,10 +86,10 @@ describe('season library', () => {
   const first = new Date('2026-03-01');
   await saveSeason(db, draft, result(100), [], manifest, first);
   const key = (await loadLibrary(db, manifest)).entries[0].key;
-  expect(await grantedReward(db, `classic:${key}`, first.toISOString())).toEqual({ season: 1, bonus: 1 });
+  expect(await grantedReward(db, `classic:${key}`, first.toISOString())).toEqual({ season: 1, bonus: 1, daily: 0 });
   const revisit = new Date('2026-03-02');
   await saveSeason(db, draft, result(100), [], manifest, revisit);
-  expect(await grantedReward(db, `classic:${key}`, revisit.toISOString())).toEqual({ season: 0, bonus: 0 });
+  expect(await grantedReward(db, `classic:${key}`, revisit.toISOString())).toEqual({ season: 0, bonus: 0, daily: 0 });
   expect(await readShop(db)).toMatchObject({ balance: 2, firstSeasonBonus: false });
   await deleteSeason(db, key);
   expect((await readShop(db)).balance).toBe(2);

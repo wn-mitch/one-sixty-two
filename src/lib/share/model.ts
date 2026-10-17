@@ -227,6 +227,7 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		record,
 		cards,
 		battingOrder: [...draft.battingOrder],
-		starterOrder: [...draft.starterOrder]
+		starterOrder: [...draft.starterOrder],
+		...(draft.daily === undefined ? {} : { daily: draft.daily })
 	};
 }

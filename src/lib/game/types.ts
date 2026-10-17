@@ -144,6 +144,8 @@ export interface Replay {
  /** Roles for CL and RP1-RP3 in bullpen order; empty until the roster is complete. */
  reliefRoles: ReliefAssignment[];
  actions: DraftAction[];
+ /** The day (`YYYY-MM-DD`) of a daily run, whose seed and home stadium follow from it; absent for any other draft. */
+ daily?: string;
 }
 /**
  * `packs` are the franchise packs open on the table for the pending roll, in the order they were dealt.

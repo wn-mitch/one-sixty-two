@@ -2,7 +2,7 @@ import { replayInput } from './draft.ts';
 import { collectionStatements } from '../collection/collection.ts';
 import { completionReward, firstSeasonBonus } from '../cosmetics/ledger.ts';
 import { seasonEntries, seasonStatements, type CardRow, type SeasonRow } from '../storage/season-rows.ts';
-import type { Db } from '../storage/sql.ts';
+import type { Db, Statement } from '../storage/sql.ts';
 import { decodeReplay, encodeReplay } from './share.ts';
 import { compareId, CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, type Draft, type Manifest, type Profile, type RosterSlot } from './types.ts';
 import { estimatedHitterWar, estimatedPitcherWar } from '../sim/value.ts';
@@ -80,6 +80,8 @@ export interface LibraryEntry {
  roster: { seasonId: string; label: string; slot: RosterSlot }[];
  mvp?: { seasonId: string; label: string };
  nickname?: string;
+ /** The day of the daily run this season played, `YYYY-MM-DD`. */
+ daily?: string;
 }
 
 /** `playable` entries validate under the current manifest; `retired` ones are mementos only. */
@@ -144,18 +146,36 @@ export function libraryEntry(key: string, savedAt: string, draft: Draft, result:
   ...savedLines(result, slots, name),
   stadium: stadium ? { id: stadium.ref.id, name: stadium.name } : null,
   roster: draft.picks.map(pick => ({ seasonId: pick.seasonId, slot: pick.slot, label: name(pick.seasonId) })),
-  mvp: seasonMvp(result, byId)
+  mvp: seasonMvp(result, byId),
+  ...(draft.daily === undefined ? {} : { daily: draft.daily })
  };
 }
 
-/** Saves an own season and its completion reward (plus a device's one-time first-season bonus) atomically; revisits keep the first save and reward. */
+/** The ledger key of a daily's completion bonus; one per day, whatever was drafted. */
+export const dailyRewardKey = (date: string) => `daily:${date}`;
+
+/** Records a daily's result on its run. A day already finished with another season keeps its first result. */
+function dailyResult(date: string, key: string, result: Pick<SeasonResult, 'wins' | 'losses'>, stamp: string): Statement {
+ return {
+  sql: `INSERT INTO daily_runs (date, started_at, updated_at, json, season_key, wins, losses) VALUES (?, ?, ?, NULL, ?, ?, ?)
+   ON CONFLICT (date) DO UPDATE SET updated_at = excluded.updated_at, json = NULL, season_key = excluded.season_key, wins = excluded.wins, losses = excluded.losses
+   WHERE daily_runs.season_key IS NULL OR daily_runs.season_key = excluded.season_key`,
+  bind: [date, stamp, stamp, key, result.wins, result.losses]
+ };
+}
+
+/**
+ * Saves an own season and its completion reward (plus a device's one-time first-season bonus) atomically; revisits keep the
+ * first save and reward. A daily run also records its result and earns the day's bonus.
+ */
 export async function saveSeason(db: Db, draft: Draft, result: SeasonResult, profiles: readonly Profile[], manifest: Manifest, now = new Date()): Promise<string | null> {
  try {
   const key = await libraryKey(draft);
   const entry = libraryEntry(key, now.toISOString(), draft, result, profiles, manifest);
   const stamp = now.toISOString();
   const complete = Number.isInteger(result.wins) && Number.isInteger(result.losses) && result.wins >= 0 && result.losses >= 0 && result.wins + result.losses === 162;
-  await db.run([...seasonStatements(entry, stamp), ...collectionStatements(entry, stamp), ...(complete ? [...firstSeasonBonus(stamp), ...completionReward(`classic:${key}`, stamp)] : [])]);
+  const daily = complete && draft.daily !== undefined ? [...completionReward(dailyRewardKey(draft.daily), stamp), dailyResult(draft.daily, key, result, stamp)] : [];
+  await db.run([...seasonStatements(entry, stamp), ...collectionStatements(entry, stamp), ...(complete ? [...firstSeasonBonus(stamp), ...completionReward(`classic:${key}`, stamp)] : []), ...daily]);
   return null;
  } catch { return STORAGE_NOTICE; }
 }

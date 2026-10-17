@@ -178,7 +178,7 @@ describe('device database migrations', () => {
    rostered: await db.all('SELECT * FROM rostered'),
    stickers: await db.all('SELECT * FROM stickers')
   };
-  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 10, to: SCHEMA_VERSION });
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 11))).toEqual({ from: 10, to: 11 });
   const after = {
    seasons: await db.all('SELECT * FROM seasons'),
    rostered: await db.all('SELECT * FROM rostered'),
@@ -195,6 +195,17 @@ describe('device database migrations', () => {
   ]);
  });
 
+ it('adds the daily slot and an unmarked daily column without touching saved seasons or the Classic draft', async () => {
+  const { db, raw } = await memoryDb({ ...NO_LEGACY, draft: '{"saved":"run"}', library: JSON.stringify([entry('kept', 120)]) }, MIGRATIONS.filter(step => step.version <= 11));
+  const before = { seasons: await db.all('SELECT * FROM seasons'), draft: await db.all('SELECT * FROM draft') };
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 12))).toEqual({ from: 11, to: 12 });
+  expect(await db.all('SELECT * FROM seasons')).toEqual(before.seasons.map(row => ({ ...row, daily: null })));
+  expect(await db.all('SELECT * FROM draft')).toEqual(before.draft);
+  expect(await db.all('SELECT * FROM daily_runs')).toEqual([]);
+  // A run is either in progress or finished with a full result.
+  await expect(db.run([{ sql: "INSERT INTO daily_runs (date, started_at, updated_at) VALUES ('2026-10-17', 'now', 'now')" }])).rejects.toThrow();
+  await expect(db.run([{ sql: "INSERT INTO daily_runs (date, started_at, updated_at, season_key, wins) VALUES ('2026-10-17', 'now', 'now', 'k', 100)" }])).rejects.toThrow();
+ });
  it('seeds zero-credit receipts for existing and deleted history without altering historical data', async () => {
   const { db, raw } = await memoryDb({
    ...NO_LEGACY, draft: '{"saved":"run"}', library: JSON.stringify([entry('kept', 120), entry('deleted', 90)])
@@ -216,7 +227,7 @@ describe('device database migrations', () => {
   const tables = ['draft', 'seasons', 'season_cards', 'rostered', 'stickers', 'series'] as const;
   const before = await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)));
   const runs = await db.all('SELECT * FROM draft_runs');
-  expect(migrate(raw, NO_LEGACY)).toEqual({ from: 8, to: SCHEMA_VERSION });
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 11))).toEqual({ from: 8, to: 11 });
   const after = await Promise.all(tables.map(table => db.all(`SELECT * FROM ${table}`)));
   expect(after.slice(0, 3)).toEqual(before.slice(0, 3));
   expect(after[3].map(({ is_mvp: _isMvp, ...row }) => row)).toEqual(before[3]);
@@ -245,7 +256,7 @@ describe('device database migrations', () => {
   expect((await readShop(db)).balance).toBe(0);
   await db.run(completionReward('draft:incomplete', 'later'));
   expect((await readShop(db)).balance).toBe(1);
-  expect(migrate(raw, NO_LEGACY)).toEqual({ from: SCHEMA_VERSION, to: SCHEMA_VERSION });
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 11))).toEqual({ from: 11, to: 11 });
   expect((await readShop(db)).balance).toBe(1);
  });
 

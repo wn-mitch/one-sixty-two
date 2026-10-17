@@ -65,8 +65,8 @@
   rankingAttempt++;
  }
 
- // The welcome screen is `/` and the game is `/classic`, one page between them, so the browser's back button
- // returns home with the draft kept for Resume and forward (or a reload) returns to the game.
+ // The welcome screen is `/` and the game is `/classic` (or `/daily` for the daily run), one page between them, so the
+ // browser's back button returns home with the draft kept for Resume and forward (or a reload) returns to the game.
  $effect(() => {
   const current = session;
   const phase = current?.phase;
@@ -75,7 +75,7 @@
    if (page.url.pathname !== '/') return;
    // A `?new=1` or `?resume=1` hand-off is replaced; Start and Resume add a history entry to go back to.
    const handOff = page.url.searchParams.has('new') || page.url.searchParams.has('resume') || page.url.searchParams.has('build');
-   void goto('/classic', { replace: handOff, reset: false });
+   void goto(current.draft?.daily !== undefined ? '/daily' : '/classic', { replace: handOff, reset: false });
   });
  });
  $effect(() => {
@@ -88,10 +88,11 @@
  $effect(() => {
   // Ordinary returns resume unfinished play only; completed seasons belong in My teams.
   const current = session;
-  if (page.url.pathname !== '/classic' || !current || current.phase !== 'start') return;
+  const path = page.url.pathname;
+  if ((path !== '/classic' && path !== '/daily') || !current || current.phase !== 'start') return;
   if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;
   untrack(() => {
-   if (current.canAutoResume) void current.resume();
+   if (path === '/daily' ? current.daily?.run.kind === 'active' : current.canAutoResume) void (path === '/daily' ? current.playDaily() : current.resume());
    else void goto('/', { replace: true, reset: false });
   });
  });
@@ -261,7 +262,7 @@
   </div>
 
   {#if currentSession.phase === 'start'}
-   <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} firstSeasonBonus={shopState.snapshot?.firstSeasonBonus ?? false} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
+   <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} firstSeasonBonus={shopState.snapshot?.firstSeasonBonus ?? false} daily={currentSession.daily} onDaily={() => void currentSession.playDaily()} onDailyRollover={() => void currentSession.refreshDaily()} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
   {:else if currentSession.draft && currentSession.manifest}
    {#if currentSession.phase === 'stadium'}
     {#if StadiumDeck}
