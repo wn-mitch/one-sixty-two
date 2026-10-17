@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { dailyDate, dailyLabel, dailyStadium } from '../lib/game/daily.ts';
 import { availableCandidates, commitPick, createDailyDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
+import { encodeReplay, storeReplay } from '../lib/game/share.ts';
 import { SLOTS, type Draft, type Manifest } from '../lib/game/types.ts';
 import { currentManifest, deviceRows, openPack, runDeviceSql } from './draft-test-fixtures.ts';
 
@@ -84,4 +85,31 @@ test('a finished daily pays two tokens, carries its stamp, and leaves the home s
  const shelf = page.getByRole('region', { name: /^Daily runs/ });
  await expect(shelf.getByRole('list', { name: 'Daily runs' }).getByRole('listitem')).toHaveCount(1);
  await expect(shelf.locator('.daily').first()).toContainText(`Daily ${dailyLabel(date)}`);
+});
+
+test('opening someone else’s daily replay leaves this device’s teams, rewards and daily untouched', async ({ page, request, baseURL }) => {
+ const origin = baseURL!;
+ const manifest = await currentManifest(request);
+ const date = dailyDate();
+ const theirs = completeDaily(manifest, date);
+ // Browsers send Origin on this POST; Node's fetch does not, and the site rejects cross-site posts.
+ const { id } = await storeReplay(theirs, origin, (input, init) => fetch(input, { ...init, headers: { ...init?.headers, origin } }));
+ const owned = async () => Object.fromEntries(await Promise.all(['seasons', 'season_cards', 'rostered', 'stickers', 'shop_completions', 'daily_runs', 'draft']
+  .map(async table => [table, (await deviceRows(page, `SELECT COUNT(*) AS n FROM ${table}`))[0].n])));
+ const nothing = { seasons: 0, season_cards: 0, rostered: 0, stickers: 0, shop_completions: 0, daily_runs: 0, draft: 0 };
+
+ for (const link of [`/r/${id}`, `/#replay=${encodeReplay(theirs)}`]) {
+  await page.goto(link);
+  await expect(page.locator('#results-heading')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('.daily-stamp')).toHaveText(`Daily ${dailyLabel(date)}`);
+  await expect(page.locator('.reward-chip, [data-reward-flight], .reward-splash')).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
+  expect(await owned()).toEqual(nothing);
+ }
+
+ await page.goto('/');
+ await expect(page.getByRole('region', { name: `Daily ${dailyLabel(date)}` }).getByRole('button', { name: 'Play today’s daily', exact: true })).toBeVisible();
+ await page.goto('/seasons');
+ await expect(page.getByRole('region', { name: /^Daily runs/ })).toHaveCount(0);
+ expect(await owned()).toEqual(nothing);
 });
