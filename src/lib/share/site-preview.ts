@@ -4,7 +4,7 @@ export const SITE_PREVIEW = {
 	width: 1200,
 	height: 630,
 	type: 'image/png',
-	alt: '162-0: a hand of historical baseball cards fanned beside the title'
+	alt: '162-0: a hand of historical baseball cards fanned beside the title and the daily stamp'
 } as const;
 
 /** Prerendered pages have no request origin, so their absolute preview URL uses the production site. */

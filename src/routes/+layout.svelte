@@ -89,11 +89,11 @@
 	<meta name="theme-color" content="oklch(16% 0.009 255)" />
 	{#if page.url.pathname === '/' || page.url.pathname === '/classic' || page.url.pathname === '/daily'}
 		<title>162-0 | The undefeated baseball challenge</title>
-		<meta name="description" content="Roll a franchise and decade. Draft sixteen historical selections. Can your team survive 162 games without a loss?" />
+		<meta name="description" content="Draft sixteen historical selections, or take today’s daily with the same packs as everyone. Can your team survive 162 games without a loss?" />
 		<meta property="og:type" content="website" />
 		<meta property="og:url" content="https://162-0.dev/" />
 		<meta property="og:title" content="162-0 | The undefeated baseball challenge" />
-		<meta property="og:description" content="Roll a franchise and decade. Draft sixteen historical selections. Can your team survive 162 games without a loss?" />
+		<meta property="og:description" content="Draft sixteen historical selections, or take today’s daily with the same packs as everyone. Can your team survive 162 games without a loss?" />
 	{/if}
 	<meta property="og:site_name" content="162-0" />
 	{#if !rosterLink}

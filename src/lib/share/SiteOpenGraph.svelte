@@ -3,7 +3,7 @@
 	import type { CardViewModel } from '../cards/view-model.ts';
 
 	/**
-	 * The site's 1200×630 link preview: the pitch on the left and a hand of era cards fanned and
+	 * The site's 1200×630 link preview: the pitch and the daily stamp on the left and a hand of era cards fanned and
 	 * tipped back on the right. Roster links use their own published field image instead.
 	 */
 	let { cards }: { cards: readonly CardViewModel[] } = $props();
@@ -17,6 +17,7 @@
 		<strong class="wordmark"><i aria-hidden="true"></i>162-0</strong>
 		<h1>The undefeated baseball challenge</h1>
 		<p>Draft sixteen historical seasons. Play all 162 games. Don’t lose one.</p>
+		<span class="daily">Daily <b>Same packs for everyone</b></span>
 		<span class="cta">Play at <em>162-0.dev</em></span>
 	</div>
 	<div class="fan" aria-hidden="true">
@@ -36,7 +37,10 @@
 	.wordmark i { display:block; width:3cqw; height:3cqw; border:.6cqw solid currentColor; transform:rotate(45deg); }
 	h1 { margin:0; font:italic 800 4.4cqw / .95 'Barlow Condensed', sans-serif; letter-spacing:.005em; text-transform:uppercase; }
 	p { margin:0; max-width:37cqw; color:oklch(80% .018 255); font-size:2.3cqw; line-height:1.3; }
-	.cta { margin-top:auto; font-size:2.8cqw; font-weight:800; letter-spacing:-.02em; }
+	/* The daily run's stamp, as on results and share images. */
+	.daily { padding:.9cqw 1.8cqw; border:.3cqw solid oklch(83% .16 120); color:oklch(83% .16 120); font:italic 800 2.4cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; transform:rotate(-3deg); transform-origin:left center; }
+	.daily b { color:oklch(97% .006 255); font-weight:800; }
+	.cta { margin-top:auto; white-space:nowrap; font-size:2.8cqw; font-weight:800; letter-spacing:-.02em; }
 	.cta em { font-style:normal; color:oklch(83% .16 120); }
 	/* Seven cards fanned from a pivot below the frame and tipped back in perspective. */
 	.fan { position:absolute; inset:0 3cqw 0 44cqw; perspective:120cqw; }
