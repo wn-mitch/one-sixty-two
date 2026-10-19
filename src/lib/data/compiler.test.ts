@@ -75,7 +75,7 @@ describe('historical data compiler', () => {
   expect(first.primaryHitterSlot).toBe('C');
   expect(first.appearances.C).toBe(100);
   expect(first.batting).toMatchObject({ SF: 0, PA: 314 });
-  expect(first.estimatedFields).toContain('batting.SF.estimated');
+  expect(first.estimatedFields).not.toContain('batting.SF.estimated');
   expect(first.battingRates).toHaveLength(8);
   expect(first.battingRates!.every(value => Number.isFinite(value) && value >= 0)).toBe(true);
   expect(first.battingRates!.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 12);
@@ -111,15 +111,23 @@ describe('historical data compiler', () => {
   expect(profile.primaryHitterSlot).toBeNull();
   expect(() => validateProfile(profile)).not.toThrow();
  });
- it('uses the recorded PA lower bound for eligibility when sacrifice flies are unavailable', () => {
+ it('counts unrecorded pre-1954 sacrifice flies as zero for eligibility and display', () => {
   const tables = syntheticTables();
   const batter = tables.Batting.find(row => row.yearID === '1950' && row.lgID === 'AL')!;
   batter.AB = '165';
   const profile = compileProfiles(tables).profiles.find(candidate => candidate.seasonId === seasonKey(batter))!;
   expect(profile.batting).toMatchObject({ SF: 0, PA: 199 });
-  expect(profile.estimatedFields).toContain('batting.SF.estimated');
+  expect(profile.estimatedFields).not.toContain('batting.SF.estimated');
   expect(profile.eligibleSlots).not.toContain('C');
   expect(profile.eligibleSlots).not.toContain('DH');
+ });
+ it('flags a missing sacrifice-fly count once the category is scored', () => {
+  const tables = syntheticTables();
+  const batter = tables.Batting.find(row => row.yearID === '1961' && row.lgID === 'AL')!;
+  batter.SF = '';
+  const profile = compileProfiles(tables).profiles.find(candidate => candidate.seasonId === seasonKey(batter))!;
+  expect(profile.batting).toMatchObject({ SF: 0 });
+  expect(profile.estimatedFields).toContain('batting.SF.estimated');
  });
 
  it('includes the 1950 boundary and excludes pre-era records without replacing later historical fixtures', () => {

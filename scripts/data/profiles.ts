@@ -10,6 +10,8 @@ export interface CompiledProfiles {
  baselines: Baselines; fielding: FieldingData; diagnostics: string[];
 }
 const clamp = (value: number, low: number, high: number): number => Math.max(low, Math.min(high, value));
+/** First season in which the sacrifice fly was scored separately and excluded from at-bats. */
+const SACRIFICE_FLY_RULE_YEAR = 1954;
 
 export function compileProfiles(tables: Tables): CompiledProfiles {
  const currentTeams = tables.Teams.filter(row => row.yearID === '2025' && (row.lgID === 'AL' || row.lgID === 'NL')).sort((a, b) => compareId(a.franchID, b.franchID));
@@ -59,7 +61,9 @@ export function compileProfiles(tables: Tables): CompiledProfiles {
    const park = parkFactor(team, 'BPF', profile);
    profile.battingRates = prepareRates(battingEvents(batter.counts), league.batting, baselines.target, park);
    const missing = batter.group.missing;
-   if (missing.has('SF')) profile.estimatedFields.push('batting.SF.estimated');
+   // Before 1954 the sacrifice fly was not a scoring category: a run-scoring fly counted as an at-bat,
+   // so zero is the season's real count and OBP and OPS are measured, not estimated.
+   if (missing.has('SF') && profile.year >= SACRIFICE_FLY_RULE_YEAR) profile.estimatedFields.push('batting.SF.estimated');
    if (missing.has('SB') || missing.has('CS')) {
     profile.estimatedFields.push('baserunning.league');
     const opportunities = batter.counts.H + batter.counts.BB + batter.counts.HBP;
