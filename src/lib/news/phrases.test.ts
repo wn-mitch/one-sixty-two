@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SEASON_GRADES } from '../game/grade.ts';
 import { parsePhraseTable } from './phrase-table.ts';
-import { LEAN_WINS, pickSeasonPhrase, SEASON_PHRASES, type SeasonPhrase } from './phrases.ts';
+import { LEAN_WINS, phraseBand, pickSeasonPhrase, SEASON_PHRASES, type SeasonPhrase } from './phrases.ts';
 
 const header = '| phrase | band | context | publication | date | page | headline | author | url | verified | notes |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n';
 const row = (cells: Partial<Record<'phrase' | 'band' | 'date' | 'url' | 'verified' | 'notes', string>>) =>
@@ -48,6 +48,13 @@ describe('picking a season phrase', () => {
 		// A band without a leaning phrase falls back to the whole band rather than printing nothing.
 		expect(pickSeasonPhrase('S', 20, 1, phrases)?.phrase).toBe('juggernaut');
 		expect(pickSeasonPhrase('F', 0, 1, phrases)).toBeNull();
+	});
+
+	it('keeps last-place F phrases for losing records and gives a winning F season a D phrase', () => {
+		expect(phraseBand('F', 98, 64)).toBe('D');
+		expect(phraseBand('F', 81, 81)).toBe('F');
+		expect(phraseBand('F', 60, 102)).toBe('F');
+		expect(phraseBand('B', 132, 30)).toBe('B');
 	});
 
 	it('prints the same phrase for the same season and varies it across seasons', () => {

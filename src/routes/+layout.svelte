@@ -162,6 +162,10 @@
 	.site:has(:global(:is(.draft-board, .draft-skeleton))) { max-width: 90rem; }
 	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) { padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
 	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) .site-header { display: none; }
+	/* A phone draft keeps the next pick in view: the main navigation folds into Menu and the footer waits for the lineup. */
+	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) .primary-nav,
+	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) footer { display: none; }
+	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) :global(.menu-panel .nav-fallback) { display: flex; }
 	.site-header {
 		position: relative;
 		/* Above the draft's sticky toolbar, so the Menu panel opens over it rather than under it. */

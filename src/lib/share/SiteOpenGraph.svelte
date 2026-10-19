@@ -17,7 +17,7 @@
 		<strong class="wordmark"><i aria-hidden="true"></i>162-0</strong>
 		<h1>The undefeated baseball challenge</h1>
 		<p>Draft sixteen historical seasons. Play all 162 games. Don’t lose one.</p>
-		<span class="daily">Daily <b>Same packs for everyone</b></span>
+		<span class="daily">Daily <b>Same first pack for everyone</b></span>
 		<span class="cta">Play at <em>162-0.dev</em></span>
 	</div>
 	<div class="fan" aria-hidden="true">

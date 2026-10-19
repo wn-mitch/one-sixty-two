@@ -321,6 +321,9 @@
  }
  /* Staff columns are 101 units apart, so a slot may be wider than the card to keep names on fewer lines. */
  .staff-slot { --roster-slot-width: calc(100cqi * 92 / 424); }
+ /* Disabled slots dim without turning translucent, so the field's lines never show through a slot. */
+ .field-slot:disabled, .staff-slot:disabled { opacity: 1; cursor: default; }
+ .field-slot:disabled .card-frame, .staff-slot:disabled .card-frame { filter: brightness(.55) saturate(.7); }
  .field-slot:hover:not(:disabled), .staff-slot:hover:not(:disabled) { background: transparent; }
  .field-slot:active:not(:disabled), .staff-slot:active:not(:disabled) { transform: translate(-50%, 1px); }
  .field-slot:focus-visible, .staff-slot:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
@@ -344,7 +347,7 @@
   border: 1.5px dashed var(--muted);
   border-radius: var(--radius);
   color: var(--muted);
-  background: color-mix(in oklch, var(--surface) 72%, transparent);
+  background: color-mix(in oklch, var(--surface) 94%, transparent);
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 800;
   line-height: 1;

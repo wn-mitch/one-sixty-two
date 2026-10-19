@@ -222,7 +222,7 @@
 			</div>
 
 			{#if draftMode}
-				<p class="compact-qualification"><strong>{profile.year}</strong> · {profile.eligibleSlots.join(' · ')}{available.length ? ` · Open ${available.join(' · ')}` : legalSlots !== undefined ? ' · No open position' : ''}</p>
+				<p class="compact-qualification"><strong>{profile.year}</strong> · {available.length && available.length === profile.eligibleSlots.length ? `Open ${available.join(' · ')}` : `${profile.eligibleSlots.join(' · ')}${available.length ? ` · Open ${available.join(' · ')}` : legalSlots !== undefined ? ' · No open position' : ''}`}</p>
 			{:else}
 				<div class="qualification" aria-label="Season qualifications and availability">
 					<div role="group" aria-label="Qualifies for">

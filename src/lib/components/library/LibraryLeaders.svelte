@@ -77,5 +77,6 @@
 	.unavailable { display: grid; place-items: center; aspect-ratio: 5 / 7; padding: var(--space-2); box-sizing: border-box; border: 1px solid var(--border); background: var(--surface-raised); font-size: var(--text-sm); }
 	.standing { display: flex; justify-content: center; padding-top: var(--space-1); font-variant-numeric: tabular-nums; }
 	.value { font-size: var(--text-xs); font-weight: 800; }
-	.team { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-xs); }
+	/* Two lines fit the record and the park under a narrow card, so captions stay distinguishable. */
+	.team { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; color: var(--muted); font-size: var(--text-xs); line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
 </style>

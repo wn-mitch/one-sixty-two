@@ -54,6 +54,9 @@
 		Menu
 	</button>
 	<nav bind:this={panel} id={panelId} class="menu-panel" aria-label="More" hidden={!open}>
+		<!-- The main navigation hides while a phone drafts (layout), so its destinations move here. -->
+		<a class="nav-fallback" href="/seasons">My teams</a>
+		<a class="nav-fallback" href="/collection">Collection</a>
 		{#if onNew}<button type="button" onclick={() => { close(); onNew?.(); }}>New draft</button>{/if}
 		<button type="button" onclick={openSettings}>Settings</button>
 		<a href="/factory">Card factory</a>
@@ -82,6 +85,7 @@
 		box-shadow: 0 1rem 2.5rem oklch(0% 0 0 / .4);
 	}
 	.menu-panel[hidden] { display: none; }
+	.menu-panel .nav-fallback { display: none; }
 	.menu-panel a, .menu-panel button {
 		display: flex;
 		min-height: 2.75rem;

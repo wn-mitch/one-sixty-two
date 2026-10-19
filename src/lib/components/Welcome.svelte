@@ -96,7 +96,7 @@
      <p class="daily-rules">{daily.run.message}</p>
     {:else}
      {#if dailyPark}<p class="daily-park">Home park: <strong>{dailyPark}</strong></p>{/if}
-     <p class="daily-rules">Same packs for everyone. One try. Earns 2 tokens.</p>
+     <p class="daily-rules">Same park and first pack for everyone. One try. Earns 2 tokens.</p>
      <button class="primary start daily-start" disabled={loading || !manifest} onclick={onDaily}>{daily.run.kind === 'active' ? 'Resume today’s daily' : 'Play today’s daily'} <span aria-hidden="true">↗</span></button>
     {/if}
    </section>

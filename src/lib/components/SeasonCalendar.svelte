@@ -212,13 +212,13 @@
 	.cell.doubleheader { align-content: center; grid-template-rows: auto auto auto; padding: clamp(.5rem, 2.8cqi, .75rem) 0 1px; gap: 0; background: transparent; border: 1px solid var(--border); }
 	.cell.doubleheader.home { background: var(--home-ground); border-color: transparent; }
 	.cell b small { color: var(--accent); font-size: .8em; }
-	.half { display: block; min-height: 0; width: 100%; padding: 0; font: inherit; font-size: clamp(.5rem, 2.3cqi, .6875rem); border: 0; border-radius: 2px; background: transparent; line-height: 1; }
+	.half { display: block; min-height: 0; width: 100%; padding: 0; font: inherit; font-size: clamp(.625rem, 2.3cqi, .6875rem); border: 0; border-radius: 2px; background: transparent; line-height: 1; }
 	.half:hover { background: var(--surface-raised); }
 	.half[aria-pressed='true'] { outline: 2px solid var(--focus); }
-	.half .result { font-size: clamp(.5rem, 2.3cqi, .6875rem); }
-	.cell.doubleheader b { font-size: clamp(.5625rem, 2.6cqi, .8125rem); }
-	.cell b { font: 800 clamp(.625rem, 3cqi, .875rem)/1 'Barlow Condensed', sans-serif; letter-spacing: .02em; white-space: nowrap; }
-	.cell .result { font-size: clamp(.5rem, 2.5cqi, .75rem); font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.half .result { font-size: clamp(.625rem, 2.3cqi, .6875rem); }
+	.cell.doubleheader b { font-size: clamp(.6875rem, 2.6cqi, .8125rem); }
+	.cell b { font: 800 clamp(.75rem, 3cqi, .875rem)/1 'Barlow Condensed', sans-serif; letter-spacing: .02em; white-space: nowrap; }
+	.cell .result { font-size: clamp(.625rem, 2.5cqi, .75rem); font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 	.win .result, strong.win { color: var(--success); }
 	.loss .result, strong.loss { color: var(--error); }
 

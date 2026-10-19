@@ -139,6 +139,8 @@
 			{#if owned}
 				<a class="button primary" href="/factory">Card factory <span aria-hidden="true">↗</span></a>
 			{:else if selected}
+				{@const defaultEras = eraDefaults.filter(([, pattern]) => pattern === (selected.film ?? selected.plate)).map(([era]) => era)}
+				{#if defaultEras.length}<p class="default-note">Already on {defaultEras.join(', ')} cards by default. Unlock it to choose it for any era in the card factory.</p>{/if}
 				<button class="primary unlock" type="button"
 					aria-label={`Unlock ${finishName(selected)}, ${selected.cost} ${selected.cost === 1 ? 'token' : 'tokens'}`}
 					aria-describedby={short ? `${uid}-balance-hint` : undefined}
@@ -205,6 +207,7 @@
 	.preview-options summary { min-height: 2.75rem; align-content: center; }
 	select { width: 100%; min-width: 0; }
 	.commit { display: grid; gap: var(--space-2); }
+	.default-note { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
 	.catalogue { min-width: 0; }
 	.finish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 	.load-more { grid-column: 1 / -1; display: flex; justify-content: center; }

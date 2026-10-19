@@ -41,6 +41,14 @@ export function pickSeasonPhrase(grade: SeasonGrade, luck: number | null, seed: 
 	return pool[mix(seed) % pool.length];
 }
 
+/**
+ * The phrase band a season reads in. The F band is written about last-place clubs, so an F season
+ * with a winning record prints a D phrase about disappointment instead.
+ */
+export function phraseBand(grade: SeasonGrade, wins: number, losses: number): SeasonGrade {
+	return grade === 'F' && wins > losses ? 'D' : grade;
+}
+
 /** Spreads neighbouring seeds across the band (a 32-bit integer hash). */
 function mix(seed: number): number {
 	let value = (seed >>> 0) ^ 0x9e3779b9;

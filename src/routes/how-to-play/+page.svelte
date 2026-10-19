@@ -41,6 +41,7 @@
 			</div>
 			<h2><span class="number">2</span>Open a pack</h2>
 			<p>Each pack is one franchise from one decade. Take one exact player season from it and put him in an open position he can play.</p>
+			<p>Two packs in every draft, and sometimes others, are jackpots: a handful of elite seasons from any franchise.</p>
 		</li>
 
 		<li class="step">
@@ -83,6 +84,7 @@
 			</div>
 			<h2><span class="number">6</span>Earn tokens</h2>
 			<p>Each season you finish earns a token, and your first earns a bonus one. Spend them in the Shop on card finishes. Finishes never change statistics.</p>
+			<p>The daily run gives everyone the same park and first pack each day. Finish it once to earn a bonus token.</p>
 		</li>
 	</ol>
 

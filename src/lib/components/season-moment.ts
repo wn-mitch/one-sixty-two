@@ -114,6 +114,8 @@ export function momentParticipant(moment: SeasonMoment | null): string | null {
  if (moment.outcome === 'stolenBase' || moment.outcome === 'caughtStealing') return moment.batterSeasonId;
  if (moment.runsScored === 0 && moment.play && moment.play.outsAfter > moment.outsBefore && moment.play.contact?.fielderSeasonId)
   return moment.play.contact.fielderSeasonId;
+ // A pooled bullpen (`league:bullpen`, `ANA:bullpen`) is not a player card; the opponent's hitter tells the story.
+ if (moment.pitcherSeasonId.endsWith(':bullpen')) return moment.batterSeasonId;
  return moment.pitcherSeasonId;
 }
 

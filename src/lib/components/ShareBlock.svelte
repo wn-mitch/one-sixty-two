@@ -87,7 +87,7 @@
 <section class="share-panel" aria-labelledby="share-art-heading" aria-busy={sharing} use:nearScreen>
 	<header>
 		<div>
-			<h3 id="share-art-heading">Challenge a friend</h3>
+			<h3 id="share-art-heading">Share your season</h3>
 		</div>
 	</header>
 

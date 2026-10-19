@@ -207,6 +207,10 @@ describe('turning-point attribution', () => {
   // An opponent's steal belongs to their runner, not to the pitcher who allowed it.
   expect(momentParticipant(moment({ outcome: 'stolenBase', challengeBatting: false }))).toBe('batter-2000');
  });
+ it('shows the opponent hitter rather than a pooled bullpen that gave up the play', () => {
+  expect(momentParticipant(moment({ outcome: 'homeRun', challengeBatting: false, pitcherSeasonId: 'league:bullpen' }))).toBe('batter-2000');
+  expect(momentParticipant(moment({ outcome: 'strikeout', challengeBatting: false, pitcherSeasonId: 'league:bullpen' }))).toBe('batter-2000');
+ });
  it('reads scores that start with a vowel sound with "an" in every call variant', () => {
   // Tied at 8 and ahead 8–3 or 11–3: each seed can pick a different phrasing, so sweep enough to hit them all.
   const scores = [{ before: 7, after: 8, against: 8 }, { before: 3, after: 8, against: 3 }, { before: 3, after: 11, against: 3 }];

@@ -21,7 +21,7 @@
 	import ResultsCollection from './ResultsCollection.svelte';
 	import ResultsGrades from './ResultsGrades.svelte';
 	import SeasonClipping from './SeasonClipping.svelte';
-	import { pickSeasonPhrase } from '../news/phrases.ts';
+	import { phraseBand, pickSeasonPhrase } from '../news/phrases.ts';
 	import { draftGrade, expectedWins, gradeRange, seasonGrade } from '../game/grade.ts';
 	import SeasonCalendar from './SeasonCalendar.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
@@ -85,7 +85,7 @@
 	const runDifference = $derived(result.runsFor - result.runsAgainst);
 	const expected = $derived(expectedWins(draft.picks.map(pick => profiles.find(profile => profile.seasonId === pick.seasonId) ?? {})));
 	const rosterGrade = $derived(expected === null ? null : draftGrade(expected));
-	const phrase = $derived(grade ? pickSeasonPhrase(grade, expected === null ? null : result.wins - expected, result.seed) : null);
+	const phrase = $derived(grade ? pickSeasonPhrase(phraseBand(grade, result.wins, result.losses), expected === null ? null : result.wins - expected, result.seed) : null);
 	const challengeVerdict = $derived(challenge
 		? result.wins > challenge.wins ? 'You beat their record.' : result.wins === challenge.wins ? 'You matched their record.' : 'You fell short of their record.'
 		: '');
