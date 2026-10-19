@@ -7,7 +7,7 @@ Status: decisions consolidated through Q59. These documents specify intended beh
 - [Shared simulation](simulation/README.md): contact profiles, flight, fielding, ordinary ballparks and Classic adoption.
 - [Draft Mode](draft-mode/README.md): shared cube, rosters, eight-team league, economy, development, franchise/decree catalog and metagame.
 - [Card print model](cards/README.md): how card fronts are printed and lit: plates, roles, tiers and the single renderer.
-- [Daily standings and scouting grade](daily/README.md): daily percentile, verified named board, anonymous identity and bans, and the pack-relative and field-ownership grades.
+- [Daily standings and scouting grade](daily/README.md): daily percentile, verified named board, anonymous identity and bans, the distribution curve, and the pack-relative scouting grade.
 - [Product policy](../PRODUCT.md): pre-release compatibility and product constraints.
 - [Interface design](../DESIGN.md): existing visual and interaction conventions, not a second gameplay specification.
 

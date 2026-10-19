@@ -4,9 +4,9 @@ This document specifies the daily run's shared standings and the scouting grade.
 
 ## Goals
 
-- Every player who finishes a daily learns where the run stands among that day's runs: "Top 7% of 1,240 daily runs".
+- Every player who finishes a daily learns where the run stands among that day's runs: "Top 7% of 1,240 daily runs", with the day's spread of records drawn as a curve that marks the player's run.
 - A short named board shows the day's best runs. Every run on it has been recomputed on the server.
-- Every season, Classic or daily, gets a scouting grade that separates taking the obvious card from finding value lower on the list. Daily runs also show how the roster compares with the rest of the field.
+- Every season, Classic or daily, gets a scouting grade that separates taking the obvious card from finding value lower on the list.
 
 Non-goals: accounts, cross-day ladders, prizes, and protection against a determined cheater on the percentile. The percentile trusts the client; only the visible board is verified.
 
@@ -26,7 +26,7 @@ The named board shows **verified rows only**. Unverified rows that would rank in
 
 ### Verification
 
-A Cron Trigger on the existing Worker runs every 15 minutes. For each current daily board it selects unverified rows whose claimed record would rank within the top N among non-rejected rows, best first, and recomputes each one:
+A Cron Trigger on the existing Worker runs every 15 minutes, and the board holds N = 25 rows; the measured verification cost below can lower either. For each current daily board it selects unverified rows whose claimed record would rank within the top N among non-rejected rows, best first, and recomputes each one:
 
 1. Load the replay from R2 (`loadReplay`).
 2. Load the manifest, `simulation.json` and the needed profile chunks from the `ASSETS` binding, as the browser does from `/data/{dataVersion}/`.
@@ -36,7 +36,7 @@ A Cron Trigger on the existing Worker runs every 15 minutes. For each current da
 
 It stops when the top N are all verified or its time budget runs out, and continues on the next run. A mismatch is not an automatic ban. The engine is deterministic within one model and data version, so a mismatch means tampering or a bug, and an admin decides which.
 
-Chosen: **wasm in the Worker's cron handler.** It runs the same TypeScript validation and the same engine build as every browser, reads data from the deployed assets, so it is always on the deployed data version, and adds no second deployment or credential. Before implementation, measure a wasm season and the manifest parse inside workerd. Those numbers set N and the cron budget. Cron invocations have a longer CPU limit than requests on the Workers Paid plan; on the free plan this design does not fit.
+Chosen: **wasm in the Worker's cron handler.** It runs the same TypeScript validation and the same engine build as every browser, reads data from the deployed assets, so it is always on the deployed data version, and adds no second deployment or credential. Before implementation, measure a wasm season and the manifest parse inside workerd. Those numbers set N and the cron budget. Cron invocations have a longer CPU limit than requests on the Workers Paid plan, which the account serving 162-0.dev has; on the free plan this design would not fit.
 
 Rejected: **a native `engine-cli` job outside Cloudflare.** It has no CPU limit, and wasm and native results are identical (`libm`). But it needs a host with the 112 MB prepared dataset on the exact deployed `dataVersion`, D1 API credentials outside Cloudflare, a port of replay validation (`engine-cli/src/draft/` ports draft rules for calibration, not replay checking), and a second deployment that must track every data or model change.
 
@@ -52,16 +52,20 @@ The same migration adds a submission state to `daily_runs` (`null`, `accepted`, 
 
 **Names** are optional, shown only on the named board, and sent with the submission. A run without a name, or with a refused name, is listed as "Anonymous". A refused name never blocks the run: the response says the name was not accepted, and the player can submit a different one for that day's row. The checks, in order:
 
-1. NFKC-normalize, trim, and collapse inner whitespace. Allow letters, digits, spaces and `.-'_`. Length limits are an open question.
+1. NFKC-normalize, trim, and collapse inner whitespace. Allow letters, digits, spaces and `.-'_`, 3 to 20 characters after normalization. A name of digits only is allowed.
 2. Reject URLs and handles (`http`, `www`, `@`, dot-TLD patterns).
-3. For matching only: lowercase, strip diacritics and zero-width characters, map leetspeak (`0→o 1→i 3→e 4→a 5→s 7→t @→a $→s`), collapse repeated letters, and drop separators.
-4. Reject a match against the blocklist unless an allowlist entry covers it, so place names that contain a blocked substring still pass. A seed list ships in source; the `name_rules` table adds terms without a deploy.
+3. For matching only: lowercase, strip diacritics and zero-width characters, fold confusable letters (Cyrillic and Greek look-alikes) to Latin, map leetspeak (`0→o 1→i 3→e 4→a 5→s 7→t 8→b 9→g @→a $→s`), collapse repeated letters, and drop separators and digits between letters.
+4. Reject any blocklist term found **anywhere** in the matching form, not only as a whole word. An allowlist entry exempts a specific name; it does not exempt a term. The filter favors refusing a harmless name over showing an offensive one; "Anonymous" costs the player nothing.
 
-**Bans** bind to the device hash. A banned device is shadow-banned: its submissions are accepted, and it still sees its own percentile, but it is excluded from the board, from other players' percentiles and from ownership. Clearing site data, a private window, another browser or the iOS app gets a new token. This is a known weakness. The existing IP rate limit (`UPLOAD_LIMIT`) is the only mitigation, and this design adds none.
+The default blocklist is deliberately broad. The seed list ships in source and covers profanity, slurs, sexual terms, drug and violence terms, and hate symbols and numbers (`88`, `1488`, `14 words` and similar), built from the English LDNOOBW list (CC BY 4.0, credited on `/credits`) plus hand additions. It also blocks impersonation of the game or staff (`162-0`, `admin`, `mod`, `official`, `alpaca`, `staff`) and real-person impersonation it can catch cheaply: the full names of players in the current dataset. The `name_rules` table adds block or allow entries without a deploy.
 
-**Administration** uses `wrangler d1 execute` against the production database: list flagged devices, ban or unban, hide a name, add a `name_rules` term. The README documents the commands. A protected admin endpoint is deferred until command-line moderation proves too slow.
+**Reports.** Any device with a counted submission that day can report a named row once. A name is **held** after three reports from distinct, unbanned devices: the row stays on the board as "Anonymous" until an admin restores the name or hides it for good. Reports never affect the run's record, rank or verification. A device whose reports are repeatedly overturned is flagged like any other abuse.
 
-**Policy pages.** Names need a short conduct and name-rules page before launch; none exists. `/privacy` must add the device token hash, optional display name, daily result and its retention, and that board rows link to public replays.
+**Bans** bind to the device hash. A banned device is shadow-banned: its submissions are accepted, and it still sees its own percentile, but it is excluded from the board and from other players' percentiles and curves. Clearing site data, a private window, another browser or the iOS app gets a new token. This is a known weakness. The existing IP rate limit (`UPLOAD_LIMIT`) is the only mitigation, and this design adds none.
+
+**Administration** uses `wrangler d1 execute` against the production database: list held names and flagged devices, restore or hide a name, ban or unban, add a `name_rules` term. The README documents the commands. A protected admin endpoint is deferred until command-line moderation proves too slow.
+
+**Policy pages.** The board launches with a conduct page and `/privacy` additions; the draft copy is under [Policy copy](#policy-copy-draft).
 
 ## Storage (D1)
 
@@ -73,6 +77,7 @@ CREATE TABLE daily_submissions (
  data_version TEXT NOT NULL, model_version TEXT NOT NULL, rules_version TEXT NOT NULL,
  wins INTEGER NOT NULL, losses INTEGER NOT NULL, runs_for INTEGER NOT NULL, runs_against INTEGER NOT NULL,
  name TEXT,                          -- accepted display name, or NULL
+ name_state TEXT NOT NULL DEFAULT 'shown' CHECK (name_state IN ('shown', 'held', 'hidden')),
  status TEXT NOT NULL CHECK (status IN ('unverified', 'verified', 'rejected', 'retired')),
  submitted_at TEXT NOT NULL, verified_at TEXT,
  PRIMARY KEY (date, device),         -- first submission per device per day wins
@@ -80,25 +85,30 @@ CREATE TABLE daily_submissions (
 );
 CREATE INDEX daily_board ON daily_submissions (date, data_version, status, wins DESC);
 
-CREATE TABLE daily_picks (           -- copied from the stored replay, never from the request
- date TEXT NOT NULL, replay_id TEXT NOT NULL, season_id TEXT NOT NULL,
- PRIMARY KEY (date, replay_id, season_id)
-);
-CREATE INDEX daily_ownership ON daily_picks (date, season_id);
-
 CREATE TABLE devices (
  device TEXT PRIMARY KEY, banned_at TEXT, flags INTEGER NOT NULL DEFAULT 0, note TEXT
+);
+
+CREATE TABLE name_reports (
+ date TEXT NOT NULL, replay_id TEXT NOT NULL, reporter TEXT NOT NULL,  -- reporter is a device hash
+ reported_at TEXT NOT NULL,
+ PRIMARY KEY (date, replay_id, reporter)
 );
 
 CREATE TABLE name_rules (term TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('block', 'allow')));
 ```
 
-Ownership and percentile queries join `devices` to exclude banned rows. They count only rows on the board's current versions whose status is not `rejected` or `retired`.
+**Retention.** Submissions, names and reports are deleted 90 days after their date, the same schedule as share images, by the cron handler. A board older than 90 days is no longer viewable; its replays stay public, as every replay does.
+
+Percentile and distribution queries join `devices` to exclude banned rows. They count only rows on the board's current versions whose status is not `rejected` or `retired`.
 
 ## API
 
-- `POST /api/daily/{date}` with `{ replayId, record: { wins, losses, runsFor, runsAgainst }, token, name? }`. The Worker loads the replay and requires `replay.daily === date`, `replay.seed === dailySeed(date)`, current versions, and a record that sums to 162 games (the check share images already use). It accepts `date` only while that daily is live, plus a grace period after rollover for seasons started before midnight. It inserts with `ON CONFLICT DO NOTHING`; a repeat submission returns the existing row's standing. Response: `{ rank, total, topPercent, nameAccepted, ownership? }`.
-- `GET /api/daily/{date}` returns `{ total, board: [{ name, wins, losses, runDiff, replayId }], checkedAt }` with a short edge cache (about 60 seconds).
+- `POST /api/daily/{date}` with `{ replayId, record: { wins, losses, runsFor, runsAgainst }, token, name? }`. The Worker loads the replay and requires `replay.daily === date`, `replay.seed === dailySeed(date)`, current versions, and a record that sums to 162 games (the check share images already use). It accepts `date` only while that daily is live, plus two hours after midnight New York for seasons started before midnight. It inserts with `ON CONFLICT DO NOTHING`; a repeat submission returns the existing row's standing. Response: `{ rank, total, topPercent, nameAccepted }`.
+- `POST /api/daily/{date}/report` with `{ replayId, token }` records a report as described under Reports. It returns 204 whether or not the report counted, so it reveals nothing about the threshold.
+- `GET /api/daily/{date}` returns `{ total, board: [{ name, wins, losses, runDiff, replayId }], distribution, checkedAt }` with a short edge cache (about 60 seconds). Any earlier date with retained rows stays viewable, and its board and curve are final once the grace period ends.
+
+**Distribution.** `distribution` is the count of counted rows at each win total, as `[[wins, count], …]` for the win totals that occur. The client bins it (five-win bins) and draws the curve with the player's own run marked. It counts the same rows as the percentile, so it also trusts claimed records.
 
 **Percentile.** `rank = 1 + count(wins > mine)`, so ties share the better rank. `topPercent = ceil(100 × rank / total)`. Records are ranked by wins only, because ties are expected and a run-differential tiebreak would make the percentile sound more exact than it is. The board breaks ties by run differential, then by earliest `submitted_at`. Both numbers change all day; the display says "so far" until the date closes.
 
@@ -141,41 +151,52 @@ The thresholds come from calibration, not invention:
 
 `just draft-spread` produces these distributions natively. `engine-cli`'s `best` policy picks by line value (OPS for hitters, ERA for pitchers), not WAR/162, so it is only an approximation of "obvious". Calibration needs a `chalk` policy in `engine-cli/src/draft/policy.rs` that takes `T_i` for the first open slot. A rules change in `src/lib/game/draft.ts` or `rules.ts` already needs the matching native change; this policy follows that rule.
 
-## Field ownership (daily runs)
-
-`own(s) = submissions on the board that rostered season s / total`, from `daily_picks`. Per run:
-
-- **Field overlap** `F = mean over the 16 picks of own(P_i)`, shown as "Your team overlaps 22% with the field".
-- **Lone picks**: picks no other counted submission made, such as "3 picks nobody else made".
-
-Only the first roll of a daily is identical for everyone. Later rolls diverge, because each pick changes the legal pool and how much of the random stream each roll uses. Ownership therefore mixes pack luck with choice. Pack-relative scouting isolates choice, which is why the two are shown side by side and never blended into one number. Ownership appears only when `total ≥ N_min`, recomputes on each standings request, and is final when the date closes.
+Rejected: **field ownership**, the share of the day's runs that rostered each card. Only the first roll of a daily is identical for everyone, so ownership mostly measures pack luck rather than choice, and it needs a minimum sample before it means anything. The pack-relative scouting grade measures choice alone.
 
 Rejected: **a shared daily deck** that deals every player the same franchise order. With one season seed per day, drafters who take the best card from identical packs converge on identical rosters and identical records, and the board fills with ties. The current dealing lets each pick reshape later packs, which keeps rosters apart.
 
 ## Surfaces
 
-- **Daily Results**: the record, "Top X% of N daily runs so far", the scouting label with `E` (for example "+38 runs over the obvious cards"), field overlap and lone picks once the sample allows, and a link to the board. The per-pick breakdown, the obvious card each time and its `edge_i`, appears only after the season.
+- **Daily Results**: the record, "Top X% of N daily runs so far", the distribution curve with the run marked, the scouting label with `E` (for example "+38 runs over the obvious cards"), and a link to the board. There is no per-pick breakdown: showing which card was the obvious one and how much value each pick gave up would teach the value model and make drafting more solvable.
 - **Classic Results**: the scouting label only.
 - **Home daily tile**: after completion, today's percentile and the countdown to the next daily. Before completion, the current number of runs.
-- **Share artwork**: the scouting label only. It is deterministic. Percentile and ownership change during the day and would be wrong in an immutable PNG.
+- **Board page** (`/daily/{date}`): the named board and the day's curve, for today and earlier retained dates.
+- **Share artwork**: the scouting label only. It is deterministic. Percentile and distribution change during the day and would be wrong in an immutable PNG.
 
 ## Delivery
 
 | Step | Usable result | Gate |
 | --- | --- | --- |
-| L01: Scouting grade | Label and per-pick breakdown on all Results | `chalk` policy and calibrated thresholds |
-| L02: Daily percentile | Submission, D1, device token migration, percentile on Results and Home | `/privacy` update |
-| L03: Verified board | Cron verification, named board, name filtering, ban commands | Measured wasm season and manifest cost in workerd; name-rules page |
+| L01: Scouting grade | Label and scout edge on all Results | `chalk` policy and calibrated thresholds |
+| L02: Daily percentile | Submission, D1, device token migration, percentile and curve on Results and Home | `/privacy` update |
+| L03: Verified board | Cron verification, named board, name filtering, reports, ban commands | Measured wasm season and manifest cost in workerd; conduct page |
 
 L01 has no server dependency and can ship alone.
 
-## Open questions
+## Policy copy (draft)
 
-1. Board size N (proposed 25) and cron interval (proposed 15 minutes). Both depend on the measured verification cost.
-2. Minimum sample `N_min` before ownership shows (proposed 50).
-3. Name length (proposed 3–20 characters) and whether names may contain digits only.
-4. Grace period after midnight New York for late submissions (proposed 2 hours), and whether yesterday's board stays viewable.
-5. Retention for submissions and names: the same 90 days as share images, or indefinite like replays?
-6. Should players be able to report a name, or does moderation stay admin-only?
-7. Should the per-pick breakdown reveal `valueRuns` gaps in detail, or only the label and `E`? Detailed gaps teach which cards the value model favors and could make drafting more solvable.
-8. Is the account on the Workers Paid plan? Cron verification requires it.
+Awaiting approval. Final wording ships with L02 (privacy) and L03 (conduct).
+
+### `/conduct`: Board names
+
+> A name is optional. It appears only next to your run on the daily board, and anyone can see it.
+>
+> Names are 3 to 20 letters, digits, spaces and `. - ' _`. We refuse names that are profane, sexual, hateful, threatening, or about drugs; names that look like links or social handles; and names that pretend to be 162-0, its staff, or a real person. Our filter is strict on purpose and sometimes refuses a harmless name. A refused name never costs you your run: it is listed as "Anonymous", and you can try another name that day.
+>
+> Anyone who finished the same daily can report a name. A reported name may be hidden while we review it. We can hide any name and can remove a device from the board and from everyone's standings, without notice, if it breaks these rules or submits a record the game did not produce.
+>
+> To ask about a hidden name, contact Alpaca Software from the link in the website footer and include the replay link.
+
+### `/privacy` additions
+
+A new section, "Daily standings", after "Replay links and shared images":
+
+> When you finish the daily, the game sends your season's replay link and record to our server to place you in that day's standings. To keep one entry per device each day, your device creates a random code and stores it locally; our server keeps only a scrambled (hashed) form of it, which is not linked to you or to any account. If you add a board name, we store it with your entry. If you report a name, we store that report with your device's hashed code.
+>
+> Board names, records and replay links are public. Entries, names and reports are deleted 90 days after the daily's date; the replays they link to are kept like any other replay. Clearing the website's data or reinstalling the app creates a new code, and earlier entries stay until they expire.
+
+Changed sentences:
+
+- Intro: "completed Classic seasons can automatically publish replay data and share images" becomes "completed Classic and daily seasons can automatically publish replay data, share images and daily standings entries".
+- Children's privacy: "The game does not ask players for a name, email address, birth date, or account profile" becomes "The game does not ask for an email address, birth date, or account profile. The daily board accepts an optional display name; please do not use a real name."
+- Your choices: add "To remove a daily board name or entry before it expires, contact us with its replay link."
