@@ -115,7 +115,7 @@ function decodeJson(bytes: Uint8Array, label: string): unknown {
 	catch { throw new ShareIncompatibleError(`${label} is invalid.`); }
 }
 
-function pngDimensions(bytes: Uint8Array): { width: number; height: number } {
+export function pngDimensions(bytes: Uint8Array): { width: number; height: number } {
 	if (bytes.byteLength < 24 || PNG_SIGNATURE.some((byte, index) => bytes[index] !== byte) ||
 		bytes[12] !== 73 || bytes[13] !== 72 || bytes[14] !== 68 || bytes[15] !== 82) {
 		throw new ShareInvalidError('The share image is not a PNG.');

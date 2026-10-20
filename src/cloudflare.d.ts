@@ -8,5 +8,6 @@ declare module 'cloudflare:workers' {
 	export const env: import('./lib/server/share-images.ts').ShareServerBindings & {
 		ASSETS: import('./lib/server/replays.ts').ReplayAssets;
 		UPLOAD_LIMIT?: import('./lib/server/rate-limit.ts').RateLimiter;
+		BROWSER?: import('./lib/server/site-preview.ts').BrowserRun;
 	};
 }

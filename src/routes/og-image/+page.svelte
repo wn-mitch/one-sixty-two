@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { createCardViewModel, type CardViewModel } from '#lib/cards/view-model.ts';
 	import { loadManifest, loadShowcase } from '#lib/game/data.ts';
 	import { loadMedia } from '#lib/media/client.ts';
@@ -20,9 +20,20 @@
 		const [showcase, media, rankings] = await Promise.all([loadShowcase(manifest), loadMedia(), loadRankings(manifest.dataVersion).catch(() => null)]);
 		cards = showcase.map(({ profile, slot }) => createCardViewModel({ profile, slot, manifest, media, mediaStatus: 'ready', rankings }));
 		await document.fonts.ready;
+		await tick();
+		await photosLoaded();
 		ready = true;
 	});
 	function ignoreCardDetails(): void {}
+
+	/** Card photos load after the frame renders; ready waits until every image has settled for two checks, or 15 seconds. */
+	async function photosLoaded(): Promise<void> {
+		let settled = 0;
+		for (let waited = 0; waited < 15_000 && settled < 2; waited += 150) {
+			await new Promise(resolve => setTimeout(resolve, 150));
+			settled = [...document.images].every(image => image.complete) ? settled + 1 : 0;
+		}
+	}
 </script>
 
 <svelte:head><meta name="robots" content="noindex" /></svelte:head>

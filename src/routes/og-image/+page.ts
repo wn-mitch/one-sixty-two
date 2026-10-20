@@ -1,7 +1,5 @@
-import { error } from '@sveltejs/kit';
-
-/** Development-only capture page for `static/og.png` (see `npm run og:capture`). */
+/**
+ * Capture page for the site link preview: `npm run og:capture` screenshots it to static/og.png, and the
+ * Worker's daily preview (`/og/daily.png`) screenshots it with `?date=` through Browser Run.
+ */
 export const ssr = false;
-export function load(): void {
-	if (!import.meta.env.DEV) error(404, 'Not found');
-}

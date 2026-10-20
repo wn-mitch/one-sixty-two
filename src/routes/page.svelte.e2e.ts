@@ -93,7 +93,7 @@ async function verifyPublication(
 	expect(html).toContain('name=\"twitter:card\" content=\"summary_large_image\"');
 	expect(html).toContain('property="og:site_name" content="162-0"');
 	// A published roster shows its own link preview, never the site preview as well.
-	expect(html).not.toContain(`${new URL(publication.replayUrl).origin}/og.png`);
+	expect(html).not.toContain(`${new URL(publication.replayUrl).origin}/og/daily.png`);
 	expect(html).toContain(firstLoss === null ? 'No losses.' : `First loss: Game ${firstLoss}.`);
 	expect(html).toContain(`Longest winning streak: ${longestWinningStreak} ${longestWinningStreak === 1 ? 'game' : 'games'}.`);
 }
@@ -364,17 +364,20 @@ test('starts a clean draft from a replay link without touching the local save', 
 	expect((await deviceDraft(page)).schemaVersion).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
 });
 
-test('previews the site with the card fan, and unpublished roster links fall back to it', async ({ request }) => {
+test('previews the site with today\'s card fan, and unpublished roster links fall back to it', async ({ request }) => {
 	for (const path of ['/', '/r/aaaaaaaaaaaaaaaaaaaaaa']) {
 		const html = await (await request.get(path, { headers: { 'user-agent': 'browser-suite-crawler' } })).text();
-		expect(html).toMatch(/property="og:image" content="https?:\/\/[^"]+\/og\.png"/);
+		expect(html).toMatch(/property="og:image" content="https?:\/\/[^"]+\/og\/daily\.png"/);
 		expect(html).toContain('property="og:image:width" content="1200"');
 		expect(html.match(/property="og:image"/g)).toHaveLength(1);
 		expect(html.match(/property="og:site_name" content="162-0"/g)).toHaveLength(1);
 	}
-	const image = await request.get('/og.png');
+	// The test server has no Browser Run binding, so the daily preview serves the undated static image.
+	const [image, fallback] = await Promise.all([request.get('/og/daily.png'), request.get('/og.png')]);
 	expect(image.status()).toBe(200);
 	expect(image.headers()['content-type']).toBe('image/png');
+	expect(image.headers()['cache-control']).toBe('public, max-age=60');
+	expect(Buffer.compare(await image.body(), await fallback.body())).toBe(0);
 });
 
 test('rejects invalid replay uploads and unknown replay ids', async ({ request }) => {

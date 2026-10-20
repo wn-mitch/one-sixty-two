@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { SITE_PREVIEW } from '#lib/share/site-preview.ts';
  import { getContext, onMount, tick, untrack } from 'svelte';
  import { goto } from '$app/navigation';
  import { page } from '$app/state';
@@ -112,6 +113,8 @@
   void loadMedia()
    .then(value => { if (!disposed) { media = value; mediaStatus = 'ready'; } })
    .catch(() => { if (!disposed) mediaStatus = 'unavailable'; });
+  // Asks the Worker to make today's stamped link preview early in the day, before anyone shares a link.
+  void fetch(SITE_PREVIEW.path, { method: 'HEAD' }).catch(() => undefined);
   return () => {
    disposed = true;
    currentSession?.dispose();
