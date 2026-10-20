@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { stageBuildAssets } from './scripts/package-assets.ts';
+import { workerWasm } from './scripts/worker-wasm-plugin.ts';
 
 export default defineConfig(async ({ command }) => ({
 	// sqlite-wasm resolves its .wasm beside its own module, so it must not be pre-bundled.
@@ -18,6 +19,7 @@ export default defineConfig(async ({ command }) => ({
 		}
 	},
 	plugins: [
+		workerWasm(),
 		tailwindcss(),
 		sveltekit({
 			files: { assets: command === 'build' ? await stageBuildAssets(process.cwd()) : 'static' },

@@ -221,6 +221,13 @@ describe('device database migrations', () => {
   await expect(db.run([{ sql: "INSERT INTO device_identity (id, token) VALUES (2, 'b')" }])).rejects.toThrow();
   await expect(db.run([{ sql: "UPDATE daily_runs SET submission = 'pending'" }])).rejects.toThrow();
  });
+ it('adds an empty board entry and name to existing daily runs', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 13));
+  await db.run([{ sql: "INSERT INTO daily_runs (date, started_at, updated_at, season_key, wins, losses, submission) VALUES ('2026-10-18', 'then', 'then', 'k', 120, 42, 'accepted')" }]);
+  const before = await db.all('SELECT * FROM daily_runs');
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 14))).toEqual({ from: 13, to: 14 });
+  expect(await db.all('SELECT * FROM daily_runs')).toEqual(before.map(row => ({ ...row, board_entry: null, board_name: null })));
+ });
  it('seeds zero-credit receipts for existing and deleted history without altering historical data', async () => {
   const { db, raw } = await memoryDb({
    ...NO_LEGACY, draft: '{"saved":"run"}', library: JSON.stringify([entry('kept', 120), entry('deleted', 90)])

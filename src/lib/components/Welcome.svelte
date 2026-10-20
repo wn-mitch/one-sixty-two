@@ -94,7 +94,7 @@
    <section class="daily" class:done={!dailyPending} aria-labelledby="daily-heading">
     <h2 id="daily-heading"><span>Daily</span> {dailyLabel(daily.date)}</h2>
     {#if daily.run.kind === 'complete'}
-     <p class="daily-result"><strong aria-label={`${daily.run.record.wins} wins, ${daily.run.record.losses} losses`}>{daily.run.record.wins}–{daily.run.record.losses}</strong> <a href="/seasons#dailies">See it in My teams</a></p>
+     <p class="daily-result"><strong aria-label={`${daily.run.record.wins} wins, ${daily.run.record.losses} losses`}>{daily.run.record.wins}–{daily.run.record.losses}</strong> <a href="/seasons#dailies">See it in My teams</a> <a href={`/daily/${daily.date}`}>See the board</a></p>
      {#if dailyStandings?.date === daily.date}<DailyStandings standings={dailyStandings} compact />{/if}
      {#if nextDaily}<p class="daily-next" role="timer">Next daily in {countdown(nextDaily, now)}</p>{/if}
     {:else if daily.run.kind === 'unavailable'}

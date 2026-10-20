@@ -11,4 +11,12 @@ declare module 'cloudflare:workers' {
 		BROWSER?: import('./lib/server/site-preview.ts').BrowserRun;
 		DAILY?: import('./lib/server/daily-standings.ts').DailyDatabase;
 	};
+	/** Keeps the invocation alive for background work after the response; a no-op in development. */
+	export function waitUntil(promise: Promise<unknown>): void;
+}
+
+/** A wasm file compiled at deploy time, imported by server code through `scripts/worker-wasm-plugin.ts`. */
+declare module '*.wasm?module' {
+	const module: WebAssembly.Module;
+	export default module;
 }

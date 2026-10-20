@@ -90,6 +90,13 @@
 			<MediaCredits />
 		</div>
 	</section>
+
+	<section id="name-filter">
+		<div>
+			<h2>Board name filter</h2>
+			<p>The daily board’s name filter starts from the English <a href="https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words">List of Dirty, Naughty, Obscene, and Otherwise Bad Words</a>, used under <a href="https://creativecommons.org/licenses/by/4.0/" rel="license">Creative Commons Attribution 4.0</a>, with terms of our own added.</p>
+		</div>
+	</section>
 </article>
 
 <style>

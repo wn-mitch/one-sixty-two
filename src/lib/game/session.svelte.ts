@@ -379,6 +379,13 @@ export class Session {
    if (manifest === this.manifest) this.dailyStandings = view;
   } catch { /* offline or unavailable: shown once the next view succeeds */ }
  }
+ /** Asks for a board name on the day's run; the view says whether it was taken. Throws when the server cannot be reached. */
+ async nameDaily(date: string, name: string): Promise<void> {
+  const manifest = this.manifest;
+  if (!manifest || this.shared) return;
+  const view = await loadDailyStandings((await deviceDb()).db, manifest, date, location.origin, fetch, name);
+  if (manifest === this.manifest) this.dailyStandings = view;
+ }
  /** Starts today's daily with its seed and stadium pinned, or resumes it; a finished day does nothing. */
  async playDaily(): Promise<void> {
   if (!this.manifest || this.loading || !this.daily) return;

@@ -368,6 +368,14 @@ export const MIGRATIONS: readonly Migration[] = [
    // A finished daily's standing submission: null until the server answers, then accepted or rejected for good.
    exec(db, "ALTER TABLE daily_runs ADD COLUMN submission TEXT CHECK (submission IN ('accepted', 'rejected'))");
   }
+ },
+ {
+  version: 14,
+  up(db) {
+   // The run's public board id and the board name the server accepted for it; the latest name is offered the next day.
+   exec(db, 'ALTER TABLE daily_runs ADD COLUMN board_entry TEXT');
+   exec(db, 'ALTER TABLE daily_runs ADD COLUMN board_name TEXT');
+  }
  }
 ];
 

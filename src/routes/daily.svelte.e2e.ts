@@ -56,7 +56,7 @@ test('the daily leads the home screen, skips the stadium choice, keeps its own s
  expect(await deviceRows(page, 'SELECT date FROM daily_runs')).toEqual([{ date }]);
 });
 
-test('a finished daily pays two tokens, carries its stamp, joins the standings, and leaves the home screen to Classic play', async ({ page, request }) => {
+test('a finished daily pays two tokens, carries its stamp, joins the standings, and leaves the home screen to Classic play', async ({ page, request, baseURL }) => {
  const manifest = await currentManifest(request);
  const date = dailyDate();
  const draft = completeDaily(manifest, date);
@@ -78,6 +78,39 @@ test('a finished daily pays two tokens, carries its stamp, joins the standings, 
  await expect(page.getByRole('region', { name: 'Today’s daily standings' }).locator('.summary')).toHaveText(standing);
  expect(await deviceRows(page, 'SELECT submission FROM daily_runs WHERE date = ?', [date])).toEqual([{ submission: 'accepted' }]);
  expect(await deviceRows(page, 'SELECT length(token) AS length FROM device_identity')).toEqual([{ length: 22 }]);
+
+ // A refused name leaves the run Anonymous and lets the player try another.
+ const entry = page.getByRole('region', { name: 'Today’s daily board' });
+ await entry.getByLabel(/Board name/).fill('Official Staff');
+ await entry.getByRole('button', { name: 'Add name', exact: true }).click();
+ await expect(entry.getByRole('alert')).toContainText('That name was not accepted');
+ await entry.getByLabel(/Board name/).fill('Glass Arm');
+ await entry.getByRole('button', { name: 'Add name', exact: true }).click();
+ await expect(entry.getByLabel(/Board name/)).toHaveCount(0);
+ expect(await deviceRows(page, 'SELECT board_name FROM daily_runs WHERE date = ?', [date])).toEqual([{ board_name: 'Glass Arm' }]);
+
+ // A forged perfect season on the same replay ranks first by its claim, so it is checked first, and never shows.
+ const origin = baseURL!;
+ const { id } = await storeReplay(draft, origin, (input, init) => fetch(input, { ...init, headers: { ...init?.headers, origin } }));
+ const forged = await request.post(`/api/daily/${date}`, {
+  headers: { origin, 'cf-connecting-ip': '203.0.113.9' },
+  data: { replayId: id, token: 'forger0000000000000000', record: { wins: 162, losses: 0, runsFor: 1200, runsAgainst: 100 }, name: 'Perfect' }
+ });
+ expect(forged.ok()).toBe(true);
+ const forgedEntry = (await forged.json() as { entry: string }).entry;
+ // Viewing the standings drives verification: each view recomputes a few runs in the Worker with the wasm engine.
+ const board = async () => (await (await request.get(`/api/daily/${date}`)).json() as { board: { entry: string; name: string | null; wins: number }[] }).board;
+ await expect.poll(async () => (await board()).map(row => row.name), { timeout: 90_000, intervals: [1_000] }).toContain('Glass Arm');
+ expect((await board()).map(row => row.entry)).not.toContain(forgedEntry);
+ expect((await board()).find(row => row.name === 'Glass Arm')?.wins).toBe(Number(record[0]));
+
+ await page.goto(`/daily/${date}`);
+ const list = page.getByRole('list', { name: `Daily ${dailyLabel(date)} board` });
+ const own = list.getByRole('listitem').filter({ hasText: 'Glass Arm' });
+ await expect(own).toContainText('You');
+ await expect(own).toContainText(`${record[0]}–${record[1]}`);
+ await expect(own.getByRole('button', { name: /^Report/ })).toHaveCount(0);
+ await expect(list).not.toContainText('Perfect');
 
  await page.goto('/');
  const panel = page.getByRole('region', { name: `Daily ${dailyLabel(date)}` });

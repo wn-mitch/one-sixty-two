@@ -1,6 +1,6 @@
 # Daily standings and scouting grade
 
-This document specifies the daily run's shared standings and the scouting grade. L01 (the scouting grade) and L02 (the daily percentile and records curve) are implemented; the named, verified board (L03) is not. The daily run itself (`src/lib/game/daily.ts`) is current behavior: one seed and one pinned home stadium per New York calendar day, one attempt per device recorded in the device table `daily_runs`, and a replay carrying `daily: "YYYY-MM-DD"`.
+This document specifies the daily run's shared standings and the scouting grade. L01 (the scouting grade), L02 (the daily percentile and records curve) and L03 (the named, verified board) are implemented. The daily run itself (`src/lib/game/daily.ts`) is current behavior: one seed and one pinned home stadium per New York calendar day, one attempt per device recorded in the device table `daily_runs`, and a replay carrying `daily: "YYYY-MM-DD"`.
 
 ## Goals
 
@@ -26,7 +26,7 @@ The named board shows **verified rows only**. Unverified rows that would rank in
 
 ### Verification
 
-A Cron Trigger on the existing Worker runs every 15 minutes, and the board holds N = 25 rows; the measured verification cost below can lower either. For each current daily board it selects unverified rows whose claimed record would rank within the top N among non-rejected rows, best first, and recomputes each one:
+Verification runs on demand, and the board holds N = 25 rows. After each standings `GET` for a live day, the Worker uses `waitUntil` to check up to two unverified rows whose claimed record would rank within the top N among non-rejected rows, best first. Each row is claimed first (`verifying_at`, retaken after two minutes if its check died), so concurrent requests never recompute the same run. Each check:
 
 1. Load the replay from R2 (`loadReplay`).
 2. Load the manifest, `simulation.json` and the needed profile chunks from the `ASSETS` binding, as the browser does from `/data/{dataVersion}/`.
@@ -34,9 +34,9 @@ A Cron Trigger on the existing Worker runs every 15 minutes, and the board holds
 4. Build the season input (`prepareSeasonInput`) and play it with the wasm engine.
 5. Compare wins, losses, runs for and runs against with the claim. A match sets `verified`; a difference sets `rejected` and increments the device's `flags`.
 
-It stops when the top N are all verified or its time budget runs out, and continues on the next run. A mismatch is not an automatic ban. The engine is deterministic within one model and data version, so a mismatch means tampering or a bug, and an admin decides which.
+When data cannot be loaded, the claim is released and the next view retries. A mismatch is not an automatic ban. The engine is deterministic within one model and data version, so a mismatch means tampering or a bug, and an admin decides which.
 
-Chosen: **wasm in the Worker's cron handler.** It runs the same TypeScript validation and the same engine build as every browser, reads data from the deployed assets, so it is always on the deployed data version, and adds no second deployment or credential. Before implementation, measure a wasm season and the manifest parse inside workerd. Those numbers set N and the cron budget. Cron invocations have a longer CPU limit than requests on the Workers Paid plan, which the account serving 162-0.dev has; on the free plan this design would not fit.
+Chosen: **wasm in the Worker, on demand.** It runs the same TypeScript validation and the same engine build as every browser, reads data from the deployed assets, so it is always on the deployed data version, and adds no second deployment or credential. Workers cannot compile wasm at runtime, so the build bundles the engine as a compiled module (`scripts/worker-wasm-plugin.ts`). Measured cost is about 0.9 s of CPU per check (manifest parse 24 ms, replay validation 56 ms, season 740 ms), inside the Workers Paid request limit (`limits.cpu_ms` 30 s). Checks follow views, so a quiet day costs nothing; only the top N are ever recomputed. The SvelteKit Cloudflare adapter exports no scheduled handler, which ruled out a Cron Trigger.
 
 Rejected: **a native `engine-cli` job outside Cloudflare.** It has no CPU limit, and wasm and native results are identical (`libm`). But it needs a host with the 112 MB prepared dataset on the exact deployed `dataVersion`, D1 API credentials outside Cloudflare, a port of replay validation (`engine-cli/src/draft/` ports draft rules for calibration, not replay checking), and a second deployment that must track every data or model change.
 
@@ -55,9 +55,9 @@ The same migration adds a submission state to `daily_runs` (`null`, `accepted`, 
 1. NFKC-normalize, trim, and collapse inner whitespace. Allow letters, digits, spaces and `.-'_`, 3 to 20 characters after normalization. A name of digits only is allowed.
 2. Reject URLs and handles (`http`, `www`, `@`, dot-TLD patterns).
 3. For matching only: lowercase, strip diacritics and zero-width characters, fold confusable letters (Cyrillic and Greek look-alikes) to Latin, map leetspeak (`0→o 1→i 3→e 4→a 5→s 7→t 8→b 9→g @→a $→s`), collapse repeated letters, and drop separators and digits between letters.
-4. Reject any blocklist term found **anywhere** in the matching form, not only as a whole word. An allowlist entry exempts a specific name; it does not exempt a term. The filter favors refusing a harmless name over showing an offensive one; "Anonymous" costs the player nothing.
+4. Reject any blocklist term longer than three letters found **anywhere** in the matching form, not only as a whole word; terms of three letters or fewer match only a whole word or the whole name, so Cassidy and Titus pass. Hate numbers match only as whole digit runs, so "Class of 1988" passes and "Team 88" does not. An allowlist entry exempts a specific name; it does not exempt a term. The filter favors refusing a harmless name over showing an offensive one; "Anonymous" costs the player nothing.
 
-The default blocklist is deliberately broad. The seed list ships in source and covers profanity, slurs, sexual terms, drug and violence terms, and hate symbols and numbers (`88`, `1488`, `14 words` and similar), built from the English LDNOOBW list (CC BY 4.0, credited on `/credits`) plus hand additions. It also blocks impersonation of the game or staff (`162-0`, `admin`, `mod`, `official`, `alpaca`, `staff`) and real-person impersonation it can catch cheaply: the full names of players in the current dataset. The `name_rules` table adds block or allow entries without a deploy.
+The default blocklist is deliberately broad. The seed list ships in source and covers profanity, slurs, sexual terms, drug and violence terms, and hate symbols and numbers (`88`, `1488`, `14 words` and similar), built from the English LDNOOBW list (CC BY 4.0, credited on `/credits`) plus hand additions. It also blocks impersonation of the game or staff (`1620`, `onesixtytwo`, `admin`, `moderator`, `official`, `alpaca`, `staff`, `support`, `system`). Real-person impersonation is left to reports: blocking every player name in the dataset would refuse too many ordinary names. The `name_rules` table adds block or allow entries without a deploy.
 
 **Reports.** Any device with a counted submission that day can report a named row once. A name is **held** after three reports from distinct, unbanned devices: the row stays on the board as "Anonymous" until an admin restores the name or hides it for good. Reports never affect the run's record, rank or verification. A device whose reports are repeatedly overturned is flagged like any other abuse.
 
@@ -82,6 +82,8 @@ CREATE TABLE daily_submissions (
  submitted_at TEXT NOT NULL,
  verifying_at TEXT,                  -- claim taken before a recomputation, so two requests never check one row
  verified_at TEXT,
+ entry TEXT,                         -- random public id on the board; unique per date
+ roster_key TEXT,                    -- set by verification; identical rosters share one board row
  PRIMARY KEY (date, device)          -- first submission per device per day wins
 );
 CREATE INDEX daily_board ON daily_submissions (date, data_version, status, wins DESC);
@@ -91,9 +93,9 @@ CREATE TABLE devices (
 );
 
 CREATE TABLE name_reports (
- date TEXT NOT NULL, replay_id TEXT NOT NULL, reporter TEXT NOT NULL,  -- reporter is a device hash
+ date TEXT NOT NULL, entry TEXT NOT NULL, reporter TEXT NOT NULL,  -- reporter is a device hash
  reported_at TEXT NOT NULL,
- PRIMARY KEY (date, replay_id, reporter)
+ PRIMARY KEY (date, entry, reporter)
 );
 
 CREATE TABLE name_rules (term TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('block', 'allow')));
@@ -101,15 +103,15 @@ CREATE TABLE name_rules (term TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind I
 
 The Worker applies this schema itself, in numbered steps on first use in an isolate (`src/lib/server/daily-standings.ts`), so the schema ships with the code that reads it. A replay ID is not unique per day: replays are content-addressed, so two players who make identical picks in the same order share one replay, and both runs count. A cheater gains nothing from reusing a replay that a fresh device token does not already give.
 
-**Retention.** Submissions, names and reports are deleted 90 days after their date, the same schedule as share images, by the cron handler. A board older than 90 days is no longer viewable; its replays stay public, as every replay does.
+**Retention.** Submissions, names and reports are deleted 90 days after their date, the same schedule as share images, on each submission. A board older than 90 days is no longer viewable; its replays stay public, as every replay does.
 
 Percentile and distribution queries join `devices` to exclude banned rows. They count only rows on the board's current versions whose status is not `rejected` or `retired`.
 
 ## API
 
-- `POST /api/daily/{date}` with `{ replayId, record: { wins, losses, runsFor, runsAgainst }, token, name? }`. The Worker loads the replay and requires `replay.daily === date`, `replay.seed === dailySeed(date)`, current versions, and a record that sums to 162 games (the check share images already use). It accepts `date` only while that daily is live, plus two hours after midnight New York for seasons started before midnight. It inserts with `ON CONFLICT DO NOTHING`; a repeat submission returns the existing row's standing. Response: `{ rank, total, topPercent, nameAccepted }`.
-- `POST /api/daily/{date}/report` with `{ replayId, token }` records a report as described under Reports. It returns 204 whether or not the report counted, so it reveals nothing about the threshold.
-- `GET /api/daily/{date}?wins=N` returns `{ total, distribution, standing, final }` today (`standing` only with `wins`, for a day that no longer accepts the device's refresh); L03 adds `board: [{ name, wins, losses, runDiff, replayId }]` and `checkedAt`. It is served with a short edge cache (about 60 seconds). Any earlier date with retained rows stays viewable, and its board and curve are final once the grace period ends.
+- `POST /api/daily/{date}` with `{ replayId, record: { wins, losses, runsFor, runsAgainst }, token, name? }`. The Worker loads the replay and requires `replay.daily === date`, `replay.seed === dailySeed(date)`, current versions, and a record that sums to 162 games (the check share images already use). It accepts `date` only while that daily is live, plus two hours after midnight New York for seasons started before midnight. It inserts with `ON CONFLICT DO NOTHING`; a repeat submission returns the existing row's standing. A row's public `entry` is a random 16-hex id, so the board never shows the device hash. Response: `{ rank, total, topPercent, record, entry, name, nameAccepted? }`; a device whose entry has no accepted name may send another name later that day.
+- `POST /api/daily/{date}/report` with `{ entry, token }` records a report as described under Reports. It returns 204 whether or not the report counted, so it reveals nothing about the threshold.
+- `GET /api/daily/{date}?wins=N` returns `{ total, distribution, standing, final }` today (`standing` only with `wins`, for a day that no longer accepts the device's refresh); plus `board: [{ entry, name, wins, losses, runDiff, replayId, copies }]` and `checkedAt`. It is served with a short edge cache (about 60 seconds). Any earlier date with retained rows stays viewable, and its board and curve are final once the grace period ends.
 
 **Distribution.** `distribution` is the count of counted rows at each win total, as `[[wins, count], …]` for the win totals that occur. The client bins it (five-win bins) and draws the curve with the player's own run marked. It counts the same rows as the percentile, so it also trusts claimed records.
 
@@ -160,10 +162,10 @@ Rejected: **a shared daily deck** that deals every player the same franchise ord
 
 ## Surfaces
 
-- **Daily Results**: the record, "Top X% of N daily runs so far", the distribution curve with the run marked, the scouting label with `E` (for example "+38 runs over the obvious cards"), and a link to the board. There is no per-pick breakdown: showing which card was the obvious one and how much value each pick gave up would teach the value model and make drafting more solvable.
+- **Daily Results**: the record, "Top X% of N daily runs so far", the distribution curve with the run marked, the scouting label with `E` (for example "+38 runs over the obvious cards"), the run's board place once verified (or the top-25 waiting note), an optional board name field while the run has no accepted name, and a link to the board. There is no per-pick breakdown: showing which card was the obvious one and how much value each pick gave up would teach the value model and make drafting more solvable.
 - **Classic Results**: the scouting label only.
-- **Home daily tile**: after completion, today's percentile and the countdown to the next daily. Before completion, the current number of runs.
-- **Board page** (`/daily/{date}`): the named board and the day's curve, for today and earlier retained dates.
+- **Home daily tile**: after completion, today's percentile, a link to the board and the countdown to the next daily. Before completion, the current number of runs.
+- **Board page** (`/daily/{date}`): the day's curve and the named board (place, name or Anonymous, record and run differential, copies of the roster, replay link), for today and earlier retained dates. The device's own row is marked; a device with its own counted run sees Report on other named rows while the day is live.
 - **Share artwork**: the scouting label only. It is deterministic. Percentile and distribution change during the day and would be wrong in an immutable PNG.
 
 ## Delivery
@@ -172,13 +174,13 @@ Rejected: **a shared daily deck** that deals every player the same franchise ord
 | --- | --- | --- |
 | L01: Scouting grade | Label and scout edge on all Results | `chalk` policy and calibrated thresholds |
 | L02: Daily percentile | Submission, D1, device token migration, percentile and curve on Results and Home | `/privacy` update |
-| L03: Verified board | Cron verification, named board, name filtering, reports, ban commands | Measured wasm season and manifest cost in workerd; conduct page |
+| L03: Verified board | On-demand verification, named board, name filtering, reports, ban commands | Measured wasm season and manifest cost in workerd; conduct page |
 
 L01 has no server dependency and can ship alone.
 
 ## Policy copy (draft)
 
-Awaiting approval. Final wording ships with L02 (privacy) and L03 (conduct).
+Shipped in `/privacy` and `/conduct`.
 
 ### `/conduct`: Board names
 

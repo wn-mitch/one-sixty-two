@@ -1,6 +1,7 @@
 import { dailyDate, dailySeed, isDailyDate } from '../game/daily.ts';
 import { loadCurrentDataVersion, loadReplay, REPLAY_ID_PATTERN, ReplayIncompatibleError, ReplayNotFoundError, type ReplayAssets, type ReplayBucket } from './replays.ts';
 import type { Replay } from '../game/types.ts';
+import { checkName, type NameRules } from './names.ts';
 
 /** The subset of Cloudflare's D1 binding (`DAILY` in wrangler.jsonc) used here, kept structural for tests. */
 export interface DailyDatabase {
@@ -33,6 +34,12 @@ export interface DailyStanding {
 export interface DailySubmission extends DailyStanding {
 	/** The record this device's day is ranked by: its first accepted submission. */
 	record: DailyRecord;
+	/** This entry's public id on the board, so the device can find its own row. */
+	entry: string;
+	/** The board name on the entry, or null for Anonymous. */
+	name: string | null;
+	/** Whether the name this request sent was taken; absent when it sent none. */
+	nameAccepted?: boolean;
 }
 
 export interface DailyStandings {
@@ -93,6 +100,25 @@ const SCHEMA: readonly { version: number; statements: readonly string[] }[] = [
 				note TEXT
 			)`
 		]
+	},
+	{
+		version: 2,
+		statements: [
+			// A random public id per entry, so the board never shows the device hash.
+			'ALTER TABLE daily_submissions ADD COLUMN entry TEXT',
+			"UPDATE daily_submissions SET entry = lower(hex(randomblob(8))) WHERE entry IS NULL",
+			'CREATE UNIQUE INDEX daily_entry ON daily_submissions (date, entry)',
+			// Set by verification; identical rosters share one board row.
+			'ALTER TABLE daily_submissions ADD COLUMN roster_key TEXT',
+			"CREATE TABLE name_rules (term TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('block', 'allow')))",
+			`CREATE TABLE name_reports (
+				date TEXT NOT NULL,
+				entry TEXT NOT NULL,
+				reporter TEXT NOT NULL,
+				reported_at TEXT NOT NULL,
+				PRIMARY KEY (date, entry, reporter)
+			)`
+		]
 	}
 ];
 
@@ -116,7 +142,7 @@ async function applySchema(db: DailyDatabase): Promise<void> {
 	}
 }
 
-async function database(bindings: DailyBindings): Promise<DailyDatabase> {
+export async function database(bindings: DailyBindings): Promise<DailyDatabase> {
 	const db = bindings.DAILY;
 	if (!db) throw new DailyRequestError(503, 'Daily standings are unavailable.');
 	let ready = migrated.get(db);
@@ -134,7 +160,7 @@ export function liveDates(now: Date): string[] {
 	return [...new Set([dailyDate(now), dailyDate(new Date(now.getTime() - GRACE_MS))])];
 }
 
-function isFinal(date: string, now: Date): boolean {
+export function isFinal(date: string, now: Date): boolean {
 	return date < dailyDate(new Date(now.getTime() - GRACE_MS));
 }
 
@@ -150,13 +176,23 @@ function validRecord(value: unknown): DailyRecord {
 	return parsed;
 }
 
-async function deviceHash(token: string): Promise<string> {
+export async function deviceHash(token: string): Promise<string> {
 	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
 	return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+export function validToken(value: unknown): value is string {
+	return typeof value === 'string' && TOKEN.test(value);
+}
+
+/** Block and allow entries added with `wrangler d1 execute`, on top of the seed list in `names.ts`. */
+async function nameRules(db: DailyDatabase): Promise<NameRules> {
+	const { results } = await db.prepare('SELECT term, kind FROM name_rules').all<{ term: string; kind: 'block' | 'allow' }>();
+	return { block: results.filter(rule => rule.kind === 'block').map(rule => rule.term), allow: results.filter(rule => rule.kind === 'allow').map(rule => rule.term) };
+}
+
 /** Rows that count toward a board: its versions, not rejected or retired, from devices not banned. */
-const COUNTED = `date = ?1 AND data_version = ?2 AND model_version = ?3 AND rules_version = ?4
+export const COUNTED = `date = ?1 AND data_version = ?2 AND model_version = ?3 AND rules_version = ?4
 	AND status NOT IN ('rejected', 'retired')
 	AND device NOT IN (SELECT device FROM devices WHERE banned_at IS NOT NULL)`;
 
@@ -172,7 +208,8 @@ export async function submitDaily(bindings: DailyBindings, date: string, body: u
 	if (!isDailyDate(date)) throw new DailyRequestError(404, 'That daily does not exist.');
 	if (!liveDates(now).includes(date)) throw new DailyRequestError(410, 'That daily is closed.');
 	const input = body as Record<string, unknown> | null;
-	if (!input || typeof input.token !== 'string' || !TOKEN.test(input.token) || typeof input.replayId !== 'string' || !REPLAY_ID_PATTERN.test(input.replayId)) {
+	if (!input || !validToken(input.token) || typeof input.replayId !== 'string' || !REPLAY_ID_PATTERN.test(input.replayId)
+		|| (input.name !== undefined && typeof input.name !== 'string')) {
 		throw new DailyRequestError(400, 'The submission is invalid.');
 	}
 	const record = validRecord(input.record);
@@ -188,18 +225,24 @@ export async function submitDaily(bindings: DailyBindings, date: string, body: u
 	const db = await database(bindings);
 	const device = await deviceHash(input.token);
 	const cutoff = dailyDate(new Date(now.getTime() - RETENTION_DAYS * 86_400_000));
+	const named = typeof input.name === 'string' ? checkName(input.name, await nameRules(db)) : null;
+	const name = named?.ok ? named.name : null;
+	const entry = [...crypto.getRandomValues(new Uint8Array(8))].map(byte => byte.toString(16).padStart(2, '0')).join('');
 	await db.batch([
 		db.prepare(`INSERT INTO daily_submissions
-			(date, device, replay_id, data_version, model_version, rules_version, wins, losses, runs_for, runs_against, submitted_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(date, device, replay_id, data_version, model_version, rules_version, wins, losses, runs_for, runs_against, submitted_at, entry, name)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (date, device) DO NOTHING`)
-			.bind(date, device, input.replayId, replay.dataVersion, replay.modelVersion, replay.rulesVersion, record.wins, record.losses, record.runsFor, record.runsAgainst, now.toISOString()),
-		db.prepare('DELETE FROM daily_submissions WHERE date < ?').bind(cutoff)
+			.bind(date, device, input.replayId, replay.dataVersion, replay.modelVersion, replay.rulesVersion, record.wins, record.losses, record.runsFor, record.runsAgainst, now.toISOString(), entry, name),
+		// A device that had no accepted name may name its entry later the same day; an accepted name stays.
+		db.prepare('UPDATE daily_submissions SET name = ? WHERE date = ? AND device = ? AND name IS NULL').bind(name, date, device),
+		db.prepare('DELETE FROM daily_submissions WHERE date < ?').bind(cutoff),
+		db.prepare('DELETE FROM name_reports WHERE date < ?').bind(cutoff)
 	]);
-	const mine = await db.prepare(`SELECT wins, losses, runs_for, runs_against, data_version, model_version, rules_version, status,
+	const mine = await db.prepare(`SELECT wins, losses, runs_for, runs_against, data_version, model_version, rules_version, status, entry, name,
 		EXISTS (SELECT 1 FROM devices WHERE devices.device = daily_submissions.device AND banned_at IS NOT NULL) AS banned
 		FROM daily_submissions WHERE date = ? AND device = ?`).bind(date, device)
-		.first<{ wins: number; losses: number; runs_for: number; runs_against: number; data_version: string; model_version: string; rules_version: string; status: string; banned: number }>();
+		.first<{ wins: number; losses: number; runs_for: number; runs_against: number; data_version: string; model_version: string; rules_version: string; status: string; entry: string; name: string | null; banned: number }>();
 	if (!mine) throw new DailyRequestError(503, 'Daily standings are unavailable.');
 	const versions = [date, mine.data_version, mine.model_version, mine.rules_version];
 	const counts = await db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(wins > ?5), 0) AS better FROM daily_submissions WHERE ${COUNTED}`)
@@ -209,8 +252,21 @@ export async function submitDaily(bindings: DailyBindings, date: string, body: u
 	const total = (counts?.total ?? 0) + (counted ? 0 : 1);
 	return {
 		...standing(1 + (counts?.better ?? 0), total),
-		record: { wins: mine.wins, losses: mine.losses, runsFor: mine.runs_for, runsAgainst: mine.runs_against }
+		record: { wins: mine.wins, losses: mine.losses, runsFor: mine.runs_for, runsAgainst: mine.runs_against },
+		entry: mine.entry,
+		name: mine.name,
+		...(named ? { nameAccepted: named.ok && mine.name === named.name } : {})
 	};
+}
+
+/**
+ * The `COUNTED` bindings for a day's board on the deployed data version: the model and rules of its latest
+ * submission, since a deploy that changes either starts a new board. Null before the day's first run.
+ */
+export async function boardVersions(db: DailyDatabase, date: string, dataVersion: string): Promise<[string, string, string, string] | null> {
+	const latest = await db.prepare('SELECT model_version, rules_version FROM daily_submissions WHERE date = ? AND data_version = ? ORDER BY submitted_at DESC LIMIT 1')
+		.bind(date, dataVersion).first<{ model_version: string; rules_version: string }>();
+	return latest ? [date, dataVersion, latest.model_version, latest.rules_version] : null;
 }
 
 /** A day's counted runs on the current versions, with the standing of `wins` when given. */
@@ -219,11 +275,9 @@ export async function dailyStandings(bindings: DailyBindings, date: string, wins
 	if (wins !== null && (!Number.isInteger(wins) || wins < 0 || wins > 162)) throw new DailyRequestError(400, 'The win total is invalid.');
 	const dataVersion = await loadCurrentDataVersion(bindings.ASSETS);
 	const db = await database(bindings);
-	const replayVersions = await db.prepare('SELECT model_version, rules_version FROM daily_submissions WHERE date = ? AND data_version = ? ORDER BY submitted_at DESC LIMIT 1')
-		.bind(date, dataVersion).first<{ model_version: string; rules_version: string }>();
+	const versions = await boardVersions(db, date, dataVersion);
 	const final = isFinal(date, now);
-	if (!replayVersions) return { date, total: 0, distribution: [], ...(wins === null ? {} : { standing: standing(1, 1) }), final };
-	const versions = [date, dataVersion, replayVersions.model_version, replayVersions.rules_version];
+	if (!versions) return { date, total: 0, distribution: [], ...(wins === null ? {} : { standing: standing(1, 1) }), final };
 	const { results } = await db.prepare(`SELECT wins, COUNT(*) AS count FROM daily_submissions WHERE ${COUNTED} GROUP BY wins ORDER BY wins DESC`)
 		.bind(...versions).all<{ wins: number; count: number }>();
 	const distribution = results.map(row => [row.wins, row.count] as [number, number]);

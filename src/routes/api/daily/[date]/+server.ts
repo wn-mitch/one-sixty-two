@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { env } from 'cloudflare:workers';
+import { env, waitUntil } from 'cloudflare:workers';
 import type { RequestHandler } from './$types';
+import { dailyBoard, verifyBoard } from '#lib/server/daily-board.ts';
 import { dailyStandings, DailyRequestError, submitDaily } from '#lib/server/daily-standings.ts';
 import { uploadAllowed } from '#lib/server/rate-limit.ts';
 import { ReplayUnavailableError } from '#lib/server/replays.ts';
@@ -23,11 +24,17 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	catch (error) { return errorResponse(error); }
 };
 
-/** The day's counted runs and their spread; `?wins=N` adds that record's standing. */
+/** Runs checked per standings request, after the response is sent; about a second of CPU each. */
+const CHECKS_PER_REQUEST = 2;
+
+/** The day's counted runs, their spread and the named board; `?wins=N` adds that record's standing. */
 export const GET: RequestHandler = async ({ params, url }) => {
 	const wins = url.searchParams.get('wins');
 	try {
-		const standings = await dailyStandings(env, params.date, wins === null ? null : Number(wins));
+		const [day, board] = await Promise.all([dailyStandings(env, params.date, wins === null ? null : Number(wins)), dailyBoard(env, params.date)]);
+		const standings = { ...day, ...board };
+		// Viewing the standings is what drives verification: the board's unchecked runs are recomputed in the background.
+		if (!day.final) waitUntil(verifyBoard(env, params.date, CHECKS_PER_REQUEST).catch(error => console.error('Daily verification failed', error)));
 		// Every viewer sees the same numbers, so a short shared cache absorbs bursts; a closed day no longer changes.
 		return json(standings, { headers: { 'cache-control': standings.final ? 'public, max-age=3600' : 'public, max-age=60' } });
 	} catch (error) { return errorResponse(error); }
