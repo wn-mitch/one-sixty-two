@@ -10,13 +10,13 @@
 	/**
 	 * The season's 1200×630 link preview, published only as `og:image`: the record large enough to
 	 * read in a chat thumbnail, the grade and two season facts, the daily stamp on a daily run, and the
-	 * roster's best cards fanned on the right. Every length is a share of the frame's width, like the site preview it stands beside.
+	 * roster's best cards laid out as a collage on the right. Every length is a share of the frame's width, like the site preview it stands beside.
 	 */
 	let { model }: { model: ShareRenderModel } = $props();
 	let hydrated = $state(false);
 	const record = $derived(model.record);
 	const grade = $derived(seasonGrade(record.wins, record.losses));
-	const fan = $derived(previewCards(model.cards));
+	const collage = $derived(previewCards(model.cards));
 	const facts = $derived([
 		record.firstLoss === null ? 'No losses' : `First loss: Game ${record.firstLoss}`,
 		`${record.longestWinningStreak}-game win streak`
@@ -31,7 +31,7 @@
 	data-share-artwork
 	data-share-format="og"
 	data-share-hydrated={hydrated}
-	data-share-cards={fan.length}
+	data-share-cards={collage.length}
 	data-share-ready="false"
 	data-share-state="idle"
 	role="img"
@@ -50,13 +50,13 @@
 		<ul class="facts">{#each facts as fact}<li>{fact}</li>{/each}</ul>
 		<span class="cta">Beat this at <em>162-0.dev</em></span>
 	</div>
-	<div class="fan" aria-hidden="true"><div class="fan-cards">
-		{#each fan as entry, index (entry.seasonId)}
-			<span class="fan-card" style={`--i:${index};--n:${fan.length};z-index:${fan.length - Math.abs(index - (fan.length - 1) / 2) * 2}`}>
+	<div class="collage" aria-hidden="true">
+		{#each collage as entry, index (entry.seasonId)}
+			<span class="collage-card" style={`--tilt:${[-2.5, 1.5, -1, 2.5, 2, -2, 1, -1.5][index]}deg`}>
 				<Card s={entry.card} face="front" capture interactive={false} onDetails={ignoreCardDetails} />
 			</span>
 		{/each}
-	</div></div>
+	</div>
 </section>
 
 <style>
@@ -71,7 +71,7 @@
 	.final { display:grid; gap:.9cqw; }
 	.final small { color:oklch(76% .018 255); font:700 2.2cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.08em; text-transform:uppercase; }
 	.record { display:flex; align-items:baseline; gap:1cqw; font-size:13.5cqw; font-weight:850; letter-spacing:-.05em; line-height:.82; white-space:nowrap; }
-	/* A three-digit total steps down so the record never runs under the fan. */
+	/* A three-digit total steps down so the record never runs under the collage. */
 	.record.long { font-size:11.4cqw; }
 	.record span { color:oklch(52% .016 255); font-weight:600; }
 	.record .losses { color:oklch(76% .018 255); }
@@ -81,10 +81,9 @@
 	.facts { margin:0; padding:0; list-style:none; display:grid; gap:.8cqw; color:oklch(86% .014 255); font-size:2.5cqw; font-weight:650; }
 	.cta { margin-top:auto; font-size:2.8cqw; font-weight:800; letter-spacing:-.02em; white-space:nowrap; }
 	.cta em { font-style:normal; color:oklch(83% .16 120); }
-	/* Cards fan in the plane from a pivot below the frame, the best card on top in the middle; captures stay flat, so no perspective tilt. */
-	/* The fan clips at the frame's edge itself, so a card tipping past it never counts as overflow that fails the capture. */
-	.fan { position:absolute; inset:0 0 0 49cqw; overflow:hidden; }
-	.fan-cards { position:absolute; inset:0 2cqw 0 0; }
-	.fan-card { --w:20cqw; position:absolute; left:calc(50% - var(--w) / 2); top:6.5cqw; width:var(--w); transform-origin:50% 200%; transform:rotate(calc((var(--i) - (var(--n) - 1) / 2) * 8deg)); filter:drop-shadow(0 1cqw 1.4cqw oklch(0% 0 0 / .55)); }
-	.fan-card :global([data-card]) { width:100%; }
+	/* Up to eight cards in two rows of four, each tipped slightly like prints pinned to a board. */
+	/* The collage clips at the frame's edge itself, so a tilted corner never counts as overflow that fails the capture. */
+	.collage { position:absolute; inset:4.6cqw 3.5cqw 4.6cqw 50cqw; display:grid; grid-template-columns:repeat(4, 1fr); align-content:center; justify-items:center; gap:1.6cqw 1.2cqw; overflow:hidden; padding:.8cqw; }
+	.collage-card { width:100%; transform:rotate(var(--tilt)); filter:drop-shadow(0 .6cqw .9cqw oklch(0% 0 0 / .55)); }
+	.collage-card :global([data-card]) { width:100%; }
 </style>

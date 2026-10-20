@@ -6,10 +6,14 @@
 	import { loadRankings } from '#lib/rankings/client.ts';
 	import Card from '#lib/cards/Card.svelte';
 	import SiteOpenGraph from '#lib/share/SiteOpenGraph.svelte';
+	import { isDailyDate } from '#lib/game/daily.ts';
 
 	let cards = $state.raw<CardViewModel[]>([]);
 	let ready = $state(false);
-	const loadingCapture = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('loading-cards');
+	const search = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+	const loadingCapture = search?.has('loading-cards') ?? false;
+	// `?date=YYYY-MM-DD` stamps the preview with that day's daily.
+	const date = search?.get('date') ?? null;
 
 	onMount(async () => {
 		const manifest = await loadManifest();
@@ -30,7 +34,7 @@
 			{/each}
 		</div>
 	{:else if cards.length}
-		<SiteOpenGraph {cards} />
+		<SiteOpenGraph {cards} date={date && isDailyDate(date) ? date : null} />
 	{/if}
 </div>
 

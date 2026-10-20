@@ -101,7 +101,7 @@ describe('share render model', () => {
 		expect(createShareRenderModel({ ...input, ...publishedAssets(input.manifest.dataVersion) })).toMatchObject({ mediaVersion: 'media-pin', rankingVersion: 'ranking-pin' });
 	});
 
-	it('ranks the link preview cards by WAR/162 in each card\'s role, best in the middle', () => {
+	it('collages the roster\'s best cards by WAR/162 in each card\'s role and leaves out weak ones', () => {
 		const input = fixture();
 		const assets = publishedAssets(input.manifest.dataVersion);
 		const bySlot = new Map(input.draft.picks.map(pick => [pick.slot, pick.seasonId]));
@@ -113,15 +113,23 @@ describe('share render model', () => {
 		seasons[bySlot.get('CF')!] = { battingWAR162: 7, pitchingWAR162: null };
 		seasons[bySlot.get('SP2')!] = { battingWAR162: null, pitchingWAR162: 6 };
 		seasons[bySlot.get('1B')!] = { battingWAR162: 5, pitchingWAR162: null };
+		seasons[bySlot.get('LF')!] = { battingWAR162: 2, pitchingWAR162: null };
+		seasons[bySlot.get('RF')!] = { battingWAR162: 1.9, pitchingWAR162: null };
 		seasons[bySlot.get('CL')!] = { battingWAR162: null, pitchingWAR162: null };
 		const model = createShareRenderModel({ ...input, ...assets, rankings: { ...assets.rankings, seasons } });
 		expect(model.cards.find(card => card.slot === 'C')!.war).toBe(1);
 		expect(model.cards.find(card => card.slot === 'SP1')!.war).toBe(8);
 		expect(model.cards.find(card => card.slot === 'CL')!.war).toBeNull();
-		expect(previewCards(model.cards).map(card => card.slot)).toEqual(['SP2', 'SP1', 'SS', 'CF', '1B']);
+		// LF sits exactly on the bar; RF and the off-role catcher fall below it.
+		expect(previewCards(model.cards).map(card => card.slot)).toEqual(['SS', 'SP1', 'CF', 'SP2', '1B', 'LF']);
+		// A weak roster still shows its best four, and never more than eight.
+		const weak = Object.fromEntries(Object.entries(seasons).map(([id]) => [id, { battingWAR162: 0.5, pitchingWAR162: 0.5 }]));
+		expect(previewCards(createShareRenderModel({ ...input, ...assets, rankings: { ...assets.rankings, seasons: weak } }).cards)).toHaveLength(4);
+		const strong = Object.fromEntries(input.draft.picks.map(pick => [pick.seasonId, { battingWAR162: 6, pitchingWAR162: 6 }]));
+		expect(previewCards(createShareRenderModel({ ...input, ...assets, rankings: { ...assets.rankings, seasons: strong } }).cards)).toHaveLength(8);
 		// Without rankings the earliest picks stand in for the best cards.
 		const unranked = createShareRenderModel(input);
-		expect(previewCards(unranked.cards).map(card => card.pickNumber)).toEqual([4, 2, 1, 3, 5]);
+		expect(previewCards(unranked.cards).map(card => card.pickNumber)).toEqual([1, 2, 3, 4]);
 	});
 
 	it('rejects duplicate slots and mismatched profile identities', () => {

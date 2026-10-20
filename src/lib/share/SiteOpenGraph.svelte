@@ -1,12 +1,13 @@
 <script lang="ts">
 	import Card from '../cards/Card.svelte';
 	import type { CardViewModel } from '../cards/view-model.ts';
+	import { dailyLabel } from '../game/daily.ts';
 
 	/**
-	 * The site's 1200×630 link preview: the pitch and the daily stamp on the left and a hand of era cards fanned and
-	 * tipped back on the right. Roster links use their own published field image instead.
+	 * The site's 1200×630 link preview: the pitch, and the daily stamp when it is captured for a `date`, on the
+	 * left and a hand of era cards fanned and tipped back on the right. Roster links use their own published preview.
 	 */
-	let { cards }: { cards: readonly CardViewModel[] } = $props();
+	let { cards, date = null }: { cards: readonly CardViewModel[]; date?: string | null } = $props();
 	// One card per era, oldest to newest, so the hand shows the range of card designs.
 	const fan = $derived([...new Map(cards.map(card => [card.era, card])).values()].sort((a, b) => a.era.localeCompare(b.era)).slice(-7));
 	function ignoreCardDetails(): void { /* Front-only capture has no details action. */ }
@@ -15,9 +16,8 @@
 <section class="og" data-site-og aria-label="162-0 link preview">
 	<div class="copy">
 		<strong class="wordmark"><i aria-hidden="true"></i>162-0</strong>
-		<h1>The undefeated baseball challenge</h1>
 		<p>Draft sixteen historical seasons. Play all 162 games. Don’t lose one.</p>
-		<span class="daily">Daily <b>Same first pack for everyone</b></span>
+		{#if date}<span class="daily">Daily <b>{dailyLabel(date)}</b></span>{/if}
 		<span class="cta">Play at <em>162-0.dev</em></span>
 	</div>
 	<div class="fan" aria-hidden="true">
@@ -35,10 +35,9 @@
 	.copy { position:absolute; z-index:2; left:5cqw; top:6.5cqw; bottom:6.5cqw; width:38cqw; display:flex; flex-direction:column; align-items:flex-start; gap:2.2cqw; }
 	.wordmark { display:inline-flex; align-items:center; gap:1.6cqw; font-size:8.5cqw; font-weight:850; letter-spacing:-.05em; }
 	.wordmark i { display:block; width:3cqw; height:3cqw; border:.6cqw solid currentColor; transform:rotate(45deg); }
-	h1 { margin:0; font:italic 800 4.4cqw / .95 'Barlow Condensed', sans-serif; letter-spacing:.005em; text-transform:uppercase; }
-	p { margin:0; max-width:37cqw; color:oklch(80% .018 255); font-size:2.3cqw; line-height:1.3; }
+	p { margin:0; max-width:37cqw; color:oklch(80% .018 255); font-size:2.8cqw; line-height:1.3; }
 	/* The daily run's stamp, as on results and share images. */
-	.daily { padding:.8cqw 1.5cqw; border:.3cqw solid oklch(83% .16 120); color:oklch(83% .16 120); font:italic 800 2.05cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; transform:rotate(-3deg); transform-origin:left center; }
+	.daily { padding:.8cqw 1.5cqw; border:.3cqw solid oklch(83% .16 120); color:oklch(83% .16 120); font:italic 800 3.2cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; transform:rotate(-3deg); transform-origin:left center; }
 	.daily b { color:oklch(97% .006 255); font-weight:800; }
 	.cta { margin-top:auto; white-space:nowrap; font-size:2.8cqw; font-weight:800; letter-spacing:-.02em; }
 	.cta em { font-style:normal; color:oklch(83% .16 120); }
