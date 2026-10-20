@@ -45,8 +45,8 @@ calibrate *args:
 bench *args:
     npm run bench -- {{args}}
 
-# Drafts rosters natively with calibration policies (random, best, vorp, packs; comma-separated) and
-# plays each over many season seeds, all in parallel. Prints {label, valueRuns, jackpots, wins} lines.
+# Drafts rosters natively with calibration policies (random, best, vorp, packs, chalk; comma-separated) and
+# plays each over many season seeds, all in parallel. Prints {label, valueRuns, jackpots, chalk, edge, wins} lines.
 # Example: just draft-spread vorp,packs 1 300 --seasons 100 --jackpots 2,0.2
 draft-spread policy from to *args:
     cargo run --release --quiet -p engine-cli -- draft-spread --policy {{policy}} --from {{from}} --to {{to}} {{args}}

@@ -399,13 +399,17 @@ function jackpotPlayers(roll: Roll | undefined, manifest: Manifest): string[] {
  return roll.jackpot.map(seasonId => manifest.candidates.find(candidate => candidate.seasonId === seasonId)?.playerId ?? seasonId);
 }
 
+/** Called before each replayed pick with the draft as it stood and every pack dealt for that pick, even ones a `choose-pack` discarded. */
+type PickObserver = (draft: Draft, slot: Slot, table: readonly Roll[]) => void;
+
 /** Rebuilds the draft from its actions, with every player an earlier jackpot dealt. */
-function replayActions(input: Replay, manifest: Manifest): { draft: Draft; random: () => number; shown: Set<string> } {
+function replayActions(input: Replay, manifest: Manifest, onPick?: PickObserver): { draft: Draft; random: () => number; shown: Set<string> } {
  if (!Array.isArray(input.actions)) throw new Error('Invalid draft actions');
  if (input.daily !== undefined && (!isDailyDate(input.daily) || input.seed !== dailySeed(input.daily))) throw new Error('Invalid daily run');
  let draft = emptyDraft(manifest, input.seed, input.daily);
  const random = randomStream(input.seed, 'draft');
  const shown = new Set<string>();
+ let table: readonly Roll[] = [];
  for (const value of input.actions) {
   const action = validAction(value);
   const previous = draft;
@@ -413,9 +417,11 @@ function replayActions(input: Replay, manifest: Manifest): { draft: Draft; rando
   else if (action.type === 'roll' || action.type === 'add-pack') {
    draft = action.type === 'roll' ? applyRoll(draft, manifest, random, true, shown) : applyAddPack(draft, manifest, random, shown);
    for (const playerId of jackpotPlayers(draft.packs.at(-1), manifest)) shown.add(playerId);
+   table = draft.packs;
   }
   else if (action.type === 'choose-pack') draft = applyChoosePack(draft, action.pack);
   else if (action.type === 'pick') {
+   onPick?.(draft, action.slot, table);
    draft = commitPickWithPolicy(draft, manifest, action.seasonId, action.slot, draftRules(CURRENT_REPLAY_SCHEMA_VERSION), true);
   } else {
    draft = reassignedDraft(draft, manifest, action.seasonId, action.slot, true);
@@ -426,9 +432,25 @@ function replayActions(input: Replay, manifest: Manifest): { draft: Draft; rando
 }
 
 
-function replayChronology(input: Replay, manifest: Manifest): { draft: Draft; random: () => number; shown: Set<string> } {
+/** For each pick in a complete replay, every legal season for the slot it filled across all packs dealt for that pick. */
+export function pickOffers(input: Replay, manifest: Manifest): { seasonId: string; slot: Slot; offered: Candidate[] }[] {
+ const offers: { slot: Slot; offered: Candidate[] }[] = [];
+ const { draft } = replayChronology(input, manifest, (before, slot, table) => {
+  const offered = new Map<string, Candidate>();
+  for (const pack of table) {
+   for (const candidate of availableCandidates(before, manifest, pack)) {
+    if (legalSlots(before, candidate, manifest).includes(slot)) offered.set(candidate.seasonId, candidate);
+   }
+  }
+  offers.push({ slot, offered: [...offered.values()] });
+ });
+ if (!samePicks(input.picks, draft.picks)) throw new Error('Invalid draft snapshot');
+ return offers.map((offer, index) => ({ seasonId: draft.picks[index].seasonId, ...offer }));
+}
+
+function replayChronology(input: Replay, manifest: Manifest, onPick?: PickObserver): { draft: Draft; random: () => number; shown: Set<string> } {
  if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid draft seed');
- return replayActions(input, manifest);
+ return replayActions(input, manifest, onPick);
 }
 
 export function rollDraft(draft: Draft, manifest: Manifest): Draft {

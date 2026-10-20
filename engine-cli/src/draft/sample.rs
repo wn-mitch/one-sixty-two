@@ -62,7 +62,7 @@ pub fn sticker_sample(arguments: &[String]) -> Result<(), String> {
     let jobs: Vec<(Policy, u32)> = (from..=to).flat_map(|seed| policies.iter().map(move |&policy| (policy, seed))).collect();
     eprintln!("[sticker-sample] drafting {} rosters, {seasons} seasons each", jobs.len());
     let requests: Vec<SeasonRequest> = jobs.par_iter()
-        .map(|&(policy, seed)| request(&policy::draft(&pool, &refs, &rules, policy, seed, 0.85, &slot_values), &pool, &profiles, &park))
+        .map(|&(policy, seed)| request(&policy::draft(&pool, &refs, &rules, policy, seed, 0.85, &slot_values).0, &pool, &profiles, &park))
         .collect();
     debug_assert!(requests.iter().all(|request| request.roster.len() == SLOTS.len()));
     // Rosters play in batches, written in order, so output is deterministic and progress is visible.
@@ -96,7 +96,7 @@ mod tests {
         let engine = Engine::from_json(&std::fs::read_to_string(simulation_path(root).unwrap()).unwrap()).unwrap();
         let (pool, profiles, park) = load(root).expect("prepared data (run `npm run data:prepare`)");
         let refs: Vec<_> = profiles.iter().collect();
-        let picks = policy::draft(&pool, &refs, &Rules::default(), Policy::Best, 3, 0.85, &policy::slot_values(&pool));
+        let (picks, _) = policy::draft(&pool, &refs, &Rules::default(), Policy::Best, 3, 0.85, &policy::slot_values(&pool));
         let request = SeasonRequest { seed: 7, ..request(&picks, &pool, &profiles, &park) };
         let challenge = draft_team(&request, &engine.data.bullpen, "challenge", "Your team").unwrap();
         let matchups = engine.season_matchups(&challenge).unwrap();

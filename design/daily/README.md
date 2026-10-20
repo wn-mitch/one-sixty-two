@@ -143,13 +143,13 @@ The first matching row sets the label:
 | By the book | `C ≥ C_book` |
 | Sharp eye | any other run: off-list often, without a large gain or loss |
 
-The thresholds come from calibration, not invention:
+The thresholds come from 1,000 native calibration drafts per policy:
 
-- `E_scout`: the 25th percentile of `E` for the `vorp` policy, which drafts by `valueRuns` and is the scout baseline.
-- `C_book`: the 25th percentile of `C` for an obvious-card policy.
-- `E_off`: the 10th percentile of `E` for the `random` policy.
+- `E_scout = +44`: the 25th percentile of `E` for the `vorp` policy, which drafts by `valueRuns` and is the scout baseline. 44 runs is about two wins.
+- `E_off = −44`: the mirror of `E_scout`. Every `random` draft falls below it; 0.5% of `best` drafts do.
+- `C_book = 12`: the 90th percentile of `C` for the `vorp` policy. The obvious-card policy itself always scores 16, so its own distribution cannot set the band.
 
-`just draft-spread` produces these distributions natively. `engine-cli`'s `best` policy picks by line value (OPS for hitters, ERA for pitchers), not WAR/162, so it is only an approximation of "obvious". Calibration needs a `chalk` policy in `engine-cli/src/draft/policy.rs` that takes `T_i` for the first open slot. A rules change in `src/lib/game/draft.ts` or `rules.ts` already needs the matching native change; this policy follows that rule.
+`just draft-spread` reports `chalk` and `edge` for every draft. Its `chalk` policy takes `T_i` for the first open slot; `best` picks by line value (OPS for hitters, ERA for pitchers), not WAR/162, and lands a talent scout in about half its drafts. `SCOUTING_BANDS` in `src/lib/game/scouting.ts` holds the bands; refit them when card values, rankings or draft rules change.
 
 Rejected: **field ownership**, the share of the day's runs that rostered each card. Only the first roll of a daily is identical for everyone, so ownership mostly measures pack luck rather than choice, and it needs a minimum sample before it means anything. The pack-relative scouting grade measures choice alone.
 

@@ -1,5 +1,5 @@
 //! `draft-spread`: drafts Classic rosters natively with calibration policies and plays each over many
-//! seasons, all in parallel. Prints one `{label, valueRuns, jackpots, wins}` line per roster.
+//! seasons, all in parallel. Prints one `{label, valueRuns, jackpots, chalk, edge, wins}` line per roster.
 mod policy;
 mod rules;
 pub mod sample;
@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 
-const USAGE: &str = "Usage: engine draft-spread --policy random,best,vorp,packs --from N --to N [--seasons N] [--seed N] [--jackpots guaranteed,chance] [--add-below Q]";
+const USAGE: &str = "Usage: engine draft-spread --policy random,best,vorp,packs,chalk --from N --to N [--seasons N] [--seed N] [--jackpots guaranteed,chance] [--add-below Q]";
 const RULES_VERSION: &str = "classic-v8";
 
 fn read_json(path: &Path) -> Result<Value, String> {
@@ -42,13 +42,18 @@ fn load(root: &Path) -> Result<(Pool, Vec<Profile>, ParkRef), String> {
     let intern = |key: &str| { let mut ids: Vec<&str> = rows.iter().filter_map(|row| row[key].as_str()).collect(); ids.sort_unstable(); ids.dedup(); ids };
     let (franchises, players) = (intern("franchiseId"), intern("playerId"));
     let index = |ids: &[&str], id: &str| ids.binary_search(&id).unwrap() as u32;
+    let rankings_pointer = read_json(&root.join("static/rankings/current.json"))?;
+    let rankings = read_json(&root.join("static").join(rankings_pointer["manifestUrl"].as_str().ok_or("rankings pointer has no manifestUrl")?.trim_start_matches('/')))?;
+    if rankings["dataVersion"] != manifest["dataVersion"] { return Err("WAR rankings belong to another data version (run `npm run data:prepare`)".into()); }
     let cards = rows.iter().map(|row| {
         let season_id = row["seasonId"].as_str().unwrap().to_string();
+        let ranking = &rankings["seasons"][season_id.as_str()];
+        let war = [ranking["battingWAR162"].as_f64(), ranking["pitchingWAR162"].as_f64()];
         let (value, priced) = values[&season_id];
         let slots = row["eligibleSlots"].as_array().unwrap().iter().filter_map(|slot| SLOTS.iter().position(|name| Some(*name) == slot.as_str())).fold(0u16, |mask, slot| mask | 1 << slot);
         Card {
             player: index(&players, row["playerId"].as_str().unwrap()), franchise: index(&franchises, row["franchiseId"].as_str().unwrap()),
-            decade: row["decade"].as_i64().unwrap() as i32, slots, value, priced, season_id,
+            decade: row["decade"].as_i64().unwrap() as i32, slots, value, priced, war, season_id,
         }
     }).collect::<Vec<Card>>();
     let mut jackpot: Vec<usize> = cards.iter().enumerate().filter_map(|(index, card)| jackpot.contains(card.season_id.as_str()).then_some(index)).collect();
@@ -109,8 +114,8 @@ pub fn draft_spread(arguments: &[String]) -> Result<(), String> {
     // Seed-major, so a partial run covers every policy evenly.
     let jobs: Vec<(Policy, u32)> = (from..=to).flat_map(|seed| policies.iter().map(move |&policy| (policy, seed))).collect();
     eprintln!("[draft-spread] drafting {} rosters from {} cards", jobs.len(), pool.cards.len());
-    let drafted: Vec<Vec<(usize, usize, bool)>> = jobs.par_iter().map(|&(policy, seed)| policy::draft(&pool, &refs, &rules, policy, seed, add_below, &slot_values)).collect();
-    let requests: Vec<SeasonRequest> = drafted.iter().map(|picks| request(picks, &pool, &profiles, &park)).collect();
+    let drafted: Vec<(policy::Picks, policy::Scouting)> = jobs.par_iter().map(|&(policy, seed)| policy::draft(&pool, &refs, &rules, policy, seed, add_below, &slot_values)).collect();
+    let requests: Vec<SeasonRequest> = drafted.iter().map(|(picks, _)| request(picks, &pool, &profiles, &park)).collect();
     eprintln!("[draft-spread] playing {seasons} seasons each for {} rosters", requests.len());
     // Rosters play in batches; each batch's lines are written and flushed as soon as it finishes,
     // so an interrupted run keeps every finished roster and the log shows progress.
@@ -121,10 +126,10 @@ pub fn draft_spread(arguments: &[String]) -> Result<(), String> {
         let end = (start + batch).min(requests.len());
         let wins = play(&engine, &requests[start..end], seasons, base)?;
         for (index, wins) in (start..end).zip(wins) {
-            let ((policy, seed), picks) = (jobs[index], &drafted[index]);
+            let ((policy, seed), (picks, scouting)) = (jobs[index], &drafted[index]);
             let value_runs: f64 = picks.iter().map(|&(_, card, _)| pool.cards[card].value).sum();
             let jackpots = picks.iter().filter(|pick| pick.2).count();
-            writeln!(output, "{}", serde_json::json!({ "label": format!("{}:{seed}", policy.name()), "valueRuns": value_runs, "jackpots": jackpots, "wins": wins })).map_err(|error| error.to_string())?;
+            writeln!(output, "{}", serde_json::json!({ "label": format!("{}:{seed}", policy.name()), "valueRuns": value_runs, "jackpots": jackpots, "chalk": scouting.chalk, "edge": scouting.edge, "wins": wins })).map_err(|error| error.to_string())?;
         }
         output.flush().map_err(|error| error.to_string())?;
         let (done, total) = (end, requests.len());
@@ -146,9 +151,11 @@ mod tests {
         let (pool, profiles, _) = load(root).expect("prepared data (run `npm run data:prepare`)");
         let (rules, refs, values) = (Rules::default(), profiles.iter().collect::<Vec<_>>(), policy::slot_values(&pool));
         let mut jackpots = 0;
-        for policy in [Policy::Random, Policy::Best, Policy::Vorp, Policy::Packs] {
+        for policy in [Policy::Random, Policy::Best, Policy::Vorp, Policy::Packs, Policy::Chalk] {
             for seed in 1..=4 {
-                let picks = policy::draft(&pool, &refs, &rules, policy, seed, 0.85, &values);
+                let (picks, scouting) = policy::draft(&pool, &refs, &rules, policy, seed, 0.85, &values);
+                assert!(scouting.chalk as usize <= SLOTS.len() && scouting.edge.is_finite());
+                if policy == Policy::Chalk { assert_eq!(scouting, policy::Scouting { chalk: 16, edge: 0.0 }, "chalk takes the obvious card every pick"); }
                 assert_eq!(picks.len(), SLOTS.len());
                 let mut slots: Vec<usize> = picks.iter().map(|pick| pick.0).collect();
                 slots.sort_unstable();
@@ -162,6 +169,6 @@ mod tests {
                 }
             }
         }
-        assert!(jackpots >= 16 * rules.guaranteed * 9 / 10, "only {jackpots} jackpots in 16 drafts");
+        assert!(jackpots >= 20 * rules.guaranteed * 9 / 10, "only {jackpots} jackpots in 20 drafts");
     }
 }

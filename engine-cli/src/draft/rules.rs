@@ -22,6 +22,8 @@ pub struct Card {
     pub slots: u16,
     pub value: f64,
     pub priced: usize,
+    /// Composite batting and pitching WAR/162, the candidate list's default order; `None` when unranked.
+    pub war: [Option<f64>; 2],
 }
 
 /// Draftable seasons, with jackpot candidates pre-ranked by card value.
@@ -282,6 +284,7 @@ mod tests {
             slots,
             value,
             priced: 0,
+            war: [None, None],
         }
     }
 

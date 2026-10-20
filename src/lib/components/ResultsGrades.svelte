@@ -1,16 +1,17 @@
 <script lang="ts">
 	import { backOut } from 'svelte/easing';
 	import { gradeRange, type SeasonGrade } from '../game/grade.ts';
+	import { scoutEdgeText, type ScoutingReport } from '../game/scouting.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
 	import GradeBadge from './GradeBadge.svelte';
 
 	/**
-	 * The season's two grades beside the record: what the season earned and what the roster was
-	 * built for, with the gap between them as the season's luck. Each grade stamps down like a
-	 * sticker pressed onto the scoreboard.
+	 * The season's grades beside the record: what the season earned, what the roster was built for
+	 * with the gap between them as the season's luck, and how the draft's picks compare with the
+	 * card the list showed first. Each grade stamps down like a sticker pressed onto the scoreboard.
 	 */
-	let { wins, grade, rosterGrade, expected }: {
-		wins: number; grade: SeasonGrade | null; rosterGrade: SeasonGrade | null; expected: number | null;
+	let { wins, grade, rosterGrade, expected, scouting = null }: {
+		wins: number; grade: SeasonGrade | null; rosterGrade: SeasonGrade | null; expected: number | null; scouting?: ScoutingReport | null;
 	} = $props();
 	const luck = $derived(expected === null ? null : Math.round(wins - expected));
 
@@ -44,6 +45,13 @@
 				<span class="sr-only">Draft {rosterGrade} · built for about {Math.round(expected)} wins</span>
 			</p>
 		{/if}
+		{#if scouting}
+			<p class="grade scouting" title={`Picks compared with the card the list showed first by WAR/162. ${scouting.chalk} of 16 picks took it.`}>
+				<span class="badge scout-name" in:stamp|global={{ order: 2 }}>{scouting.label}</span>
+				<span class="label" aria-hidden="true">Scouting</span>
+				<span class="detail">{scoutEdgeText(scouting.edge)}</span>
+			</p>
+		{/if}
 	</div>
 {/if}
 
@@ -69,10 +77,14 @@
 	/* The draft grade is the expectation, so it sits a step quieter than the season it set up. */
 	.draft-grade .badge { font-size: var(--text-2xl); }
 	.draft-grade { border-style: dashed; }
+	.scouting { grid-template-areas: 'label' 'badge' 'detail'; grid-template-columns: minmax(0, 1fr); padding-inline: var(--space-4); }
+	.scout-name { font-family: var(--font-control); font-size: var(--text-xl); font-weight: 750; letter-spacing: var(--control-tracking); line-height: 1.1; transform-origin: 0 60%; }
 	.luck { color: var(--error); }
 	.luck.up { color: var(--success); }
 	@media (max-width: 40rem) {
 		.grades { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		.grade.scouting { grid-column: 1 / -1; grid-template-areas: 'label' 'badge' 'detail'; row-gap: 0; }
+		.scout-name { font-size: var(--text-lg); }
 		/* Phones put the badge beside its label and the detail across the tile. */
 		.grade { grid-template-areas: 'badge label' 'detail detail'; row-gap: var(--space-2); padding: var(--space-2) var(--space-3); }
 		.badge, .draft-grade .badge { font-size: var(--text-xl); }

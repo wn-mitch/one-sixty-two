@@ -23,6 +23,8 @@
 	import SeasonClipping from './SeasonClipping.svelte';
 	import { phraseBand, pickSeasonPhrase } from '../news/phrases.ts';
 	import { draftGrade, expectedWins, gradeRange, seasonGrade } from '../game/grade.ts';
+	import { loadCardValues, scoutingReport, type ScoutingReport } from '../game/scouting.ts';
+	import { replayInput } from '../game/draft.ts';
 	import SeasonCalendar from './SeasonCalendar.svelte';
 	import ResultsAwards from './ResultsAwards.svelte';
 	import ResultsHand from './ResultsHand.svelte';
@@ -89,6 +91,19 @@
 	const challengeVerdict = $derived(challenge
 		? result.wins > challenge.wins ? 'You beat their record.' : result.wins === challenge.wins ? 'You matched their record.' : 'You fell short of their record.'
 		: '');
+
+	// The scouting grade needs WAR rankings and every offered card's value; it appears once both arrive.
+	let scouting = $state.raw<ScoutingReport | null>(null);
+	$effect(() => {
+		const [source, ranked, data] = [draft, rankings, manifest];
+		scouting = null;
+		if (!ranked) return;
+		let current = true;
+		void loadCardValues(data)
+			.then(values => { if (current) scouting = scoutingReport(replayInput(source), data, values, ranked); })
+			.catch(() => undefined);
+		return () => { current = false; };
+	});
 
 	let media = $state.raw<MediaManifest | null>(null);
 	let mediaUnavailable = $state(false);
@@ -238,7 +253,7 @@
 			</h2>
 			{#if draft.daily}<p class="daily-stamp">Daily <span>{dailyLabel(draft.daily)}</span></p>{/if}
 			{#if phrase}<SeasonClipping {phrase} />{/if}
-			<ResultsGrades wins={result.wins} {grade} {rosterGrade} {expected} />
+			<ResultsGrades wins={result.wins} {grade} {rosterGrade} {expected} {scouting} />
 			<dl class="season-ledger">
 				<div><dt>{result.firstLoss === null ? 'Season' : 'First loss'}</dt><dd class:perfect={result.firstLoss === null}>{result.firstLoss === null ? 'No losses' : `Game ${result.firstLoss}`}</dd></div>
 				<div><dt>Best streak</dt><dd>{result.longestWinningStreak} W</dd></div>
