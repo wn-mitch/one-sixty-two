@@ -359,6 +359,15 @@ export const MIGRATIONS: readonly Migration[] = [
     CHECK (json IS NOT NULL OR season_key IS NOT NULL)
    )`);
   }
+ },
+ {
+  version: 13,
+  up(db) {
+   // The daily standings know a device only by a random token made on its first submission; the server keeps its hash.
+   exec(db, 'CREATE TABLE device_identity (id INTEGER PRIMARY KEY CHECK (id = 1), token TEXT NOT NULL)');
+   // A finished daily's standing submission: null until the server answers, then accepted or rejected for good.
+   exec(db, "ALTER TABLE daily_runs ADD COLUMN submission TEXT CHECK (submission IN ('accepted', 'rejected'))");
+  }
  }
 ];
 

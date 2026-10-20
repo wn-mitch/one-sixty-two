@@ -1,4 +1,6 @@
 <script lang="ts">
+ import DailyStandings from '#lib/components/DailyStandings.svelte';
+ import type { DailyStandingsView } from '#lib/game/standings.ts';
  import type { Manifest } from '#lib/game/types.ts';
  import type { DailyRun } from '#lib/game/persistence.ts';
  import { countdown, dailyLabel, dailyStadium, nextDailyAt } from '#lib/game/daily.ts';
@@ -13,7 +15,7 @@
   playerId: string;
   model: CardViewModel;
  }
- let { manifest, loading, hasSavedDraft, firstSeasonBonus = false, daily = null, onDaily = () => {}, onDailyRollover = () => {}, onStart, onResume, cards = [], showcaseStatus = 'ready', mediaStatus = 'ready' }: {
+ let { manifest, loading, hasSavedDraft, firstSeasonBonus = false, daily = null, dailyStandings = null, onDaily = () => {}, onDailyRollover = () => {}, onStart, onResume, cards = [], showcaseStatus = 'ready', mediaStatus = 'ready' }: {
   manifest: Manifest | null;
   loading: boolean;
   hasSavedDraft: boolean;
@@ -21,6 +23,8 @@
   firstSeasonBonus?: boolean;
   /** Today's daily and this device's run of it; null until read. */
   daily?: { date: string; run: DailyRun } | null;
+  /** Where this device's finished daily stands, once the standings answer. */
+  dailyStandings?: DailyStandingsView | null;
   onDaily?: () => void;
   /** The next daily went live while this screen was open. */
   onDailyRollover?: () => void;
@@ -91,6 +95,7 @@
     <h2 id="daily-heading"><span>Daily</span> {dailyLabel(daily.date)}</h2>
     {#if daily.run.kind === 'complete'}
      <p class="daily-result"><strong aria-label={`${daily.run.record.wins} wins, ${daily.run.record.losses} losses`}>{daily.run.record.wins}–{daily.run.record.losses}</strong> <a href="/seasons#dailies">See it in My teams</a></p>
+     {#if dailyStandings?.date === daily.date}<DailyStandings standings={dailyStandings} compact />{/if}
      {#if nextDaily}<p class="daily-next" role="timer">Next daily in {countdown(nextDaily, now)}</p>{/if}
     {:else if daily.run.kind === 'unavailable'}
      <p class="daily-rules">{daily.run.message}</p>

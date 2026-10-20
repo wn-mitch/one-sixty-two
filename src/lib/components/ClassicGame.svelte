@@ -265,7 +265,7 @@
   </div>
 
   {#if currentSession.phase === 'start'}
-   <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} firstSeasonBonus={shopState.snapshot?.firstSeasonBonus ?? false} daily={currentSession.daily} onDaily={() => void currentSession.playDaily()} onDailyRollover={() => void currentSession.refreshDaily()} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
+   <Welcome manifest={currentSession.manifest} loading={currentSession.loading} hasSavedDraft={!!currentSession.savedDraft} firstSeasonBonus={shopState.snapshot?.firstSeasonBonus ?? false} daily={currentSession.daily} dailyStandings={currentSession.dailyStandings} onDaily={() => void currentSession.playDaily()} onDailyRollover={() => void currentSession.refreshDaily()} onStart={() => currentSession.requestNew()} onResume={() => void currentSession.resume()} cards={showcaseCards} showcaseStatus={showcaseLoading ? 'loading' : showcaseError ? 'unavailable' : 'ready'} {mediaStatus} />
   {:else if currentSession.draft && currentSession.manifest}
    {#if currentSession.phase === 'stadium'}
     {#if StadiumDeck}
@@ -286,7 +286,7 @@
     {:else if !phaseLoadError}<ProgressSkeleton />{/if}
    {:else if currentSession.phase === 'results' && currentSession.result}
     {#if Results}
-     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} ownSeason={!currentSession.shared} />
+     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} ownSeason={!currentSession.shared} dailyStandings={currentSession.dailyStandings} />
     {:else if !phaseLoadError}<ResultsSkeleton />{/if}
    {/if}
   {/if}

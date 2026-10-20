@@ -1,6 +1,6 @@
 # Daily standings and scouting grade
 
-This document specifies the daily run's shared standings and the scouting grade. None of it is implemented. The daily run itself (`src/lib/game/daily.ts`) is current behavior: one seed and one pinned home stadium per New York calendar day, one attempt per device recorded in the device table `daily_runs`, and a replay carrying `daily: "YYYY-MM-DD"`.
+This document specifies the daily run's shared standings and the scouting grade. L01 (the scouting grade) and L02 (the daily percentile and records curve) are implemented; the named, verified board (L03) is not. The daily run itself (`src/lib/game/daily.ts`) is current behavior: one seed and one pinned home stadium per New York calendar day, one attempt per device recorded in the device table `daily_runs`, and a replay carrying `daily: "YYYY-MM-DD"`.
 
 ## Goals
 
@@ -79,9 +79,10 @@ CREATE TABLE daily_submissions (
  name TEXT,                          -- accepted display name, or NULL
  name_state TEXT NOT NULL DEFAULT 'shown' CHECK (name_state IN ('shown', 'held', 'hidden')),
  status TEXT NOT NULL CHECK (status IN ('unverified', 'verified', 'rejected', 'retired')),
- submitted_at TEXT NOT NULL, verified_at TEXT,
- PRIMARY KEY (date, device),         -- first submission per device per day wins
- UNIQUE (date, replay_id)            -- one row per replay, so one season cannot be counted twice
+ submitted_at TEXT NOT NULL,
+ verifying_at TEXT,                  -- claim taken before a recomputation, so two requests never check one row
+ verified_at TEXT,
+ PRIMARY KEY (date, device)          -- first submission per device per day wins
 );
 CREATE INDEX daily_board ON daily_submissions (date, data_version, status, wins DESC);
 
@@ -98,6 +99,8 @@ CREATE TABLE name_reports (
 CREATE TABLE name_rules (term TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('block', 'allow')));
 ```
 
+The Worker applies this schema itself, in numbered steps on first use in an isolate (`src/lib/server/daily-standings.ts`), so the schema ships with the code that reads it. A replay ID is not unique per day: replays are content-addressed, so two players who make identical picks in the same order share one replay, and both runs count. A cheater gains nothing from reusing a replay that a fresh device token does not already give.
+
 **Retention.** Submissions, names and reports are deleted 90 days after their date, the same schedule as share images, by the cron handler. A board older than 90 days is no longer viewable; its replays stay public, as every replay does.
 
 Percentile and distribution queries join `devices` to exclude banned rows. They count only rows on the board's current versions whose status is not `rejected` or `retired`.
@@ -106,11 +109,11 @@ Percentile and distribution queries join `devices` to exclude banned rows. They 
 
 - `POST /api/daily/{date}` with `{ replayId, record: { wins, losses, runsFor, runsAgainst }, token, name? }`. The Worker loads the replay and requires `replay.daily === date`, `replay.seed === dailySeed(date)`, current versions, and a record that sums to 162 games (the check share images already use). It accepts `date` only while that daily is live, plus two hours after midnight New York for seasons started before midnight. It inserts with `ON CONFLICT DO NOTHING`; a repeat submission returns the existing row's standing. Response: `{ rank, total, topPercent, nameAccepted }`.
 - `POST /api/daily/{date}/report` with `{ replayId, token }` records a report as described under Reports. It returns 204 whether or not the report counted, so it reveals nothing about the threshold.
-- `GET /api/daily/{date}` returns `{ total, board: [{ name, wins, losses, runDiff, replayId }], distribution, checkedAt }` with a short edge cache (about 60 seconds). Any earlier date with retained rows stays viewable, and its board and curve are final once the grace period ends.
+- `GET /api/daily/{date}?wins=N` returns `{ total, distribution, standing, final }` today (`standing` only with `wins`, for a day that no longer accepts the device's refresh); L03 adds `board: [{ name, wins, losses, runDiff, replayId }]` and `checkedAt`. It is served with a short edge cache (about 60 seconds). Any earlier date with retained rows stays viewable, and its board and curve are final once the grace period ends.
 
 **Distribution.** `distribution` is the count of counted rows at each win total, as `[[wins, count], …]` for the win totals that occur. The client bins it (five-win bins) and draws the curve with the player's own run marked. It counts the same rows as the percentile, so it also trusts claimed records.
 
-**Percentile.** `rank = 1 + count(wins > mine)`, so ties share the better rank. `topPercent = ceil(100 × rank / total)`. Records are ranked by wins only, because ties are expected and a run-differential tiebreak would make the percentile sound more exact than it is. The board breaks ties by run differential, then by earliest `submitted_at`. Both numbers change all day; the display says "so far" until the date closes.
+**Percentile.** `rank = 1 + count(wins > mine)`, so ties share the better rank. `topPercent = ceil(100 × rank / total)`. Records are ranked by wins only, because ties are expected and a run-differential tiebreak would make the percentile sound more exact than it is. The board breaks ties by run differential, then by earliest `submitted_at`. Both numbers change all day; the display says "so far" until the date closes. Below the median the display shows the rank instead ("#900 of 1,240"), since "Top 80%" reads as praise.
 
 **Identical rosters.** The season is seeded by the draft seed, which every daily run shares, so the same sixteen seasons in the same batting order, rotation and relief roles play the same season. The board lists such a group once, at its earliest submission, with a count such as "3 runs with this roster", rather than repeating rows. The group key is a hash of the replay's picks and lineup orders.
 

@@ -12,7 +12,7 @@
 	<header>
 		<h1>Privacy policy</h1>
 		<p class="lede">162-0 is a baseball game from Alpaca Software. This policy covers the website at 162-0.dev and the iOS app that loads it.</p>
-		<p>You do not need an account to play. Your saved game library lives on your device, but completed Classic seasons can automatically publish replay data and share images. The service also processes network information to deliver and protect the game.</p>
+		<p>You do not need an account to play. Your saved game library lives on your device, but completed Classic and daily seasons can automatically publish replay data and share images, and a finished daily joins that day’s standings. The service also processes network information to deliver and protect the game.</p>
 	</header>
 
 	<section aria-labelledby="device-data">
@@ -28,6 +28,12 @@
 		<p>Replay data includes the game seed, roster selections, draft actions, lineup, stadium, and game/data versions. Shared artwork contains the simulated roster and results. These publications are not linked to a player account. Anyone with a replay, challenge, or image URL can view and redistribute it; an unlisted link is not private storage.</p>
 		<p>Using Copy link in the foil lab can upload the design settings to create a short link. Head-to-head links encode the information needed to open a series without storing a separate series record on our server.</p>
 		<p>Published replays and saved lab links have no automatic expiry. Share images and their publication records are scheduled for deletion after 90 days. Copies downloaded, cached, or reposted by others may remain available after our copy is removed.</p>
+	</section>
+
+	<section aria-labelledby="daily-standings">
+		<h2 id="daily-standings">Daily standings</h2>
+		<p>When you finish the daily, the game sends your season’s replay link and record to our server to place it in that day’s standings. To keep one entry per device each day, your device creates a random code and stores it locally; our server keeps only a scrambled (hashed) form of it, which is not linked to you or to any account.</p>
+		<p>The standings show only counts: how many runs finished that day and how many reached each record. Entries are deleted 90 days after the daily’s date; the replays they point to are kept like any other replay. Clearing the website’s data or reinstalling the app creates a new code, and earlier entries stay until they expire.</p>
 	</section>
 
 	<section aria-labelledby="hosting">
@@ -46,7 +52,7 @@
 	<section aria-labelledby="your-choices">
 		<h2 id="your-choices">Your choices and deletion requests</h2>
 		<p>You can delete saved seasons in My teams and clear the website’s stored data through your browser. Deleting the iOS app removes its local app storage; offloading it may preserve that storage. These actions do not remove server publications or copies you shared elsewhere.</p>
-		<p>For a privacy question, access or deletion request, or concern about a child’s information, <a href="https://alpacasoft.dev/" target="_blank" rel="noreferrer">contact Alpaca Software</a> using the email link in the website footer. Include the relevant replay, challenge, image, or lab URL so we can identify the publication. Do not send sensitive information through a public issue or shared game link.</p>
+		<p>For a privacy question, access or deletion request, or concern about a child’s information, <a href="https://alpacasoft.dev/" target="_blank" rel="noreferrer">contact Alpaca Software</a> using the email link in the website footer. Include the relevant replay, challenge, image, or lab URL so we can identify the publication; for a daily standings entry, include its replay link. Do not send sensitive information through a public issue or shared game link.</p>
 		<p>There is no player account or self-service server-deletion control. We may need information to establish that a request concerns you. We cannot retrieve a device-only save from our servers or remove copies held by other people. Information you send in a support request is used to respond and handle the request.</p>
 		<p>Depending on your location, you may have rights to access, correct, delete, or restrict use of personal information, or to complain to your local privacy regulator. Use the contact route above to exercise those rights.</p>
 	</section>

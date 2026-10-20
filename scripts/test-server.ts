@@ -51,7 +51,9 @@ try {
 		compatibility_flags: ['nodejs_als'],
 		assets: { binding: 'ASSETS', directory: '.svelte-kit/cloudflare' },
 		vars: { PUBLIC_ORIGIN: origin },
-		r2_buckets: [{ binding: 'REPLAYS', bucket_name: `browser-suite-${process.pid}` }]
+		r2_buckets: [{ binding: 'REPLAYS', bucket_name: `browser-suite-${process.pid}` }],
+		// In memory like the bucket; the Worker applies the standings schema on first use.
+		d1_databases: [{ binding: 'DAILY', database_name: `browser-suite-${process.pid}`, database_id: `browser-suite-${process.pid}` }]
 	}));
 	// Tests consume an immutable build. Watching thousands of image assets can
 	// exhaust macOS file handles before workerd starts; persistence is isolated too.

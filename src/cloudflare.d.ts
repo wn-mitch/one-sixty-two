@@ -9,5 +9,6 @@ declare module 'cloudflare:workers' {
 		ASSETS: import('./lib/server/replays.ts').ReplayAssets;
 		UPLOAD_LIMIT?: import('./lib/server/rate-limit.ts').RateLimiter;
 		BROWSER?: import('./lib/server/site-preview.ts').BrowserRun;
+		DAILY?: import('./lib/server/daily-standings.ts').DailyDatabase;
 	};
 }

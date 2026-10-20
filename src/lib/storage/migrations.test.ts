@@ -206,6 +206,21 @@ describe('device database migrations', () => {
   await expect(db.run([{ sql: "INSERT INTO daily_runs (date, started_at, updated_at) VALUES ('2026-10-17', 'now', 'now')" }])).rejects.toThrow();
   await expect(db.run([{ sql: "INSERT INTO daily_runs (date, started_at, updated_at, season_key, wins) VALUES ('2026-10-17', 'now', 'now', 'k', 100)" }])).rejects.toThrow();
  });
+ it('adds an empty device identity and an unsubmitted state to existing daily runs', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 12));
+  await db.run([
+   { sql: "INSERT INTO daily_runs (date, started_at, updated_at, json) VALUES ('2026-10-19', 'then', 'then', '{\"run\":1}')" },
+   { sql: "INSERT INTO daily_runs (date, started_at, updated_at, season_key, wins, losses) VALUES ('2026-10-18', 'then', 'then', 'k', 120, 42)" }
+  ]);
+  const before = await db.all('SELECT * FROM daily_runs ORDER BY date');
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 13))).toEqual({ from: 12, to: 13 });
+  expect(await db.all('SELECT * FROM daily_runs ORDER BY date')).toEqual(before.map(row => ({ ...row, submission: null })));
+  expect(await db.all('SELECT * FROM device_identity')).toEqual([]);
+  // One device token at most, and a submission can only be answered one of two ways.
+  await db.run([{ sql: "INSERT INTO device_identity (id, token) VALUES (1, 'a')" }]);
+  await expect(db.run([{ sql: "INSERT INTO device_identity (id, token) VALUES (2, 'b')" }])).rejects.toThrow();
+  await expect(db.run([{ sql: "UPDATE daily_runs SET submission = 'pending'" }])).rejects.toThrow();
+ });
  it('seeds zero-credit receipts for existing and deleted history without altering historical data', async () => {
   const { db, raw } = await memoryDb({
    ...NO_LEGACY, draft: '{"saved":"run"}', library: JSON.stringify([entry('kept', 120), entry('deleted', 90)])

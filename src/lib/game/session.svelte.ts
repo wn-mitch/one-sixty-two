@@ -6,6 +6,7 @@ import { newCards, newStickers, type NewCard, type NewSticker } from '../collect
 import { refreshStickers } from '../collection/store.svelte.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import { grantedReward, type SeasonReward } from '../cosmetics/ledger.ts';
+import { loadDailyStandings, type DailyStandingsView } from './standings.ts';
 import { clearCompletedDraft, DAILY_STORAGE_NOTICE, persistDraft, restoreDaily, restoreDraft, RESUME_NOTICE, type DailyRun, type Restore, type SavedPhase } from './persistence.ts';
 import { dailyDate, dailyLabel, dailyStadium } from './daily.ts';
 import { deviceDb } from '../storage/db.ts';
@@ -67,6 +68,8 @@ export class Session {
  reward = $state.raw<SeasonReward | null>(null);
  /** Today's daily and this device's run of it; null until read. */
  daily = $state.raw<{ date: string; run: DailyRun } | null>(null);
+ /** Where this device's finished daily stands among the day's runs; null until loaded or when it cannot count. */
+ dailyStandings = $state.raw<DailyStandingsView | null>(null);
  nativeShareReady = $state(false);
  imageDownloadFallback = $state(false);
  textCopyFallback = $state(false);
@@ -300,9 +303,10 @@ export class Session {
     if (draft.daily === undefined) {
      if (this.savedDraft === draft) this.savedDraft = null;
      notice = await clearCompletedDraft(db, draft);
-    } else if (this.daily?.date === draft.daily) {
+    } else {
      // The save recorded the day's result with the season.
-     this.daily = { date: draft.daily, run: { kind: 'complete', record: { wins: result.wins, losses: result.losses } } };
+     if (this.daily?.date === draft.daily) this.daily = { date: draft.daily, run: { kind: 'complete', record: { wins: result.wins, losses: result.losses } } };
+     void this.refreshDailyStandings(draft.daily);
     }
     try {
      const key = await libraryKey(draft);
@@ -364,6 +368,16 @@ export class Session {
   if (this.draft?.daily === date && this.phase !== 'start') return;
   this.daily = { date, run };
   if (run.kind === 'unplayed' && run.notice) this.resumeNotice = run.notice;
+  if (run.kind === 'complete') void this.refreshDailyStandings(date);
+ }
+ /** Submits or refreshes the day's standing; a failure leaves the last one shown, or none, and retries on the next view. */
+ private async refreshDailyStandings(date: string): Promise<void> {
+  const manifest = this.manifest;
+  if (!manifest || this.shared) return;
+  try {
+   const view = await loadDailyStandings((await deviceDb()).db, manifest, date, location.origin);
+   if (manifest === this.manifest) this.dailyStandings = view;
+  } catch { /* offline or unavailable: shown once the next view succeeds */ }
  }
  /** Starts today's daily with its seed and stadium pinned, or resumes it; a finished day does nothing. */
  async playDaily(): Promise<void> {

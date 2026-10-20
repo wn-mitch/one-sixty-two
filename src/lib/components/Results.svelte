@@ -20,6 +20,8 @@
 	import ResultsReward from './ResultsReward.svelte';
 	import ResultsCollection from './ResultsCollection.svelte';
 	import ResultsGrades from './ResultsGrades.svelte';
+	import DailyStandings from './DailyStandings.svelte';
+	import type { DailyStandingsView } from '../game/standings.ts';
 	import SeasonClipping from './SeasonClipping.svelte';
 	import { phraseBand, pickSeasonPhrase } from '../news/phrases.ts';
 	import { draftGrade, expectedWins, gradeRange, seasonGrade } from '../game/grade.ts';
@@ -57,6 +59,8 @@
 		reward?: SeasonReward | null;
 		/** Only an own season participates in earned-token feedback. */
 		ownSeason?: boolean;
+		/** Where this device's daily run stands among the day's runs, once the standings answer. */
+		dailyStandings?: DailyStandingsView | null;
 	}
 
 	let {
@@ -76,7 +80,8 @@
 		newStickers = [],
 		newCards = [],
 		reward = null,
-		ownSeason = false
+		ownSeason = false,
+		dailyStandings = null
 	}: Props = $props();
 	const grade = $derived(seasonGrade(result.wins, result.losses));
 	// Head-to-head setup opens with this team already in place; only the opponent is left to choose.
@@ -262,6 +267,7 @@
 					<dd aria-label={`${result.runsFor} scored, ${result.runsAgainst} allowed, difference ${runDifference > 0 ? '+' : ''}${runDifference}`}>{result.runsFor}–{result.runsAgainst} <span class="run-difference" class:up={runDifference > 0} class:down={runDifference < 0}>{runDifference > 0 ? '+' : runDifference < 0 ? '−' : '±'}{Math.abs(runDifference)}</span></dd>
 				</div>
 			</dl>
+			{#if ownSeason && draft.daily && dailyStandings?.date === draft.daily}<DailyStandings standings={dailyStandings} />{/if}
 		</div>
 
 		<div class="score-actions" aria-busy={sharing}>
