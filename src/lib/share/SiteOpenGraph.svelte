@@ -38,7 +38,7 @@
 	h1 { margin:0; font:italic 800 4.4cqw / .95 'Barlow Condensed', sans-serif; letter-spacing:.005em; text-transform:uppercase; }
 	p { margin:0; max-width:37cqw; color:oklch(80% .018 255); font-size:2.3cqw; line-height:1.3; }
 	/* The daily run's stamp, as on results and share images. */
-	.daily { padding:.9cqw 1.8cqw; border:.3cqw solid oklch(83% .16 120); color:oklch(83% .16 120); font:italic 800 2.4cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; transform:rotate(-3deg); transform-origin:left center; }
+	.daily { padding:.8cqw 1.5cqw; border:.3cqw solid oklch(83% .16 120); color:oklch(83% .16 120); font:italic 800 2.05cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; transform:rotate(-3deg); transform-origin:left center; }
 	.daily b { color:oklch(97% .006 255); font-weight:800; }
 	.cta { margin-top:auto; white-space:nowrap; font-size:2.8cqw; font-weight:800; letter-spacing:-.02em; }
 	.cta em { font-style:normal; color:oklch(83% .16 120); }
