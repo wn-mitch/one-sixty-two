@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '@fontsource-variable/inter';
 	import { onMount, tick } from 'svelte';
 	import { createCardViewModel, type CardViewModel } from '#lib/cards/view-model.ts';
 	import { loadManifest, loadShowcase } from '#lib/game/data.ts';
@@ -19,8 +20,9 @@
 		const manifest = await loadManifest();
 		const [showcase, media, rankings] = await Promise.all([loadShowcase(manifest), loadMedia(), loadRankings(manifest.dataVersion).catch(() => null)]);
 		cards = showcase.map(({ profile, slot }) => createCardViewModel({ profile, slot, manifest, media, mediaStatus: 'ready', rankings }));
-		await document.fonts.ready;
+		// Fonts load once the rendered frame uses them.
 		await tick();
+		await document.fonts.ready;
 		await photosLoaded();
 		ready = true;
 	});

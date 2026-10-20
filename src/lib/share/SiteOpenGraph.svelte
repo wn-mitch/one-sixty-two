@@ -15,10 +15,10 @@
 
 <section class="og" data-site-og aria-label="162-0 link preview">
 	<div class="copy">
-		<strong class="wordmark"><i aria-hidden="true"></i>162-0</strong>
+		<strong class="wordmark"><i aria-hidden="true"></i><span>162<span class="hyphen">-</span>0</span></strong>
 		<p>Draft sixteen historical seasons. Play all 162 games. Don’t lose one.</p>
 		{#if date}<span class="daily">Daily <b>{dailyLabel(date)}</b></span>{/if}
-		<span class="cta">Play at <em>162-0.dev</em></span>
+		<span class="cta">Play at <em>162<span class="hyphen">-</span>0.dev</em></span>
 	</div>
 	<div class="fan" aria-hidden="true">
 		{#each fan as card, index (card.seasonId)}
@@ -30,8 +30,9 @@
 </section>
 
 <style>
-	/* Every length is a share of the frame's width, so any render size matches the 1200×630 export. */
-	.og { position:relative; box-sizing:border-box; width:100%; aspect-ratio:1200/630; container-type:inline-size; overflow:hidden; background:radial-gradient(120% 140% at 85% 30%, oklch(26% .02 255), oklch(14% .009 255) 60%); color:oklch(97% .006 255); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; line-height:1; isolation:isolate; }
+	/* Every length is a share of the frame's width, so any render size matches the 1200×630 export. Inter is
+	   bundled so a Mac capture and the Worker's Linux Browser Run capture set the same type. */
+	.og { position:relative; box-sizing:border-box; width:100%; aspect-ratio:1200/630; container-type:inline-size; overflow:hidden; background:radial-gradient(120% 140% at 85% 30%, oklch(26% .02 255), oklch(14% .009 255) 60%); color:oklch(97% .006 255); font-family:'Inter Variable',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; line-height:1; isolation:isolate; }
 	.copy { position:absolute; z-index:2; left:5cqw; top:6.5cqw; bottom:6.5cqw; width:38cqw; display:flex; flex-direction:column; align-items:flex-start; gap:2.2cqw; }
 	.wordmark { display:inline-flex; align-items:center; gap:1.6cqw; font-size:8.5cqw; font-weight:850; letter-spacing:-.05em; }
 	.wordmark i { display:block; width:3cqw; height:3cqw; border:.6cqw solid currentColor; transform:rotate(45deg); }
@@ -39,6 +40,8 @@
 	/* The daily run's stamp, as on results and share images. */
 	.daily { padding:.8cqw 1.5cqw; border:.3cqw solid oklch(83% .16 120); color:oklch(83% .16 120); font:italic 800 3.2cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; transform:rotate(-3deg); transform-origin:left center; }
 	.daily b { color:oklch(97% .006 255); font-weight:800; }
+	/* Inter's hyphen is .14em wider than the system font's; pulling it in keeps the wordmark's familiar shape. */
+	.hyphen { margin-inline:-.07em; }
 	.cta { margin-top:auto; white-space:nowrap; font-size:2.8cqw; font-weight:800; letter-spacing:-.02em; }
 	.cta em { font-style:normal; color:oklch(83% .16 120); }
 	/* Seven cards fanned from a pivot below the frame and tipped back in perspective. */
