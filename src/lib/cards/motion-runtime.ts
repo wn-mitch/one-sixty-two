@@ -125,7 +125,8 @@ export class AutonomousMotionScheduler {
 
 	#onIntersection = (entries: IntersectionEntryLike[]) => {
 		for (const entry of entries) {
-			const visible = entry.isIntersecting && entry.intersectionRatio > 0;
+			// A card first observed fully clipped (ratio 0) gets no further entry when the clip lifts, so the ratio cannot gate it.
+			const visible = entry.isIntersecting;
 			const subscribers = this.#byNode.get(entry.target);
 			if (!subscribers) continue;
 			for (const subscriber of subscribers) {

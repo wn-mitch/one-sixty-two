@@ -197,12 +197,12 @@
 				play(seal, [{ transform: 'none', opacity: 1 }, { transform: 'translate(18%, -140%) rotate(9deg)', opacity: 0 }], { duration: MOTION.packTear }),
 				play(pack, [{ transform: 'none' }, { transform: 'translateY(.35rem) rotate(-1deg)' }], { duration: MOTION.packTear })
 			]);
-			await play(card, [{ transform: 'translateY(0)' }, { transform: 'translateY(-62%)' }], { duration: MOTION.cardRise });
+			await play(card, [{ translate: '0 0' }, { translate: '0 -62%' }], { duration: MOTION.cardRise });
 			stage = 'dealt';
 			// The pack pulls away underneath while the card turns face up.
 			await Promise.all([
 				play(pack, [{ transform: 'translateY(.35rem) rotate(-1deg)', opacity: 1 }, { transform: 'translateY(115%) rotate(-4deg)', opacity: 0 }], { duration: MOTION.packDrop, easing: EASE_IN_OUT }),
-				play(card, [{ transform: 'translateY(-62%)' }, { transform: 'translateY(0) scale(1.06)' }], { duration: MOTION.dealSettle }),
+				play(card, [{ translate: '0 -62%' }, { translate: '0 0', scale: `${LIFT}` }], { duration: MOTION.dealSettle }),
 				play(flipper, [{ transform: 'rotateY(180deg)' }, { transform: 'rotateY(0deg)' }], { duration: MOTION.deal, delay: 60 })
 			]);
 		} else {
@@ -248,17 +248,16 @@
 				// Cards that shrink to make room on a narrow row ease down to their new size as they slide.
 				const dx = from.left + from.width / 2 - (now.left + now.width / 2);
 				const ratio = from.width / now.width;
-				if (Math.abs(dx) > .5 || Math.abs(ratio - 1) > .005) void play(element, [{ transform: `translateX(${dx}px) scale(${1.06 * ratio})` }, { transform: 'scale(1.06)' }], { duration: MOTION.addSettle / speed });
+				if (Math.abs(dx) > .5 || Math.abs(ratio - 1) > .005) void play(element, [{ translate: `${dx}px 0`, scale: `${LIFT * ratio}` }, { translate: '0 0', scale: `${LIFT}` }], { duration: MOTION.addSettle / speed });
 			}
 			if (ghost) ghost.style.translate = `${spent || -offset}px 0`;
 			// The card waits face down inside the pack, smaller than it and behind it, until the seal is off, then pulls
 			// up out of its top. It comes forward only once the spent pack has dropped clear, growing to full size as it lands.
 			const insideScale = (ghostTo && to ? Math.min(1, ghostTo.width / to.width) : 1) * MOTION.addInside;
-			const inside = `scale(${insideScale})`;
 			const riseDelay = MOTION.ghostOpen * MOTION.addRiseAt / speed;
 			const clear = MOTION.packDrop * MOTION.addClear / speed;
 			if (card) card.style.zIndex = '0';
-			const rise = play(card, [{ transform: `translateY(0) ${inside}` }, { transform: `translateY(-45%) ${inside}` }], { duration: MOTION.addRise / speed, delay: riseDelay, fill: 'both' });
+			const rise = play(card, [{ translate: '0 0', scale: `${insideScale}` }, { translate: '0 -45%', scale: `${insideScale}` }], { duration: MOTION.addRise / speed, delay: riseDelay, fill: 'both' });
 			// The pack is see-through while it brightens, so the card is cut off at the pack's top edge: only the part
 			// that has come out of the top shows, never the card sliding along inside it as the row re-centers.
 			const mouth = card && to && ghostTo ? insideClip(card, to, ghostTo.top, insideScale) : undefined;
@@ -279,7 +278,7 @@
 			if (card) card.style.zIndex = '';
 			clipped?.cancel();
 			await Promise.all([
-				play(card, [{ transform: `translateY(-45%) ${inside}` }, { transform: 'translateY(0) scale(1.06)' }], { duration: MOTION.addSettle / speed }),
+				play(card, [{ translate: '0 -45%', scale: `${insideScale}` }, { translate: '0 0', scale: `${LIFT}` }], { duration: MOTION.addSettle / speed }),
 				flip
 			]);
 		}
@@ -346,13 +345,13 @@
 		const dx = to.left + to.width / 2 - (from.left + from.width / 2);
 		const dy = to.top + to.height / 2 - (from.top + from.height / 2);
 		const scale = to.height / from.height;
-		const start = appSettings.effectiveEnabled ? 'translateY(0) scale(1.06)' : 'none';
+		const start = appSettings.effectiveEnabled ? `${LIFT}` : '1';
 		// The rail starts growing the franchise and era while the card is still arriving, so the card reads as turning into the name.
 		const arrive = setTimeout(onArrive, MOTION.deal * MOTION.dealHandoff);
 		const slide = play(card, [
-			{ transform: start, opacity: 1 },
+			{ translate: '0 0', scale: start, opacity: 1 },
 			{ opacity: 1, offset: .75 },
-			{ transform: `translate(${dx}px, ${dy}px) scale(${scale})`, opacity: 0 }
+			{ translate: `${dx}px ${dy}px`, scale: `${scale}`, opacity: 0 }
 		], { duration: MOTION.deal });
 		// Hand off to the candidate deal once the card has landed rather than after its last faint frames.
 		await Promise.race([slide, wait(MOTION.deal * MOTION.dealOutLead)]);
@@ -367,7 +366,7 @@
 		await new Promise(requestAnimationFrame);
 		if (hand) Object.assign(hand.style, { opacity: '', transition: '' });
 		// The taken card sits lifted, as every dealt card does once it lands.
-		void play(cards[packKey(packs[0])], [{ transform: 'scale(1.06)' }, { transform: 'scale(1.06)' }], { duration: 1 });
+		void play(cards[packKey(packs[0])], [{ scale: `${LIFT}` }, { scale: `${LIFT}` }], { duration: 1 });
 		await play(hand, [{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.returnFade / (appSettings.snapshot.cardSpeed || 1), fill: 'backwards' });
 		await openGhost(() => held = null);
 	}
@@ -605,7 +604,8 @@
 	/* Lifted cards overhang their boxes by 3% a side; these margins keep the visible gaps at the flex gap. */
 	.dealt-card + .dealt-card { margin-left: calc(var(--card-w) * (var(--lift) - 1)); }
 	.dealt-card + .ghost-pack { margin-left: calc(var(--card-w) * (var(--lift) - 1) / 2); }
-	button.dealt-card { padding: 0; border: 0; border-radius: .3rem; color: inherit; background: none; font: inherit; }
+	/* No button transition: the tilt sets the transform every frame and would trail behind it. */
+	button.dealt-card { padding: 0; border: 0; border-radius: .3rem; color: inherit; background: none; font: inherit; transition: none; }
 	button.dealt-card:not(:disabled) { cursor: pointer; }
 	button.dealt-card:hover:not(:disabled) { background: none; }
 	button.dealt-card:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }

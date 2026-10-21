@@ -91,10 +91,22 @@ test.describe('Draft board browsing', () => {
 		// The new card opens right of the dealt one and takes focus; the pair slides over to share the center.
 		await expect(cards.first()).toHaveAttribute('aria-label', first!);
 		await expect(cards.nth(1)).toBeFocused();
+		// It opened fully clipped inside the ghost, yet drifts like the card beside it once it lets go of focus. The deal
+		// motion and the lift sit on translate and scale, so neither holds the transform the tilt leans.
+		await cards.nth(1).evaluate(node => (node as HTMLElement).blur());
+		await expect.poll(() => cards.evaluateAll(nodes => nodes.map(node => `${getComputedStyle(node).scale} ${getComputedStyle(node).transform.split('(')[0]}`))).toEqual(['1.06 matrix3d', '1.06 matrix3d']);
+		await cards.nth(1).focus();
 		// The new card lands at the same visible gap as the cards beside it and the ghost after it.
 		const visibleGaps = () => page.evaluate(() => {
 			const boxes = [...document.querySelectorAll('.foil-pack .dealt-card'), document.querySelector('.foil-pack .ghost-pack:not([inert])')]
-				.filter(node => node).map(node => node!.getBoundingClientRect());
+				.filter(node => node).map(node => {
+					// At rest, without the tilt's lean, which shrinks a card inside its resting footprint.
+					const element = node as HTMLElement, pose = element.style.transform;
+					element.style.transform = 'none';
+					const box = element.getBoundingClientRect();
+					element.style.transform = pose;
+					return box;
+				});
 			return boxes.slice(1).map((box, index) => Math.round(box.left - boxes[index].right));
 		});
 		await expect.poll(visibleGaps).toEqual([12, 12]);
@@ -141,7 +153,14 @@ test.describe('Draft board browsing', () => {
 		// It lands as a ghost-opened pack does, at the row's one visible gap.
 		await expect.poll(() => page.evaluate(() => {
 			const boxes = [...document.querySelectorAll('.foil-pack .dealt-card'), document.querySelector('.foil-pack .ghost-pack:not([inert])')]
-				.filter(node => node).map(node => node!.getBoundingClientRect());
+				.filter(node => node).map(node => {
+					// At rest, without the tilt's lean, which shrinks a card inside its resting footprint.
+					const element = node as HTMLElement, pose = element.style.transform;
+					element.style.transform = 'none';
+					const box = element.getBoundingClientRect();
+					element.style.transform = pose;
+					return box;
+				});
 			return boxes.slice(1).map((box, index) => Math.round(box.left - boxes[index].right));
 		})).toEqual([12, 12]);
 		await expect(cards.first().locator('.front strong')).toHaveText(current!);
