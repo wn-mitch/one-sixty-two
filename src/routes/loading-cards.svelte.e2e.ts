@@ -35,7 +35,7 @@ test('slow screen navigation shows eight static cards and clears when the destin
 	const loader = await expectLoadingCards(page);
 	release();
 	await expect(page.getByRole('heading', { name: 'No cards yet' })).toBeVisible();
-	await expect(loader).toHaveCount(0, { timeout: 1000 });
+	await expect(loader).toHaveCount(0, { timeout: 2000 });
 });
 
 test('failed destination data removes the loader and exposes the error', async ({ page }) => {
@@ -46,7 +46,7 @@ test('failed destination data removes the loader and exposes the error', async (
 	const loader = await expectLoadingCards(page);
 	reject();
 	await expect(page.getByRole('alert')).toBeVisible();
-	await expect(loader).toHaveCount(0, { timeout: 1000 });
+	await expect(loader).toHaveCount(0, { timeout: 2000 });
 });
 
 for (const preference of ['system', 'setting'] as const) {

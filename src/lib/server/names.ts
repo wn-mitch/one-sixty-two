@@ -13,7 +13,7 @@ const EXTRA_TERMS = [
 	'kike', 'spic', 'wetback', 'tranny', 'faggot', 'retard', 'killyourself', 'kys', 'suicide', 'shooter', 'terrorist', 'cocaine',
 	'heroin', 'meth', 'fentanyl', 'weed', 'stoner', 'porn', 'onlyfans', 'nsfw', 'hentai', 'horny', 'boob', 'penis', 'vagina',
 	'dick', 'cock', 'pussy', 'bitch', 'shit', 'fuck', 'cunt', 'whore', 'slut', 'twat', 'wank', 'piss', 'crap', 'damn',
-	'admin', 'moderator', 'official', 'staff', 'alpaca', 'onesixtytwo', '1620', 'system', 'support'
+	'admin', 'moderator', 'official', 'staff', 'alpacasoft', 'onesixtytwo', '1620', 'system', 'support'
 ];
 
 /** Hate numbers, refused as whole digit runs so ordinary numbers in a name pass. */
@@ -53,7 +53,8 @@ function compile(rules: NameRules): Compiled {
 	};
 }
 
-export type NameCheck = { ok: true; name: string } | { ok: false; reason: 'length' | 'characters' | 'link' | 'blocked' };
+export type NameRefusal = 'length' | 'characters' | 'link' | 'blocked';
+export type NameCheck = { ok: true; name: string } | { ok: false; reason: NameRefusal };
 
 /** NFKC-normalized, trimmed, single-spaced display name. */
 export function normalizeName(raw: string): string {

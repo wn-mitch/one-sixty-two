@@ -167,7 +167,10 @@ test('pairs gallery cards, preserves cancelled selections, shares identical game
  await tile('Bombers').click();
  await page.getByRole('link', { name: 'Play best-of-five' }).click();
  await expect(page).toHaveURL(/\/h2h#a=/);
- await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'My teams' })).toHaveAttribute('aria-current', 'page');
+ // Phones fold the main navigation into Menu, which still marks the current destination.
+ await page.getByRole('button', { name: 'Menu' }).click();
+ await expect(page.getByRole('navigation', { name: 'More' }).getByRole('link', { name: 'My teams' })).toHaveAttribute('aria-current', 'page');
+ await page.keyboard.press('Escape');
  await expect(page.getByRole('status').filter({ hasText: /Replaying|Playing|Game/ })).toBeVisible();
  await page.getByRole('button', { name: 'Cancel series' }).click();
  await expect(page).toHaveURL(/\/seasons#a=/);
@@ -260,7 +263,8 @@ test('plays two pasted replay links from an empty gallery without collecting eit
  await gameSummaries(page);
  await page.getByRole('button', { name: 'Play another series' }).click();
  await expect(page.getByRole('list', { name: 'Saved clubs' }).getByRole('button')).toHaveCount(0);
- await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Collection' }).click();
+ await page.getByRole('button', { name: 'Menu' }).click();
+ await page.getByRole('navigation', { name: 'More' }).getByRole('link', { name: 'Collection' }).click();
  await expect(page.getByRole('heading', { name: 'No cards yet' })).toBeVisible();
 });
 test('names broken challenge links, focuses the first error, and lets a corrected matchup play', async ({ page, request }) => {

@@ -376,6 +376,15 @@ export const MIGRATIONS: readonly Migration[] = [
    exec(db, 'ALTER TABLE daily_runs ADD COLUMN board_entry TEXT');
    exec(db, 'ALTER TABLE daily_runs ADD COLUMN board_name TEXT');
   }
+ },
+ {
+  version: 15,
+  up(db) {
+   // The board name this device sends with every daily; it starts as the latest name a run was accepted under.
+   exec(db, 'CREATE TABLE device_profile (id INTEGER PRIMARY KEY CHECK (id = 1), board_name TEXT)');
+   exec(db, `INSERT INTO device_profile (id, board_name)
+    SELECT 1, board_name FROM daily_runs WHERE board_name IS NOT NULL ORDER BY date DESC LIMIT 1`);
+  }
  }
 ];
 

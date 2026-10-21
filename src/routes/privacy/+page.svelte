@@ -33,7 +33,7 @@
 	<section aria-labelledby="daily-standings">
 		<h2 id="daily-standings">Daily standings</h2>
 		<p>When you finish the daily, the game sends your season’s replay link and record to our server to place it in that day’s standings. To keep one entry per device each day, your device creates a random code and stores it locally; our server keeps only a scrambled (hashed) form of it, which is not linked to you or to any account.</p>
-		<p>If you add a board name, we store it with your entry. If you report a name, we store that report with your device’s hashed code. The daily board shows the day’s best checked runs with their names, records and replay links; everyone else sees only counts: how many runs finished that day and how many reached each record. See the <a href="/conduct">board name rules</a>.</p>
+		<p>If you add a board name, we store it with your entry. A board name saved in Settings stays on your device and is sent with each daily you finish. If you report a name, we store that report with your device’s hashed code. The daily board shows the day’s best checked runs with their names, records and replay links; everyone else sees only counts: how many runs finished that day and how many reached each record. See the <a href="/conduct">board name rules</a>.</p>
 		<p>Board names, records and replay links are public. Entries, names and reports are deleted 90 days after the daily’s date; the replays they point to are kept like any other replay. Clearing the website’s data or reinstalling the app creates a new code, and earlier entries stay until they expire.</p>
 	</section>
 

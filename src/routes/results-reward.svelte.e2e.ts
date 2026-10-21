@@ -96,3 +96,31 @@ test('an unavailable wallet target leaves an accessible static Shop receipt', as
 	await chip.click();
 	await expect(page.locator('.balance')).toHaveText('2 unlock tokens');
 });
+
+test('the results arrival never widens the phone page or lifts the share bar off the bottom edge', async ({ page, request }) => {
+	await prepareSeason(page, request);
+	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
+	await page.getByRole('button', { name: 'Skip animation', exact: true }).click();
+	// Sample every frame from the hand-off until the arrival animations settle.
+	const samples = await page.evaluate(() => new Promise<{ wide: number; barOffset: number; frames: number }>(resolve => {
+		let wide = 0;
+		let barOffset = 0;
+		let frames = 0;
+		let started = 0;
+		const sample = (time: number) => {
+			const bar = document.querySelector('.results .share-shortcuts');
+			if (bar) {
+				started ||= time;
+				frames++;
+				wide = Math.max(wide, document.documentElement.scrollWidth - innerWidth);
+				barOffset = Math.max(barOffset, Math.abs(innerHeight - bar.getBoundingClientRect().bottom));
+			}
+			if (started && time - started > 2000) resolve({ wide, barOffset, frames });
+			else requestAnimationFrame(sample);
+		};
+		requestAnimationFrame(sample);
+	}));
+	expect(samples.frames).toBeGreaterThan(0);
+	expect(samples.wide).toBe(0);
+	expect(samples.barOffset).toBeLessThan(1);
+});

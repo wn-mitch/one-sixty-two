@@ -1,7 +1,7 @@
 import { dailyDate, dailySeed, isDailyDate } from '../game/daily.ts';
 import { loadCurrentDataVersion, loadReplay, REPLAY_ID_PATTERN, ReplayIncompatibleError, ReplayNotFoundError, type ReplayAssets, type ReplayBucket } from './replays.ts';
 import type { Replay } from '../game/types.ts';
-import { checkName, type NameRules } from './names.ts';
+import { checkName, type NameRefusal, type NameRules } from './names.ts';
 
 /** The subset of Cloudflare's D1 binding (`DAILY` in wrangler.jsonc) used here, kept structural for tests. */
 export interface DailyDatabase {
@@ -40,6 +40,8 @@ export interface DailySubmission extends DailyStanding {
 	name: string | null;
 	/** Whether the name this request sent was taken; absent when it sent none. */
 	nameAccepted?: boolean;
+	/** Why the filter refused the name this request sent; absent when it passed or none was sent. */
+	nameRefusal?: NameRefusal;
 }
 
 export interface DailyStandings {
@@ -255,7 +257,8 @@ export async function submitDaily(bindings: DailyBindings, date: string, body: u
 		record: { wins: mine.wins, losses: mine.losses, runsFor: mine.runs_for, runsAgainst: mine.runs_against },
 		entry: mine.entry,
 		name: mine.name,
-		...(named ? { nameAccepted: named.ok && mine.name === named.name } : {})
+		...(named ? { nameAccepted: named.ok && mine.name === named.name } : {}),
+		...(named && !named.ok ? { nameRefusal: named.reason } : {})
 	};
 }
 

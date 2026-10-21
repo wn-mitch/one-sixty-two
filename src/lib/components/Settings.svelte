@@ -2,11 +2,14 @@
 	import { onMount } from 'svelte';
 	import { appSettings, PLAYBACK_SPEEDS } from '#lib/game/settings.svelte.ts';
 	import { deviceTilt, type DeviceTiltState } from '#lib/cards/device-tilt.ts';
+	import BoardNameSetting from './BoardNameSetting.svelte';
 
 	let { showTrigger = true }: { showTrigger?: boolean } = $props();
 	let dialog = $state<HTMLDialogElement>();
 	let trigger = $state<HTMLButtonElement>();
 	let ready = $state(false);
+	// The board name reads the device database, so it mounts on first open rather than on every page.
+	let opened = $state(false);
 	const uid = $props.id();
 	const titleId = `${uid}-title`;
 	const systemNoticeId = `${uid}-system-notice`;
@@ -50,6 +53,7 @@
 
 	function openSettings(): void {
 		if (!ready || !dialog) return;
+		opened = true;
 		dialog.showModal();
 	}
 
@@ -100,6 +104,8 @@
 			</header>
 
 			<div class="settings-options">
+				{#if opened}<BoardNameSetting />{/if}
+
 				<div class="setting-row">
 					<div class="setting-copy">
 						<label for={motionId}>Motion</label>

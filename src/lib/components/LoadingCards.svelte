@@ -8,6 +8,11 @@
 	let cards = $state<number[]>([]);
 	let shownLabel = $state('Loading…');
 	const moving = $derived(appSettings.effectiveEnabled);
+	// A wait shorter than this never shows the loader, so instant screens do not flash it.
+	const SHOW_DELAY = 40;
+	// Once shown, the loader stays until every card has dealt in (360ms each, 22ms apart), holding the next screen behind it.
+	const DEALT = 360 + 7 * 22;
+	let shownAt = 0;
 
 	onMount(() => appSettings.retain());
 	$effect(() => {
@@ -25,13 +30,16 @@
 					}
 					cards = pool.slice(0, 8);
 					visible = true;
-				}, 120);
+					shownAt = performance.now();
+				}, SHOW_DELAY);
 				return () => clearTimeout(timer);
 			}
 			if (!visible) return;
 			if (!animate) { visible = false; return; }
-			leaving = true;
-			const timer = setTimeout(() => { visible = false; leaving = false; }, 280);
+			let timer = setTimeout(() => {
+				leaving = true;
+				timer = setTimeout(() => { visible = false; leaving = false; }, 280);
+			}, Math.max(0, shownAt + DEALT - performance.now()));
 			return () => clearTimeout(timer);
 		});
 	});

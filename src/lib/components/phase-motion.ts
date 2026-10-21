@@ -53,6 +53,21 @@ export function freeze(source: HTMLElement): HTMLElement {
 	return clone;
 }
 
+/**
+ * A viewport-sized, clipped layer for page-level ghosts. A ghost scaled past the screen edge would otherwise
+ * widen the page, and iOS Safari zooms the whole page out until the ghost is removed.
+ */
+function ghostLayer(): HTMLElement {
+	const existing = document.body.querySelector<HTMLElement>(':scope > [data-motion-layer]');
+	if (existing) return existing;
+	const layer = document.createElement('div');
+	layer.dataset.motionLayer = '';
+	layer.setAttribute('aria-hidden', 'true');
+	Object.assign(layer.style, { position: 'fixed', inset: '0', zIndex: '30', overflow: 'clip', pointerEvents: 'none' });
+	document.body.append(layer);
+	return layer;
+}
+
 function ghostAt(node: HTMLElement, rect: DOMRect, host: Element): HTMLElement {
 	node.setAttribute('aria-hidden', 'true');
 	node.setAttribute('inert', '');
@@ -63,7 +78,7 @@ function ghostAt(node: HTMLElement, rect: DOMRect, host: Element): HTMLElement {
 		position: 'fixed', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`,
 		minWidth: '0', maxWidth: 'none', margin: '0', zIndex: '30', pointerEvents: 'none', transformOrigin: '0 0', boxSizing: 'border-box'
 	});
-	host.append(node);
+	(host === document.body ? ghostLayer() : host).append(node);
 	return node;
 }
 
@@ -142,6 +157,8 @@ export function morphInto(clone: HTMLElement, from: DOMRect, target: HTMLElement
 	const to = target.getBoundingClientRect();
 	if (!to.height || !from.height || !appSettings.effectiveEnabled) return [];
 	const ghost = ghostAt(clone, from, document.body);
+	// The source may be a full-width row; only its content travels, so the scaled copy stays near the target's width.
+	ghost.style.width = 'max-content';
 	const scale = to.height / from.height;
 	const dx = to.left - from.left;
 	const dy = to.top - from.top;

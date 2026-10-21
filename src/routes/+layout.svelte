@@ -30,6 +30,10 @@
 	// The iOS app marks itself before the page runs; the website alone shows the external support link.
 	let externalSupport = $state(false);
 	const playing = $derived(['/', '/classic', '/daily', '/draft'].includes(page.url.pathname) || /^\/(r|c)\//.test(page.url.pathname));
+	const navigation = $derived(destinations.map(destination => ({
+		...destination,
+		current: destination.href === '/' ? playing : destination.href === '/seasons' ? ['/seasons', '/h2h'].includes(page.url.pathname) : page.url.pathname === destination.href
+	})));
 	// Roster links (/r, /c) set their own preview from the published season image.
 	const rosterLink = $derived(/^\/(r|c)\//.test(page.url.pathname));
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
@@ -112,8 +116,8 @@
 	<header class="site-header">
 		<a class="wordmark" href="/" aria-label="162-0 home"><span aria-hidden="true" class="mark"></span>162-0</a>
 		<nav class="primary-nav" aria-label="Main navigation">
-			{#each destinations as destination (destination.href)}
-				<a href={destination.href} aria-current={(destination.href === '/' ? playing : destination.href === '/seasons' ? ['/seasons', '/h2h'].includes(page.url.pathname) : page.url.pathname === destination.href) ? 'page' : undefined}>{destination.label}</a>
+			{#each navigation as destination (destination.href)}
+				<a href={destination.href} aria-current={destination.current ? 'page' : undefined}>{destination.label}</a>
 			{/each}
 		</nav>
 		<nav class="site-actions" aria-label="Site controls">
@@ -121,20 +125,20 @@
 				aria-label={balance === null ? 'Shop' : `Shop, ${balance} ${balance === 1 ? 'token' : 'tokens'}`}>
 				<span>Shop</span><span class="shop-balance" data-token-wallet aria-hidden="true"><TokenAmount amount={balance} /></span>
 			</a>
-			<SiteMenu onNew={classicActions.newDraft} />
+			<SiteMenu onNew={classicActions.newDraft} {navigation} />
 		</nav>
 	</header>
 	{@render children()}
 	<footer>
 		<div class="attribution">
-			<p>Inspired by <a href="https://82-0.com/">82-0</a>. An original baseball challenge.</p>
-			<p><a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates.
+			<p>Inspired by <a href="https://82-0.com/">82-0</a>. An original baseball challenge.
+				<a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates,
 				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/credits">Full attribution, data download &amp; image credits</a>.</p>
 		</div>
 		<div class="footer-links">
-			<a class="support-link" href="/privacy">Privacy policy</a>
+			<a class="support-link" href="/privacy" aria-label="Privacy policy">Privacy</a>
 			{#if externalSupport}
-				<a class="support-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer">Support the developer <span aria-hidden="true">↗</span></a>
+				<a class="support-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer" aria-label="Support the developer">Support <span aria-hidden="true">↗</span></a>
 			{/if}
 			<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
 		</div>
@@ -162,7 +166,7 @@
 	.site:has(:global(:is(.draft-board, .draft-skeleton))) { max-width: 90rem; }
 	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) { padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
 	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) .site-header { display: none; }
-	/* A phone draft keeps the next pick in view: the main navigation folds into Menu and the footer waits for the lineup. */
+	/* A phone-sized draft keeps the next pick in view: the main navigation folds into Menu and the footer waits for the lineup. */
 	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) .primary-nav,
 	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) footer { display: none; }
 	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) :global(.menu-panel .nav-fallback) { display: flex; }
@@ -193,6 +197,12 @@
 		.site-header { flex-wrap: nowrap; }
 		.primary-nav { order: 0; display: flex; width: auto; }
 		.primary-nav a { padding-inline: var(--space-3); }
+	}
+	/* Phones keep the header to one row: the main navigation folds into Menu. */
+	@media (max-width: 47.999rem) {
+		.site-header { min-height: 3.5rem; }
+		.primary-nav { display: none; }
+		.site-header :global(.menu-panel .nav-fallback) { display: flex; }
 	}
 	@media (max-width: 30rem) {
 		.site-header { column-gap: var(--space-2); }
@@ -232,6 +242,13 @@
 	.support-link:hover { color: var(--text); }
 	@media (min-width: 48rem) {
 		footer { display: flex; justify-content: space-between; align-items: center; gap: var(--space-12); }
+	}
+	/* Phones set the attribution as one tight paragraph and the links in one row. */
+	@media (max-width: 47.999rem) {
+		footer { margin-top: var(--space-8); padding-top: var(--space-4); line-height: 1.5; }
+		footer p { margin: 0; }
+		footer p a { padding-block: 0; }
+		.footer-links { flex-wrap: nowrap; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-2); }
 	}
 	@media (min-width: 68rem) {
 		.site:has(:global(main.home-start)) .site-header,

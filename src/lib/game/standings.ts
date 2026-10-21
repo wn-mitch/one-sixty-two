@@ -2,6 +2,9 @@ import type { Db } from '../storage/sql.ts';
 import { decodeReplay, storeReplay } from './share.ts';
 import type { Manifest } from './types.ts';
 
+/** Why the server's filter refused a board name. */
+export type NameRefusal = 'length' | 'characters' | 'link' | 'blocked';
+
 export interface DailyStanding { rank: number; total: number; topPercent: number }
 
 /** A day's standings as this device shows them: where its run stands and the spread of every counted run. */
@@ -18,8 +21,8 @@ export interface DailyStandingsView {
 	entry: string | null;
 	/** The board name the server holds for this run; null lists it as Anonymous. */
 	name: string | null;
-	/** The name just sent was refused, so the run stays Anonymous until another is accepted. */
-	nameRefused: boolean;
+	/** Why the name just sent was refused, so the run stays Anonymous until another is accepted; null when none was refused. */
+	nameRefusal: NameRefusal | null;
 	/** The day's named board: verified runs only, best first. */
 	board: DailyBoardRow[];
 }
@@ -84,7 +87,8 @@ interface FinishedDaily {
  * standing with the day's spread and board. Null when the run cannot count: never finished here, refused by the
  * server, or its saved season deleted before it was ever submitted. A closed day still shows its final spread.
  *
- * `name` asks for that board name. Without it, a run with no accepted name offers the device's latest one.
+ * `name` asks for that board name and, once accepted, saves it as the device's. Without it, a run with no accepted
+ * name offers the device's saved one.
  */
 export async function loadDailyStandings(db: Db, manifest: Manifest, date: string, origin: string, fetcher: FetchBoundary = fetch, name?: string): Promise<DailyStandingsView | null> {
 	const [run] = await db.all<FinishedDaily & Record<string, string | number | null>>(
@@ -97,9 +101,9 @@ export async function loadDailyStandings(db: Db, manifest: Manifest, date: strin
 	let wins = run.wins;
 	let entry = run.board_entry;
 	let boardName = run.board_name;
-	let nameRefused = false;
+	let nameRefusal: NameRefusal | null = null;
 	if (run.replay && run.runs_scored !== null && run.runs_allowed !== null) {
-		const requested = name ?? (boardName === null ? await latestBoardName(db) : null);
+		const requested = name ?? (boardName === null ? await savedBoardName(db) : null);
 		const replay = await storeReplay(decodeReplay(run.replay, manifest), origin, fetcher);
 		const response = await fetcher(new URL(`/api/daily/${date}`, origin), {
 			method: 'POST',
@@ -112,13 +116,14 @@ export async function loadDailyStandings(db: Db, manifest: Manifest, date: strin
 			})
 		});
 		if (response.ok) {
-			const submitted = await response.json() as DailyStanding & { record: { wins: number }; entry: string; name: string | null; nameAccepted?: boolean };
+			const submitted = await response.json() as DailyStanding & { record: { wins: number }; entry: string; name: string | null; nameAccepted?: boolean; nameRefusal?: NameRefusal };
 			standing = { rank: submitted.rank, total: submitted.total, topPercent: submitted.topPercent };
 			wins = submitted.record.wins;
 			entry = submitted.entry;
 			boardName = submitted.name;
-			// Only a name the player just typed reports a refusal; a carried-over name that no longer passes is dropped quietly.
-			nameRefused = name !== undefined && submitted.nameAccepted === false;
+			// A refused saved name is reported too, so the player can change it.
+			if (requested !== null && submitted.nameAccepted === false) nameRefusal = submitted.nameRefusal ?? 'blocked';
+			else if (name !== undefined && submitted.nameAccepted) await saveBoardName(db, submitted.name);
 			await db.run([{ sql: "UPDATE daily_runs SET submission = 'accepted', board_entry = ?, board_name = ? WHERE date = ?", bind: [entry, boardName, date] }]);
 		} else if (REFUSED.has(response.status) && run.submission === null) {
 			await db.run([{ sql: "UPDATE daily_runs SET submission = 'rejected' WHERE date = ?", bind: [date] }]);
@@ -132,14 +137,20 @@ export async function loadDailyStandings(db: Db, manifest: Manifest, date: strin
 	const day = await response.json() as DailyBoardView & { standing: DailyStanding };
 	return {
 		date, wins, standing: standing ?? day.standing, total: standing?.total ?? day.total, distribution: day.distribution, final: day.final,
-		entry, name: boardName, nameRefused, board: day.board
+		entry, name: boardName, nameRefusal, board: day.board
 	};
 }
 
-/** The name this device's most recent named run went by, offered for its next daily. */
-async function latestBoardName(db: Db): Promise<string | null> {
-	const [row] = await db.all<{ board_name: string }>('SELECT board_name FROM daily_runs WHERE board_name IS NOT NULL ORDER BY date DESC LIMIT 1');
+/** The board name this device sends with each daily; null runs as Anonymous. */
+export async function savedBoardName(db: Db): Promise<string | null> {
+	const [row] = await db.all<{ board_name: string | null }>('SELECT board_name FROM device_profile WHERE id = 1');
 	return row?.board_name ?? null;
+}
+
+/** Saves the board name sent with each daily; a blank name clears it. The server still checks it on each submission. */
+export async function saveBoardName(db: Db, name: string | null): Promise<void> {
+	const trimmed = name?.normalize('NFKC').trim().replace(/\s+/g, ' ') || null;
+	await db.run([{ sql: 'INSERT INTO device_profile (id, board_name) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET board_name = excluded.board_name', bind: [trimmed] }]);
 }
 
 /** A day's spread and named board, for any viewer. */

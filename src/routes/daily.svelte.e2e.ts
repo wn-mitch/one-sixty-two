@@ -83,11 +83,13 @@ test('a finished daily pays two tokens, carries its stamp, joins the standings, 
  const entry = page.getByRole('region', { name: 'Today’s daily board' });
  await entry.getByLabel(/Board name/).fill('Official Staff');
  await entry.getByRole('button', { name: 'Add name', exact: true }).click();
- await expect(entry.getByRole('alert')).toContainText('That name was not accepted');
+ await expect(entry.getByRole('alert')).toContainText('That name was not accepted: It matches a filtered word or the game’s or studio’s name.');
  await entry.getByLabel(/Board name/).fill('Glass Arm');
  await entry.getByRole('button', { name: 'Add name', exact: true }).click();
  await expect(entry.getByLabel(/Board name/)).toHaveCount(0);
  expect(await deviceRows(page, 'SELECT board_name FROM daily_runs WHERE date = ?', [date])).toEqual([{ board_name: 'Glass Arm' }]);
+ // The accepted name becomes the device's saved name for its next daily; the refused one never was.
+ expect(await deviceRows(page, 'SELECT board_name FROM device_profile')).toEqual([{ board_name: 'Glass Arm' }]);
 
  // A forged perfect season on the same replay ranks first by its claim, so it is checked first, and never shows.
  const origin = baseURL!;
@@ -115,8 +117,9 @@ test('a finished daily pays two tokens, carries its stamp, joins the standings, 
  await page.goto('/');
  const panel = page.getByRole('region', { name: `Daily ${dailyLabel(date)}` });
  await expect(panel).toContainText(`${record[0]}–${record[1]}`);
- await expect(panel.getByRole('region', { name: 'Today’s daily standings' }).locator('.summary')).toHaveText(standing);
- await expect(panel.getByRole('timer')).toContainText('Next daily in');
+ // The home screen asks the standings again after its own data loads.
+ await expect(panel.getByRole('region', { name: 'Today’s daily standings' }).locator('.summary')).toHaveText(standing, { timeout: 15_000 });
+ await expect(panel.getByRole('timer')).toHaveAccessibleName(/^Next daily in /);
  await expect(panel.getByRole('button')).toHaveCount(0);
  await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toHaveClass(/primary/);
 

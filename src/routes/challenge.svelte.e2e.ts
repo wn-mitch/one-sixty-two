@@ -124,7 +124,9 @@ test('lineup uses the site menu and canceling New draft preserves the roster and
  await expect(confirmation).toBeHidden();
  await expect(menu).toBeFocused();
  expect((await deviceDraft<Draft>(page)).picks).toEqual(draft.picks);
- await page.getByRole('link', { name: 'Collection', exact: true }).click();
+ // Phones reach Collection through Menu.
+ await menu.click();
+ await page.getByRole('navigation', { name: 'More' }).getByRole('link', { name: 'Collection', exact: true }).click();
  await expect(page.getByRole('heading', { name: 'Collection', exact: true })).toBeVisible();
  await menu.click();
  await expect(page.getByRole('button', { name: 'New draft', exact: true })).toHaveCount(0);

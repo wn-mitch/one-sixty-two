@@ -26,7 +26,9 @@ describe('board name filter', () => {
 		expect(accepted('Team 88')).toBe(false);
 		expect(accepted('1488')).toBe(false);
 		expect(accepted('Class of 1988')).toBe(true);
-		for (const name of ['162-0 Admin', 'Official Team', '1620 Staff', 'Alpaca Soft']) expect(accepted(name), name).toBe(false);
+		for (const name of ['162-0 Admin', 'Official Team', '1620 Staff', 'Alpaca Soft', 'Alpacas0ft']) expect(accepted(name), name).toBe(false);
+		// The studio's name is refused, not every alpaca.
+		for (const name of ['TheAlpacalypse', 'Alpaca Fan']) expect(accepted(name), name).toBe(true);
 	});
 
 	it('takes added block terms and exempts allowed names', () => {

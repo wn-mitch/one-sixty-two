@@ -230,7 +230,8 @@
    const clone = arrival.clones.get('record');
    const heading = document.querySelector<HTMLElement>('#results-heading');
    if (from && clone && heading) morphInto(clone, from, heading);
-   riseIn(document.querySelectorAll<HTMLElement>('.scoreboard > :not(.record-block), .results > :not(.scoreboard)'), 160);
+   // The share bar is fixed to a phone's bottom edge, so its container never takes a transform: that would pin the bar inside it.
+   riseIn(document.querySelectorAll<HTMLElement>('.scoreboard > :not(.record-block, .score-actions), .score-actions > *, .results > :not(.scoreboard)'), 160);
   });
  });
  const waitingForStage = $derived(

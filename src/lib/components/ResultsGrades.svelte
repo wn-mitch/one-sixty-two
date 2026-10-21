@@ -15,14 +15,15 @@
 	} = $props();
 	const luck = $derived(expected === null ? null : Math.round(wins - expected));
 
-	function stamp(_: Element, { order }: { order: number }) {
+	/** `swell` is how far past full size the stamp starts: a letter grade lands from far above, the scouting word from closer, so it stays on screen. */
+	function stamp(_: Element, { order, swell = .9 }: { order: number; swell?: number }) {
 		const motion = appSettings.effectiveEnabled;
 		const tilt = order ? 7 : -7;
 		return {
 			delay: motion ? 220 + order * 140 : 0,
 			duration: motion ? 420 : 0,
 			easing: backOut,
-			css: (t: number, u: number) => `transform: scale(${1 + .9 * u}) rotate(${tilt * u}deg); opacity: ${Math.min(1, t * 3)};`
+			css: (t: number, u: number) => `transform: scale(${1 + swell * u}) rotate(${tilt * u}deg); opacity: ${Math.min(1, t * 3)};`
 		};
 	}
 </script>
@@ -47,7 +48,7 @@
 		{/if}
 		{#if scouting}
 			<p class="grade scouting" title={`Picks compared with the card the list showed first by WAR/162. ${scouting.chalk} of 16 picks took it.`}>
-				<span class="badge scout-name" in:stamp|global={{ order: 2 }}>{scouting.label}</span>
+				<span class="badge scout-name" in:stamp|global={{ order: 2, swell: .3 }}>{scouting.label}</span>
 				<span class="label" aria-hidden="true">Scouting</span>
 				<span class="detail">{scoutEdgeText(scouting.edge)}</span>
 			</p>
@@ -81,16 +82,25 @@
 	.scout-name { font-family: var(--font-control); font-size: var(--text-xl); font-weight: 750; letter-spacing: var(--control-tracking); line-height: 1.1; transform-origin: 0 60%; }
 	.luck { color: var(--error); }
 	.luck.up { color: var(--success); }
+	/* Phones read the grades as one compact table: label, grade, detail on each row. */
 	@media (max-width: 40rem) {
-		.grades { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-		.grade.scouting { grid-column: 1 / -1; grid-template-areas: 'label' 'badge' 'detail'; row-gap: 0; }
-		.scout-name { font-size: var(--text-lg); }
-		/* Phones put the badge beside its label and the detail across the tile. */
-		.grade { grid-template-areas: 'badge label' 'detail detail'; row-gap: var(--space-2); padding: var(--space-2) var(--space-3); }
-		.badge, .draft-grade .badge { font-size: var(--text-xl); }
-		.label { align-self: center; }
+		/* The table clips its stamps, so a swelling badge never widens the phone page. */
+		.grades { display: grid; gap: 0; overflow: clip; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--background); }
+		.grade {
+			grid-template-columns: 4.75rem auto minmax(0, 1fr);
+			grid-template-areas: 'label badge detail';
+			column-gap: var(--space-3);
+			padding: 6px var(--space-3);
+			border: 0;
+			border-radius: 0;
+			background: none;
+		}
+		.grade + .grade { border-top: 1px solid var(--border); }
+		.draft-grade { border-style: solid; }
+		.badge, .draft-grade .badge { font-size: var(--text-base); }
+		.label, .detail { align-self: center; }
 		.detail { white-space: normal; font-size: var(--text-xs); }
-		.sep { display: none; }
-		.luck { display: block; }
+		.grade.scouting { grid-template-columns: 4.75rem minmax(0, 1fr); grid-template-areas: 'label badge' 'label detail'; padding-inline: var(--space-3); }
+		.scout-name { font-size: var(--text-base); }
 	}
 </style>

@@ -16,7 +16,7 @@
 
 	<section aria-labelledby="name-rules">
 		<h2 id="name-rules">What a name can be</h2>
-		<p>Names are 3 to 20 letters, digits, spaces and <code>. - ' _</code>. We refuse names that are profane, sexual, hateful, threatening, or about drugs; names that look like links or social handles; and names that pretend to be 162-0, its staff, or a real person. Our filter is strict on purpose and sometimes refuses a harmless name. A refused name never costs you your run: it is listed as “Anonymous”, and you can try another name that day. Please do not use your real name.</p>
+		<p>Names are 3 to 20 letters, digits, spaces and <code>. - ' _</code>. We refuse names that are profane, sexual, hateful, threatening, or about drugs; names that look like links or social handles; and names that pretend to be 162-0, its studio or staff, or a real person. Our filter is strict on purpose and sometimes refuses a harmless name. A refused name never costs you your run: it is listed as “Anonymous”, and you can try another name that day. A name saved in Settings goes with every daily you finish. Please do not use your real name.</p>
 	</section>
 
 	<section aria-labelledby="reports">

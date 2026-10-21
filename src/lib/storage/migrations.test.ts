@@ -228,6 +228,23 @@ describe('device database migrations', () => {
   expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 14))).toEqual({ from: 13, to: 14 });
   expect(await db.all('SELECT * FROM daily_runs')).toEqual(before.map(row => ({ ...row, board_entry: null, board_name: null })));
  });
+ it('saves the latest accepted board name as the device board name', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 14));
+  await db.run([
+   { sql: "INSERT INTO daily_runs (date, started_at, updated_at, season_key, wins, losses, board_name) VALUES ('2026-10-17', 'then', 'then', 'a', 120, 42, 'Older')" },
+   { sql: "INSERT INTO daily_runs (date, started_at, updated_at, season_key, wins, losses, board_name) VALUES ('2026-10-18', 'then', 'then', 'b', 120, 42, 'Newer')" },
+   { sql: "INSERT INTO daily_runs (date, started_at, updated_at, season_key, wins, losses) VALUES ('2026-10-19', 'then', 'then', 'c', 120, 42)" }
+  ]);
+  const before = await db.all('SELECT * FROM daily_runs ORDER BY date');
+  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 15))).toEqual({ from: 14, to: 15 });
+  expect(await db.all('SELECT * FROM device_profile')).toEqual([{ id: 1, board_name: 'Newer' }]);
+  expect(await db.all('SELECT * FROM daily_runs ORDER BY date')).toEqual(before);
+ });
+ it('starts with no device board name when no run was named', async () => {
+  const { db, raw } = await memoryDb(NO_LEGACY, MIGRATIONS.filter(step => step.version <= 14));
+  migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 15));
+  expect(await db.all('SELECT * FROM device_profile')).toEqual([]);
+ });
  it('seeds zero-credit receipts for existing and deleted history without altering historical data', async () => {
   const { db, raw } = await memoryDb({
    ...NO_LEGACY, draft: '{"saved":"run"}', library: JSON.stringify([entry('kept', 120), entry('deleted', 90)])

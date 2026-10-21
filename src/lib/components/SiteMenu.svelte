@@ -4,7 +4,7 @@
  import Settings from './Settings.svelte';
  import { draftModeEnabled } from '#lib/app/features.ts';
 
- let { onNew }: { onNew?: () => void } = $props();
+ let { onNew, navigation = [] }: { onNew?: () => void; navigation?: { href: string; label: string; current: boolean }[] } = $props();
  let open = $state(false);
  let developerDraft = $state(false);
  let settings = $state<ReturnType<typeof Settings>>();
@@ -54,11 +54,13 @@
 		Menu
 	</button>
 	<nav bind:this={panel} id={panelId} class="menu-panel" aria-label="More" hidden={!open}>
-		<!-- The main navigation hides while a phone drafts (layout), so its destinations move here. -->
-		<a class="nav-fallback" href="/seasons">My teams</a>
-		<a class="nav-fallback" href="/collection">Collection</a>
+		<!-- Phones hide the main navigation (layout), so its destinations move here. -->
+		{#each navigation as destination (destination.href)}
+			<a class="nav-fallback" href={destination.href} aria-current={destination.current ? 'page' : undefined}>{destination.label}</a>
+		{/each}
 		{#if onNew}<button type="button" onclick={() => { close(); onNew?.(); }}>New draft</button>{/if}
 		<button type="button" onclick={openSettings}>Settings</button>
+		<a href="/how-to-play">How to play</a>
 		<a href="/factory">Card factory</a>
 		<a href="/about#simulation">Rules &amp; model</a>
 		<a href="/credits">Data &amp; image credits</a>
@@ -103,5 +105,7 @@
 		text-decoration: none;
 	}
 	.menu-panel a:hover, .menu-panel button:hover:not(:disabled) { background: var(--surface-hover); }
+	.menu-panel a[aria-current='page'] { color: var(--accent); }
+	.menu-panel .nav-fallback:nth-last-child(1 of .nav-fallback) { margin-bottom: var(--space-1); box-shadow: 0 1px 0 var(--border); }
 	.developer span { color: var(--muted); font-size: var(--text-xs); }
 </style>

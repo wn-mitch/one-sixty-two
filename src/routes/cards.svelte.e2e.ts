@@ -408,7 +408,7 @@ test.describe('normal card motion', () => {
 			const style = (node as HTMLElement).style;
 			return !style.transform && !style.opacity;
 		}))).toBe(true);
-		expect(await page.locator('body > [aria-hidden="true"][inert]').count()).toBe(0);
+		expect(await page.locator('body > [aria-hidden="true"][inert], [data-motion-layer] > *').count()).toBe(0);
 		expect(await visibleGroupIds(page)).toEqual(groupsFor(scenario.draft, manifest, scenario.profiles, 'metrics', rankings));
 		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await expect.poll(() => surface.evaluate(node => (node as HTMLElement).style.transform)).toBe('');

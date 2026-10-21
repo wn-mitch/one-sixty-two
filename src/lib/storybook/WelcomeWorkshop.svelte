@@ -1,6 +1,6 @@
 <script module lang="ts">
 	export interface WelcomeWorkshopProps {
-		initial?: 'start' | 'resume' | 'loading';
+		initial?: 'start' | 'resume' | 'loading' | 'daily-done';
 	}
 </script>
 
@@ -31,6 +31,13 @@
 			model: createCardViewModel({ profile, slot: slots[index], manifest: fixtures.manifest, media, mediaStatus: 'ready' })
 		};
 	});
+	// A finished daily, ranked fourth of four, as the home screen shows it the rest of the day.
+	const dailyDate = '2026-10-21';
+	const finishedDaily = { date: dailyDate, run: { kind: 'complete' as const, record: { wins: 138, losses: 24 } } };
+	const dailyStandings = {
+		date: dailyDate, wins: 138, standing: { rank: 4, total: 4, topPercent: 100 }, total: 4, distribution: [[144, 1], [139, 2], [138, 1]] as [number, number][],
+		final: false, entry: null, name: null, nameRefusal: null, board: []
+	};
 	let screen = $state<'welcome' | 'ready' | 'partial'>('welcome');
 	let instance = $state(0);
 	let observedInitial = untrack(() => initial);
@@ -53,6 +60,7 @@
 	{#key instance}
 		{#if screen === 'welcome'}
 			<Welcome manifest={fixtures.manifest} loading={initial === 'loading'} hasSavedDraft={initial === 'resume'} {cards}
+				daily={initial === 'daily-done' ? finishedDaily : null} dailyStandings={initial === 'daily-done' ? dailyStandings : null}
 				onStart={() => screen = 'ready'} onResume={() => screen = 'partial'} />
 		{:else}
 			<DraftWorkshop initial={screen} embedded />
