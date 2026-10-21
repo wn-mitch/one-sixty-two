@@ -1,19 +1,21 @@
 import { defineFilm } from './film.ts';
 
 /**
- * Chasing rosette (ITW's fine-line guilloche): a spirograph medallion of interwoven wave strands in two bands.
- * Tilt chases light along the strands; alternate strands chase the opposite way, so the light runs outward on
- * one and inward on its neighbour, and the two bands turn against each other. The fine lines stay visible between
- * highlights.
+ * Chasing rosette (ITW's fine-line guilloche): interwoven wave strands in two bands. By default the bands follow the
+ * card's own outline as a border; the shape dial turns them into a round medallion instead. Tilt chases light along
+ * the strands; alternate strands chase the opposite way, so the light runs outward on one and inward on its
+ * neighbour, and the two bands turn against each other. The fine lines stay visible between highlights.
  */
 export default defineFilm({
 	name: 'chasing-rosette',
 	experimental: true,
 	params: {
+		shape: { value: 1, min: 0, max: 1, step: 1, note: '1 runs the bands round the card as a border; 0 draws a round medallion.' },
+		border: { value: 1.3, min: 0.4, max: 2.4, step: 0.01, note: 'How far the border reaches in from the card edge, in card units.' },
 		size: { value: 2.1, min: 0.8, max: 2.5, step: 0.01, note: 'Medallion radius in card units.' },
-		lobes: { value: 12, min: 3, max: 30, step: 1, note: 'Waves round each strand.' },
+		lobes: { value: 16, min: 3, max: 40, step: 1, note: 'Waves round each strand.' },
 		strands: { value: 6, min: 1, max: 12, step: 1, note: 'Interwoven strands in each band.' },
-		amplitude: { value: 0.11, min: 0, max: 0.3, step: 0.005, note: 'How far each strand swings in and out, as a fraction of the radius.' },
+		amplitude: { value: 0.11, min: 0, max: 0.3, step: 0.005, note: 'How far each strand swings in and out, as a fraction of the border or radius.' },
 		weight: { value: 0.012, min: 0.003, max: 0.05, step: 0.001, note: 'Line half-width in card units.' },
 		lights: { value: 3, min: 1, max: 12, step: 1, note: 'Chasing lights on each strand.' },
 		chase: { value: 1, min: 0, max: 4, step: 0.05, note: 'How far the lights run from one full lean to the other, in gaps between lights.' },
@@ -21,18 +23,36 @@ export default defineFilm({
 		travel: { value: 0.12, min: 0.03, max: 0.4, step: 0.005, note: 'Lean, as the sine of the tilt, that counts as a full lean.' }
 	},
 	helpers: `
-// The nearest strand of a guilloche band round the origin: its distance, how strongly a chasing light catches
-// there, and which strand it is. The band's strands swing about radius r by a, each a fraction of a lobe apart;
-// the lights run round each strand, so they swing in and out with its waves as they go.
-void rosetteBand(vec2 u, float r, float a, float lobes, float strands, float lights, float chase, float glow, float turn, inout float best, inout float lit, inout float which) {
-	float radius = length(u);
-	float theta = atan(u.y, u.x);
+// How far in from the edge of a box of half-size b a point inside it sits. The edge's corners round to radius r,
+// and the inward offsets soften by k, so bands deep inside still turn a curve rather than a mitre.
+float rosetteInset(vec2 q, vec2 b, float r, float k) {
+	vec2 d = abs(q) - b + r;
+	float inner = max(d.x, d.y);
+	float h = clamp(0.5 + 0.5 * (d.x - d.y) / k, 0.0, 1.0);
+	inner = max(inner, mix(d.y, d.x, h) + k * h * (1.0 - h));
+	return r - (d.x > 0.0 && d.y > 0.0 ? length(d) : inner);
+}
+// Where a point sits going anticlockwise round a box of half-size b, as a fraction of the way round, measured
+// along the box's sides so lobes space evenly on long and short sides alike.
+float rosetteAround(vec2 u, vec2 b) {
+	vec2 s = u / b;
+	float along;
+	if (abs(s.x) >= abs(s.y)) along = s.x > 0.0 ? b.y * s.y / s.x : 2.0 * b.x + 2.0 * b.y - b.y * s.y / -s.x;
+	else along = s.y > 0.0 ? b.y + b.x - b.x * s.x / s.y : 3.0 * b.y + 3.0 * b.x + b.x * s.x / -s.y;
+	return fract(along / (4.0 * (b.x + b.y)));
+}
+// The nearest strand of a guilloche band: its distance, how strongly a chasing light catches there, and which
+// strand it is. Strands are traced in a band's own coordinates: depth in from its outer rim (card units) and
+// theta round it, with stretch how many radians of theta one card unit spans there. Each strand swings about
+// depth r by a, a fraction of a lobe from its neighbours; the lights run round each strand, so they swing in and
+// out with its waves as they go.
+void rosetteBand(float depth, float theta, float stretch, float r, float a, float lobes, float strands, float lights, float chase, float glow, float turn, inout float best, inout float lit, inout float which) {
 	for (int i = 0; i < 12; i++) {
 		if (float(i) >= strands) break;
 		float phase = float(i) / strands * 6.28318;
 		float wave = lobes * theta + phase;
-		float slope = a * lobes * cos(wave) / max(radius, 1e-3);
-		float d = abs(radius - r - a * sin(wave)) / sqrt(1.0 + slope * slope);
+		float slope = a * lobes * cos(wave) * stretch;
+		float d = abs(depth - r - a * sin(wave)) / sqrt(1.0 + slope * slope);
 		// Even strands chase one way and odd strands the other; the band's turn flips both.
 		float direction = (mod(float(i), 2.0) < 0.5 ? 1.0 : -1.0) * turn;
 		float gap = abs(fract((theta + phase / lobes) / 6.28318 * lights - direction * chase + 0.5) - 0.5);
@@ -46,21 +66,38 @@ void rosetteBand(vec2 u, float r, float a, float lobes, float strands, float lig
 	vec2 lean = v_view.xy / max(travel, 1e-3);
 	vec2 u = (f - CARD * 0.5) * vec2(1.0, -1.0);
 	float h = dot(lean, vec2(0.6, 0.8)) * 0.5;
+	float depth;
+	float theta;
+	float stretch;
+	float reach;
+	if (shape > 0.5) {
+		// Bands run in from the card's own edge, with corners close to its own, softening as they go inward.
+		// Theta goes round by distance along the sides; stretch follows the band's shorter perimeter inside.
+		reach = border;
+		vec2 outline = CARD * 0.5 - 0.05;
+		depth = rosetteInset(u, outline, 0.2, reach * 0.6);
+		theta = rosetteAround(u, outline) * 6.28318;
+		stretch = 6.28318 / max(4.0 * (outline.x + outline.y) - 8.0 * depth, 1.0);
+	} else {
+		reach = size;
+		depth = size - length(u);
+		theta = atan(u.y, u.x);
+		stretch = 1.0 / max(length(u), 1e-3);
+	}
 	float best = 1e3;
 	float lit = 0.0;
 	float which = 0.0;
-	rosetteBand(u, size * 0.74, size * amplitude, lobes, strands, lights, h * chase, glow, 1.0, best, lit, which);
-	rosetteBand(u, size * 0.42, size * amplitude * 0.8, lobes * 0.5, strands, lights, h * chase, glow, -1.0, best, lit, which);
+	rosetteBand(depth, theta, stretch, reach * 0.26, reach * amplitude, lobes, strands, lights, h * chase, glow, 1.0, best, lit, which);
+	rosetteBand(depth, theta, stretch, reach * 0.58, reach * amplitude * 0.8, lobes * 0.5, strands, lights, h * chase, glow, -1.0, best, lit, which);
 	// Plain rims bound each band.
-	float rim = min(abs(length(u) - size), abs(length(u) - size * 0.58));
-	rim = min(rim, abs(length(u) - size * 0.24));
+	float rim = min(min(abs(depth), abs(depth - reach * 0.42)), abs(depth - reach * 0.76));
 	float lines = inked(best - weight);
 	float rims = inked(rim - weight * 1.3);
 	vec3 hot = mix(vec3(1.0), rainbow(h + which), 0.65);
 	vec3 color = mix(vec3(0.42, 0.45, 0.5), hot, lit);
 	own = vec4(mix(color, vec3(0.78, 0.8, 0.84), rims * (1.0 - lines)), max(lines, rims));
 	ownFlash = lit * lines;
-	// Spun grooves round the medallion, dimmed so the lines lead.
+	// Spun grooves round the centre, dimmed so the lines lead.
 	vec2 around = length(u) > 1e-3 ? normalize(vec2(-u.y, u.x)) : vec2(1.0, 0.0);
 	groove = around;
 	vivid = 0.25;
