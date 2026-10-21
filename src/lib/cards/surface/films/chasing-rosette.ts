@@ -11,11 +11,11 @@ export default defineFilm({
 	experimental: true,
 	params: {
 		shape: { value: 1, min: 0, max: 1, step: 1, note: '1 runs the bands round the card as a border; 0 draws a round medallion.' },
-		border: { value: 1.3, min: 0.4, max: 2.4, step: 0.01, note: 'How far the border reaches in from the card edge, in card units.' },
+		border: { value: 1.3, min: 0.4, max: 2.4, step: 0.01, note: 'Scale of the border bands in card units; with amplitude it sets how far in from the edge they reach.' },
 		size: { value: 2.1, min: 0.8, max: 2.5, step: 0.01, note: 'Medallion radius in card units.' },
 		lobes: { value: 16, min: 3, max: 40, step: 1, note: 'Waves round each strand.' },
 		strands: { value: 6, min: 1, max: 12, step: 1, note: 'Interwoven strands in each band.' },
-		amplitude: { value: 0.11, min: 0, max: 0.3, step: 0.005, note: 'How far each strand swings in and out, as a fraction of the border or radius.' },
+		amplitude: { value: 0.11, min: 0.01, max: 0.3, step: 0.005, note: 'How far each strand swings in and out, as a fraction of the border or radius; the bands are as wide as their swing.' },
 		weight: { value: 0.012, min: 0.003, max: 0.05, step: 0.001, note: 'Line half-width in card units.' },
 		lights: { value: 3, min: 1, max: 12, step: 1, note: 'Chasing lights on each strand.' },
 		chase: { value: 1, min: 0, max: 4, step: 0.05, note: 'How far the lights run from one full lean to the other, in gaps between lights.' },
@@ -74,7 +74,7 @@ void rosetteBand(float depth, float theta, float stretch, float r, float a, floa
 		// Bands run in from the card's own edge, with corners close to its own, softening as they go inward.
 		// Theta goes round by distance along the sides; stretch follows the band's shorter perimeter inside.
 		reach = border;
-		vec2 outline = CARD * 0.5 - 0.05;
+		vec2 outline = CARD * 0.5;
 		depth = rosetteInset(u, outline, 0.2, reach * 0.6);
 		theta = rosetteAround(u, outline) * 6.28318;
 		stretch = 6.28318 / max(4.0 * (outline.x + outline.y) - 8.0 * depth, 1.0);
@@ -87,15 +87,13 @@ void rosetteBand(float depth, float theta, float stretch, float r, float a, floa
 	float best = 1e3;
 	float lit = 0.0;
 	float which = 0.0;
-	rosetteBand(depth, theta, stretch, reach * 0.26, reach * amplitude, lobes, strands, lights, h * chase, glow, 1.0, best, lit, which);
-	rosetteBand(depth, theta, stretch, reach * 0.58, reach * amplitude * 0.8, lobes * 0.5, strands, lights, h * chase, glow, -1.0, best, lit, which);
-	// Plain rims bound each band.
-	float rim = min(min(abs(depth), abs(depth - reach * 0.42)), abs(depth - reach * 0.76));
+	// The outer band's strands swing out to the edge itself; the inner band starts where the outer one ends.
+	float a = reach * amplitude;
+	rosetteBand(depth, theta, stretch, a, a, lobes, strands, lights, h * chase, glow, 1.0, best, lit, which);
+	rosetteBand(depth, theta, stretch, a * 2.8, a * 0.8, lobes * 0.5, strands, lights, h * chase, glow, -1.0, best, lit, which);
 	float lines = inked(best - weight);
-	float rims = inked(rim - weight * 1.3);
 	vec3 hot = mix(vec3(1.0), rainbow(h + which), 0.65);
-	vec3 color = mix(vec3(0.42, 0.45, 0.5), hot, lit);
-	own = vec4(mix(color, vec3(0.78, 0.8, 0.84), rims * (1.0 - lines)), max(lines, rims));
+	own = vec4(mix(vec3(0.42, 0.45, 0.5), hot, lit), lines);
 	ownFlash = lit * lines;
 	// Spun grooves round the centre, dimmed so the lines lead.
 	vec2 around = length(u) > 1e-3 ? normalize(vec2(-u.y, u.x)) : vec2(1.0, 0.0);
