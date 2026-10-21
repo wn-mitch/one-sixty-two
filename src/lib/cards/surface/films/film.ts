@@ -87,10 +87,18 @@ export function defineFilm(film: Film): Film {
 	return film;
 }
 
-/** Every dial: scale, optional ground, module settings, then tilt travel for patterned films without their own. */
+/** Whether a film's pattern reads its size, through the scene's holo scale or its own scale dial. */
+export function filmScales(film: Film): boolean {
+	return /\b(?:filmScale|scale)\b/.test(film.glsl);
+}
+
+/**
+ * Every dial: scale for films whose pattern reads it, optional ground, module settings, then tilt travel for
+ * patterned films without their own.
+ */
 export function filmDials(film: Film): Record<string, Dial> {
 	return {
-		scale: { value: film.scale ?? 1, min: 0.2, max: 4, step: 0.01, note: 'Pattern size; above 1 is finer.' },
+		...(filmScales(film) ? { scale: { value: film.scale ?? 1, min: 0.2, max: 4, step: 0.01, note: 'Pattern size; above 1 is finer.' } } : {}),
 		...(film.ground === undefined ? {} : { ground: { value: film.ground, min: 0, max: 1.5, step: 0.01, note: 'Brightness of the ground between features.' } }),
 		...film.params,
 		...(film.glsl && !film.blend && !('slideWithTilt' in film.params) ? {

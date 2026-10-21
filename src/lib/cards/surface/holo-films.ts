@@ -1,5 +1,5 @@
 import type { CardEra } from '../era.ts';
-import { dialLocals, filmDials, glslName, type FilmFinish, type Film, type Palette } from './films/film.ts';
+import { dialLocals, filmDials, filmScales, glslName, type FilmFinish, type Film, type Palette } from './films/film.ts';
 import { SHARED_FILM_GLSL } from './films/shared.ts';
 import refractor from './films/refractor.ts';
 import prizm from './films/prizm.ts';
@@ -34,8 +34,8 @@ import matrix from './films/matrix.ts';
 import spiralMoire from './films/spiral-moire.ts';
 import wallpaper from './films/wallpaper.ts';
 import smoke from './films/smoke.ts';
-import rollingSnowflake from './films/rolling-snowflake.ts';
 import chasingRosette from './films/chasing-rosette.ts';
+import rollingSnowflake from './films/rolling-snowflake.ts';
 import channelFlip from './films/channel-flip.ts';
 import floatingConstellation from './films/floating-constellation.ts';
 import turningBaseball from './films/turning-baseball.ts';
@@ -69,10 +69,10 @@ import monoSilver from './palettes/mono-silver.ts';
 import custom from './palettes/custom.ts';
 
 /** Every holo film, in the order the shader numbers them; the experimental studies come last. */
-export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper, matrix, spiralMoire, wallpaper, smoke,
-	rollingSnowflake, chasingRosette, channelFlip, floatingConstellation, turningBaseball, mintedCrest, secretInning, quarterTurn, silverInversion, quietIsland, lensLettering, colorLock, wireframeJewel, morphingGeometry] as const satisfies readonly Film[];
-export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper', 'matrix', 'spiral-moire', 'wallpaper', 'smoke',
-	'rolling-snowflake', 'chasing-rosette', 'channel-flip', 'floating-constellation', 'turning-baseball', 'minted-crest', 'secret-inning', 'quarter-turn', 'silver-inversion', 'quiet-island', 'lens-lettering', 'color-lock', 'wireframe-jewel', 'morphing-geometry'];
+export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper, matrix, spiralMoire, wallpaper, smoke, chasingRosette,
+	rollingSnowflake, channelFlip, floatingConstellation, turningBaseball, mintedCrest, secretInning, quarterTurn, silverInversion, quietIsland, lensLettering, colorLock, wireframeJewel, morphingGeometry] as const satisfies readonly Film[];
+export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper', 'matrix', 'spiral-moire', 'wallpaper', 'smoke', 'chasing-rosette',
+	'rolling-snowflake', 'channel-flip', 'floating-constellation', 'turning-baseball', 'minted-crest', 'secret-inning', 'quarter-turn', 'silver-inversion', 'quiet-island', 'lens-lettering', 'color-lock', 'wireframe-jewel', 'morphing-geometry'];
 export type HoloPattern = (typeof HOLO_PATTERNS)[number];
 
 /** Films that move with time; the light engine keeps redrawing cards that show one. */
@@ -116,7 +116,7 @@ function filmFunction(film: Film, index: number): string {
 	return `${film.helpers ?? ''}
 void ${glslName('film', film.name)}(vec2 p, ${OUTPUTS.replace('inout float ground', 'inout float groundOut')}) {
 ${dialLocals('film', index, dials)}
-	float filmScale = u_holoScale * scale;${film.ground === undefined ? '' : '\n\tgroundOut = ground;'}
+${filmScales(film) ? '\tfloat filmScale = u_holoScale * scale;' : ''}${film.ground === undefined ? '' : '\n\tgroundOut = ground;'}
 ${slide ? '\tp -= v_view.xy * u_shift * slideWithTilt;' : ''}
 ${film.glsl}
 }`;

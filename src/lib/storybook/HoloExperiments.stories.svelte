@@ -14,7 +14,6 @@
 </script>
 
 <Story exportName="RollingSnowflake" name="Rolling snowflake" args={{ kind: 'film', name: 'rolling-snowflake' }} />
-<Story exportName="ChasingRosette" name="Chasing rosette" args={{ kind: 'film', name: 'chasing-rosette' }} />
 <Story exportName="ChannelFlip" name="Three-image flip" args={{ kind: 'film', name: 'channel-flip' }} />
 <Story exportName="ChannelFlipTwo" name="Two-image flip" args={{ kind: 'film', name: 'channel-flip', tune: { channels: 2 } }} />
 <Story exportName="FloatingConstellation" name="Floating constellation" args={{ kind: 'film', name: 'floating-constellation' }} />

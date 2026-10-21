@@ -6,7 +6,7 @@
 	import { DEFAULT_LIGHT } from '#lib/cards/surface/light-renderer.ts';
 	import { FILM_FINISHES, FILMS, PALETTES } from '#lib/cards/surface/holo-films.ts';
 	import { PLATES } from '#lib/cards/surface/foil-plates.ts';
-	import { filmDials, type Dial } from '#lib/cards/surface/films/film.ts';
+	import { filmDials, filmScales, type Dial } from '#lib/cards/surface/films/film.ts';
 	import { plateDials } from '#lib/cards/surface/plates/plate.ts';
 	import type { Finish } from '#lib/cards/finish.ts';
 	import { finishName } from '#lib/cosmetics/catalogue.ts';
@@ -59,7 +59,8 @@
 			vivid: [1, 0, 3, 0.05] as Range
 		},
 		light: {
-			holoScale: [DEFAULT_LIGHT.holoScale, 3, 40, 0.5] as Range,
+			// The scene's holo scale sizes only films that read it.
+			...(kind !== 'film' || filmScales(module as (typeof FILMS)[number]) ? { holoScale: [DEFAULT_LIGHT.holoScale, 3, 40, 0.5] as Range } : {}),
 			plateDepth: [DEFAULT_LIGHT.plateDepth, 0, 3, 0.05] as Range,
 			plateTone: [DEFAULT_LIGHT.plateTone, 0, 3, 0.05] as Range,
 			stain: [DEFAULT_LIGHT.stain, 0, 2, 0.05] as Range,

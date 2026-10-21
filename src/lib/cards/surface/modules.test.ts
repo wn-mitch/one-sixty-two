@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ERA_HOLO, FILM_FINISHES, FILMS, PALETTES } from './holo-films.ts';
 import { PLATES } from './foil-plates.ts';
-import { filmDials, TUNE_SLOTS, type Dial } from './films/film.ts';
+import { filmDials, filmScales, TUNE_SLOTS, type Dial } from './films/film.ts';
 import { plateDials } from './plates/plate.ts';
 import { programKey } from './light-programs.ts';
 import { programSpec } from './light-renderer.ts';
@@ -47,6 +47,16 @@ describe('finish modules', () => {
 		expect(PLATES.length * PLATE_CODE).toBeLessThanOrEqual(PALETTE_CODE);
 		// The code rides in a float attribute, exact only below 2^24.
 		expect((PALETTES.length + 1) * PALETTE_CODE).toBeLessThan(2 ** 24);
+	});
+
+	it('offers a scale dial only on films whose pattern reads it', () => {
+		// A dial the shader never reads moves nothing in the workshop or the lab.
+		for (const film of FILMS) {
+			expect('scale' in filmDials(film), film.name).toBe(filmScales(film));
+			if (film.scale !== undefined) expect(filmScales(film), film.name).toBe(true);
+		}
+		expect(filmScales(FILMS.find(film => film.name === 'dollar')!)).toBe(true);
+		expect(filmScales(FILMS.find(film => film.name === 'chasing-rosette')!)).toBe(false);
 	});
 
 	it('points every film at a finish and colourway that exist', () => {

@@ -42,3 +42,4 @@
 <Story exportName="SpiralMoire" name="spiral-moire" args={{ kind: 'film', name: 'spiral-moire' }} />
 <Story exportName="Wallpaper" name="wallpaper" args={{ kind: 'film', name: 'wallpaper' }} />
 <Story exportName="Smoke" name="Smoke" args={{ kind: 'film', name: 'smoke' }} />
+<Story exportName="ChasingRosette" name="chasing-rosette" args={{ kind: 'film', name: 'chasing-rosette' }} />
