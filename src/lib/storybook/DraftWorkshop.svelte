@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
 	import DraftBoard from '#lib/components/DraftBoard.svelte';
+	import { classicBoardSource } from '#lib/game/board-source.ts';
 	import ErrorDialog from '#lib/components/ErrorDialog.svelte';
 	import { addPack, choosePack, commitPick, reassignPick, rollContains, rollDraft } from '#lib/game/draft.ts';
 	import type { Draft, HitterSlot, Profile, Slot } from '#lib/game/types.ts';
@@ -220,10 +221,11 @@
 		{/if}
 		{#key instance}
 			<DraftBoard
-				{draft}
+				source={classicBoardSource(draft, fixtures.manifest, pool)}
+				classic={{ draft, onRoll: roll, onAddPack: addExtraPack, onChoosePack: chooseExtraPack }}
 				manifest={fixtures.manifest}
-				{pool}
 				profiles={draftedProfiles}
+				homeStadiumId={draft.homeStadium?.id ?? null}
 				{phase}
 				{loading}
 				{busy}
@@ -231,11 +233,8 @@
 				{rankingLoading}
 				{rankingError}
 				onRetryRankings={loadRankings}
-				onRoll={roll}
-				onAddPack={addExtraPack}
-				onChoosePack={chooseExtraPack}
-				onDraft={draftPlayer}
-				onReassign={reassign}
+				onDraft={(seasonId, slot) => { if (slot) draftPlayer(seasonId, slot as Slot); }}
+				onMove={(seasonId, slot) => { if (slot) reassign(seasonId, slot as HitterSlot); }}
 				onNew={reset}
 			/>
 		{/key}

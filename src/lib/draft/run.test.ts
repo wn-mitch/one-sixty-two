@@ -3,9 +3,9 @@ import { chooseAiPick, explainPick, scorePile, trueJudgment, type Personality } 
 import { RIVALS, seatTable } from './franchises.ts';
 import { auditLedger } from './ledger.ts';
 import { arrangeRoster, checkSubmission, submissionFrom } from './legality.ts';
-import { applyAction, heldPile, newRunSetup, ownedBy, replayRun, RunActionError, seatView, startRun, type DraftRun, type RunData } from './run.ts';
-import { baselineBudget, DRAFT_RULES, rosterSize } from './rules.ts';
-import { playDraft, testCard, testUniverse, TEST_ROLES } from './test-fixtures.ts';
+import { applyAction, heldPile, movesFor, newRunSetup, openSlotsFor, ownedBy, placementOf, replayRun, RunActionError, seatView, startRun, type DraftRun, type RunData } from './run.ts';
+import { baselineBudget, canFill, DRAFT_RULES, rosterSize } from './rules.ts';
+import { pickAction, playDraft, testCard, testUniverse, TEST_ROLES } from './test-fixtures.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
 
 const FRANCHISES = Object.keys(RIVALS);
@@ -124,7 +124,7 @@ describe('draft run', () => {
   const seat = (run.seating.humanSeat + 3) % 8;
   expect(seatView(run, seat).seenElsewhere).toEqual([]);
   const first = heldPile(run, seat).map(card => card.seasonId);
-  applyAction(run, { type: 'pick', cardId: heldPile(run)[0].seasonId });
+  applyAction(run, pickAction(run, heldPile(run)[0].seasonId));
   const seen = seatView(run, seat).seenElsewhere.map(card => card.seasonId);
   // The pile it held, less the card it took, now sits with its neighbour.
   expect(seen).toHaveLength(15);
@@ -146,11 +146,11 @@ describe('draft run', () => {
  it('rejects a card outside the player pile without changing the run', () => {
   const run = startRun(setup, DATA);
   const elsewhere = heldPile(run, (run.seating.humanSeat + 1) % 8)[0].seasonId;
-  expect(() => applyAction(run, { type: 'pick', cardId: elsewhere })).toThrow(RunActionError);
+  expect(() => applyAction(run, { type: 'pick', cardId: elsewhere, slot: null })).toThrow(RunActionError);
   expect(run.pick).toBe(0);
   expect(run.pool.ledger.events.filter(event => event.op === 'draft')).toEqual([]);
   playDraft(run);
-  expect(() => applyAction(run, { type: 'pick', cardId: elsewhere })).toThrow('The draft is over');
+  expect(() => applyAction(run, { type: 'pick', cardId: elsewhere, slot: null })).toThrow('The draft is over');
  });
 
  it('replays the same table from the setup and action log, and a different choice changes rosters', () => {
@@ -185,7 +185,7 @@ describe('draft run', () => {
   const top = run.pool.cleanup.peek(human, 'C')!;
   applyAction(run, { type: 'cleanup', role: 'C' });
   expect(ownedBy(run, human).map(card => card.seasonId)).toContain(top.seasonId);
-  expect(() => applyAction(run, { type: 'pick', cardId: top.seasonId })).toThrow('The draft is over');
+  expect(() => applyAction(run, { type: 'pick', cardId: top.seasonId, slot: null })).toThrow('The draft is over');
   // Auto-fix fills the rest the way the AI clubs recover.
   applyAction(run, { type: 'autofix' });
   expect(ownedBy(run, human)).toHaveLength(rosterSize(DRAFT_RULES));
@@ -198,6 +198,56 @@ describe('draft run', () => {
   expect(eventsOf(again)).toEqual(eventsOf(run));
   expect(again.submissions).toEqual(run.submissions);
   expect(auditLedger(run.pool.ledger)).toEqual([]);
+ });
+
+ it('places each pick where the player chose and moves cards between slots and the bench', () => {
+  const run = startRun(setup, DATA);
+  const human = run.seating.humanSeat;
+  const pile = heldPile(run);
+  const hitter = pile.find(card => card.eligibleSlots.includes('C') || card.eligibleSlots.includes('SS'))!;
+  const slot = openSlotsFor(run, hitter.seasonId)[0];
+  const pitcherOnly = pile.find(card => card.eligibleSlots.every(item => item.startsWith('SP') || item === 'CL'))!;
+  // An ineligible slot is refused before anything changes.
+  expect(() => applyAction(run, { type: 'pick', cardId: pitcherOnly.seasonId, slot: 'C' })).toThrow('C is not open');
+  expect(run.pick).toBe(0);
+  applyAction(run, { type: 'pick', cardId: hitter.seasonId, slot });
+  expect(placementOf(run, hitter.seasonId)).toBe(slot);
+  expect(openSlotsFor(run, hitter.seasonId)).not.toContain(slot);
+  // A taken slot is no longer open to a second card that could fill it.
+  const rival = heldPile(run).find(card => canFill(card, slot))!;
+  expect(rival).toBeDefined();
+  expect(() => applyAction(run, { type: 'pick', cardId: rival.seasonId, slot })).toThrow('is not open');
+  applyAction(run, { type: 'pick', cardId: rival.seasonId, slot: null });
+  expect(run.bench).toEqual([rival.seasonId]);
+
+  // Moving the bench card onto the occupied slot swaps; a bench card has no slot to give, so the occupant is benched.
+  expect(movesFor(run, rival.seasonId)).toContainEqual({ slot, swapWith: hitter.seasonId });
+  applyAction(run, { type: 'place', cardId: rival.seasonId, slot });
+  expect(placementOf(run, rival.seasonId)).toBe(slot);
+  expect(run.bench).toEqual([hitter.seasonId]);
+  const placed = [...run.field.values()][0];
+  applyAction(run, { type: 'place', cardId: placed, slot: null });
+  expect(run.bench).toContain(placed);
+  expect(() => applyAction(run, { type: 'place', cardId: placed, slot: null })).toThrow('already on the bench');
+
+  playDraft(run);
+  // Every owned card has exactly one place, and the place survives a replay.
+  const owned = ownedBy(run, human).map(card => card.seasonId).sort();
+  expect([...run.field.values(), ...run.bench].sort()).toEqual(owned);
+  for (const [at, id] of run.field) expect(canFill(run.pool.ledger.cards.get(id)!, at)).toBe(true);
+  const again = replayRun(setup, run.actions, DATA);
+  expect([...again.field]).toEqual([...run.field]);
+  expect(again.bench).toEqual(run.bench);
+
+  // Cuts leave the field, cleanup lands in an open slot it fits, and auto-fix keeps every card placed.
+  const cut = [...run.field.values()][0];
+  applyAction(run, { type: 'cut', cardId: cut });
+  expect(placementOf(run, cut)).toBeNull();
+  expect(run.bench).not.toContain(cut);
+  applyAction(run, { type: 'autofix' });
+  expect([...run.field.values(), ...run.bench].sort()).toEqual(ownedBy(run, human).map(card => card.seasonId).sort());
+  expect(run.field.size).toBe(DRAFT_RULES.activeSlots.length);
+  expect(run.bench).toHaveLength(DRAFT_RULES.reserves);
  });
 
  it('refuses a setup from other rules', () => {

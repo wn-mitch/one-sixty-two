@@ -14,7 +14,7 @@ import type { Difficulty } from './scouting.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
 import { DRAFT_RULES } from './rules.ts';
 
-export type DraftScreen = 'loading' | 'failed' | 'entry' | 'drafting' | 'window' | 'season' | 'report';
+export type DraftScreen = 'loading' | 'entry' | 'drafting' | 'window' | 'season' | 'report';
 
 /**
  * Draft Mode in the browser: one active run per device, saved after every action. The run is a
@@ -31,6 +31,8 @@ export class DraftModeSession {
  refused = $state('');
  storageNotice = $state('');
  busy = $state(false);
+ /** New draft was requested over an unfinished run and waits for the player to confirm. */
+ confirmNew = $state(false);
  playing = $state(false);
  completed = $state(0);
  lastChapter = $state.raw<LeagueChapterResult | null>(null);
@@ -44,13 +46,41 @@ export class DraftModeSession {
 
  get screen(): DraftScreen {
   void this.revision;
-  if (this.failure) return 'failed';
   if (!this.manifest) return 'loading';
   const run = this.run;
   if (!run) return 'entry';
   if (run.phase === 'drafting') return 'drafting';
   if (run.phase === 'window') return 'window';
   return (this.season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? 'report' : 'season';
+ }
+
+ /** The game shell's name for a failure, shown in its error dialog. */
+ get error(): string { return this.failure; }
+ set error(message: string) { this.failure = message; }
+ /** A failed chapter can be played again; a failed load needs a reload. */
+ get canRetry(): boolean { return !!this.failure && !!this.season; }
+
+ async retry(): Promise<void> {
+  this.failure = '';
+  await this.playChapter();
+ }
+
+ /** New draft from the site menu: an unfinished run asks first, a finished report starts over at once. */
+ requestNew(): void {
+  if (!this.run) return;
+  if (this.screen !== 'report') { this.confirmNew = true; return; }
+  void this.startNew();
+ }
+
+ /** Leaves the run as history and returns to the franchise choice. */
+ async startNew(): Promise<void> {
+  this.confirmNew = false;
+  await this.abandon();
+  if (this.run) return;
+  const url = new URL(location.href);
+  url.searchParams.delete('run');
+  history.replaceState(history.state, '', url);
+  window.scrollTo({ top: 0 });
  }
 
  /** Display name of the club at `seat`. */
@@ -180,7 +210,8 @@ export class DraftModeSession {
   return null;
  }
 
- pick(cardId: string) { return this.act({ type: 'pick', cardId }); }
+ pick(cardId: string, slot: DraftSlot | null) { return this.act({ type: 'pick', cardId, slot }); }
+ place(cardId: string, slot: DraftSlot | null) { return this.act({ type: 'place', cardId, slot }); }
  cut(cardId: string) { return this.act({ type: 'cut', cardId }); }
  cleanup(role: StackRole) { return this.act({ type: 'cleanup', role }); }
  autofix() { return this.act({ type: 'autofix' }); }

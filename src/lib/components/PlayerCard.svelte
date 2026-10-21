@@ -5,7 +5,7 @@
 	import CardReview from '../cards/CardReview.svelte';
 	import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
 	import { BULLPEN_SLOTS, compareId, STARTER_SLOTS } from '../game/types.ts';
-	import type { Manifest, Profile, Slot } from '../game/types.ts';
+	import type { FieldSlot, Manifest, Profile, Slot } from '../game/types.ts';
 	import { loadMedia } from '../media/client.ts';
 	import type { MediaManifest } from '../media/types.ts';
 	import type { WarRankings, WarSeasonRanking } from '../rankings/types.ts';
@@ -15,6 +15,7 @@
 		seasons,
 		onSeasonChange,
 		legalSlots,
+		bench = false,
 		assignedSlot,
 		war,
 		selected = false,
@@ -34,7 +35,9 @@
 		profile: Profile;
 		seasons?: Profile[];
 		onSeasonChange?: (seasonId: string) => void;
-		legalSlots?: readonly Slot[];
+		legalSlots?: readonly FieldSlot[];
+		/** The season may also be drafted onto the bench. */
+		bench?: boolean;
 		assignedSlot?: Slot;
 		war?: number | null;
 		selected?: boolean;
@@ -43,7 +46,8 @@
 		wide?: boolean;
 		turned?: boolean;
 		onSelect?: (trigger: HTMLButtonElement) => void;
-		onPlace?: (slot: Slot, trigger: HTMLButtonElement) => void;
+		/** Previews the season at `slot`, or on the bench (`null`). */
+		onPlace?: (slot: FieldSlot | null, trigger: HTMLButtonElement) => void;
 		manifest?: Manifest | null;
 		ranking?: WarSeasonRanking | null;
 		rankings?: WarRankings | null;
@@ -69,22 +73,27 @@
 		if (!unique.has(profile.seasonId)) unique.set(profile.seasonId, profile);
 		return [...unique.values()].sort((left, right) => left.year - right.year || compareId(left.seasonId, right.seasonId));
 	});
-	/** Draftable slots this season qualifies for; a collected team bullpen's BP is not one. */
-	const eligible = $derived(profile.eligibleSlots.filter((slot): slot is Slot => slot !== 'BP'));
+	/** Draftable slots this season qualifies for; a collected team bullpen's BP is not one. Open deep relief slots count for any reliever. */
+	const eligible = $derived<FieldSlot[]>([
+		...profile.eligibleSlots.filter((slot): slot is Slot => slot !== 'BP'),
+		...(profile.eligibleSlots.includes('CL') ? legalSlots?.filter(slot => slot === 'RP4' || slot === 'RP5') ?? [] : [])
+	]);
 	const available = $derived(legalSlots ? eligible.filter(slot => legalSlots.includes(slot)) : []);
 	/**
 	 * One placement button per position: each hitter slot alone, the rotation as SP and the bullpen as RP.
 	 * A grouped button previews the first open slot in rotation or bullpen order; the field still offers the others.
 	 */
 	const placements = $derived.by(() => {
-		const groups: { label: string; slots: Slot[] }[] = [];
+		const groups: { label: string; slots: FieldSlot[] }[] = [];
 		for (const slot of eligible) {
-			const label = (STARTER_SLOTS as readonly Slot[]).includes(slot) ? 'SP' : (BULLPEN_SLOTS as readonly Slot[]).includes(slot) ? 'RP' : slot;
+			const label = (STARTER_SLOTS as readonly FieldSlot[]).includes(slot) ? 'SP' : (BULLPEN_SLOTS as readonly FieldSlot[]).includes(slot) || slot.startsWith('RP') ? 'RP' : slot;
 			const group = groups.find(item => item.label === label);
 			if (group) group.slots.push(slot);
 			else groups.push({ label, slots: [slot] });
 		}
-		return groups.map(group => ({ label: group.label, target: group.slots.find(slot => available.includes(slot)) ?? null }));
+		const placed: { label: string; target: FieldSlot | null; bench?: boolean }[] = groups.map(group => ({ label: group.label, target: group.slots.find(slot => available.includes(slot)) ?? null }));
+		if (bench) placed.push({ label: 'Bench', target: null, bench: true });
+		return placed;
 	});
 	const card = $derived(createCardViewModel({
 		profile,
@@ -127,8 +136,8 @@
 		onSelect?.(trigger);
 	}
 
-	function place(slot: Slot, trigger: HTMLButtonElement): void {
-		if (!available.includes(slot)) return;
+	function place(slot: FieldSlot | null, trigger: HTMLButtonElement): void {
+		if (slot === null ? !bench : !available.includes(slot)) return;
 		onPlace?.(slot, trigger);
 	}
 	$effect(() => {
@@ -184,18 +193,18 @@
 					<span class="fixed-season"><span class="sr-only">Exact season</span><strong>{profile.year}</strong></span>
 				{/if}
 				<span class="placement-list" aria-label={`Preview placement for ${profile.displayName} ${profile.year}`}>
-					{#each placements as { label, target } (label)}
+					{#each placements as { label, target, bench: onBench } (label)}
 						<button
 							type="button"
 							class="placement"
-							disabled={!target}
-							aria-label={target ? `Preview ${profile.year} ${profile.displayName} at ${target}` : `${label} unavailable for ${profile.year} ${profile.displayName}`}
-							title={target ? `${target} placement preview` : `${label} unavailable`}
-							onclick={event => target && place(target, event.currentTarget)}
+							disabled={!target && !onBench}
+							aria-label={onBench ? `Preview ${profile.year} ${profile.displayName} on the bench` : target ? `Preview ${profile.year} ${profile.displayName} at ${target}` : `${label} unavailable for ${profile.year} ${profile.displayName}`}
+							title={onBench ? 'Bench placement preview' : target ? `${target} placement preview` : `${label} unavailable`}
+							onclick={event => (target || onBench) && place(target, event.currentTarget)}
 						>{label}</button>
 					{/each}
 				</span>
-				{#if legalSlots !== undefined && !available.length}<span class="no-open-position">No open position</span>{/if}
+				{#if legalSlots !== undefined && !available.length && !bench}<span class="no-open-position">No open position</span>{/if}
 				<button type="button" class="draft-turn" aria-label="Turn over" title="Flip card over" aria-pressed={turned} onclick={() => turned = !turned}>
 					<FlipIcon />
 				</button>
@@ -222,7 +231,7 @@
 			</div>
 
 			{#if draftMode}
-				<p class="compact-qualification"><strong>{profile.year}</strong> · {available.length && available.length === profile.eligibleSlots.length ? `Open ${available.join(' · ')}` : `${profile.eligibleSlots.join(' · ')}${available.length ? ` · Open ${available.join(' · ')}` : legalSlots !== undefined ? ' · No open position' : ''}`}</p>
+				<p class="compact-qualification"><strong>{profile.year}</strong> · {available.length && available.length === profile.eligibleSlots.length ? `Open ${available.join(' · ')}` : `${profile.eligibleSlots.join(' · ')}${available.length ? ` · Open ${available.join(' · ')}` : bench ? ' · Bench' : legalSlots !== undefined ? ' · No open position' : ''}`}</p>
 			{:else}
 				<div class="qualification" aria-label="Season qualifications and availability">
 					<div role="group" aria-label="Qualifies for">

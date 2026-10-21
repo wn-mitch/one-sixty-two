@@ -8,7 +8,7 @@ import { startLeague } from './league.ts';
 import { LEAGUE_CHAPTERS } from '../sim/league-types.ts';
 import type { DraftSlot } from './types.ts';
 import type { Db } from '../storage/sql.ts';
-import { playDraft, testUniverse } from './test-fixtures.ts';
+import { pickAction, playDraft, testUniverse } from './test-fixtures.ts';
 
 const FRANCHISES = Object.keys(RIVALS);
 const CARDS = testUniverse(120);
@@ -28,7 +28,7 @@ describe('draft run saves', () => {
   for (let suspendAt = 0; suspendAt <= 16; suspendAt += 4) {
    const run = startRun(setup, DATA);
    while (run.pick < suspendAt) {
-    applyAction(run, { type: 'pick', cardId: best(heldPile(run)) });
+    applyAction(run, pickAction(run, best(heldPile(run))));
     expect(await saveRun(db, 'run-1', run, null, new Date(Date.UTC(2026, 0, 1, 0, suspendAt, run.pick)))).toBeNull();
    }
    if (suspendAt === 0) await saveRun(db, 'run-1', run);
@@ -59,7 +59,7 @@ describe('draft run saves', () => {
   const saved = (await latestRun(db))!;
   expect(resumeRun(saved, DATA, 'new-data')).toEqual({ ok: false, reason: expect.stringContaining('player data') });
   expect(resumeRun({ ...saved, setup: { ...saved.setup, salaryVersion: 'salary-old' } }, DATA, VERSION)).toEqual({ ok: false, reason: expect.stringContaining('salaries salary-old') });
-  const tampered = { ...saved, actions: [{ type: 'pick' as const, cardId: 'not-a-card' }] };
+  const tampered = { ...saved, actions: [{ type: 'pick' as const, cardId: 'not-a-card', slot: null }] };
   expect(resumeRun(tampered, DATA, VERSION)).toEqual({ ok: false, reason: expect.stringContaining('no longer replays') });
  });
 
@@ -82,7 +82,7 @@ describe('draft run saves', () => {
   const run = startRun(setup, DATA);
   await saveRun(db, 'run', run);
   const saved = (await latestRun(db))!;
-  applyAction(run, { type: 'pick', cardId: best(heldPile(run)) });
+  applyAction(run, pickAction(run, best(heldPile(run))));
   await saveRun(db, 'run', run);
   await archiveRun(db, saved);
   expect((await latestRun(db))?.actions).toHaveLength(1);

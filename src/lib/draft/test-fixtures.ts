@@ -1,6 +1,6 @@
 import type { Finish } from '../cards/finish.ts';
 import { POSITIONS, STARTER_SLOTS, type Slot } from '../game/types.ts';
-import { applyAction, heldPile, type DraftRun, type RunAction } from './run.ts';
+import { applyAction, heldPile, openSlotsFor, type DraftRun, type RunAction } from './run.ts';
 import type { DraftCard } from './types.ts';
 
 export function testCard(seasonId: string, eligibleSlots: readonly Slot[], salary = 5, finish: Finish = 'base'): DraftCard {
@@ -35,6 +35,9 @@ export function testUniverse(perRole = 60): DraftCard[] {
 
 /** Plays the rest of a draft, picking with `choose` from the player's pile each round. */
 export function playDraft(run: DraftRun, choose: (pile: DraftCard[]) => string = pile => pile[0].seasonId): RunAction[] {
- while (run.phase === 'drafting') applyAction(run, { type: 'pick', cardId: choose(heldPile(run)) });
+ while (run.phase === 'drafting') applyAction(run, pickAction(run, choose(heldPile(run))));
  return run.actions;
 }
+
+/** A pick of `cardId` into its first open slot, or onto the bench when none is open. */
+export const pickAction = (run: DraftRun, cardId: string): RunAction => ({ type: 'pick', cardId, slot: openSlotsFor(run, cardId)[0] ?? null });

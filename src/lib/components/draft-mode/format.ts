@@ -1,12 +1,10 @@
 import { average, historicalBatting, historicalEra, innings } from '../../game/format.ts';
 import type { Profile } from '../../game/types.ts';
 import type { DraftCard } from '../../draft/types.ts';
-import type { Finish } from '../../cards/finish.ts';
 
 /** Salary units are $0.1M. */
 export const money = (salary: number): string => `$${(salary / 10).toFixed(1)}M`;
 
-export const FINISH_LABELS: Readonly<Record<Finish, string>> = { base: 'Common', foil: 'Silver', emboss: 'Gold', gem: 'Gem' };
 
 /** The roles a card can fill, as the table names them: starters as SP, any closer-eligible arm as RP. */
 export function rolesLabel(card: DraftCard): string {

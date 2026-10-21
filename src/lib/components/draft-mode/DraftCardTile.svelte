@@ -7,7 +7,7 @@
  import type { Manifest, Profile } from '../../game/types.ts';
  import type { MediaManifest } from '../../media/types.ts';
  import type { WarRankings } from '../../rankings/types.ts';
- import { FINISH_LABELS, historicalLine, money, rolesLabel } from './format.ts';
+ import { historicalLine, money, rolesLabel } from './format.ts';
 
  let { card, profile, manifest, media, mediaStatus, rankings = null, compact = false, actions }: {
   card: DraftCard; profile: Profile | undefined; manifest: Manifest | null; media: MediaManifest | null; mediaStatus: CardMediaStatus;
@@ -26,7 +26,7 @@
  </div>
  <div class="caption">
   <p class="name">{profile?.displayName ?? card.playerId} <span>{card.year}</span></p>
-  <p class="meta"><span class="salary">{money(card.salary)}</span> · {rolesLabel(card)} · <span class="finish {card.finish}">{FINISH_LABELS[card.finish]}</span></p>
+  <p class="meta"><span class="salary">{money(card.salary)}</span> · {rolesLabel(card)} · <span class="finish">{materialFor(card.finish).label}</span></p>
   {#if profile}<p class="line">{historicalLine(profile, card)}</p>{/if}
  </div>
  {#if actions}<div class="actions">{@render actions()}</div>{/if}
@@ -40,8 +40,6 @@
  .name { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
  .name span, .meta, .line { color: var(--muted); font-size: var(--text-xs); }
  .salary { color: var(--text); font-weight: 700; }
- .finish.gem { color: var(--focus); }
- .finish.emboss { color: var(--accent); }
  .caption { min-width: 0; }
  .compact .caption p { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
  .compact .name { font-size: var(--text-sm); }

@@ -2,6 +2,8 @@ import { json, parseJson, type Db } from '../storage/sql.ts';
 import { completionReward } from '../cosmetics/ledger.ts';
 import { LEAGUE_CHAPTERS } from '../sim/league-types.ts';
 import { STACK_ROLES } from './cleanup.ts';
+import { DRAFT_SLOTS } from './rules.ts';
+import { RUN_VERSION } from './versions.ts';
 import { LEAGUE_VERSION, LineupError, validateLineup, type LeagueSeason } from './league.ts';
 import { replayRun, RunActionError, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunPhase, type RunSetup } from './run.ts';
 
@@ -33,7 +35,8 @@ const isAction = (value: unknown): value is RunAction => {
  if (typeof value !== 'object' || value === null) return false;
  const action = value as Record<string, unknown>;
  switch (action.type) {
-  case 'pick': case 'cut': return typeof action.cardId === 'string';
+  case 'pick': case 'place': return typeof action.cardId === 'string' && (action.slot === null || (DRAFT_SLOTS as readonly unknown[]).includes(action.slot));
+  case 'cut': return typeof action.cardId === 'string';
   case 'cleanup': return (STACK_ROLES as readonly unknown[]).includes(action.role);
   case 'autofix': return true;
   case 'submit': return typeof action.active === 'object' && action.active !== null && isIdList(Object.values(action.active)) && isIdList(action.reserves);
@@ -51,7 +54,8 @@ function fromRow(row: RunRow): SavedRun | null {
  const setup = parseJson<unknown>(row.setup_json);
  const actions = parseJson<unknown>(row.actions_json);
  const season = row.season_json === null ? null : parseJson<unknown>(row.season_json);
- if (!isSetup(setup) || !Array.isArray(actions) || !actions.every(isAction) || !PHASES.includes(row.phase)) return null;
+ // A run saved in another run format keeps its row for history; `resumeRun` refuses it by version.
+ if (!isSetup(setup) || !Array.isArray(actions) || (setup.runVersion === RUN_VERSION && !actions.every(isAction)) || !PHASES.includes(row.phase)) return null;
  if (season !== null && !isSeason(season)) return null;
  return { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, setup, actions, phase: row.phase as RunPhase, season };
 }

@@ -6,7 +6,7 @@ import { STACK_ROLES, type StackRole } from './cleanup.ts';
 import { checkSubmission } from './legality.ts';
 import { recoverSeat } from './recovery.ts';
 import { buildRunPool, pileHeldBy, type RunPool } from './pool.ts';
-import { baselineBudget, DRAFT_RULES, picksPerSeat, rosterSize } from './rules.ts';
+import { baselineBudget, canFill, DRAFT_RULES, picksPerSeat, rosterSize } from './rules.ts';
 import { randomStream } from '../game/random.ts';
 import type { DraftCard, DraftSlot, LegalityReport, PayrollBudget, Submission } from './types.ts';
 import { DRAFT_RULES_VERSION, RUN_VERSION, SALARY_VERSION } from './versions.ts';
@@ -33,12 +33,14 @@ export interface RunData {
 
 /**
  * One player decision. Runs are rebuilt by replaying these against the setup. A pick drafts from
- * the held pile; in the opening window a cut releases an owned card, a cleanup takes the top card of
+ * the held pile into an open slot or onto the bench (`slot: null`), and a place moves an owned card
+ * on the field; in the opening window a cut releases an owned card, a cleanup takes the top card of
  * one of the player's stacks, auto-fix applies the AI clubs' recovery to the player's roster, and a
  * submit fixes the opening roster.
  */
 export type RunAction =
- | { type: 'pick'; cardId: string }
+ | { type: 'pick'; cardId: string; slot: DraftSlot | null }
+ | { type: 'place'; cardId: string; slot: DraftSlot | null }
  | { type: 'cut'; cardId: string }
  | { type: 'cleanup'; role: StackRole }
  | { type: 'autofix' }
@@ -73,6 +75,10 @@ export interface DraftRun {
  readonly seen: Set<string>[];
  /** Each seat's opening roster once fixed: AI seats when the draft ends, the player's on submit. */
  readonly submissions: (Submission | null)[];
+ /** The player's cards in active slots; every other card the player owns is on the bench. */
+ readonly field: Map<DraftSlot, string>;
+ /** The player's unplaced cards, in the order they arrived. */
+ readonly bench: string[];
  pick: number;
  phase: RunPhase;
  readonly aiRandoms: (() => number)[];
@@ -111,7 +117,8 @@ export function startRun(setup: RunSetup, data: RunData): DraftRun {
   judges: personalities.map((personality, seat) => personality && judgeFor(setup.seed, seat, personality, setup.difficulty)),
   budgets: seating.seats.map(() => baselineBudget(pool.tableCap)),
   piles: pool.packs.map(packs => packs.flat()),
-  ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), submissions: seating.seats.map(() => null), pick: 0, phase: 'drafting',
+  ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), submissions: seating.seats.map(() => null),
+  field: new Map(), bench: [], pick: 0, phase: 'drafting',
   aiRandoms: seating.seats.map((_, seat) => randomStream(setup.seed, `draft:ai:seat:${seat}`))
  };
 }
@@ -154,16 +161,69 @@ export function seatView(run: DraftRun, seat: number): SeatView {
  * `RunActionError` before anything changes.
  */
 export function applyAction(run: DraftRun, action: RunAction): void {
- if (action.type === 'pick') applyPick(run, action.cardId);
+ if (action.type === 'pick') applyPick(run, action.cardId, action.slot);
+ else if (action.type === 'place') applyPlace(run, action.cardId, action.slot);
  else if (run.phase !== 'window') throw new RunActionError(run.phase === 'drafting' ? 'The draft is still on' : 'The opening window is closed');
  else applyWindowAction(run, action);
  run.actions.push(action);
 }
 
-function applyPick(run: DraftRun, cardId: string): void {
+/** Where a player's card sits: its active slot, or null on the bench. */
+export function placementOf(run: DraftRun, cardId: string): DraftSlot | null {
+ for (const [slot, id] of run.field) if (id === cardId) return slot;
+ return null;
+}
+
+/** Open active slots `cardId` could take, in roster order. */
+export function openSlotsFor(run: DraftRun, cardId: string): DraftSlot[] {
+ const item = card(run, cardId);
+ return run.pool.rules.activeSlots.filter(slot => !run.field.has(slot) && canFill(item, slot));
+}
+
+/**
+ * Where an owned card may move: any slot it can fill, swapping with the occupant, who takes the
+ * moving card's old slot when it can fill it and the bench otherwise; or the bench when it is placed.
+ */
+export function movesFor(run: DraftRun, cardId: string): { slot: DraftSlot | null; swapWith: string | null }[] {
+ const item = card(run, cardId);
+ const from = placementOf(run, cardId);
+ const moves: { slot: DraftSlot | null; swapWith: string | null }[] = run.pool.rules.activeSlots
+  .filter(slot => slot !== from && canFill(item, slot))
+  .map(slot => ({ slot, swapWith: run.field.get(slot) ?? null }));
+ if (from !== null) moves.push({ slot: null, swapWith: null });
+ return moves;
+}
+
+function seatCard(run: DraftRun, cardId: string, slot: DraftSlot | null): void {
+ if (slot === null) { run.bench.push(cardId); return; }
+ run.field.set(slot, cardId);
+}
+
+function unseatCard(run: DraftRun, cardId: string): void {
+ const slot = placementOf(run, cardId);
+ if (slot !== null) run.field.delete(slot);
+ else if (run.bench.includes(cardId)) run.bench.splice(run.bench.indexOf(cardId), 1);
+}
+
+function applyPlace(run: DraftRun, cardId: string, slot: DraftSlot | null): void {
+ if (run.phase === 'season') throw new RunActionError('The opening window is closed');
+ if (!ownedBy(run, run.seating.humanSeat).some(item => item.seasonId === cardId)) throw new RunActionError(`${cardId} is not on your roster`);
+ if (!movesFor(run, cardId).some(move => move.slot === slot)) throw new RunActionError(slot === null ? `${cardId} is already on the bench` : `${cardId} cannot play ${slot}`);
+ const from = placementOf(run, cardId);
+ const occupant = slot === null ? undefined : run.field.get(slot);
+ unseatCard(run, cardId);
+ if (occupant) {
+  unseatCard(run, occupant);
+  seatCard(run, occupant, from !== null && canFill(card(run, occupant), from) ? from : null);
+ }
+ seatCard(run, cardId, slot);
+}
+
+function applyPick(run: DraftRun, cardId: string, slot: DraftSlot | null): void {
  if (run.phase !== 'drafting') throw new RunActionError('The draft is over');
  const human = run.seating.humanSeat;
  if (!heldPile(run, human).some(item => item.seasonId === cardId)) throw new RunActionError(`${cardId} is not in your pile`);
+ if (slot !== null && !openSlotsFor(run, cardId).includes(slot)) throw new RunActionError(`${slot} is not open for ${cardId}`);
  for (let seat = 0; seat < run.seating.seats.length; seat++) for (const item of heldPile(run, seat)) run.seen[seat].add(item.seasonId);
  // Every seat holds a different pile, so the AI picks do not depend on the player's pick this round.
  const aiPicks = run.seating.seats.flatMap((_, seat) => {
@@ -172,6 +232,7 @@ function applyPick(run: DraftRun, cardId: string): void {
   return [{ seat, choice: chooseAiPick(scores) }];
  });
  take(run, human, cardId, null);
+ seatCard(run, cardId, slot);
  for (const { seat, choice } of aiPicks) take(run, seat, choice.cardId, choice);
  run.pick++;
  if (run.pick === picksPerSeat(run.pool.rules)) {
@@ -193,14 +254,21 @@ function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pi
  if (action.type === 'cut') {
   if (!owned.some(item => item.seasonId === action.cardId)) throw new RunActionError(`${action.cardId} is not on your roster`);
   transfer(run.pool.ledger, action.cardId, seat, UNOWNED, 'cut');
+  unseatCard(run, action.cardId);
  } else if (action.type === 'cleanup') {
   if (!STACK_ROLES.includes(action.role)) throw new RunActionError(`Unknown cleanup stack ${String(action.role)}`);
   if (owned.length >= rosterSize(run.pool.rules)) throw new RunActionError('Your roster is full; cut a card first');
   const top = run.pool.cleanup.peek(human, action.role);
   if (!top) throw new RunActionError(`The ${action.role} stack is empty`);
   transfer(run.pool.ledger, top.seasonId, UNOWNED, seat, 'cleanup');
+  seatCard(run, top.seasonId, openSlotsFor(run, top.seasonId)[0] ?? null);
  } else if (action.type === 'autofix') {
-  recoverSeat(run.pool, run.budgets[human], human);
+  const { submission } = recoverSeat(run.pool, run.budgets[human], human);
+  // Recovery rebuilds the whole arrangement; cards it leaves without a place stay on the bench.
+  run.field.clear();
+  for (const [slot, id] of Object.entries(submission.active) as [DraftSlot, string][]) run.field.set(slot, id);
+  const placed = new Set(run.field.values());
+  run.bench.splice(0, run.bench.length, ...submission.reserves, ...ownedBy(run, human).map(item => item.seasonId).filter(id => !placed.has(id) && !submission.reserves.includes(id)));
  } else if (action.type === 'submit') {
   const submission: Submission = { seat: human, active: { ...action.active }, reserves: [...action.reserves] };
   let report: LegalityReport;

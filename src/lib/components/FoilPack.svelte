@@ -4,6 +4,7 @@
 	import { tilt } from '../cards/motion.ts';
 	import { CardLight, LightEngine, lightCanvas } from '../cards/surface/card-light.ts';
 	import PackSeal from './PackSeal.svelte';
+	import SealedPack from './SealedPack.svelte';
 	import { STOCK, roles } from '../cards/tokens.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
 	import { EASE_IN_OUT, EASE_OUT, MOTION } from '../motion-timing.ts';
@@ -122,13 +123,12 @@
 		const timer = setTimeout(() => hinting = true, MOTION.tapHint);
 		return () => clearTimeout(timer);
 	});
-	let pack = $state<HTMLElement>();
+	let pack = $state<HTMLButtonElement>();
 	let hand = $state<HTMLElement>();
 	let seal = $state<HTMLElement>();
 	// Where the browser runs the card light, the sealed pack is lit silver foil, a jackpot gem holo and a franchise card's
 	// frame its decade's foil, all drifting and following the pointer like cards; elsewhere they keep their CSS foil.
 	const shaded = LightEngine.shared() !== null;
-	const packLight = new CardLight();
 	const dealtLights = new Map<string, CardLight>();
 	function dealtLight(key: string): CardLight {
 		let light = dealtLights.get(key);
@@ -454,29 +454,7 @@
 				{/key}
 			{/if}
 		</div>
-		<button
-			id="roll-next"
-			type="button"
-			class="pack"
-			bind:this={pack}
-			aria-label="Roll next franchise"
-			disabled={disabled || stage !== 'sealed'}
-			onclick={open}
-			style:--foil={SILVER}
-			data-light-root={shaded || undefined}
-			data-finish="foil"
-			data-card="2020s"
-			data-plate="sunburst"
-			data-identity="franchise-pack"
-			use:tilt={{ enabled: shaded && stage === 'sealed', idle: true, finish: 'silver', light: packLight, identity: 'franchise-pack' }}
-		>
-			{#if shaded}
-				<span class="sheet" data-surface="ring" data-surface-shape="box" aria-hidden="true"></span>
-				<canvas class="light" aria-hidden="true" use:lightCanvas={packLight}></canvas>
-			{/if}
-			<!-- The torn seal leaves the light and flies off as print, so the canvas stops drawing it. -->
-			<PackSeal bind:element={seal} lit={shaded && stage === 'sealed'} />
-			<span class="pack-face" aria-hidden="true">
+		<SealedPack id="roll-next" label="Roll next franchise" identity="franchise-pack" disabled={disabled || stage !== 'sealed'} sealed={stage === 'sealed'} bind:element={pack} bind:seal onclick={open}>
 				{#if frontMark && backMark}
 					<span class="coin" class:spinning={appSettings.effectiveEnabled} style:--mark-spin="{MOTION.markSpin}ms" bind:this={coin} onanimationiteration={advanceMarks}>
 						<span class="coin-face" class:fielded={!!frontField} style:--coin-field={frontField}><TeamLogo franchiseId={frontMark} size="small" bind:field={frontField} /></span>
@@ -486,9 +464,7 @@
 				<span class="wordmark"><span class="mark"></span>162-0</span>
 				<span class="pack-title">Franchise pack</span>
 				<span class="pack-count">Pick {pickNumber} of {pickCount}</span>
-			</span>
-			<PackSeal bottom lit={shaded} />
-		</button>
+		</SealedPack>
 	</div>
 	<p class="caption" class:hidden={!hinting} aria-hidden="true">{stage === 'sealed' ? 'Tap the pack' : shown.length > 1 ? 'Take one pack' : 'Take the card'}</p>
 </div>
@@ -500,7 +476,7 @@
 	/* Phones have the pick header and field button above the pack; the dealt card rises over them instead of into reserved space. */
 	.opening .stage { z-index: 6; }
 	@media (max-width: 47.999rem) { .foil-pack { padding-block: var(--space-6) var(--space-6); } }
-	.pack { grid-area: 1 / 1; }
+	.stage > :global(.sealed-pack) { grid-area: 1 / 1; }
 	/* The dealt cards share the center: adding a pack slides the cards already dealt over so the row sits even. */
 	.hand { position: absolute; z-index: 1; inset: 0 auto; left: 50%; translate: calc(-1 * var(--anchor)) 0; display: flex; align-items: center; gap: 12px; width: max-content; transition: translate var(--motion-deal) var(--ease-out); }
 	:global([data-motion='off']) .hand { transition: none; }
@@ -520,60 +496,11 @@
 	:global([data-motion='off']) :is(.divider, .ghost-pack) { animation: none; }
 	@media (prefers-reduced-motion: reduce) { :is(.divider, .ghost-pack) { animation: none; } }
 	.dealt .hand { z-index: 3; }
-	.pack {
-		--mx: 30%;
-		--my: 50%;
-		position: relative;
-		z-index: 2;
-		display: grid;
-		grid-template-rows: 1.1rem 1fr 1.1rem;
-		width: 100%;
-		height: 100%;
-		min-height: 44px;
-		padding: 0;
-		border: 0;
-		border-radius: .35rem;
-		color: var(--background);
-		background: var(--foil);
-		box-shadow: 0 1rem 2rem oklch(8% .01 255 / .45), inset 0 0 0 1px oklch(100% 0 0 / .35);
-		overflow: hidden;
-		cursor: pointer;
-	}
-	.pack::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		/* A strip 2.5 packs wide slides across; moving it by transform keeps the glint on the GPU. */
-		right: auto;
-		width: 250%;
-		/* A plain translucent sheen: a blend mode would recomposite everything under the strip on every frame. */
-		background: linear-gradient(105deg, transparent 30%, oklch(100% 0 0 / .22) 45%, transparent 60%);
-		translate: -72% 0;
-		animation: glint 3.2s ease-in-out infinite;
-		pointer-events: none;
-	}
-	.pack:hover:not(:disabled) { background: var(--foil); filter: brightness(1.06); }
-	.pack:active:not(:disabled) { transform: translateY(1px); }
-	.pack:disabled { cursor: default; opacity: 1; }
-	.pack-gone .pack { visibility: hidden; }
-	.pack:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
-	/* A lit pack's foil sheet and light canvas sit under its seals and face; the canvas brings its own glint. */
+	.pack-gone :global(.sealed-pack) { visibility: hidden; }
+	/* A dealt card's foil sheet and light canvas fill its plate. */
 	.sheet, .light { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
 	.light { width: 100%; height: 100%; opacity: 0; transition: opacity 240ms ease-out; }
 	.light:global([data-presented]) { opacity: 1; }
-	.pack[data-light-root] > :not(.sheet, .light) { position: relative; z-index: 1; }
-	.pack[data-light-root]::after { display: none; }
-	.pack-face {
-		display: grid;
-		align-content: center;
-		justify-items: center;
-		gap: var(--space-2);
-		margin-inline: .6rem;
-		padding: var(--space-3) var(--space-2);
-		color: var(--text);
-		background: oklch(16% .012 255 / .92);
-		border-block: 3px solid oklch(100% 0 0 / .6);
-	}
 	.coin { position: relative; width: 4.5rem; aspect-ratio: 1; margin-bottom: var(--space-1); transform-style: preserve-3d; transform: rotateY(0deg); }
 	/* Each turn runs edge-on to edge-on, so the marks change where neither face can be seen. */
 	.coin.spinning { animation: coin-turn var(--mark-spin) linear infinite; }
@@ -657,7 +584,4 @@
 	.caption { margin: 0; color: var(--muted); font-size: var(--text-sm); font-weight: 650; letter-spacing: .02em; transition: opacity var(--motion-deal) var(--ease-out); }
 	/* The caption keeps its line while hidden so the hint appears without moving the stage. */
 	.caption.hidden { opacity: 0; }
-	@keyframes glint { 0%, 55% { translate: -72% 0; } 100% { translate: 72% 0; } }
-	:global([data-motion='off']) .pack::after { animation: none; }
-	@media (prefers-reduced-motion: reduce) { .pack::after { animation: none; } }
 </style>

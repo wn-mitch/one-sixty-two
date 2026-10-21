@@ -1,6 +1,9 @@
 <script lang="ts">
 	/** Modal confirmation before a new draft replaces the saved run. Escape, the backdrop, and Keep draft all keep it. */
-	let { open, onKeep, onDiscard }: { open: boolean; onKeep: () => void; onDiscard: () => void } = $props();
+	let {
+		open, onKeep, onDiscard,
+		message = 'Your picks are permanent. Starting a new draft replaces this saved run with a new seed.'
+	}: { open: boolean; onKeep: () => void; onDiscard: () => void; message?: string } = $props();
 	let dialog = $state<HTMLDialogElement>();
 	let keep = $state<HTMLButtonElement>();
 	const titleId = $props.id();
@@ -23,7 +26,7 @@
 >
 	<div class="panel">
 		<h2 id={titleId}>Leave this roster behind?</h2>
-		<p>Your picks are permanent. Starting a new draft replaces this saved run with a new seed.</p>
+		<p>{message}</p>
 		<div class="actions">
 			<button bind:this={keep} type="button" class="secondary" onclick={() => dialog?.close()}>Keep draft</button>
 			<button type="button" class="primary" onclick={onDiscard}>Discard and start new</button>

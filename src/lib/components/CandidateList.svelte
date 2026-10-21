@@ -1,8 +1,7 @@
 <script lang="ts">
- import { tick, untrack } from 'svelte';
- import { availableCandidates, legalSlots, rollContains, rollKey } from '../game/draft.ts';
- import { draftRules } from '../game/rules.ts';
- import { BULLPEN_SLOTS, STARTER_SLOTS, type Draft, type Manifest, type Profile, type RosterSlot, type Slot } from '../game/types.ts';
+ import { tick, untrack, type Snippet } from 'svelte';
+ import type { BoardSource } from '../game/board-source.ts';
+ import { BULLPEN_SLOTS, STARTER_SLOTS, type FieldSlot, type Manifest, type Profile, type RosterSlot, type Slot } from '../game/types.ts';
  import { rankingForSeason } from '../rankings/client.ts';
  import type { WarRankings } from '../rankings/types.ts';
  import { collapseFullRoles, fullRoles, isHitter, mixGroups, rankGroups, warValue } from './candidate-ranking.ts';
@@ -21,13 +20,13 @@
  function filterSlots(option: Exclude<FilterSlot, 'All'>): readonly Slot[] {
   return FILTER_GROUPS[option] ?? [option as Slot];
  }
- function filterFor(slot: Slot): Exclude<FilterSlot, 'All'> {
-  return (STARTER_SLOTS as readonly Slot[]).includes(slot) ? 'SP' : (BULLPEN_SLOTS as readonly Slot[]).includes(slot) ? 'RP' : slot;
+ function filterFor(slot: FieldSlot): Exclude<FilterSlot, 'All'> {
+  return (STARTER_SLOTS as readonly FieldSlot[]).includes(slot) ? 'SP' : slot === 'CL' || slot.startsWith('RP') ? 'RP' : slot as Slot;
  }
 
  let {
   profiles,
-  draft,
+  source,
   manifest,
   rankings,
   rankingLoading,
@@ -41,10 +40,11 @@
   onSelect,
   onPlace,
   onSeasonChange,
-  onResetBrowse
+  onResetBrowse,
+  caption
  }: {
-  profiles: Profile[];
-  draft: Draft;
+  profiles: readonly Profile[];
+  source: BoardSource;
   manifest: Manifest;
   rankings: WarRankings | null;
   rankingLoading: boolean;
@@ -57,16 +57,18 @@
   previewing?: boolean;
   wide: boolean;
   onSelect: (seasonId: string, seasons: Profile[], trigger: HTMLButtonElement) => void;
-  onPlace?: (seasonId: string, seasons: Profile[], slot: Slot, trigger: HTMLButtonElement) => void;
+  onPlace?: (seasonId: string, seasons: Profile[], slot: FieldSlot | null, trigger: HTMLButtonElement) => void;
   onSeasonChange: (playerId: string, seasonId: string) => void;
   onResetBrowse: () => void;
+  /** Lines a mode prints under each offered card, such as Draft Mode's salary and finish. */
+  caption?: Snippet<[Profile]>;
  } = $props();
 
  interface CandidateMotionState {
   draftKey: string;
   count: number;
   filter: FilterSlot;
-  sort: RankingSort;
+  sort: string;
   rankings: WarRankings | null;
  }
  const uid = $props.id();
@@ -78,22 +80,14 @@
  let flippedPlayerId = $state<string | null>(null);
  const showBlocked = $derived(appSettings.showBlockedCards);
  let browseRevision = $state(0);
- let sort = $state<RankingSort>('war');
- const manifestBySeason = $derived(new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])));
- const usedPlayerIds = $derived(new Set(draft.picks.map(pick => manifestBySeason.get(pick.seasonId)?.playerId).filter((id): id is string => !!id)));
- const usedFranchises = $derived(new Set(draft.picks.map(pick => pick.franchiseId)));
- const candidates = $derived(draft.currentRoll
-  ? manifest.candidates.filter(candidate =>
-   rollContains(draft.currentRoll!, candidate) &&
-   !usedPlayerIds.has(candidate.playerId) &&
-   !usedFranchises.has(candidate.franchiseId)
-  )
-  : []);
- const candidateIndex = $derived(new Map(candidates.map(candidate => [candidate.seasonId, candidate])));
- const viableSeasonIds = $derived(new Set(availableCandidates(draft, manifest).map(candidate => candidate.seasonId)));
- function legalSlotsFor(seasonId: string): readonly Slot[] {
-  const candidate = candidateIndex.get(seasonId);
-  return candidate && viableSeasonIds.has(seasonId) ? legalSlots(draft, candidate, manifest) : [];
+ let sort = $state('war');
+ /** A mode's own sort, when one is chosen; WAR and OPS / ERA rank through `rankGroups`. */
+ const modeSort = $derived(source.sorts.find(option => option.value === sort));
+ const rankingSort = $derived<RankingSort>(sort === 'metrics' ? 'metrics' : 'war');
+ const candidateIndex = $derived(new Set(source.offer.map(profile => profile.seasonId)));
+ const viableSeasonIds = $derived(new Set(source.offer.map(profile => profile.seasonId).filter(seasonId => source.viable(seasonId))));
+ function legalSlotsFor(seasonId: string): readonly FieldSlot[] {
+  return candidateIndex.has(seasonId) && viableSeasonIds.has(seasonId) ? source.destinations(seasonId) : [];
  }
  const qualificationSlots = $derived.by(() => {
   const found = new Set<RosterSlot>();
@@ -101,9 +95,8 @@
    if (!candidateIndex.has(profile.seasonId)) continue;
    for (const slot of profile.eligibleSlots) found.add(slot);
   }
-  // A filled position can take no one new, so it is not offered as a filter.
-  const filled = new Set(draft.picks.map(pick => pick.slot));
-  return draftRules(draft.schemaVersion).slots.filter(slot => found.has(slot) && !filled.has(slot));
+  // A filled position can take no one new, so it is not offered as a filter; a deep relief slot qualifies closers.
+  return source.roster.slots.filter(slot => found.has(slot.startsWith('RP') ? 'CL' : slot as Slot) && !source.roster.placed.has(slot));
  });
  const filterOptions = $derived.by((): FilterSlot[] => ['All', ...new Set(qualificationSlots.map(filterFor))]);
  const activeFilter = $derived(filterOptions.includes(filter) ? filter : 'All');
@@ -113,7 +106,7 @@
    if (!candidateIndex.has(profile.seasonId)) continue;
    entries.push({ profile, slots: profile.eligibleSlots });
   }
-  return rankGroups(entries, sort, rankings);
+  return rankGroups(entries, rankingSort, rankings, source.groupSeasons);
  });
  const visibleGroups = $derived.by(() => groupsBeforeFilter.filter(group =>
   showBlocked ||
@@ -126,20 +119,19 @@
    const entries = visibleGroups.flatMap(group => group.entries
     .filter(entry => profileMatchesFilter(entry.profile, activeFilter))
     .map(entry => ({ profile: entry.profile, slots: filterSlots(activeFilter as Exclude<FilterSlot, 'All'>) })));
-   filtered = rankGroups(entries, sort, rankings);
+   filtered = rankGroups(entries, rankingSort, rankings, source.groupSeasons);
   }
   // Hitters and pitchers share one ranking, led by each player's default season, so choosing another exact
   // season never moves the card out from under the player.
-  const mixed = mixGroups(filtered, sort, rankings, defaultEntry);
+  const mixed = modeSort
+   ? [...filtered].sort((a, b) => modeSort.compare(defaultEntry(a).profile, defaultEntry(b).profile))
+   : mixGroups(filtered, rankingSort, rankings, defaultEntry);
   // When shown, blocked players follow every player who can still be placed on phones.
   return wide ? mixed : [...mixed].sort((a, b) => Number(isBlocked(a)) - Number(isBlocked(b)));
  });
- const openSlots = $derived.by(() => {
-  const filled = new Set(draft.picks.map(pick => pick.slot));
-  return draftRules(draft.schemaVersion).slots.filter(slot => !filled.has(slot));
- });
- // A role with no open slot folds its unplaceable players away below the ranking.
- const roleSplit = $derived(collapseFullRoles(groups, fullRoles(openSlots), group =>
+ const openSlots = $derived(source.roster.slots.filter(slot => !source.roster.placed.has(slot)));
+ // A role with no open slot folds its unplaceable players away below the ranking; a bench takes anyone, so none fold there.
+ const roleSplit = $derived(collapseFullRoles(groups, source.roster.bench ? new Set() : fullRoles(openSlots), group =>
   !isBlocked(group) || group.entries.some(entry => entry.profile.seasonId === selectedSeasonId)
  ));
  const filterCounts = $derived.by(() => new Map(filterOptions
@@ -158,7 +150,7 @@
   const role = kinds.size === 2 ? 'Roster full' : kinds.has('Pitchers') ? 'Pitching staff full' : 'Lineup full';
   return `${role} · ${collapsedGroups.length} ${collapsedGroups.length === 1 ? 'player' : 'players'}`;
  });
- const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll ? rollKey(draft.currentRoll) : ''}`);
+ const draftBrowseKey = $derived(source.key);
 
  function selectedEntry(group: CandidateGroup): CandidateEntry {
   const preferred = selectedSeasonId && group.entries.some(entry => entry.profile.seasonId === selectedSeasonId)
@@ -203,13 +195,13 @@
   flippedPlayerId = null;
   onSelect(seasonId, group.entries.map(item => item.profile), trigger);
  }
- function placeSeason(seasonId: string, group: CandidateGroup, slot: Slot, trigger: HTMLButtonElement) {
+ function placeSeason(seasonId: string, group: CandidateGroup, slot: FieldSlot | null, trigger: HTMLButtonElement) {
   flippedPlayerId = null;
   onPlace?.(seasonId, group.entries.map(item => item.profile), slot, trigger);
  }
  async function loadMore(focusNew = false): Promise<void> {
   if (busy || !hasMore) return;
-  const firstNew = rankedGroups[shownGroups.length]?.playerId;
+  const firstNew = rankedGroups[shownGroups.length]?.key;
   visibleCount += 20;
   if (!focusNew || !firstNew) return;
   await tick();
@@ -294,18 +286,19 @@
     {@const cardKind = cardRankingKind(profile)}
     <div
      class="candidate-card"
-     data-candidate-group={group.playerId}
-     data-candidate-card={group.playerId}
+     data-candidate-group={group.key}
+     data-candidate-card={group.key}
      data-selected={selectedSeasonId === profile.seasonId}
      data-previewing={previewing && selectedSeasonId === profile.seasonId}
-     data-flipped={flippedPlayerId === group.playerId}
+     data-flipped={flippedPlayerId === group.key}
      data-blocked={!wide && isBlocked(group)}
     >
      <PlayerCard
       {profile}
       seasons={group.entries.map(item => item.profile)}
-      onSeasonChange={seasonId => changeSeason(group, seasonId)}
+      onSeasonChange={source.groupSeasons ? seasonId => changeSeason(group, seasonId) : undefined}
       legalSlots={directSlots}
+      bench={source.viable(profile.seasonId) && source.benches(profile.seasonId)}
       onPlace={(slot, trigger) => placeSeason(profile.seasonId, group, slot, trigger)}
       war={warValue({ profile, slots: profile.eligibleSlots }, cardKind, rankings)}
       ranking={rankingForSeason(rankings, profile.seasonId)}
@@ -316,16 +309,17 @@
       selected={selectedSeasonId === profile.seasonId}
       draftMode
       {wide}
-      bind:turned={() => flippedPlayerId === group.playerId, value => flippedPlayerId = value ? group.playerId : null}
+      bind:turned={() => flippedPlayerId === group.key, value => flippedPlayerId = value ? group.key : null}
       onSelect={trigger => selectSeason(profile.seasonId, group, trigger)}
      />
+     {#if caption}{@render caption(profile)}{/if}
     </div>
 {/snippet}
 
 <svelte:window onpointerdown={handlePointerDown} onfocusin={handleFocusIn} />
 <div use:candidateGridMotion={gridMotion} class:candidates-wide={wide} class="candidates">
 <CardBrowser label="Choose a historical player season" {wide} {busy} searchable={false}
- sorts={[{ value: 'war', label: 'WAR' }, { value: 'metrics', label: 'OPS / ERA' }]} {sort} onSort={value => reshuffle(() => sort = value as RankingSort)}
+ sorts={[{ value: 'war', label: 'WAR' }, { value: 'metrics', label: 'OPS / ERA' }, ...source.sorts.map(({ value, label }) => ({ value, label }))]} {sort} onSort={value => reshuffle(() => sort = value)}
  filters={filterOptions.map(option => ({ value: option, count: option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0 }))}
  filter={activeFilter} filterLegend="Qualifies for position" filterToggle="Positions" onFilter={value => reshuffle(() => filter = value as FilterSlot)}
  resultsId="{uid}-results">
@@ -342,8 +336,8 @@
   {/if}
  {/snippet}
 
-  {#if !draft.currentRoll}
-   <p class="notice">Roll a franchise and era to open your next player pool.</p>
+  {#if source.waiting}
+   <p class="notice">{source.waiting}</p>
   {:else if groups.length === 0 && !showBlocked && blockedGroupCount > 0}
    <p class="notice">These players have no open position. Turn on Blocked players in Settings to select one and make room on your field.</p>
   {:else if groups.length === 0}

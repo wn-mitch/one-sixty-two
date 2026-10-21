@@ -1,3 +1,4 @@
+import type { Finish } from '../cards/finish.ts';
 import type { ContactModel, ContactRecord } from '../sim/contact-profile.ts';
 import type { ParkRef, StadiumConfig, StadiumSummary } from '../sim/park-types.ts';
 
@@ -7,6 +8,10 @@ export const STARTER_SLOTS = ['SP1', 'SP2', 'SP3'] as const;
 export const RELIEF_SLOTS = ['RP1', 'RP2', 'RP3'] as const;
 export const SLOTS = [...HITTER_SLOTS, ...STARTER_SLOTS, 'CL', ...RELIEF_SLOTS] as const;
 export type Slot = typeof SLOTS[number];
+/** Draft Mode's middle relievers beyond Classic's three named relievers. */
+export type DeepReliefSlot = 'RP4' | 'RP5';
+/** A slot a roster field can show: every Classic slot plus Draft Mode's deep relievers. */
+export type FieldSlot = Slot | DeepReliefSlot;
 /** The closer and named relievers, in the order a season request lists their roles. */
 export const BULLPEN_SLOTS = ['CL', ...RELIEF_SLOTS] as const;
 export type BullpenSlot = typeof BULLPEN_SLOTS[number];
@@ -25,6 +30,8 @@ export const defaultReliefRoles = <S extends string>(slots: readonly S[]): Relie
  slots.map((slot, index) => ({ slot, primary: DEFAULT_RELIEF_ROLES[index][0], secondary: DEFAULT_RELIEF_ROLES[index][1] }));
 /** A slot a card or saved season may carry. BP is the retired team-bullpen slot: collected bullpen cards and older saved seasons keep it, and no draft offers it. */
 export type RosterSlot = Slot | 'BP';
+/** A slot a printed card can show: any roster slot, or a Draft Mode deep relief slot. */
+export type CardSlot = RosterSlot | DeepReliefSlot;
 export type Position = 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
 export type HitterSlot = Position | 'DH';
 export const MIN_SEASON_YEAR = 1950;
@@ -73,6 +80,8 @@ export interface Profile {
  };
  /** Modeled runs above replacement at the card's best slot (as priced in `draft-cards.json`); absent for collected team bullpens. */
  valueRuns?: number;
+ /** A Draft Mode card's dealt pack rarity, which its front prints instead of the finish its WAR earns. */
+ finish?: Finish;
 }
 export interface Candidate { seasonId: string; playerId: string; franchiseId: string; decade: number; eligibleSlots: RosterSlot[] }
 /** Every candidate but the collected team bullpens; Draft Mode prices and deals only these. */

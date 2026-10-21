@@ -1,7 +1,21 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(240_000);
+
+const fieldButton = (page: Page, picked: number) => page.getByRole('button', { name: `Open your field, ${picked} of 16 picked` });
+
+/** Selects the pile's first card, places it in its first open slot (or on the bench), and drafts it. */
+async function draftFirstCard(page: Page, picked: number, place: 'slot' | 'bench' = 'slot') {
+ await expect(fieldButton(page, picked)).toBeVisible({ timeout: 60_000 });
+ // A role query skips the aria-hidden copies the grid deals in with.
+ await page.getByRole('region', { name: 'Players' }).getByRole('button', { name: /^Select / }).first().click();
+ const sheet = page.locator('dialog.draft-sheet[open]');
+ const confirm = sheet.locator('.pick-confirmation button.primary');
+ const target = place === 'bench' ? sheet.locator('[data-bench-open]') : sheet.locator('.highlighted[data-slot], [data-bench-open]').first();
+ if (place === 'bench' || await confirm.isDisabled()) await target.click();
+ await confirm.click();
+}
 
 test('public visitors cannot enter unfinished Draft Mode; a developer opt-in can', async ({ page }) => {
  await page.goto('/');
@@ -21,10 +35,19 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  await page.goto('/draft?developer=on');
  await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
  await page.getByRole('button', { name: 'Start draft' }).click();
- for (let pick = 1; pick <= 16; pick++) {
-  await expect(page.getByRole('heading', { name: `Pick ${pick} of 16` })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole('button', { name: 'Pick', exact: true }).first().click();
+ // The seat's two sealed packs open together into the first pile.
+ await page.getByRole('button', { name: 'Open your 2 packs' }).first().click();
+ // The first pick goes to the bench, and a reload keeps it there.
+ await draftFirstCard(page, 0, 'bench');
+ const sheet = page.locator('dialog.draft-sheet[open]');
+ for (const reload of [false, true]) {
+  if (reload) await page.reload();
+  await fieldButton(page, 1).click();
+  await expect(sheet.getByRole('heading', { name: /^Bench 1 ·/ })).toBeVisible();
+  await expect(sheet.locator('[data-slot]').filter({ hasText: 'Open' })).toHaveCount(18);
+  await sheet.getByRole('button', { name: 'Close field' }).click();
  }
+ for (let picked = 1; picked < 16; picked++) await draftFirstCard(page, picked);
  await expect(page.getByRole('heading', { name: 'Opening window' })).toBeVisible();
  // Sixteen picks leave four open places, so the roster is not yet legal.
  await expect(page.getByRole('button', { name: 'Submit roster' })).toBeDisabled();
@@ -71,8 +94,22 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  await expect(page).toHaveURL(/\/draft$/);
  await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
  await page.getByRole('button', { name: 'Start draft', exact: true }).click();
- await page.getByRole('button', { name: 'Pick', exact: true }).first().click();
- await expect(page.getByRole('heading', { name: 'Pick 2 of 16' })).toBeVisible({ timeout: 60_000 });
+ await page.getByRole('button', { name: 'Open your 2 packs' }).first().click();
+ await draftFirstCard(page, 0);
+ await expect(fieldButton(page, 1)).toBeVisible({ timeout: 60_000 });
  await page.reload();
- await expect(page.getByRole('heading', { name: 'Pick 2 of 16' })).toBeVisible({ timeout: 60_000 });
+ await expect(fieldButton(page, 1)).toBeVisible({ timeout: 60_000 });
+
+ // New draft lives in the site menu and asks before leaving an unfinished run; Keep returns to the same pick.
+ await page.getByRole('button', { name: 'Menu', exact: true }).click();
+ await page.getByRole('button', { name: 'New draft', exact: true }).click();
+ const confirmation = page.getByRole('dialog', { name: 'Leave this roster behind?' });
+ await expect(confirmation).toContainText('moves to My teams');
+ await confirmation.getByRole('button', { name: 'Keep draft' }).click();
+ await expect(confirmation).toBeHidden();
+ await expect(fieldButton(page, 1)).toBeVisible();
+ await page.getByRole('button', { name: 'Menu', exact: true }).click();
+ await page.getByRole('button', { name: 'New draft', exact: true }).click();
+ await page.getByRole('dialog', { name: 'Leave this roster behind?' }).getByRole('button', { name: 'Discard and start new' }).click();
+ await expect(page.getByRole('button', { name: 'Start draft', exact: true })).toBeVisible();
 });

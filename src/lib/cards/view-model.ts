@@ -1,6 +1,6 @@
 import { average, formatDefEstimate, historicalBatting, historicalEra, innings } from '../game/format.ts';
 import { POSITIONS } from '../game/types.ts';
-import type { HitterSlot, Manifest, Position, Profile, RosterSlot } from '../game/types.ts';
+import type { CardSlot, HitterSlot, Manifest, Position, Profile, RosterSlot } from '../game/types.ts';
 import { selectLogo, selectPhoto, selectTeamPhoto } from '../media/client.ts';
 import type { MediaAsset, MediaManifest, PlayerPhoto, TeamPhoto } from '../media/types.ts';
 import { logoShapeFor, type LogoShape } from '../media/logo-shapes.ts';
@@ -113,7 +113,7 @@ export interface CardFront {
 export interface CardViewModel extends CardFront { b: CardBack; details: Supplemental }
 export interface CreateCardViewModelInput {
 	profile: Profile;
-	slot?: RosterSlot | null;
+	slot?: CardSlot | null;
 	ranking?: WarSeasonRanking | null;
 	war?: number | null;
 	media?: MediaManifest | null;
@@ -315,10 +315,12 @@ function logoRows(logo: CardMedia | null, mediaStatus: CardMediaStatus): Supplem
 }
 
 export function createCardViewModel(input: CreateCardViewModelInput): CardViewModel {
-	const { profile, slot = null, media = null, manifest = null, rankings = null, mediaStatus = 'ready' } = input;
+	const { profile, media = null, manifest = null, rankings = null, mediaStatus = 'ready' } = input;
+	// Draft Mode's deep relievers print their own slot and otherwise read as any named reliever.
+	const slot: RosterSlot | null = input.slot === 'RP4' || input.slot === 'RP5' ? 'RP3' : input.slot ?? null;
 	const ranking = input.ranking ?? rankings?.seasons[profile.seasonId] ?? null;
 	const role = cardRole(profile, slot);
-	const pos = position(profile, slot, role);
+	const pos = slot === 'RP3' && input.slot !== 'RP3' ? input.slot! : position(profile, slot, role);
 	const hasBatting = !profile.bullpen && profile.eligibleSlots.some(isHitter) && !!profile.batting;
 	const hasPitching = !profile.bullpen && profile.eligibleSlots.some(value => !isHitter(value)) && !!profile.pitching;
 	const teamRemainder = !!profile.bullpen || profile.playerId === `${profile.franchiseId}:bullpen`;
@@ -406,7 +408,7 @@ export function createCardViewModel(input: CreateCardViewModelInput): CardViewMo
 		logoLabel,
 		logoShape,
 		k: roles({ primary: media?.teams[profile.franchiseId]?.color || STOCK, secondary: STOCK }),
-		fin: materialFor(finishFor(finishRoleFor(profile.eligibleSlots, slot, role === 'bullpen'), ranking?.battingWAR162, ranking?.pitchingWAR162)),
+		fin: materialFor(profile.finish ?? finishFor(finishRoleFor(profile.eligibleSlots, slot, role === 'bullpen'), ranking?.battingWAR162, ranking?.pitchingWAR162)),
 		mediaStatus
 	};
 	const supplemental: Supplemental = profile.bullpen ? {

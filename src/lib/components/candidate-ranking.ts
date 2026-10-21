@@ -1,6 +1,6 @@
 import { historicalBatting, historicalEra } from '../game/format.ts';
 import { compareId } from '../game/types.ts';
-import type { HitterSlot, Profile, RosterSlot, Slot } from '../game/types.ts';
+import type { CardSlot, HitterSlot, Profile, RosterSlot, Slot } from '../game/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 
 export type RankingKind = 'Hitters' | 'Pitchers';
@@ -8,7 +8,7 @@ export type RankingSort = 'war' | 'metrics';
 export type CandidateEntry = { profile: Profile; slots: readonly RosterSlot[] };
 export type CandidateGroup = { key: string; name: string; playerId: string; kind: RankingKind; entries: CandidateEntry[] };
 
-export function isHitter(slot: RosterSlot): slot is HitterSlot {
+export function isHitter(slot: CardSlot): slot is HitterSlot {
  return slot !== 'CL' && slot !== 'BP' && !slot.startsWith('SP') && !slot.startsWith('RP');
 }
 
@@ -37,21 +37,23 @@ export function compareEntries(a: CandidateEntry, b: CandidateEntry, kind: Ranki
  return compareId(a.profile.seasonId, b.profile.seasonId);
 }
 
-export function rankGroups(entries: CandidateEntry[], sort: RankingSort, rankings: WarRankings | null): CandidateGroup[] {
- const groupedEntries = new Map<string, { name: string; entries: Map<string, CandidateEntry> }>();
+export function rankGroups(entries: CandidateEntry[], sort: RankingSort, rankings: WarRankings | null, groupSeasons = true): CandidateGroup[] {
+ const groupedEntries = new Map<string, { name: string; playerId: string; entries: Map<string, CandidateEntry> }>();
  for (const entry of entries) {
-  let group = groupedEntries.get(entry.profile.playerId);
+  // Grouped, an athlete's seasons share one card; ungrouped, every season is its own.
+  const key = groupSeasons ? entry.profile.playerId : entry.profile.seasonId;
+  let group = groupedEntries.get(key);
   if (!group) {
-   group = { name: entry.profile.displayName, entries: new Map() };
-   groupedEntries.set(entry.profile.playerId, group);
+   group = { name: entry.profile.displayName, playerId: entry.profile.playerId, entries: new Map() };
+   groupedEntries.set(key, group);
   }
   if (!group.entries.has(entry.profile.seasonId)) group.entries.set(entry.profile.seasonId, entry);
  }
- const groups = [...groupedEntries].map(([playerId, source]) => {
+ const groups = [...groupedEntries].map(([key, source]) => {
   const values = [...source.entries.values()];
   const kind: RankingKind = values.some(entry => entry.slots.some(isHitter)) ? 'Hitters' : 'Pitchers';
   values.sort((a, b) => compareEntries(a, b, kind, sort, rankings));
-  return { key: playerId, playerId, name: source.name, kind, entries: values };
+  return { key, playerId: source.playerId, name: source.name, kind, entries: values };
  });
  return mixGroups(groups, sort, rankings);
 }
@@ -89,7 +91,7 @@ export function mixGroups(
 }
 
 /** The roles with no open slot left; their players can only displace someone already drafted. */
-export function fullRoles(openSlots: readonly Slot[]): Set<RankingKind> {
+export function fullRoles(openSlots: readonly CardSlot[]): Set<RankingKind> {
  const full = new Set<RankingKind>();
  if (!openSlots.some(isHitter)) full.add('Hitters');
  if (!openSlots.some(slot => !isHitter(slot))) full.add('Pitchers');

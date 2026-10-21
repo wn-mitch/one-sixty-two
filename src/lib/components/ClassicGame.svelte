@@ -15,7 +15,8 @@
  import { freeze, morphInto, riseIn, stash, take } from '#lib/components/phase-motion.ts';
  import { createCardViewModel, type CardMediaStatus } from '#lib/cards/view-model.ts';
  import { loadShowcase } from '#lib/game/data.ts';
- import type { ShowcaseCard } from '#lib/game/types.ts';
+ import type { HitterSlot, ShowcaseCard, Slot } from '#lib/game/types.ts';
+ import { classicBoardSource } from '#lib/game/board-source.ts';
  import { loadMedia } from '#lib/media/client.ts';
  import type { MediaManifest } from '#lib/media/types.ts';
  import { loadRankings } from '#lib/rankings/client.ts';
@@ -26,18 +27,25 @@
  import ScreenLoading from '#lib/components/ScreenLoading.svelte';
 
  type GameSession = import('#lib/game/session.svelte.ts').Session;
+ type DraftSession = import('#lib/draft/session.svelte.ts').DraftModeSession;
 
+ /** Classic and the daily share `classic`; `draft` hosts Draft Mode's league run in the same shell. */
+ let { mode = 'classic' }: { mode?: 'classic' | 'draft' } = $props();
  let session = $state.raw<GameSession | null>(null);
+ let draftSession = $state.raw<DraftSession | null>(null);
+ let DraftModeStages = $state<typeof import('#lib/components/draft-mode/DraftModeStages.svelte').default | null>(null);
  const siteActions = getContext<{ newDraft?: () => void } | undefined>('classic-actions');
  $effect(() => {
   const current = session;
-  if (!siteActions || !current || !['stadium', 'lineup', 'simulating'].includes(current.phase)) return;
-  const requestNew = () => current.requestNew();
+  const draftRun = draftSession;
+  const requestNew = current && ['stadium', 'lineup', 'simulating'].includes(current.phase) ? () => current.requestNew()
+   : draftRun?.run ? () => draftRun.requestNew() : null;
+  if (!siteActions || !requestNew) return;
   siteActions.newDraft = requestNew;
   return () => { if (siteActions.newDraft === requestNew) siteActions.newDraft = undefined; };
  });
  // Storage problems are toasts, not a paragraph that shifts the screen.
- $effect(() => { const notice = session?.storageNotice; if (notice) toasts.show(notice, { id: 'storage', tone: 'error' }); });
+ $effect(() => { const notice = session?.storageNotice ?? draftSession?.storageNotice; if (notice) toasts.show(notice, { id: 'storage', tone: 'error' }); });
  $effect(() => { const notice = session?.resumeNotice; if (notice) toasts.show(notice, { id: 'resume' }); });
  let StadiumDeck = $state<typeof import('#lib/components/StadiumDeck.svelte').default | null>(null);
  let DraftBoard = $state<typeof import('#lib/components/DraftBoard.svelte').default | null>(null);
@@ -55,7 +63,7 @@
  let showcaseError = $state(false);
  let media = $state.raw<MediaManifest | null>(null);
  let mediaStatus = $state<CardMediaStatus>('loading');
- const rankingVersion = $derived(session?.draft?.dataVersion ?? session?.manifest?.dataVersion ?? null);
+ const rankingVersion = $derived(session?.draft?.dataVersion ?? session?.manifest?.dataVersion ?? draftSession?.manifest?.dataVersion ?? null);
  const showcaseCards = $derived(showcase.map(({ profile, slot }) => ({
   seasonId: profile.seasonId,
   playerId: profile.playerId,
@@ -99,22 +107,31 @@
  });
  onMount(() => {
   let disposed = false;
-  let currentSession: GameSession | null = null;
-  void import('#lib/game/session.svelte.ts')
-   .then(({ Session }) => {
+  let currentSession: GameSession | DraftSession | null = null;
+  const loaded = mode === 'draft'
+   ? Promise.all([import('#lib/draft/session.svelte.ts'), import('#lib/components/draft-mode/DraftModeStages.svelte')]).then(([{ DraftModeSession }, stages]) => {
     if (disposed) return;
-    currentSession = new Session();
-    session = currentSession;
-    void currentSession.initialize();
+    const created = new DraftModeSession();
+    currentSession = created;
+    DraftModeStages = stages.default;
+    draftSession = created;
+    void created.initialize();
    })
-   .catch(() => {
-    if (!disposed) gameLoadError = 'The game could not load. Reload the page to try again.';
+   : import('#lib/game/session.svelte.ts').then(({ Session }) => {
+    if (disposed) return;
+    const created = new Session();
+    currentSession = created;
+    session = created;
+    void created.initialize();
    });
+  loaded.catch(() => {
+   if (!disposed) gameLoadError = 'The game could not load. Reload the page to try again.';
+  });
   void loadMedia()
    .then(value => { if (!disposed) { media = value; mediaStatus = 'ready'; } })
    .catch(() => { if (!disposed) mediaStatus = 'unavailable'; });
   // Asks the Worker to make today's stamped link preview early in the day, before anyone shares a link.
-  void fetch(SITE_PREVIEW.path, { method: 'HEAD' }).catch(() => undefined);
+  if (mode === 'classic') void fetch(SITE_PREVIEW.path, { method: 'HEAD' }).catch(() => undefined);
   return () => {
    disposed = true;
    currentSession?.dispose();
@@ -243,16 +260,34 @@
  );
 </script>
 
-<ScreenLoading
- active={!gameLoadError && !phaseLoadError && !session?.error && (waitingForStage || (page.url.pathname !== '/' && (!session || (session.loading && session.phase === 'start'))))}
- label="Loading your team…"
-/>
+{#if mode === 'draft'}
+ <ScreenLoading active={!gameLoadError && !draftSession?.error && (!draftSession || !DraftModeStages || draftSession.screen === 'loading')} label="Loading the draft…" />
+{:else}
+ <ScreenLoading
+  active={!gameLoadError && !phaseLoadError && !session?.error && (waitingForStage || (page.url.pathname !== '/' && (!session || (session.loading && session.phase === 'start'))))}
+  label="Loading your team…"
+ />
+{/if}
 
-<main class:home-start={!session || session.phase === 'start'}>
+<main class:home-start={mode === 'classic' && (!session || session.phase === 'start')}>
  <ErrorDialog message={gameLoadError || phaseLoadError} onDismiss={() => { gameLoadError = ''; phaseLoadError = ''; }}>
   {#snippet actions()}<button type="button" class="primary" onclick={() => location.reload()}>Reload</button>{/snippet}
  </ErrorDialog>
- {#if session}
+ {#if mode === 'draft'}
+  {#if draftSession}
+   {@const currentDraft = draftSession}
+   <div class="session-feedback">
+    <ErrorDialog message={currentDraft.error} onDismiss={() => currentDraft.error = ''}>
+     {#snippet actions()}
+      {#if currentDraft.canRetry}<button type="button" class="primary" disabled={currentDraft.playing} onclick={() => void currentDraft.retry()}>Retry chapter</button>
+      {:else}<button type="button" class="primary" onclick={() => location.reload()}>Reload</button>{/if}
+     {/snippet}
+    </ErrorDialog>
+    <ConfirmNewDraft open={currentDraft.confirmNew} message="This run moves to My teams and won’t resume. A new draft starts with a fresh franchise and seed." onKeep={() => currentDraft.confirmNew = false} onDiscard={() => void currentDraft.startNew()} />
+   </div>
+   {#if DraftModeStages && currentDraft.screen !== 'loading'}<DraftModeStages session={currentDraft} {media} {mediaStatus} {rankings} />{/if}
+  {/if}
+ {:else if session}
   {@const currentSession = session}
   <div class="sr-only" aria-live="polite" aria-atomic="true">{currentSession.announce}</div>
   <div class="session-feedback">
@@ -274,7 +309,15 @@
     {:else if !phaseLoadError}<StadiumSkeleton />{/if}
    {:else if currentSession.phase === 'ready' || currentSession.phase === 'revealing' || currentSession.phase === 'choosing'}
     {#if DraftBoard}
-     <DraftBoard draft={currentSession.draft} manifest={currentSession.manifest} pool={currentSession.pool} profiles={currentSession.profiles} phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings} onRoll={() => void currentSession.roll()} onAddPack={() => currentSession.addPack()} onChoosePack={pack => void currentSession.choosePack(pack)} onDraft={(id, slot) => currentSession.commit(id, slot)} onReassign={(id, slot) => currentSession.reassign(id, slot)} onNew={() => currentSession.requestNew()} />
+     {@const classicDraft = currentSession.draft}
+     <DraftBoard
+      source={classicBoardSource(classicDraft, currentSession.manifest, currentSession.pool)}
+      classic={{ draft: classicDraft, onRoll: () => void currentSession.roll(), onAddPack: () => currentSession.addPack(), onChoosePack: pack => void currentSession.choosePack(pack) }}
+      manifest={currentSession.manifest} profiles={currentSession.profiles} homeStadiumId={classicDraft.homeStadium?.id ?? null}
+      phase={currentSession.phase} loading={currentSession.loading} busy={currentSession.busy} {rankings} {rankingLoading} {rankingError} onRetryRankings={retryRankings}
+      onDraft={(id, slot) => { if (slot) currentSession.commit(id, slot as Slot); }}
+      onMove={(id, slot) => { if (slot) currentSession.reassign(id, slot as HitterSlot); }}
+      onNew={() => currentSession.requestNew()} />
     {:else if !phaseLoadError}<DraftSkeleton pool={currentSession.phase === 'choosing' && currentSession.draft.packs.length <= 1} />{/if}
    {:else if currentSession.phase === 'lineup'}
     <GuideTip step="roster" text="Your team is complete. Adjust the batting order and bullpen roles if you like, then play all 162 games." />

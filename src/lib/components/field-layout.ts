@@ -1,4 +1,4 @@
-import type { RosterSlot } from '../game/types.ts';
+import type { CardSlot } from '../game/types.ts';
 import type { StadiumSummary } from '../sim/park-types.ts';
 
 export interface Point { x: number; y: number }
@@ -53,6 +53,9 @@ export const FIELD = {
 		RP1: { x: 111, y: 587 },
 		RP2: { x: 212, y: 587 },
 		RP3: { x: 313, y: 587 },
+		/** Draft Mode's deep relievers, in the five-across relief row (`DEEP_RELIEF`). */
+		RP4: { x: 292.8, y: 587 },
+		RP5: { x: 373.6, y: 587 },
 		/** Older saved seasons drafted a team bullpen; it takes the first relief spot. */
 		BP: { x: 111, y: 587 }
 	}
@@ -64,8 +67,20 @@ export const FIELD = {
 	home: Point;
 	stadium: Point;
 	staffPlate: { y: number; height: number };
-	slots: Record<RosterSlot, Point>;
+	slots: Record<CardSlot, Point>;
 };
+
+/** Draft Mode's relief row: five relievers spread evenly across the staff plate's width, 80.8 units apart. */
+const DEEP_RELIEF: Partial<Record<CardSlot, Point>> = {
+	RP1: { x: 50.4, y: 587 },
+	RP2: { x: 131.2, y: 587 },
+	RP3: { x: 212, y: 587 },
+	RP4: FIELD.slots.RP4,
+	RP5: FIELD.slots.RP5
+};
+
+/** Where `slot`'s card sits; `deep` rosters carry RP4 and RP5, so their relievers share a five-across row. */
+export const slotPoint = (slot: CardSlot, deep = false): Point => (deep ? DEEP_RELIEF[slot] : undefined) ?? FIELD.slots[slot];
 
 export interface FieldArt {
 	/** Fair territory from home around the fence, as an SVG points list. */

@@ -5,7 +5,7 @@
 	import { applyDraftModeOptIn, draftModeBuild } from '#lib/app/features.ts';
 	import DraftModeSkeleton from '#lib/components/skeletons/DraftModeSkeleton.svelte';
 
-	type Game = typeof import('#lib/components/draft-mode/DraftModeGame.svelte').default;
+	type Game = typeof import('#lib/components/ClassicGame.svelte').default;
 	// Unfinished Draft Mode is developer-only; public visitors get a way back to the game instead.
 	let access = $state<'checking' | 'open' | 'closed'>(draftModeBuild ? 'open' : 'checking');
 	let Game = $state<Game | null>(null);
@@ -14,7 +14,7 @@
 	onMount(() => {
 		access = applyDraftModeOptIn(page.url) ? 'open' : 'closed';
 		if (access === 'open') {
-			void import('#lib/components/draft-mode/DraftModeGame.svelte')
+			void import('#lib/components/ClassicGame.svelte')
 				.then(module => { Game = module.default; })
 				.catch(() => { loadError = 'Draft Mode could not load. Reload the page to try again.'; });
 		}
@@ -36,7 +36,7 @@
 {:else if loadError}
 	<main class="unavailable"><p role="alert">{loadError}</p><button class="primary" onclick={() => location.reload()}>Reload</button></main>
 {:else if Game}
-	<Game />
+	<Game mode="draft" />
 {:else}
 	<main class="unavailable"><DraftModeSkeleton /></main>
 {/if}

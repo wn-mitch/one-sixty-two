@@ -1,7 +1,6 @@
 <script lang="ts">
- import { type LegalReassignment } from '../game/draft.ts';
- import { draftRules } from '../game/rules.ts';
- import { HITTER_SLOTS, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../game/types.ts';
+ import { placementKey as rosterPlacementKey, type RosterMove, type RosterView } from '../game/roster-view.ts';
+ import { HITTER_SLOTS, type FieldSlot, type HitterSlot, type Manifest, type Profile } from '../game/types.ts';
  import type { RosterClickBehavior } from '../game/settings.svelte.ts';
  import type { CardMediaStatus } from '../cards/view-model.ts';
  import type { MediaManifest } from '../media/types.ts';
@@ -12,16 +11,17 @@
  import RosterItem from './RosterItem.svelte';
  import StadiumCard from './StadiumCard.svelte';
  import TeamLogo from './TeamLogo.svelte';
- import { FIELD, fieldArt } from './field-layout.ts';
+ import { FIELD, fieldArt, slotPoint } from './field-layout.ts';
  import { captureField, slideField } from './field-motion.ts';
 
- type Preview = { profile: Profile; slot: Slot };
+ /** A selected card shown where it would land: a slot, or the bench (`slot: null`). */
+ type Preview = { profile: Profile; slot: FieldSlot | null };
 
  const pct = (value: number, total: number) => `${(value / total) * 100}%`;
  const { window: fieldWindow, staffPlate, stadium: stadiumPoint } = FIELD;
 
  let {
-  draft,
+  roster,
   manifest,
   profiles,
   busy,
@@ -32,6 +32,7 @@
   mediaStatus = 'loading',
   preview = null,
   legalSlots = [],
+  benchLegal = false,
   movingSeasonId = null,
   moveTargets = [],
   inspectedSeasonId = null,
@@ -41,11 +42,12 @@
   stadium = null,
   stadiumFranchise,
   stadiumColor,
-  onSlot
+  onSlot,
+  onBench
  }: {
-  draft: Draft;
+  roster: RosterView;
   manifest: Manifest;
-  profiles: Profile[];
+  profiles: readonly Profile[];
   busy: boolean;
   rankings?: WarRankings | null;
   rankingLoading?: boolean;
@@ -53,9 +55,11 @@
   media?: MediaManifest | null;
   mediaStatus?: CardMediaStatus;
   preview?: Preview | null;
-  legalSlots?: readonly Slot[];
+  legalSlots?: readonly FieldSlot[];
+  /** The selected card may be placed on the bench. */
+  benchLegal?: boolean;
   movingSeasonId?: string | null;
-  moveTargets?: readonly LegalReassignment[];
+  moveTargets?: readonly RosterMove[];
   inspectedSeasonId?: string | null;
   rosterFirstClick?: RosterClickBehavior;
   inspectionId?: string;
@@ -64,28 +68,32 @@
   stadium?: StadiumSummary | null;
   stadiumFranchise?: string;
   stadiumColor?: string;
-  onSlot: (slot: Slot, trigger: HTMLButtonElement) => void;
+  onSlot: (slot: FieldSlot, trigger: HTMLButtonElement) => void;
+  /** A bench card, or the open bench place (`null`) as a placement or move target. */
+  onBench?: (seasonId: string | null, trigger: HTMLButtonElement) => void;
  } = $props();
 
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
- const bySlot = $derived(new Map(draft.picks.map(pick => [pick.slot, pick])));
- const slots = $derived(draftRules(draft.schemaVersion).slots);
+ const bySlot = $derived(new Map([...roster.placed].map(([slot, seasonId]) => [slot, { seasonId }])));
+ const slots = $derived(roster.slots);
+ const deep = $derived(slots.includes('RP4'));
  const pitcherSlots = $derived(slots.filter(slot => !HITTER_SLOTS.includes(slot as HitterSlot)));
- const targetsBySlot = $derived(new Map(moveTargets.map(target => [target.slot, target])));
- const pickedCount = $derived(draft.picks.length);
+ const targetsBySlot = $derived(new Map(moveTargets.flatMap(target => target.slot ? [[target.slot, target] as const] : [])));
+ const benchTarget = $derived(moveTargets.some(target => target.slot === null));
+ const pickedCount = $derived(roster.placed.size);
 
 
  function profileLabel(profile: Profile): string {
   return `${profile.displayName}, ${profile.year}, ${profile.historicalTeam}`;
  }
 
- function isInspectionTrigger(state: { profile: Profile | undefined; slot: Slot; source: boolean }): boolean {
+ function isInspectionTrigger(state: { profile: Profile | undefined; slot: FieldSlot; source: boolean }): boolean {
   if (!state.profile) return false;
-  return !HITTER_SLOTS.includes(state.slot as HitterSlot) || state.source || rosterFirstClick === 'review';
+  return !roster.movable(state.slot) || state.source || rosterFirstClick === 'review';
  }
 
- function slotState(slot: Slot): {
-  slot: Slot;
+ function slotState(slot: FieldSlot): {
+  slot: FieldSlot;
   profile: Profile | undefined;
   unavailable: boolean;
   preview: boolean;
@@ -102,12 +110,12 @@
   const profile = isPreview ? preview.profile : pick ? bySeason.get(pick.seasonId) : undefined;
   const unavailable = Boolean(pick && !profile);
   const source = pick?.seasonId === movingSeasonId;
-  const hitter = HITTER_SLOTS.includes(slot as HitterSlot);
-  const target = hitter ? targetsBySlot.get(slot as HitterSlot) : undefined;
+  const movable = roster.movable(slot);
+  const target = targetsBySlot.get(slot);
   const legalPlacement = !movingSeasonId && legalSlots.includes(slot);
   const occupied = Boolean(pick);
-  const inspectable = occupied && (!movingSeasonId || !hitter);
-  const fieldPosition = FIELD.slots[slot];
+  const inspectable = occupied && (!movingSeasonId || !movable);
+  const fieldPosition = slotPoint(slot, deep);
   const highlighted = source || Boolean(target) || legalPlacement;
   const targetName = target?.swapWith ? bySeason.get(target.swapWith)?.displayName ?? 'unavailable selected season' : null;
 
@@ -117,7 +125,7 @@
   else if (target) action = targetName ? `Swap with ${targetName}` : `Move to open ${slot}`;
   else if (legalPlacement) action = `Place at open ${slot}`;
   else if (unavailable) action = 'Unavailable selected season';
-  else if (occupied && hitter) action = rosterFirstClick === 'review' ? 'Review card' : 'Move or swap';
+  else if (occupied && movable) action =rosterFirstClick === 'review' ? 'Review card' : 'Move or swap';
   else if (occupied) action = 'Review card';
   else action = 'Open, unavailable';
 
@@ -144,7 +152,16 @@
 
  let root = $state<HTMLElement>();
  let before: Map<string, DOMRect> | null = null;
- const placementKey = $derived(`${draft.picks.map(pick => `${pick.seasonId}@${pick.slot}`).join('|')}#${preview ? `${preview.profile.seasonId}@${preview.slot}` : ''}`);
+ const placementKey = $derived(`${rosterPlacementKey(roster)}#${preview ? `${preview.profile.seasonId}@${preview.slot ?? 'bench'}` : ''}`);
+ /** Bench cards in order, then the selected card previewed on the bench. */
+ const benchCards = $derived.by(() => {
+  if (!roster.bench) return [];
+  const cards = roster.bench.map((seasonId, index) => ({ seasonId, profile: bySeason.get(seasonId), preview: false, surplus: index >= roster.reserves }));
+  if (preview && preview.slot === null && !movingSeasonId) cards.push({ seasonId: preview.profile.seasonId, profile: preview.profile, preview: true, surplus: cards.length >= roster.reserves });
+  return cards;
+ });
+ /** The open bench place shows while it is a legal placement not yet previewed, or a move target. */
+ const benchOpen = $derived(!!roster.bench && (movingSeasonId ? benchTarget : benchLegal && preview?.slot !== null));
  // Capture card positions before a placement change reaches the DOM, then slide them to their new slots.
  $effect.pre(() => {
   void placementKey;
@@ -166,7 +183,7 @@
  let turned = $state(false);
 </script>
 
-<aside bind:this={root} class="roster" class:compact aria-label={`Your field, ${pickedCount} of ${slots.length} roster slots filled`}>
+<aside bind:this={root} class="roster" class:compact class:deep aria-label={`Your field, ${pickedCount} of ${slots.length} roster slots filled`}>
  {#if !compact}
   <div class="pick-track" aria-label={`${pickedCount} of ${slots.length} roster slots filled`}>
    {#each slots as slot}<span class:locked={bySlot.has(slot)}></span>{/each}
@@ -222,6 +239,41 @@
    {/if}
   </div>
  </div>
+ {#if roster.bench}
+  <section class="bench" aria-labelledby="bench-heading">
+   <h3 id="bench-heading">Bench <span>{roster.bench.length} · {roster.reserves} reserve{roster.reserves === 1 ? '' : 's'}</span></h3>
+   <div class="bench-cards">
+    {#each benchCards as card (card.seasonId)}
+     {@const source = card.seasonId === movingSeasonId}
+     <button
+      type="button"
+      class="bench-slot"
+      class:preview={card.preview}
+      class:source
+      class:highlighted={source || card.preview}
+      class:surplus={card.surplus && !card.preview}
+      data-bench-season={card.seasonId}
+      data-preview={card.preview ? 'true' : undefined}
+      aria-label={`Bench${card.surplus ? ', no roster spot' : ''}, ${card.profile ? profileLabel(card.profile) : 'unavailable selected season'}. ${card.preview ? 'Preview, confirm bench' : source || rosterFirstClick === 'review' ? 'Review card' : 'Move or swap'}.`}
+      aria-expanded={!card.preview ? card.seasonId === inspectedSeasonId : undefined}
+      aria-controls={!card.preview ? inspectionId : undefined}
+      disabled={busy || card.preview || (!!movingSeasonId && !source)}
+      onclick={event => onBench?.(card.seasonId, event.currentTarget as HTMLButtonElement)}
+     >
+      <span class="card-frame" aria-hidden="true">
+       {#if card.profile}<RosterItem profile={card.profile} assignedSlot={null} {manifest} {rankings} {rankingLoading} {rankingError} {media} {mediaStatus} />
+       {:else}<span class="slot-placeholder"><b>Bench</b><span>Unavailable</span></span>{/if}
+      </span>
+     </button>
+    {/each}
+    {#if benchOpen}
+     <button type="button" class="bench-slot highlighted" data-bench-open aria-label={movingSeasonId ? 'Bench. Move to the bench.' : 'Bench. Place on the bench.'} disabled={busy} onclick={event => onBench?.(null, event.currentTarget as HTMLButtonElement)}>
+      <span class="card-frame" aria-hidden="true"><span class="slot-placeholder"><b>Bench</b><span>Open</span><small>{movingSeasonId ? 'Move' : 'Place'}</small></span></span>
+     </button>
+    {/if}
+   </div>
+  </section>
+ {/if}
 </aside>
 
 {#snippet slotButton(state: ReturnType<typeof slotState>, kind: 'field-slot' | 'staff-slot')}
@@ -321,6 +373,32 @@
  }
  /* Staff columns are 101 units apart, so a slot may be wider than the card to keep names on fewer lines. */
  .staff-slot { --roster-slot-width: calc(100cqi * 92 / 424); }
+ /* A five-across relief row leaves 80.8 units per reliever. */
+ .deep .staff-slot[data-slot^='RP'] { --roster-slot-width: calc(100cqi * 78 / 424); }
+ .bench { container-type: inline-size; width: min(100%, 30rem); margin: var(--space-3) auto 0; }
+ .bench h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+ .bench h3 span { color: var(--muted); font-weight: 500; }
+ .bench-cards { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+ .bench-slot {
+  --roster-mini-width: calc(100cqi * 56 / 424);
+  --roster-slot-width: calc(var(--roster-mini-width) * 8 / 7);
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  width: var(--roster-slot-width);
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  text-align: center;
+ }
+ .bench-slot:hover:not(:disabled) { background: transparent; }
+ .bench-slot:disabled { opacity: 1; cursor: default; }
+ .bench-slot:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+ .bench-slot.surplus .card-frame { outline-color: var(--error); }
  /* Disabled slots dim without turning translucent, so the field's lines never show through a slot. */
  .field-slot:disabled, .staff-slot:disabled { opacity: 1; cursor: default; }
  .field-slot:disabled .card-frame, .staff-slot:disabled .card-frame { filter: brightness(.55) saturate(.7); }

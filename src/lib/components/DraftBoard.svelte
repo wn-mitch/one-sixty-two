@@ -1,8 +1,9 @@
 <script lang="ts">
- import { onMount, tick, untrack } from 'svelte';
- import { extraPacksLeft, legalSlots, legalReassignments, maxPacks, rollContains, rollKey, rollYears } from '../game/draft.ts';
+ import { onMount, tick, untrack, type Snippet } from 'svelte';
+ import { extraPacksLeft, maxPacks, rollYears } from '../game/draft.ts';
+ import type { BoardSource } from '../game/board-source.ts';
  import { draftRules } from '../game/rules.ts';
- import { HITTER_SLOTS, compareId, isJackpot, type Draft, type HitterSlot, type Manifest, type Profile, type Roll, type Slot } from '../game/types.ts';
+ import { HITTER_SLOTS, compareId, isJackpot, type Draft, type FieldSlot, type HitterSlot, type Manifest, type Profile } from '../game/types.ts';
  import { loadMedia } from '../media/client.ts';
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
@@ -24,20 +25,34 @@
  import { shopState } from '../cosmetics/store.svelte.ts';
  import PoolSkeleton from './skeletons/PoolSkeleton.svelte';
  import Skeleton from './skeletons/Skeleton.svelte';
- let { draft, manifest, pool, profiles, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onRoll, onAddPack, onChoosePack, onDraft, onReassign, onNew }: {
-  draft: Draft; manifest: Manifest; pool: Profile[]; profiles: Profile[];
+ /** A place a selected card can be drafted into: an open slot, or the bench. */
+ type Place = FieldSlot | 'bench';
+ /** Classic's roll: the franchise packs dealt, taken and added beside the board. */
+ interface ClassicRolls { draft: Draft; onRoll: () => void; onAddPack: () => void; onChoosePack: (pack: number) => void }
+ /** Draft Mode's passed pile: the sealed packs before the first pick, a status line and a League view. */
+ interface PileTable { opening: Snippet; status: Snippet; league: Snippet }
+ let { source, classic, pile, manifest, profiles, homeStadiumId, phase, loading, busy, rankings, rankingLoading, rankingError, onRetryRankings, onDraft, onMove, onNew, caption }: {
+  source: BoardSource; classic?: ClassicRolls; pile?: PileTable;
+  manifest: Manifest;
+  /** Profiles of the rostered cards. */
+  profiles: readonly Profile[];
+  homeStadiumId: string | null;
   phase: 'ready' | 'revealing' | 'choosing'; loading: boolean; busy: boolean;
   rankings: WarRankings | null; rankingLoading: boolean; rankingError: boolean;
-  onRetryRankings: () => void; onRoll: () => void; onAddPack: () => void; onChoosePack: (pack: number) => void; onNew: () => void;
-  onDraft: (seasonId: string, slot: Slot) => void;
-  onReassign: (seasonId: string, slot: HitterSlot) => void;
+  onRetryRankings: () => void; onNew: () => void;
+  /** Drafts the season into `slot`, or onto the bench (`null`). */
+  onDraft: (seasonId: string, slot: FieldSlot | null) => void;
+  /** Moves a rostered card to `slot`, or to the bench (`null`). */
+  onMove: (seasonId: string, slot: FieldSlot | null) => void;
+  caption?: Snippet<[Profile]>;
  } = $props();
+ const draft = $derived(classic?.draft);
  const uid = $props.id();
  let wide = $state(false);
  let selectedSeasonId = $state<string | null>(null);
  let selectedSeasons = $state(new Map<string, string>());
  let selectionChoices = $state<Profile[]>([]);
- let pendingSlot = $state<Slot | null>(null);
+ let pendingSlot = $state<Place | null>(null);
  let movingSeasonId = $state<string | null>(null);
  let inspectedSeasonId = $state<string | null>(null);
  let sheetOpen = $state(false);
@@ -51,7 +66,7 @@
  let returning = $state(false);
  /** A confirmed pick is clearing the candidate grid before it commits. */
  let leaving = $state(false);
- let sheetTab = $state<'field' | 'back'>('field');
+ let sheetTab = $state<'field' | 'back' | 'league'>('field');
  let trigger = $state<HTMLElement | null>(null);
  let selectionTrigger: HTMLElement | null = null;
  let inspectionTrigger = $state<HTMLElement | null>(null);
@@ -66,18 +81,23 @@
  let draftBoard = $state<HTMLElement>();
  /** Two or three open packs, from the pool's toolbar or a reload, show as dealt cards until one is taken. */
  $effect(() => {
-  if (draft.packs.length < 2 || untrack(() => dealing)) return;
+  if (!draft || draft.packs.length < 2 || untrack(() => dealing)) return;
   dealing = true;
   dealtArrived = false;
   dealOutPending = false;
  });
- const dealtPacks = $derived(draft.packs.map(pack => isJackpot(pack) ? { roll: pack } : {
+ const dealtPacks = $derived(draft ? draft.packs.map(pack => isJackpot(pack) ? { roll: pack } : {
   roll: pack,
   name: manifest.franchises.find(franchise => franchise.id === pack.franchiseId)?.name,
   years: rollYears(pack, manifest, draft.schemaVersion),
   color: media?.teams[pack.franchiseId]?.color
- }));
- const showingCandidates = $derived(!(phase === 'ready' || dealing) && !(loading || phase === 'revealing') && pool.length > 0);
+ }) : []);
+ const showingCandidates = $derived(!(phase === 'ready' || dealing) && !(loading || phase === 'revealing') && source.offer.length > 0);
+ // Each passed pile deals into the grid as it arrives, as the opened packs do.
+ $effect(() => {
+  void source.key;
+  if (pile && phase === 'choosing') untrack(() => { dealOutPending = true; });
+ });
  $effect(() => {
   if (!dealOutPending || !showingCandidates) return;
   dealOutPending = false;
@@ -98,42 +118,53 @@
  let inspectedOpened = $state(false);
  let inspectionOpening = false;
  let inspectedTextBack = $state(false);
- let requestedMove = $state<{ seasonId: string; slot: HitterSlot } | null>(null);
+ let requestedMove = $state<{ seasonId: string; slot: Place } | null>(null);
  let media = $state.raw<MediaManifest | null>(null);
  let mediaStatus = $state<CardMediaStatus>('loading');
- const manifestBySeason = $derived(new Map(manifest.candidates.map(candidate => [candidate.seasonId, candidate])));
- const poolBySeason = $derived(new Map(pool.map(profile => [profile.seasonId, profile])));
+ const poolBySeason = $derived(new Map(source.offer.map(profile => [profile.seasonId, profile])));
  const rosterBySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
  const selectedProfile = $derived(selectedSeasonId ? poolBySeason.get(selectedSeasonId) : undefined);
- const selectedCandidate = $derived(selectedSeasonId ? manifestBySeason.get(selectedSeasonId) : undefined);
- const destinations = $derived(selectedCandidate ? legalSlots(draft, selectedCandidate, manifest) : []);
- const moveTargets = $derived(movingSeasonId ? legalReassignments(draft, manifest, movingSeasonId) : []);
+ const destinations = $derived(selectedProfile ? source.destinations(selectedProfile.seasonId) : []);
+ const benchLegal = $derived(!!selectedProfile && source.benches(selectedProfile.seasonId));
+ /** Every place the selected card may go: its open slots, then the bench. */
+ const places = $derived<Place[]>([...destinations, ...(benchLegal ? ['bench' as const] : [])]);
+ const moveTargets = $derived(movingSeasonId ? source.moves(movingSeasonId) : []);
+ /** Where a rostered card sits: its slot, or the bench. */
+ const placeOf = (seasonId: string): Place | undefined => {
+  for (const [slot, id] of source.roster.placed) if (id === seasonId) return slot;
+  return source.roster.bench?.includes(seasonId) ? 'bench' : undefined;
+ };
+ const occupantOf = (slot: FieldSlot) => source.roster.placed.get(slot);
  const movingProfile = $derived(movingSeasonId ? rosterBySeason.get(movingSeasonId) : undefined);
  const inspectedProfile = $derived(inspectedSeasonId ? rosterBySeason.get(inspectedSeasonId) : undefined);
  const seasonChoices = $derived([...selectionChoices].sort((a, b) => a.year - b.year || compareId(a.seasonId, b.seasonId)));
- const preview = $derived(selectedProfile && pendingSlot && !movingSeasonId ? { profile: selectedProfile, slot: pendingSlot } : null);
+ const preview = $derived(selectedProfile && pendingSlot && !movingSeasonId ? { profile: selectedProfile, slot: pendingSlot === 'bench' ? null : pendingSlot } : null);
  const selectedCard = $derived(selectedProfile ? createCardViewModel({ profile: selectedProfile, manifest, media, mediaStatus, rankings }) : null);
- const inspectedCard = $derived(inspectedProfile ? createCardViewModel({ profile: inspectedProfile, slot: draft.picks.find(pick => pick.seasonId === inspectedSeasonId)?.slot, manifest, media, mediaStatus, rankings }) : null);
- const draftBrowseKey = $derived(`${draft.schemaVersion}:${draft.dataVersion}:${draft.seed}:${draft.picks.map(pick => pick.seasonId).join('|')}:${draft.currentRoll ? rollKey(draft.currentRoll) : ''}`);
- const rosterSlots = $derived(draftRules(draft.schemaVersion).slots);
- const occupiedSlots = $derived(new Set(draft.picks.map(pick => pick.slot)));
- const roll = $derived(draft.currentRoll);
+ const inspectedPlace = $derived(inspectedSeasonId ? placeOf(inspectedSeasonId) : undefined);
+ const inspectedCard = $derived(inspectedProfile ? createCardViewModel({ profile: inspectedProfile, slot: inspectedPlace === 'bench' ? null : inspectedPlace, manifest, media, mediaStatus, rankings }) : null);
+ const draftBrowseKey = $derived(source.key);
+ const rosterSlots = $derived(source.roster.slots);
+ const occupiedSlots = $derived(new Set(source.roster.placed.keys()));
+ /** Picks made so far and the draft's total. */
+ const picked = $derived(source.pickNumber - 1);
+ const pickTotal = $derived(source.pickCount);
+ const roll = $derived(draft?.currentRoll ?? null);
  const rollColor = $derived(roll && !isJackpot(roll) ? media?.teams[roll.franchiseId]?.color : undefined);
- const homeStadium = $derived(draft.homeStadium ? manifest.stadiums.find(stadium => stadium.ref.id === draft.homeStadium!.id) ?? null : null);
+ const homeStadium = $derived(homeStadiumId ? manifest.stadiums.find(stadium => stadium.ref.id === homeStadiumId) ?? null : null);
  const rollFranchise = $derived(roll ? isJackpot(roll) ? 'Jackpot' : manifest.franchises.find(franchise => franchise.id === roll.franchiseId)?.name : undefined);
  /** The name a short instruction uses: the surname, without a generational suffix. */
  const shortName = (name: string) => name.split(' ').filter(part => !/^(Jr\.?|Sr\.?|II|III|IV)$/.test(part)).at(-1) ?? name;
  const selectedName = $derived(selectedProfile ? shortName(selectedProfile.displayName) : '');
  const pitcherOnly = $derived(destinations.length > 0 && destinations.every(slot => !HITTER_SLOTS.includes(slot as HitterSlot)));
  /** Explain only a missing destination; the chosen card and slot already identify a valid pick. */
- const placementGuide = $derived(!selectedProfile ? '' : !destinations.length
+ const placementGuide = $derived(!selectedProfile ? '' : !places.length
   ? `No open spot fits ${selectedName}. Move a hitter to make room, or cancel.`
-  : !pendingSlot ? `Choose ${pitcherOnly ? 'a pitching slot' : 'a highlighted position'} for ${selectedName}.`
+  : !pendingSlot ? `Choose ${pitcherOnly && !benchLegal ? 'a pitching slot' : benchLegal ? 'a highlighted position or the bench' : 'a highlighted position'} for ${selectedName}.`
   : '');
- const extraLeft = $derived(extraPacksLeft(draft));
+ const extraLeft = $derived(draft ? extraPacksLeft(draft) : 0);
  let draftMenuOpen = $state(false);
  let draftMenuTrigger = $state<HTMLButtonElement>();
- const canConfirm = $derived(phase === 'choosing' && !busy && !leaving && !movingSeasonId && !!selectedProfile && !!pendingSlot && destinations.includes(pendingSlot));
+ const canConfirm = $derived(phase === 'choosing' && !busy && !leaving && !movingSeasonId && !!selectedProfile && !!pendingSlot && places.includes(pendingSlot));
 
  function clearTransient(): void {
   selectedSeasonId = null;
@@ -182,7 +213,7 @@
   preserveInspectionClick = reviewing && !event.composedPath().some(node =>
    node instanceof Element && node.matches('.card-review'));
   returningSourceClick = reviewing && event.target instanceof Element &&
-   event.target.closest<HTMLElement>('[data-slot]')?.dataset.seasonId === inspectedSeasonId;
+   (event.target.closest<HTMLElement>('[data-slot]')?.dataset.seasonId ?? event.target.closest<HTMLElement>('[data-bench-season]')?.dataset.benchSeason) === inspectedSeasonId;
   if (reviewing && event.target instanceof HTMLDialogElement && event.target.matches('.draft-sheet')) {
    event.preventDefault();
    event.stopPropagation();
@@ -222,7 +253,7 @@
   }
   if (!selectedProfile || busy) return;
   if (event.composedPath().some(node => node instanceof Element &&
-   node.matches('[data-app-settings], .site-menu, .draft-menu, .error-dialog, [data-candidate-card], [data-slot], [data-pool-load], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
+   node.matches('[data-app-settings], .site-menu, .draft-menu, .error-dialog, [data-candidate-card], [data-slot], [data-bench-open], [data-bench-season], [data-pool-load], .card-review, .field-footer, .sheet-footer, .sheet-header, .open-field'))) return;
   clearTransient();
   sheetOpen = false;
  }
@@ -253,15 +284,14 @@
   inspectedTextBack = false;
   inspectionOpening = false;
   sheetTab = 'field';
-  const candidate = manifestBySeason.get(seasonId);
-  const slots = candidate ? legalSlots(draft, candidate, manifest) : [];
+  const slots: Place[] = [...source.destinations(seasonId), ...(source.benches(seasonId) ? ['bench' as const] : [])];
   pendingSlot = slots.length === 1 ? slots[0] : null;
   if (!wide) sheetOpen = true;
  }
- function placeCandidate(seasonId: string, seasons: Profile[], slot: Slot, nextTrigger: HTMLButtonElement): void {
+ function placeCandidate(seasonId: string, seasons: Profile[], fieldSlot: FieldSlot | null, nextTrigger: HTMLButtonElement): void {
   if (busy || phase !== 'choosing' || !poolBySeason.has(seasonId)) return;
-  const candidate = manifestBySeason.get(seasonId);
-  if (!candidate || !legalSlots(draft, candidate, manifest).includes(slot)) return;
+  const slot: Place = fieldSlot ?? 'bench';
+  if (slot === 'bench' ? !source.benches(seasonId) : !source.destinations(seasonId).includes(slot)) return;
   if (selectedSeasonId !== seasonId) selectCandidate(seasonId, seasons, nextTrigger);
   movingSeasonId = null;
   requestedMove = null;
@@ -285,22 +315,21 @@
   selectedSeasonId = seasonId;
   candidateTurned = true;
   candidateTextBack = false;
-  const candidate = manifestBySeason.get(seasonId);
-  if (pendingSlot && (!candidate || !legalSlots(draft, candidate, manifest).includes(pendingSlot))) pendingSlot = null;
+  if (pendingSlot && (pendingSlot === 'bench' ? !source.benches(seasonId) : !source.destinations(seasonId).includes(pendingSlot))) pendingSlot = null;
  }
  /**
   * Adds a pack beside the taken roll. The session deals at once; a still copy of the pool fades out while the
   * table fades back in and opens the added pack, as tapping its ghost would.
   */
  function addPackFromPool(): void {
-  if (busy || leaving) return;
+  if (busy || leaving || !classic) return;
   cancelSelection();
   const grid = draftBoard?.querySelector<HTMLElement>('.candidates');
   const host = draftBoard?.querySelector<HTMLElement>('.draft-browser');
   const before = draft;
   returning = true;
   const fading = grid && host && appSettings.effectiveEnabled ? fadeCopy(grid, host) : null;
-  onAddPack();
+  classic.onAddPack();
   // A failed add leaves the pool in place.
   if (draft === before) fading?.remove();
  }
@@ -320,13 +349,11 @@
   return copy;
  }
  async function confirmPick(): Promise<void> {
-  if (!canConfirm || !selectedSeasonId || !pendingSlot || !selectedProfile || !selectedCandidate) return;
-  const roll = draft.currentRoll;
-  if (!roll || !rollContains(roll, selectedCandidate)) return;
-  if (!legalSlots(draft, selectedCandidate, manifest).includes(pendingSlot)) return;
+  if (!canConfirm || !selectedSeasonId || !pendingSlot || !selectedProfile) return;
+  if (!places.includes(pendingSlot)) return;
   const seasonId = selectedSeasonId;
-  const slot = pendingSlot;
-  const before = draft;
+  const slot = pendingSlot === 'bench' ? null : pendingSlot;
+  const before = source.key;
   // The candidates leave first so the next pack arrives on a clear stage.
   leaving = true;
   const grid = wide ? draftBoard?.querySelector<HTMLElement>('.candidates') : null;
@@ -337,14 +364,14 @@
   if (placed) await stamp(placed);
   const landing = placedCard?.isConnected ? { clone: freeze(placedCard), rect: placedCard.getBoundingClientRect() } : null;
   // The last pick hands every field card to its lineup row.
-  if (draft.picks.length + 1 === rosterSlots.length) stash('field', new Map([...draftBoard?.querySelectorAll<HTMLElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} .roster-item[data-season-id]`) ?? []]
+  if (source.pickNumber === source.pickCount) stash('field', new Map([...draftBoard?.querySelectorAll<HTMLElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} .roster-item[data-season-id]`) ?? []]
    .map(item => [item.dataset.seasonId!, (item.querySelector<HTMLElement>('.miniature .card') ?? item).getBoundingClientRect()] as const)
    .filter(([, rect]) => rect.width > 0)));
   // Session catches errors. Only the ensuing draft identity change closes the preview.
   onDraft(seasonId, slot);
   leaving = false;
   await tick();
-  if (draft === before) {
+  if (source.key === before) {
    for (const animation of exit) animation.cancel();
    return;
   }
@@ -371,9 +398,10 @@
   sheetTab = 'field';
   if (!wide) sheetOpen = true;
  }
- function slotAction(slot: Slot, nextTrigger: HTMLButtonElement): void {
+ function slotAction(slot: FieldSlot, nextTrigger: HTMLButtonElement): void {
   if (busy) return;
-  const occupant = draft.picks.find(pick => pick.slot === slot);
+  const occupantId = occupantOf(slot);
+  const occupant = occupantId ? { seasonId: occupantId } : undefined;
   if (returningSourceClick || occupant?.seasonId === inspectedSeasonId) {
    returningSourceClick = false;
    inspectedOpened = false;
@@ -385,23 +413,47 @@
     inspectRoster(occupant.seasonId, nextTrigger, false);
     return;
    }
-   if (occupant && !HITTER_SLOTS.includes(slot as HitterSlot)) {
+   if (occupant && !source.roster.movable(slot)) {
     inspectRoster(occupant.seasonId, nextTrigger, false);
     return;
    }
    const destination = moveTargets.find(target => target.slot === slot);
    if (!destination) return;
-   requestedMove = { seasonId: movingSeasonId, slot: destination.slot };
-   onReassign(movingSeasonId, destination.slot);
+   requestedMove = { seasonId: movingSeasonId, slot };
+   onMove(movingSeasonId, slot);
    return;
   }
   if (occupant) {
-   const hitter = HITTER_SLOTS.includes(slot as HitterSlot);
-   if (hitter && appSettings.rosterFirstClick === 'move') beginMove(occupant.seasonId, nextTrigger);
-   else inspectRoster(occupant.seasonId, nextTrigger, hitter);
+   const movable = source.roster.movable(slot);
+   if (movable && appSettings.rosterFirstClick === 'move') beginMove(occupant.seasonId, nextTrigger);
+   else inspectRoster(occupant.seasonId, nextTrigger, movable);
    return;
   }
   if (phase === 'choosing' && selectedProfile && destinations.includes(slot)) pendingSlot = slot;
+ }
+ /** A bench card, or the open bench place (`null`): the bench mirrors a slot's place, move and review. */
+ function benchAction(seasonId: string | null, nextTrigger: HTMLButtonElement): void {
+  if (busy) return;
+  if (seasonId === null) {
+   if (movingSeasonId) {
+    if (!moveTargets.some(target => target.slot === null)) return;
+    requestedMove = { seasonId: movingSeasonId, slot: 'bench' };
+    onMove(movingSeasonId, null);
+   } else if (phase === 'choosing' && benchLegal) pendingSlot = 'bench';
+   return;
+  }
+  if (returningSourceClick || seasonId === inspectedSeasonId) {
+   returningSourceClick = false;
+   inspectedOpened = false;
+   inspectedTurned = false;
+   return;
+  }
+  if (movingSeasonId) {
+   if (movingSeasonId === seasonId) inspectRoster(seasonId, nextTrigger, false);
+   return;
+  }
+  if (appSettings.rosterFirstClick === 'move') beginMove(seasonId, nextTrigger);
+  else inspectRoster(seasonId, nextTrigger, true);
  }
  function restoreInspectionFocus(preferred: HTMLElement | null): void {
   void tick().then(() => {
@@ -413,14 +465,20 @@
   return trigger.querySelector<HTMLElement>('.miniature .card')
    ?? trigger.querySelector<HTMLElement>('.card-frame');
  }
+ /** The field button showing a rostered card: its slot, or its bench place. */
+ function placeSelector(seasonId: string): string | null {
+  const place = placeOf(seasonId);
+  if (!place) return null;
+  return place === 'bench' ? `[data-bench-season="${CSS.escape(seasonId)}"]` : `[data-slot="${CSS.escape(place)}"]`;
+ }
  async function refreshInspectionSource(seasonId: string): Promise<void> {
-  const pick = draft.picks.find(item => item.seasonId === seasonId);
-  if (!pick) return;
+  const selector = placeSelector(seasonId);
+  if (!selector) return;
   await tick();
-  let nextTrigger = draftBoard?.querySelector<HTMLButtonElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} [data-slot="${CSS.escape(pick.slot)}"]`);
+  let nextTrigger = draftBoard?.querySelector<HTMLButtonElement>(`${wide ? '.field-panel' : 'dialog.draft-sheet[open]'} ${selector}`);
   if (!nextTrigger && !wide) {
    await tick();
-   nextTrigger = draftBoard?.querySelector<HTMLButtonElement>(`dialog.draft-sheet[open] [data-slot="${CSS.escape(pick.slot)}"]`);
+   nextTrigger = draftBoard?.querySelector<HTMLButtonElement>(`dialog.draft-sheet[open] ${selector}`);
   }
   if (inspectedSeasonId !== seasonId || !nextTrigger) return;
   inspectionTrigger = nextTrigger;
@@ -472,8 +530,8 @@
  function moveFromInspection(): void {
   const seasonId = inspectedSeasonId;
   const previousTrigger = inspectionTrigger;
-  const pick = seasonId ? draft.picks.find(item => item.seasonId === seasonId) : undefined;
-  if (!seasonId || !previousTrigger || !pick || !HITTER_SLOTS.includes(pick.slot as HitterSlot)) {
+  const place = seasonId ? placeOf(seasonId) : undefined;
+  if (!seasonId || !previousTrigger || !place || (place !== 'bench' && !source.roster.movable(place))) {
    returnToField();
    return;
   }
@@ -505,13 +563,13 @@
  });
  $effect(() => {
   const request = requestedMove;
-  if (request && draft.picks.some(pick => pick.seasonId === request.seasonId && pick.slot === request.slot)) {
+  if (request && placeOf(request.seasonId) === request.slot) {
    movingSeasonId = null;
    requestedMove = null;
   }
  });
  $effect(() => {
-  if (pendingSlot && !destinations.includes(pendingSlot)) pendingSlot = null;
+  if (pendingSlot && !places.includes(pendingSlot)) pendingSlot = null;
  });
  $effect(() => {
   if (inspectedSeasonId && !inspectedProfile) {
@@ -584,23 +642,24 @@
 <svelte:window onpointerdowncapture={trackInspectionPointer} onkeydowncapture={closeInspectionOnEscape} onkeyup={clearInspectionEscape} onclick={deselectOutsideCard} />
 
 {#snippet fieldHeader()}
- {@const sheetTabs = !wide && !!selectedProfile}
+ {@const sheetTabs = (!wide && !!selectedProfile) || !!pile}
  <div class="field-header" class:sheet-tabs={sheetTabs}>
   <div class:sr-only={sheetTabs}>
-   <div class="field-title"><h2 bind:this={fieldHeading} tabindex="-1">Your field <span class="sr-only">{draft.picks.length} of {rosterSlots.length} picked</span></h2>
+   <div class="field-title"><h2 bind:this={fieldHeading} tabindex="-1">Your field <span class="sr-only">{picked} of {pickTotal} picked</span></h2>
     {#if wide}<div class="pick-track" aria-hidden="true">{#each rosterSlots as slot}<span class:locked={occupiedSlots.has(slot)}></span>{/each}</div>{/if}
-    <span class="picked-count" aria-hidden="true">{draft.picks.length} / {rosterSlots.length}</span>
+    <span class="picked-count" aria-hidden="true">{picked} / {pickTotal}</span>
    </div>
   </div>
   {#if sheetTabs}
    <div class="tabs" role="tablist" aria-label="Selected player view" tabindex="-1" onkeydown={tabKey}>
-    <button type="button" role="tab" id="{uid}-tab-field" aria-selected={sheetTab === 'field'} aria-controls="{uid}-panel-field" tabindex={sheetTab === 'field' ? 0 : -1} onclick={() => sheetTab = 'field'}>Field <span class="tab-count" aria-hidden="true">{draft.picks.length}/{rosterSlots.length}</span></button>
-    <button type="button" role="tab" id="{uid}-tab-back" aria-selected={sheetTab === 'back'} aria-controls="{uid}-panel-back" tabindex={sheetTab === 'back' ? 0 : -1} onclick={() => { candidateTurned = true; sheetTab = 'back'; }}>Card back</button>
+    <button type="button" role="tab" id="{uid}-tab-field" aria-selected={sheetTab === 'field'} aria-controls="{uid}-panel-field" tabindex={sheetTab === 'field' ? 0 : -1} onclick={() => sheetTab = 'field'}>Field <span class="tab-count" aria-hidden="true">{picked}/{pickTotal}</span></button>
+    {#if selectedProfile}<button type="button" role="tab" id="{uid}-tab-back" aria-selected={sheetTab === 'back'} aria-controls="{uid}-panel-back" tabindex={sheetTab === 'back' ? 0 : -1} onclick={() => { candidateTurned = true; sheetTab = 'back'; }}>Card back</button>{/if}
+    {#if pile}<button type="button" role="tab" id="{uid}-tab-league" aria-selected={sheetTab === 'league'} aria-controls="{uid}-panel-league" tabindex={sheetTab === 'league' ? 0 : -1} onclick={() => sheetTab = 'league'}>League</button>{/if}
    </div>
   {/if}
   {#if !wide}<button type="button" class="quiet close-field" aria-label="Close field" onclick={dismissSheet}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>{/if}
  </div>
- {#if !wide && selectedProfile}
+ {#if !wide && selectedProfile && source.groupSeasons}
   <label class="sheet-season"><span class="sr-only">Exact season for {selectedProfile.displayName}</span>
    <select aria-label="Exact season for {selectedProfile.displayName}" value={selectedSeasonId ?? ''} disabled={busy} onchange={event => changeSeason(selectedProfile!.playerId, event.currentTarget.value)}>
     {#each seasonChoices as season (season.seasonId)}<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>{/each}
@@ -621,9 +680,9 @@
    />
   </div>
  {/if}
- <div hidden={!wide && !!selectedCard && sheetTab !== 'field'} role={selectedProfile && !wide ? 'tabpanel' : undefined} id="{uid}-panel-field" aria-labelledby={selectedProfile && !wide ? `${uid}-tab-field` : undefined}>
+ <div hidden={(!wide && !!selectedCard && sheetTab !== 'field') || sheetTab === 'league'} role={(selectedProfile && !wide) || pile ? 'tabpanel' : undefined} id="{uid}-panel-field" aria-labelledby={(selectedProfile && !wide) || pile ? `${uid}-tab-field` : undefined}>
   <Roster
-   {draft}
+   roster={source.roster}
    {manifest}
    {profiles}
    {rankings}
@@ -638,14 +697,19 @@
    stadiumFranchise={homeStadium ? manifest.franchises.find(franchise => franchise.id === homeStadium.franchiseId)?.name : undefined}
    stadiumColor={homeStadium ? media?.teams[homeStadium.franchiseId]?.color : undefined}
    legalSlots={movingSeasonId ? [] : destinations}
+   benchLegal={!movingSeasonId && benchLegal}
    {movingSeasonId}
    {moveTargets}
    {inspectedSeasonId}
    rosterFirstClick={appSettings.rosterFirstClick}
    inspectionId={`${uid}-roster-review`}
    onSlot={slotAction}
+   onBench={benchAction}
   />
  </div>
+ {#if pile && sheetTab === 'league'}
+  <div role="tabpanel" id="{uid}-panel-league" aria-labelledby={`${uid}-tab-league`} class="league-panel">{@render pile.league()}</div>
+ {/if}
  {#if inspectedCard}
   {#key inspectedSeasonId}
    <CardReview
@@ -676,8 +740,8 @@
   <div class="pick-confirmation" data-pending-slot={pendingSlot ?? ''} data-selected-season={selectedSeasonId}>
   {#if placementGuide}<p class="placement-hint" id="{uid}-placement-hint" aria-live="polite">{placementGuide}</p>{/if}
    <div class="confirmation-actions">
-    <button type="button" class="primary" disabled={!canConfirm} aria-label={pendingSlot ? `Draft ${selectedName} at ${pendingSlot}` : `Draft ${selectedName}`} aria-describedby={placementGuide ? `${uid}-placement-hint` : undefined} onclick={() => void confirmPick()}>{pendingSlot ? `Draft at ${pendingSlot}` : 'Draft'}</button>
-    {#if pendingSlot && destinations.length > 1}<button type="button" class="secondary" onclick={() => pendingSlot = null}>Change slot</button>{/if}
+    <button type="button" class="primary" disabled={!canConfirm} aria-label={pendingSlot === 'bench' ? `Draft ${selectedName} to the bench` : pendingSlot ? `Draft ${selectedName} at ${pendingSlot}` : `Draft ${selectedName}`} aria-describedby={placementGuide ? `${uid}-placement-hint` : undefined} onclick={() => void confirmPick()}>{pendingSlot === 'bench' ? 'Draft to bench' : pendingSlot ? `Draft at ${pendingSlot}` : 'Draft'}</button>
+    {#if pendingSlot && places.length > 1}<button type="button" class="secondary" onclick={() => pendingSlot = null}>Change slot</button>{/if}
     <button type="button" class="quiet" onclick={cancelSelection}>Cancel</button>
    </div>
   </div>
@@ -686,7 +750,7 @@
 
 <div bind:this={draftBoard} class="draft-board" class:wide>
 {#snippet rerollControl()}
- {#if showingCandidates}
+ {#if showingCandidates && draft}
   {@const total = draftRules(draft.schemaVersion).extraPacks}
   <button type="button" class="secondary reroll" disabled={busy || leaving || extraLeft <= 0} aria-label={`Extra pack: add another franchise pack to choose from, ${extraLeft} of ${total} left this draft`} onclick={addPackFromPool}>
    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>
@@ -696,14 +760,18 @@
  {/if}
 {/snippet}
 {#snippet reveal()}
- <Reveal {roll} {manifest} compact={wide} bar={!wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} pickNumber={draft.picks.length + 1} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
+ {#if draft}
+  <Reveal {roll} {manifest} compact={wide} bar={!wide} revealing={phase === 'revealing'} concealed={dealing && !dealtArrived} pickNumber={source.pickNumber} schemaVersion={draft.schemaVersion} teamColor={rollColor} />
+ {:else if pile}
+  <div class="pile-status">{@render pile.status()}</div>
+ {/if}
 {/snippet}
  {#if wide}
   <header class="draft-header">
    <a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>
    {@render reveal()}
    {@render rerollControl()}
-   {#if roll && !(dealing && !dealtArrived)}<p class="eyebrow header-pick">Pick {draft.picks.length + 1} of {rosterSlots.length}</p>{/if}
+   {#if (roll && !(dealing && !dealtArrived)) || (pile && phase === 'choosing')}<p class="eyebrow header-pick">Pick {source.pickNumber} of {pickTotal}</p>{/if}
    <a class="shop-link" href="/shop" aria-label={shopState.snapshot ? `Shop, ${shopState.snapshot.balance} ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop'}>
     <span>Shop</span><span class="shop-balance" aria-hidden="true"><TokenAmount amount={shopState.snapshot?.balance ?? null} /></span>
    </a>
@@ -715,10 +783,11 @@
   {#if !wide}
    {@render reveal()}
    {@render rerollControl()}
-   <button type="button" class="secondary open-field" aria-label={`Open your field, ${draft.picks.length} of ${rosterSlots.length} picked`} onclick={event => { trigger = event.currentTarget; sheetOpen = true; }}>
+   <button type="button" class="secondary open-field" aria-label={`Open your field, ${picked} of ${pickTotal} picked`} onclick={event => { trigger = event.currentTarget; sheetTab = 'field'; sheetOpen = true; }}>
     Field
-    <span class="field-count">· {draft.picks.length}/{rosterSlots.length}</span>
+    <span class="field-count">· {picked}/{pickTotal}</span>
    </button>
+   {#if pile}<button type="button" class="secondary open-field" onclick={event => { trigger = event.currentTarget; sheetTab = 'league'; sheetOpen = true; }}>League</button>{/if}
    <div class="draft-menu">
     <button bind:this={draftMenuTrigger} type="button" class="secondary draft-menu-trigger" aria-expanded={draftMenuOpen} aria-controls="{uid}-draft-menu" onclick={() => draftMenuOpen = !draftMenuOpen}>
      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="3.5" cy="8" r="1.2"></circle><circle cx="8" cy="8" r="1.2"></circle><circle cx="12.5" cy="8" r="1.2"></circle></svg>
@@ -733,32 +802,34 @@
  </div>
  <div class="board-columns">
   <section class="draft-browser" aria-label="Make your next pick" inert={leaving}>
-   {#if draft.picks.length === 0 && (phase === 'ready' || dealing)}
+   {#if draft && draft.picks.length === 0 && (phase === 'ready' || dealing)}
     <GuideTip step="pack" text="Each pack is one franchise from one decade. Open it, then choose one exact player season from that pool." />
-   {:else if showingCandidates && draft.picks.length >= 1 && extraLeft > 0}
+   {:else if draft && showingCandidates && draft.picks.length >= 1 && extraLeft > 0}
     <GuideTip step="extra" text={`Extra pack adds another franchise to choose from before you pick. You have ${extraLeft} for the whole draft and they don't refill, so save them for a pack that doesn't fit.`} />
    {/if}
-   {#if phase === 'ready' || dealing || draft.packs.length > 1}
+   {#if pile && phase === 'ready'}
+    {@render pile.opening()}
+   {:else if classic && draft && (phase === 'ready' || dealing || draft.packs.length > 1)}
     <FoilPack
      packs={dealtPacks}
-     pickNumber={draft.picks.length + 1}
-     pickCount={rosterSlots.length}
+     pickNumber={source.pickNumber}
+     pickCount={pickTotal}
      marks={manifest.franchises.map(franchise => franchise.id)}
      disabled={busy && !dealing}
      extraPacks={{ left: extraPacksLeft(draft), total: draftRules(draft.schemaVersion).extraPacks, max: maxPacks(draft) }}
      addDisabled={busy || phase !== 'choosing'}
-     {onAddPack}
+     onAddPack={classic.onAddPack}
      {returning}
-     onChoose={pack => { returning = false; onChoosePack(pack); }}
+     onChoose={pack => { returning = false; classic.onChoosePack(pack); }}
      flyTarget={() => draftBoard?.querySelector<HTMLElement>('[data-roll-mark]') ?? null}
-     onOpen={() => { returning = false; dealing = true; dealtArrived = false; dealOutPending = false; onRoll(); }}
+     onOpen={() => { returning = false; dealing = true; dealtArrived = false; dealOutPending = false; classic.onRoll(); }}
      onArrive={() => dealtArrived = true}
      onDealt={() => { dealing = false; dealOutPending = true; }}
     />
    {:else if loading || phase === 'revealing'}
     <Skeleton label="Finding eligible seasons…"><PoolSkeleton {wide} /></Skeleton>
    {:else if showingCandidates}
-    <CandidateList profiles={pool} {draft} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
+    <CandidateList profiles={source.offer} {source} {caption} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
   {#if wide}
@@ -840,6 +911,9 @@
  .wide .confirmation-actions button { padding-inline: .65rem; font-size: .8125rem; }
  .wide .confirmation-actions .primary { margin-left: auto; order: 3; }
  .draft-header { min-width: 0; }
+ .pile-status { flex: 1 1 auto; min-width: 0; }
+ .draft-toolbar > .pile-status { flex: 1 1 100%; }
+ .league-panel { padding-block: var(--space-2) var(--space-4); }
  .wide .draft-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 20px; min-height: 64px; box-sizing: border-box; padding-block: 10px; border-bottom: 1px solid var(--border); background: var(--background); }
  .wordmark { flex: none; display: inline-flex; align-items: center; gap: .625rem; min-height: 44px; color: var(--text); text-decoration: none; font-size: 1.25rem; font-weight: 850; letter-spacing: -.04em; }
  .mark { width: .625rem; height: .625rem; border: 2px solid var(--text); transform: rotate(45deg); }

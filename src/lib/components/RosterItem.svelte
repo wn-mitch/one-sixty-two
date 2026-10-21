@@ -1,7 +1,7 @@
 <script lang="ts">
  import Card from '../cards/Card.svelte';
  import { createCardViewModel, type CardMediaStatus } from '../cards/view-model.ts';
- import type { Manifest, Profile, Slot } from '../game/types.ts';
+ import type { CardSlot, Manifest, Profile } from '../game/types.ts';
  import type { MediaManifest } from '../media/types.ts';
  import type { WarRankings } from '../rankings/types.ts';
 
@@ -16,7 +16,8 @@
   mediaStatus = 'loading'
  }: {
   profile: Profile;
-  assignedSlot: Slot;
+  /** The slot the card fills, or null on a bench. */
+  assignedSlot: CardSlot | null;
   manifest: Manifest;
   rankings?: WarRankings | null;
   rankingLoading?: boolean;
@@ -42,7 +43,7 @@
  </span>
  <span class="identity">
   <strong>{profile.displayName}</strong>
-  <span>{assignedSlot} · {profile.year}</span>
+  <span>{assignedSlot ?? 'Bench'} · {profile.year}</span>
  </span>
 </span>
 

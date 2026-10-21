@@ -1,10 +1,8 @@
 import type { Finish } from '../cards/finish.ts';
-import type { Slot } from '../game/types.ts';
+import type { FieldSlot, Slot } from '../game/types.ts';
 
-/** Draft Mode's middle relievers beyond Classic's three named relievers. */
-export type DeepReliefSlot = 'RP4' | 'RP5';
 /** A Draft Mode active roster slot: every Classic slot plus RP4 and RP5. */
-export type DraftSlot = Slot | DeepReliefSlot;
+export type DraftSlot = FieldSlot;
 
 /**
  * One historical player-season as a draftable card. Immutable for a data and salary version.

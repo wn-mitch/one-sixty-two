@@ -1,20 +1,20 @@
 <script lang="ts">
  import type { Snippet } from 'svelte';
- import { arrangeRoster } from '../../draft/legality.ts';
+ import { arrangeRoster, type Arrangement } from '../../draft/legality.ts';
  import type { DraftCard, DraftSlot } from '../../draft/types.ts';
  import type { Profile } from '../../game/types.ts';
  import { money, rolesLabel } from './format.ts';
 
- /** A club's cards placed by the best legal arrangement: active slots, reserves, then cards with no place. */
- let { cards, profiles, open = true, action, activeSlot = null, onSlot }: {
-  cards: readonly DraftCard[]; profiles: ReadonlyMap<string, Profile>; open?: boolean;
+ /** A club's cards by `placed`, or else the best legal arrangement: active slots, reserves, then cards with no place. */
+ let { cards, profiles, placed, open = true, action, activeSlot = null, onSlot }: {
+  cards: readonly DraftCard[]; profiles: ReadonlyMap<string, Profile>; placed?: Arrangement; open?: boolean;
   action?: Snippet<[DraftCard]>;
   /** The missing slot the pile is filtered to, if any. */
   activeSlot?: DraftSlot | null;
   /** Makes missing slots buttons that filter the pile to cards able to fill them. */
   onSlot?: (slot: DraftSlot) => void;
  } = $props();
- const arrangement = $derived(arrangeRoster(cards));
+ const arrangement = $derived(placed ?? arrangeRoster(cards));
  const byId = $derived(new Map(cards.map(card => [card.seasonId, card])));
  const rows = $derived([
   ...Object.entries(arrangement.active).map(([slot, id]) => ({ label: slot, card: byId.get(id!)! })),
