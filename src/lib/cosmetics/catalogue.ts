@@ -7,7 +7,8 @@ export type CardAppearance = { plate?: FoilPlate; film?: HoloPattern; palette?: 
 export type CosmeticItem = { id: string; name: string; kind: 'plate' | 'film' | 'colorway'; plate?: FoilPlate; film?: HoloPattern; cost: number };
 
 const plates: readonly CosmeticItem[] = PLATES.map(plate => ({ id: `plate:${plate.name}`, name: plate.name, kind: 'plate', plate: plate.name as FoilPlate, cost: 1 }));
-const films: readonly CosmeticItem[] = FILMS.map(film => ({ id: `film:${film.name}`, name: film.name, kind: 'film', film: film.name as HoloPattern, cost: 1 }));
+/** Experimental films are workshop studies, not shop items. */
+const films: readonly CosmeticItem[] = FILMS.filter(film => !film.experimental).map(film => ({ id: `film:${film.name}`, name: film.name, kind: 'film', film: film.name as HoloPattern, cost: 1 }));
 const stock: readonly CosmeticItem[] = [];
 /** Palette numbers retain their shipped shader indices; custom editing is not a shop colorway. */
 export const COLORWAYS: readonly { id: string; name: string; palette: number }[] = PALETTES

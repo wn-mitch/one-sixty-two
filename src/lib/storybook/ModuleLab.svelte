@@ -14,15 +14,17 @@
 
 	/**
 	 * One film, finish or plate on blank cards, with a dial for each of its settings and the remix controls:
-	 * any finish, colourway or plate under a film, and any film over a finish.
+	 * any finish, colourway or plate under a film, and any film over a finish. `tune` opens some of the module's
+	 * dials away from their shipped values, and `roll` opens the card turned in its own plane, for a story that shows a
+	 * variant.
 	 */
-	const props: { kind: 'film' | 'finish' | 'plate'; name: string } = $props();
+	const props: { kind: 'film' | 'finish' | 'plate'; name: string; tune?: Record<string, number>; roll?: number } = $props();
 	// A story mounts one module for its lifetime.
-	const { kind, name } = untrack(() => ({ kind: props.kind, name: props.name }));
+	const { kind, name, tune, roll } = untrack(() => ({ kind: props.kind, name: props.name, tune: props.tune ?? {}, roll: props.roll ?? 0 }));
 
 	type Range = [number, number, number, number];
 	const select = <T extends string>(options: readonly T[], value: T) => ({ type: 'select' as const, options: [...options], default: value });
-	const ranges = (dials: Record<string, Dial>) => Object.fromEntries(Object.entries(dials).map(([key, dial]) => [key, [dial.value, dial.min, dial.max, dial.step ?? 0.01] as Range]));
+	const ranges = (dials: Record<string, Dial>) => Object.fromEntries(Object.entries(dials).map(([key, dial]) => [key, [tune[key] ?? dial.value, dial.min, dial.max, dial.step ?? 0.01] as Range]));
 
 	const module = (kind === 'film' ? FILMS.find(film => film.name === name)
 		: kind === 'finish' ? FILM_FINISHES.find(finish => finish.name === name)
@@ -65,11 +67,12 @@
 			shine: [DEFAULT_LIGHT.shine, 0, 3, 0.05] as Range,
 			glare: [DEFAULT_LIGHT.glare, 0, 0.6, 0.01] as Range
 		},
-		layout: { width: [360, 160, 640, 1] as Range, drift: true }
+		// Roll turns the card in its own plane, clockwise in degrees, with the light held still on screen.
+		layout: { width: [360, 160, 640, 1] as Range, drift: true, roll: [roll, -180, 180, 1] as Range }
 	}) as Parameters<typeof createDialKitController>[1]));
 	const values = $derived(dials.values as Record<string, Record<string, number | string | boolean>>);
 	const remix = $derived(values.remix as { film: string; finish: string; palette: string; plate: string; under: string; underMix: number; plateUnderFilm: number; vivid: number });
-	const layout = $derived(values.layout as { width: number; drift: boolean });
+	const layout = $derived(values.layout as { width: number; drift: boolean; roll: number });
 
 	/** Gem shows a film; plates show on silver and gold foil, and under a film when one is pressed over them. */
 	const faces: { finish: Finish; label: string }[] = untrack(() => kind === 'plate'
@@ -96,6 +99,11 @@
 		const timer = setTimeout(() => untrack(() => LightEngine.shared()?.configure(options)), 60);
 		return () => clearTimeout(timer);
 	});
+	// A turned card's light moves in its frame without the card's tilt changing, so it redraws here.
+	$effect(() => {
+		void layout.roll;
+		for (const card of cards) LightEngine.shared()?.dirty(card.light);
+	});
 	let instance = $state(0);
 </script>
 
@@ -107,16 +115,19 @@
 			<div class="lab" style={`--card-width:${Math.round(layout.width)}px`}>
 				{#each cards as card (card.label)}
 					<figure>
-						<div
-							class="card"
-							data-card="2020s"
-							data-finish={card.finish}
-							data-identity={`${name}-${card.label}`}
-							data-plate-tuning={`1,1,0.6,${remix.vivid}`}
-							use:tilt={{ enabled: true, idle: layout.drift, finish: card.finish === 'foil' ? 'silver' : card.finish === 'emboss' ? 'gold' : 'gem', light: card.light, identity: `${name}-${card.label}` }}
-						>
-							<div class="face" data-surface="ring" data-surface-shape="box"></div>
-							<canvas class="light" aria-hidden="true" use:lightCanvas={card.light}></canvas>
+						<div class="turn" style={`transform:rotate(${layout.roll}deg)`}>
+							<div
+								class="card"
+								data-card="2020s"
+								data-finish={card.finish}
+								data-identity={`${name}-${card.label}`}
+								data-plate-tuning={`1,1,0.6,${remix.vivid}`}
+								data-roll={layout.roll}
+								use:tilt={{ enabled: true, idle: layout.drift, finish: card.finish === 'foil' ? 'silver' : card.finish === 'emboss' ? 'gold' : 'gem', light: card.light, identity: `${name}-${card.label}` }}
+							>
+								<div class="face" data-surface="ring" data-surface-shape="box"></div>
+								<canvas class="light" aria-hidden="true" use:lightCanvas={card.light}></canvas>
+							</div>
 						</div>
 						<figcaption><b>{finishName({ name })}</b><span>{card.label}</span></figcaption>
 					</figure>

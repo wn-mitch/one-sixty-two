@@ -7,6 +7,7 @@ import { stableUnit } from '../stable-unit.ts';
 import type { SurfaceMapOptions } from './surface-map.ts';
 import type { ReliefProfile } from './surfaces.ts';
 import { CARD_ERAS, type CardEra } from '../era.ts';
+import { rolledLight } from '../tilt-math.ts';
 
 /**
  * Lights individual cards. One shared WebGL2 context packs every card whose light changed into one frame,
@@ -374,6 +375,7 @@ export class LightEngine {
 			axisYx: 0,
 			axisYy: light.height,
 			...light.state,
+			...rolledLight(light.state, Number(card.dataset.roll) || 0, light.width, light.height),
 			tier: (card.dataset.finish ?? 'base') as Finish,
 			era: card.dataset.card as CardEra | undefined,
 			film: card.dataset.film as HoloPattern | undefined,

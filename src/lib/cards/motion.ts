@@ -5,11 +5,10 @@ import { MOTION } from '../motion-timing.ts';
 import { deviceTilt, type DeviceTiltValue } from './device-tilt.ts';
 import { autonomousMotion, type MotionRegistration } from './motion-runtime.ts';
 import type { CardLight } from './surface/card-light.ts';
-import { CALM_DRIFT, TILT, easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
+import { CALM_DRIFT, TILT, easeToward, idleDrift, pointerEnvelope, pointerTilt, restingTilt, settled, stepTilt, tiltLight, tiltPose, type DriftRhythm, type Eased, type TiltState } from './tilt-math.ts';
 
 export { TILT } from './tilt-math.ts';
 
-const LIGHT = { x: -0.45, y: -0.75 } as const;
 const SPOTLIGHT_INTERVAL = 1800;
 const SPOTLIGHT_DURATION = 2200;
 
@@ -78,8 +77,9 @@ function applyFixedPose(node: HTMLElement, light?: CardLight): void {
  * WebGL canvas in the same frame.
  */
 function applyTilt(node: HTMLElement, state: VisualState, halfWidth: number, halfHeight: number, light: CardLight | undefined): void {
-	const lightX = clamp(state.hotspotX ?? 0.5 + LIGHT.x * 0.6 - state.ry / 26, -0.2, 1.2);
-	const lightY = clamp(state.hotspotY ?? 0.5 + LIGHT.y * 0.6 + state.rx / 26, -0.2, 1.2);
+	const tilted = tiltLight(state.rx, state.ry);
+	const lightX = clamp(state.hotspotX ?? tilted.lightX, -0.2, 1.2);
+	const lightY = clamp(state.hotspotY ?? tilted.lightY, -0.2, 1.2);
 	// A card leaning right faces left, so the viewer sits toward its right edge; leaning back puts the viewer toward its bottom.
 	const radians = Math.PI / 180;
 	light?.set({ lightX, lightY, spotlight: clamp(state.lift * 0.5, 0, 1), viewX: Math.sin(state.ry * radians), viewY: -Math.sin(state.rx * radians) });

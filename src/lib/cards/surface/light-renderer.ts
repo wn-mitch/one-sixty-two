@@ -3,7 +3,7 @@ import type { CardEra } from '../era.ts';
 import { ERA_FOIL, ERA_PLATE_TUNING, FOIL_PLATES, type FoilPlate, type PlateTuning } from './foil-plates.ts';
 import { CIRCUIT_CELLS, CIRCUIT_TEXELS_PER_CELL, growWires, rasterizeWires } from './circuit-tile.ts';
 import { ERA_HOLO, filmsFor, HOLO_PATTERNS, underOf, type HoloPattern } from './holo-films.ts';
-import type { ProgramSpec } from './light-shader.ts';
+import { FILM_CODE, PALETTE_CODE, PLATE_CODE, type ProgramSpec } from './light-shader.ts';
 import { LightPrograms, programKey, type Uniforms } from './light-programs.ts';
 import { TUNE_SLOTS, type ModuleTune } from './films/film.ts';
 import { gradientUniforms } from './palettes/custom.ts';
@@ -481,7 +481,7 @@ export class LightRenderer {
 		data[offset + 11] = card.lightY;
 		data[offset + 12] = card.spotlight;
 		// The colourway is packed one-based above the existing tier/film/plate code; zero keeps scene/film defaults.
-		data[offset + 13] = TIER_CODE[card.tier] + 4 * film + 128 * plate + 4096 * ((card.palette ?? -1) + 1);
+		data[offset + 13] = TIER_CODE[card.tier] + FILM_CODE * film + PLATE_CODE * plate + PALETTE_CODE * ((card.palette ?? -1) + 1);
 		data[offset + 14] = card.viewX ?? 0;
 		data[offset + 15] = card.viewY ?? 0;
 		// The film's shift samples two sines of the card's seed, a pattern index the way a printed skin has one.

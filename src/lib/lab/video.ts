@@ -1,6 +1,7 @@
 import type { CardViewModel } from '#lib/cards/view-model.ts';
 import type { LitCard } from '#lib/cards/surface/light-renderer.ts';
 import type { Scene } from './scene.ts';
+import { LIGHT_SWING } from '#lib/cards/tilt-math.ts';
 
 export const LAB_VIDEO = { width: 1080, height: 1080, fps: 60, seconds: 6, frames: 360 } as const;
 const CARD_WIDTH = 600;
@@ -46,8 +47,8 @@ export function videoPose(frame: number) {
 		filmTime: 3 * (1 - Math.cos(angle)),
 		viewX: Math.sin(ry),
 		viewY: -Math.sin(rx),
-		lightX: 0.68 - ry * 180 / Math.PI / 26,
-		lightY: 0.24 + rx * 180 / Math.PI / 26,
+		lightX: 0.68 - ry * 180 / Math.PI / LIGHT_SWING,
+		lightY: 0.24 + rx * 180 / Math.PI / LIGHT_SWING,
 		// Orthographic projection of rotateY(ry) rotateX(rx), shared by ink and light.
 		a: Math.cos(ry), b: 0, c: Math.sin(ry) * Math.sin(rx), d: Math.cos(rx)
 	};

@@ -53,6 +53,8 @@ export function dialValues(dials: Readonly<Record<string, Dial>>): number[] {
  * A holo film's pattern: where its grooves run, how its pieces colour, and which parts are copper.
  * The GLSL body reads `p` (card units, shifted per card), `filmScale` and its dials, and sets `groove`, `seed`,
  * `vivid`, `copper`, `copperPad`, `shade` and `cellSize`. A film with a `ground` dims its uncoppered ground to it.
+ * A film that draws a view-dependent image paints it into `own` (colour, then how much of the film it replaces)
+ * and sets how brightly that image catches the light in `ownFlash`.
  */
 export interface Film {
 	name: string;
@@ -73,6 +75,8 @@ export interface Film {
 	blend?: readonly string[];
 	/** Moves with time as well as with the light, so a card showing it keeps redrawing while it is on screen. */
 	animated?: boolean;
+	/** A visual study for the workshop: drawn in the lab and Storybook but never offered in the shop. */
+	experimental?: boolean;
 	params: Record<string, Dial>;
 	/** GLSL helper functions the body calls, emitted once before it. */
 	helpers?: string;

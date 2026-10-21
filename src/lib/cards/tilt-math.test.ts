@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FACE_DEPTH, TILT_DEFAULTS, idleDrift, pointerTilt, restingTilt, stepTilt, tiltPose, type DriftRhythm, type TiltPose } from './tilt-math.ts';
+import { FACE_DEPTH, LIGHT_REST, TILT_DEFAULTS, idleDrift, pointerTilt, restingTilt, rolledLight, stepTilt, tiltLight, tiltPose, type DriftRhythm, type TiltPose } from './tilt-math.ts';
 
 const HALF_WIDTH = 140;
 const HALF_HEIGHT = 196;
@@ -123,5 +123,29 @@ describe('idle drift', () => {
 	it('keeps the swing inside the base drift range scaled by the swell ceiling', () => {
 		expect(widest(0, 120, 'rx')).toBeLessThanOrEqual(2.4 * TILT_DEFAULTS.idleAmount * 1.35 + 1e-9);
 		expect(widest(0, 120, 'ry')).toBeLessThanOrEqual(3.4 * TILT_DEFAULTS.idleAmount * 1.35 + 1e-9);
+	});
+});
+
+describe('light on a card turned in its plane', () => {
+	const lit = (rx: number, ry: number) => {
+		const radians = Math.PI / 180;
+		return { ...tiltLight(rx, ry), viewX: Math.sin(ry * radians), viewY: -Math.sin(rx * radians) };
+	};
+
+	it('swings the resting light a quarter turn round the card the other way', () => {
+		// Turned clockwise, the screen's upper-left light falls toward the card's lower left.
+		const turned = rolledLight(lit(0, 0), 90, 5, 7);
+		expect((turned.lightX - 0.5) * 5).toBeCloseTo((LIGHT_REST.y - 0.5) * 7);
+		expect((turned.lightY - 0.5) * 7).toBeCloseTo(-(LIGHT_REST.x - 0.5) * 5);
+		expect(rolledLight(lit(4, -6), 0, 5, 7)).toEqual(tiltLight(4, -6));
+	});
+
+	it('keeps the shift a lean adds in the card\'s own frame', () => {
+		// The lean is in the turned card's frame, so its shift must not turn with the resting light.
+		const rest = rolledLight(lit(0, 0), 90, 5, 7);
+		const leaning = rolledLight(lit(5, -7), 90, 5, 7);
+		const shift = { x: tiltLight(5, -7).lightX - LIGHT_REST.x, y: tiltLight(5, -7).lightY - LIGHT_REST.y };
+		expect(leaning.lightX - rest.lightX).toBeCloseTo(shift.x);
+		expect(leaning.lightY - rest.lightY).toBeCloseTo(shift.y);
 	});
 });

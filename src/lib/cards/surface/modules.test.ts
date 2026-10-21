@@ -5,7 +5,7 @@ import { filmDials, TUNE_SLOTS, type Dial } from './films/film.ts';
 import { plateDials } from './plates/plate.ts';
 import { programKey } from './light-programs.ts';
 import { programSpec } from './light-renderer.ts';
-import { lightFragment } from './light-shader.ts';
+import { FILM_CODE, lightFragment, PALETTE_CODE, PLATE_CODE } from './light-shader.ts';
 
 const modules: { kind: string; name: string; dials: Record<string, Dial> }[] = [
 	...FILMS.map(film => ({ kind: 'film', name: film.name, dials: filmDials(film) })),
@@ -39,6 +39,14 @@ describe('finish modules', () => {
 
 	it('fades the jackpot through every era film, oldest first', () => {
 		expect(FILMS.find(film => film.name === 'jackpot')?.blend).toEqual(Object.values(ERA_HOLO));
+	});
+
+	it('gives every film, plate and colourway its own range of the packed card code', () => {
+		// A film number past its range spills into the plate's, and the card prints the wrong film over the wrong plate.
+		expect(FILMS.length * FILM_CODE).toBeLessThanOrEqual(PLATE_CODE);
+		expect(PLATES.length * PLATE_CODE).toBeLessThanOrEqual(PALETTE_CODE);
+		// The code rides in a float attribute, exact only below 2^24.
+		expect((PALETTES.length + 1) * PALETTE_CODE).toBeLessThan(2 ** 24);
 	});
 
 	it('points every film at a finish and colourway that exist', () => {

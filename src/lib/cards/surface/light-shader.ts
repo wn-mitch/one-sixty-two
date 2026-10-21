@@ -3,6 +3,14 @@ import { holoFilmGlsl, type FilmSpec } from './holo-films.ts';
 import { TUNE_SLOTS } from './films/film.ts';
 import { RELIEF_RANGE } from './surfaces.ts';
 
+/**
+ * How a card's tier, film, plate and colourway share one float slot: tier + FILM_CODE * film + PLATE_CODE * plate
+ * + PALETTE_CODE * (palette + 1). Each field gets its own range, so up to 64 films and 32 plates decode exactly.
+ */
+export const FILM_CODE = 4;
+export const PLATE_CODE = 256;
+export const PALETTE_CODE = 8192;
+
 /** The light pass's shaders: one instanced quad per card, lit from its surface map, ink and finish. */
 export const LIGHT_VERTEX = `#version 300 es
 layout(location = 0) in vec2 a_origin;
@@ -180,13 +188,13 @@ void main() {
 
 	vec4 result = vec4(0.0);
 	// Tier, film, plate and one-based per-card colourway share one exact integer slot.
-	float paletteCode = floor(v_light.w / 4096.0 + 0.001);
-	float finishCode = v_light.w - paletteCode * 4096.0;
+	float paletteCode = floor(v_light.w / ${PALETTE_CODE}.0 + 0.001);
+	float finishCode = v_light.w - paletteCode * ${PALETTE_CODE}.0;
 	cardPalette = int(paletteCode) - 1;
-	float plateCode = floor(finishCode / 128.0 + 0.001);
-	float packed = finishCode - plateCode * 128.0;
-	float tier = mod(packed + 0.01, 4.0) - 0.01;
-	float pattern = u_holoPattern < -0.5 ? floor(packed / 4.0 + 0.01) : u_holoPattern;
+	float plateCode = floor(finishCode / ${PLATE_CODE}.0 + 0.001);
+	float packed = finishCode - plateCode * ${PLATE_CODE}.0;
+	float tier = mod(packed + 0.01, ${FILM_CODE}.0) - 0.01;
+	float pattern = u_holoPattern < -0.5 ? floor(packed / ${FILM_CODE}.0 + 0.01) : u_holoPattern;
 	int plate = int((u_foilPlate < -0.5 ? plateCode : u_foilPlate) + 0.5);
 	// The plate presses into silver and gold foil only; holo film keeps its own grooves.
 	// Full gloss marks a vinyl sticker, smooth over the card's plate, with the plain refractor sweep for its holo.

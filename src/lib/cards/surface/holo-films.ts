@@ -34,6 +34,20 @@ import matrix from './films/matrix.ts';
 import spiralMoire from './films/spiral-moire.ts';
 import wallpaper from './films/wallpaper.ts';
 import smoke from './films/smoke.ts';
+import rollingSnowflake from './films/rolling-snowflake.ts';
+import chasingRosette from './films/chasing-rosette.ts';
+import channelFlip from './films/channel-flip.ts';
+import floatingConstellation from './films/floating-constellation.ts';
+import turningBaseball from './films/turning-baseball.ts';
+import mintedCrest from './films/minted-crest.ts';
+import secretInning from './films/secret-inning.ts';
+import quarterTurn from './films/quarter-turn.ts';
+import silverInversion from './films/silver-inversion.ts';
+import quietIsland from './films/quiet-island.ts';
+import lensLettering from './films/lens-lettering.ts';
+import colorLock from './films/color-lock.ts';
+import wireframeJewel from './films/wireframe-jewel.ts';
+import morphingGeometry from './films/morphing-geometry.ts';
 import smooth from './finishes/smooth.ts';
 import bump from './finishes/bump.ts';
 import brushed from './finishes/brushed.ts';
@@ -54,9 +68,11 @@ import vaporwave from './palettes/vaporwave.ts';
 import monoSilver from './palettes/mono-silver.ts';
 import custom from './palettes/custom.ts';
 
-/** Every holo film, in the order the shader numbers them. */
-export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper, matrix, spiralMoire, wallpaper, smoke] as const satisfies readonly Film[];
-export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper', 'matrix', 'spiral-moire', 'wallpaper', 'smoke'];
+/** Every holo film, in the order the shader numbers them; the experimental studies come last. */
+export const FILMS = [refractor, prizm, crackedIce, spun, brilliant, shimmer, atomic, xfractor, mojo, geodesic, carpet, circuit, dollar, hgh, hghSequence, qrCode, doubleHelix, julia, fibonacci, mobius, oilPuddle, galaxy, jackpot, paisley, penrose, pinwheel, poincareDisk, apollonian, gosper, matrix, spiralMoire, wallpaper, smoke,
+	rollingSnowflake, chasingRosette, channelFlip, floatingConstellation, turningBaseball, mintedCrest, secretInning, quarterTurn, silverInversion, quietIsland, lensLettering, colorLock, wireframeJewel, morphingGeometry] as const satisfies readonly Film[];
+export const HOLO_PATTERNS = FILMS.map(film => film.name) as unknown as readonly ['refractor', 'prizm', 'cracked-ice', 'spun', 'brilliant', 'shimmer', 'atomic', 'xfractor', 'mojo', 'geodesic', 'carpet', 'circuit', 'dollar', 'hgh', 'hgh-sequence', 'qr-code', 'double-helix', 'julia', 'fibonacci', 'mobius', 'oil-puddle', 'galaxy', 'jackpot', 'paisley', 'penrose', 'pinwheel', 'poincare-disk', 'apollonian', 'gosper', 'matrix', 'spiral-moire', 'wallpaper', 'smoke',
+	'rolling-snowflake', 'chasing-rosette', 'channel-flip', 'floating-constellation', 'turning-baseball', 'minted-crest', 'secret-inning', 'quarter-turn', 'silver-inversion', 'quiet-island', 'lens-lettering', 'color-lock', 'wireframe-jewel', 'morphing-geometry'];
 export type HoloPattern = (typeof HOLO_PATTERNS)[number];
 
 /** Films that move with time; the light engine keeps redrawing cards that show one. */
@@ -92,7 +108,7 @@ export interface FilmSpec {
 
 const FULL_SPEC: FilmSpec = { films: ALL_FILMS, remix: true, under: true };
 
-const OUTPUTS = 'inout vec2 groove, inout float seed, inout float vivid, inout float copper, inout float copperPad, inout float shade, inout float cellSize, inout float ground';
+const OUTPUTS = 'inout vec2 groove, inout float seed, inout float vivid, inout float copper, inout float copperPad, inout float shade, inout float cellSize, inout float ground, inout vec4 own, inout float ownFlash';
 
 function filmFunction(film: Film, index: number): string {
 	const dials = filmDials(film);
@@ -196,12 +212,14 @@ export function holoFilmGlsl(spec: FilmSpec = FULL_SPEC): string {
 	const blend = films.has(BLEND.index);
 	return `
 ${SHARED_FILM_GLSL}
+// A film's position on the card face itself, without the per-card shift, for motifs set at a fixed place.
+vec2 cardFace(vec2 p) { return p - v_view.zw; }
 ${FILMS.map((film, index) => films.has(index) ? filmFunction(film, index) : '').join('\n')}
 ${FILM_FINISHES.map((finish, index) => !finishes || finishes.has(index) ? finishFunction(finish, index) : '').join('\n')}
 ${PALETTES.map((palette, index) => !palettes || palettes.has(index) ? paletteFunction(palette) : '').join('\n')}
 
 void filmPattern(int which, vec2 p, ${OUTPUTS}) {
-	${dispatch(FILMS, film => `${glslName('film', film.name)}(p, groove, seed, vivid, copper, copperPad, shade, cellSize, ground);`, films)}
+	${dispatch(FILMS, film => `${glslName('film', film.name)}(p, groove, seed, vivid, copper, copperPad, shade, cellSize, ground, own, ownFlash);`, films)}
 }
 void filmFinish(int which, vec2 p, vec2 groove, inout vec3 normal, inout float sweep) {
 	${dispatch(FILM_FINISHES, finish => `${glslName('finish', finish.name)}(p, groove, normal, sweep);`, finishes)}
@@ -235,7 +253,10 @@ vec3 holoFilm(vec2 p, vec3 normal, vec3 halfway, float band, int film, out float
 	float cellSize = 100.0;
 	// Below zero, the film has no copper stage: its ground prints at full strength.
 	float ground = -1.0;
-	filmPattern(film, p, groove, seed, vivid, copper, copperPad, shade, cellSize, ground);
+	// A film's own view-dependent image, and how brightly it catches the light; none by default.
+	vec4 own = vec4(0.0);
+	float ownFlash = 0.0;
+	filmPattern(film, p, groove, seed, vivid, copper, copperPad, shade, cellSize, ground, own, ownFlash);
 	float sweepShift = 0.0;
 	filmFinish(u_finish >= 0 ? u_finish : FILM_FINISH[film], p, groove, normal, sweepShift);
 	int palette = cardPalette >= 0 ? cardPalette : u_palette >= 0 ? u_palette : FILM_PALETTE[film];
@@ -259,6 +280,9 @@ vec3 holoFilm(vec2 p, vec3 normal, vec3 halfway, float band, int film, out float
 		float mask = ground / (1.0 + max(holoVivid - 1.0, 0.0) * 0.9);
 		film_ = mix(mix(film_ * mask, min(film_ * 1.15, 1.0), copper), vec3(1.0, 0.82, 0.48) * (0.8 + 0.4 * pass), copperPad * 0.7);
 	}
+	// Where a film paints its own image, that image replaces the groove colour and sets the flash.
+	film_ = mix(film_, own.rgb, clamp(own.a, 0.0, 1.0));
+	flash = mix(flash, ownFlash, clamp(own.a, 0.0, 1.0));
 	// Too small to resolve, the pattern would alias into speckle; it settles into the plain refractor sweep instead.
 	vec3 smooth_ = mix(vec3(0.82, 0.84, 0.88), sweepColor, 0.6);
 	flash *= detail;

@@ -3,15 +3,17 @@ import { PLATES } from '../cards/surface/foil-plates.ts';
 import { FILMS, PALETTES } from '../cards/surface/holo-films.ts';
 import { appearanceFor, COLORWAYS, COSMETICS, itemsForTier } from './catalogue.ts';
 
+const SHOP_FILMS = FILMS.filter(film => !film.experimental);
+
 describe('shipped cosmetic catalogue', () => {
  it('offers every shipped plate, film and colorway once for one token, without changing Base', () => {
-  expect(COSMETICS).toHaveLength(PLATES.length + FILMS.length + COLORWAYS.length);
+  expect(COSMETICS).toHaveLength(PLATES.length + SHOP_FILMS.length + COLORWAYS.length);
   expect(COSMETICS.filter(item => item.kind === 'colorway').map(item => item.id)).toEqual(COLORWAYS.map(colorway => `colorway:${colorway.id}`));
   expect(new Set(COSMETICS.map(item => item.id)).size).toBe(COSMETICS.length);
   expect(COSMETICS.every(item => item.cost === 1)).toBe(true);
   expect(itemsForTier('foil').map(item => item.name)).toEqual(PLATES.map(item => item.name));
   expect(itemsForTier('emboss')).toBe(itemsForTier('foil'));
-  expect(itemsForTier('gem').map(item => item.name)).toEqual(FILMS.map(item => item.name));
+  expect(itemsForTier('gem').map(item => item.name)).toEqual(SHOP_FILMS.map(item => item.name));
   expect(itemsForTier('base')).toEqual([]);
  });
 

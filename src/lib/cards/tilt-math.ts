@@ -9,6 +9,35 @@
 
 export type TiltEasing = 'exponential' | 'spring';
 
+/** Degrees of lean that carry a card's light across one whole card width or height. */
+export const LIGHT_SWING = 26;
+/** Where the screen's fixed light rests over an untilted card, in card fractions: up and to the left. */
+export const LIGHT_REST = { x: 0.5 - 0.45 * 0.6, y: 0.5 - 0.75 * 0.6 } as const;
+
+/** Where the fixed light falls on a card leaning `rx`, `ry` degrees, in card fractions, before any clamp. */
+export function tiltLight(rx: number, ry: number): { lightX: number; lightY: number } {
+	return { lightX: LIGHT_REST.x - ry / LIGHT_SWING, lightY: LIGHT_REST.y + rx / LIGHT_SWING };
+}
+
+/**
+ * The light on a card also turned `degrees` clockwise in its own plane, as a workshop turns one. The screen's
+ * light stays put, so its resting place swings round the card the other way; the shift the card's own lean adds
+ * stays in the card's frame, because the lean is in that frame too. `viewX` and `viewY` are the lean's sines.
+ */
+export function rolledLight(light: { lightX: number; lightY: number; viewX?: number; viewY?: number }, degrees: number, width: number, height: number): { lightX: number; lightY: number } {
+	if (!degrees || !width || !height) return { lightX: light.lightX, lightY: light.lightY };
+	const toDegrees = 180 / Math.PI;
+	const shiftX = -Math.asin(light.viewX ?? 0) * toDegrees / LIGHT_SWING;
+	const shiftY = -Math.asin(light.viewY ?? 0) * toDegrees / LIGHT_SWING;
+	const x = (light.lightX - shiftX - 0.5) * width;
+	const y = (light.lightY - shiftY - 0.5) * height;
+	const radians = degrees / toDegrees;
+	return {
+		lightX: 0.5 + shiftX + (Math.cos(radians) * x + Math.sin(radians) * y) / width,
+		lightY: 0.5 + shiftY + (-Math.sin(radians) * x + Math.cos(radians) * y) / height
+	};
+}
+
 export interface TiltTuning {
 	/** Largest pointer tilt, in degrees, at the middle of an edge. */
 	maxTilt: number;

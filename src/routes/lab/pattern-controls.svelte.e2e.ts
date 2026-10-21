@@ -17,9 +17,10 @@ async function geometry(page: Page, name: string, poses: Pose[], inspectGrooves 
 	const fragment = source.slice(0, source.indexOf('\nvoid main() {')) + `
 void main() {
 	vec2 groove = vec2(1.0, 0.0);
-	float seed = 0.0, vivid = 0.0, copper = 0.0, copperPad = 0.0, shade = 1.0, cellSize = 100.0, ground = -1.0;
+	float seed = 0.0, vivid = 0.0, copper = 0.0, copperPad = 0.0, shade = 1.0, cellSize = 100.0, ground = -1.0, ownFlash = 0.0;
+	vec4 own = vec4(0.0);
 	footprint = max(length(fwidth(v_card * CARD)), 1e-5);
-	filmPattern(${index}, v_card * CARD + v_view.zw, groove, seed, vivid, copper, copperPad, shade, cellSize, ground);
+	filmPattern(${index}, v_card * CARD + v_view.zw, groove, seed, vivid, copper, copperPad, shade, cellSize, ground, own, ownFlash);
 	o_color = ${inspectGrooves ? 'vec4(groove * 0.5 + 0.5, copper, 1.0)' : 'vec4(seed < 0.0 ? 0.0 : 0.5 + seed * 0.5, copper, vivid, 1.0)'};
 }`;
 	return page.evaluate(({ vertex, fragment, index, values, shift, periodicity }) => {
