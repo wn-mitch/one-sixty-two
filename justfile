@@ -118,6 +118,12 @@ ios-test destination='platform=iOS Simulator,name=iPhone 17': ios-project
 ios-live-smoke destination='platform=iOS Simulator,name=iPhone 17': ios-project
     DEVELOPER_DIR="{{ios_developer_dir}}" xcodebuild -project ios/OneSixtyTwo.xcodeproj -scheme OneSixtyTwoLive -destination '{{destination}}' -derivedDataPath ios/build -parallel-testing-enabled NO test CODE_SIGNING_ALLOWED=NO
 
+# Archives with the version and build in ios/project.yml and uploads it to App Store Connect for TestFlight.
+# Uses the Xcode account's automatic signing; bump CURRENT_PROJECT_VERSION before each upload.
+ios-testflight: ios-project
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcodebuild -project ios/OneSixtyTwo.xcodeproj -scheme OneSixtyTwo -configuration Release -destination 'generic/platform=iOS' -archivePath ios/build/OneSixtyTwo.xcarchive -allowProvisioningUpdates DEVELOPMENT_TEAM=22DBQNXMQ9 archive
+    DEVELOPER_DIR="{{ios_developer_dir}}" xcodebuild -exportArchive -archivePath ios/build/OneSixtyTwo.xcarchive -exportOptionsPlist ios/ExportOptions.plist -exportPath ios/build/export -allowProvisioningUpdates
+
 # Pass a booted simulator UDID; does not open Simulator.app or take focus.
 ios-run device: ios-build
     DEVELOPER_DIR="{{ios_developer_dir}}" xcrun simctl install '{{device}}' ios/build/Build/Products/Debug-iphonesimulator/OneSixtyTwo.app

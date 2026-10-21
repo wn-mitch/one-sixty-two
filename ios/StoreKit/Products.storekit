@@ -1,0 +1,62 @@
+{
+  "identifier": "B1E0C2D4",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "1.00",
+      "familyShareable": false,
+      "internalID": "6825551101",
+      "localizations": [
+        {
+          "description": "4 tokens for cosmetic card finishes in the Shop.",
+          "displayName": "4 Tokens",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "coins.4",
+      "referenceName": "4 coins",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "5.00",
+      "familyShareable": false,
+      "internalID": "6825551102",
+      "localizations": [
+        {
+          "description": "20 tokens for cosmetic card finishes in the Shop.",
+          "displayName": "20 Tokens",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "coins.20",
+      "referenceName": "20 coins",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "10.00",
+      "familyShareable": false,
+      "internalID": "6825551103",
+      "localizations": [
+        {
+          "description": "40 tokens for cosmetic card finishes in the Shop.",
+          "displayName": "40 Tokens",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "coins.40",
+      "referenceName": "40 coins",
+      "type": "Consumable"
+    }
+  ],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [],
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}

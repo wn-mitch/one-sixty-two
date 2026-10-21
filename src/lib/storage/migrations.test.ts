@@ -285,6 +285,7 @@ describe('device database migrations', () => {
    { key: 'classic:rostered-only', credit: 0 },
    { key: 'draft:complete', credit: 0 }
   ]);
+  migrate(raw, NO_LEGACY);
   expect(await readShop(db)).toMatchObject({ balance: 0, owned: [], equipped: {} });
   await db.run([
    ...completionReward('classic:deleted', 'later'),
@@ -295,7 +296,7 @@ describe('device database migrations', () => {
   expect((await readShop(db)).balance).toBe(0);
   await db.run(completionReward('draft:incomplete', 'later'));
   expect((await readShop(db)).balance).toBe(1);
-  expect(migrate(raw, NO_LEGACY, MIGRATIONS.filter(step => step.version <= 11))).toEqual({ from: 11, to: 11 });
+  expect(migrate(raw, NO_LEGACY)).toEqual({ from: SCHEMA_VERSION, to: SCHEMA_VERSION });
   expect((await readShop(db)).balance).toBe(1);
  });
 

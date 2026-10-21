@@ -12,6 +12,8 @@
 	import { refreshStickers } from '#lib/collection/store.svelte.ts';
 	import { navigating, page } from '$app/state';
 	import { refreshShop, shopState } from '#lib/cosmetics/store.svelte.ts';
+	import { watchPurchases } from '#lib/cosmetics/support.ts';
+	import { toasts } from '#lib/toast.svelte.ts';
 	import { sitePreviewImage } from '#lib/share/site-preview.ts';
 	import type { LayoutProps } from './$types';
 
@@ -42,6 +44,8 @@
 		externalSupport = showsExternalSupport();
 		void refreshStickers();
 		void refreshShop();
+		// In the iOS app, App Store purchases (including ones finished on another device) credit on every launch.
+		return watchPurchases(() => toasts.show('Purchased tokens could not be saved yet. They will be added next time the app opens.', { id: 'purchases', tone: 'error' }));
 	});
 
 	// `?perf` on any page shows frame pacing and light-pass counters, on any build, for checking feel on real hardware.

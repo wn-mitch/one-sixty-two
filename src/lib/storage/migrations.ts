@@ -385,6 +385,28 @@ export const MIGRATIONS: readonly Migration[] = [
    exec(db, `INSERT INTO device_profile (id, board_name)
     SELECT 1, board_name FROM daily_runs WHERE board_name IS NOT NULL ORDER BY date DESC LIMIT 1`);
   }
+ },
+ {
+  version: 16,
+  up(db) {
+   // One row per App Store transaction, so a redelivered or restored transaction credits its coins once.
+   // A refund records `clawback`: the part of the purchase still unspent, never coins earned by play.
+   exec(db, `CREATE TABLE shop_purchases (
+    transaction_id TEXT PRIMARY KEY NOT NULL,
+    product_id TEXT NOT NULL,
+    coins INTEGER NOT NULL CHECK (typeof(coins) = 'integer' AND coins > 0),
+    purchased_at TEXT NOT NULL,
+    revoked_at TEXT,
+    clawback INTEGER NOT NULL DEFAULT 0 CHECK (typeof(clawback) = 'integer' AND clawback BETWEEN 0 AND coins)
+   )`);
+   exec(db, 'DROP TRIGGER shop_purchase_balance');
+   exec(db, `CREATE TRIGGER shop_purchase_balance BEFORE INSERT ON shop_owned
+    WHEN NOT EXISTS (SELECT 1 FROM shop_owned WHERE item_id = NEW.item_id)
+     AND (SELECT COALESCE(SUM(credit), 0) FROM shop_completions)
+      + (SELECT COALESCE(SUM(coins - clawback), 0) FROM shop_purchases)
+      - (SELECT COALESCE(SUM(cost), 0) FROM shop_owned) < NEW.cost
+    BEGIN SELECT RAISE(ABORT, 'Not enough tokens. Complete a new season to earn one.'); END`);
+  }
  }
 ];
 

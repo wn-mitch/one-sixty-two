@@ -14,10 +14,15 @@ export type ShopSnapshot = {
  eras: Partial<Record<CustomTier, Partial<Record<CardEra, EquippedFinish>>>>;
 };
 
+/** Coins earned by play, plus purchased coins not taken back by a refund, less what unlocks cost. */
+export const BALANCE_SQL = `((SELECT COALESCE(SUM(credit), 0) FROM shop_completions)
+  + (SELECT COALESCE(SUM(coins - clawback), 0) FROM shop_purchases)
+  - (SELECT COALESCE(SUM(cost), 0) FROM shop_owned))`;
+
 /** Read all three parts from one SQLite snapshot, even when another tab is buying a finish. */
 export async function readShop(db: Db): Promise<ShopSnapshot> {
  const rows = await db.all<Row & { balance: number; first: number; owned: string; equipped: string; eras: string }>(`SELECT
-  (SELECT COALESCE(SUM(credit), 0) FROM shop_completions) - (SELECT COALESCE(SUM(cost), 0) FROM shop_owned) AS balance,
+  ${BALANCE_SQL} AS balance,
   NOT EXISTS (SELECT 1 FROM shop_completions) AS first,
   (SELECT json_group_array(item_id) FROM (SELECT item_id FROM shop_owned ORDER BY item_id)) AS owned,
   (SELECT json_group_object(tier, json_object('itemId', item_id, 'colorway', colorway)) FROM shop_equipped) AS equipped,

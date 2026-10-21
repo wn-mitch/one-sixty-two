@@ -9,6 +9,9 @@ final class GameViewController: UIViewController {
     private var urlPolicy: GameURLPolicy?
     var gameWebView: WKWebView!
     var downloadContexts: [ObjectIdentifier: GameDownloadContext] = [:]
+    private lazy var storeBridge = StoreBridge { [weak self] url in
+        self?.urlPolicy?.isAppURL(url) ?? false
+    }
 
     private let loadingView = UIView()
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
@@ -58,6 +61,12 @@ final class GameViewController: UIViewController {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        // App Store token packs; only the configured game origin's main frame may use it.
+        configuration.userContentController.addScriptMessageHandler(
+            storeBridge,
+            contentWorld: .page,
+            name: StoreBridge.handlerName
+        )
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -71,6 +80,7 @@ final class GameViewController: UIViewController {
         webView.uiDelegate = self
         // WKDownload.delegate is assigned when WebKit hands us a download.
         gameWebView = webView
+        storeBridge.attach(to: webView)
 
         view.addSubview(webView)
         NSLayoutConstraint.activate([

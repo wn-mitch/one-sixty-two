@@ -3,6 +3,8 @@
 	import ScreenLoading from '#lib/components/ScreenLoading.svelte';
 	import FinishShop from '#lib/components/FinishShop.svelte';
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
+	import SupportOffers from '#lib/components/SupportOffers.svelte';
+	import { supportAvailable } from '#lib/cosmetics/support.ts';
 	import type { CardViewModel } from '#lib/cards/view-model.ts';
 	import { loadManifest } from '#lib/game/data.ts';
 	import type { Manifest } from '#lib/game/types.ts';
@@ -28,6 +30,7 @@
 	let mediaNotice = $state('');
 	let revision = $state(0);
 	let live = true;
+	let support = $state(false);
 
 	async function load(): Promise<void> {
 		loading = true;
@@ -89,6 +92,7 @@
 	const retry = () => { if (data) revision++; else void load(); };
 
 	onMount(() => {
+		support = supportAvailable();
 		void load();
 		return () => { live = false; };
 	});
@@ -121,11 +125,12 @@
 		<FinishShop bind:tier snapshot={shopState.snapshot} {cards} {loading} {error} {busy} onRetry={retry} onUnlock={unlock} />
 	{/if}
 	{#if mediaNotice}<p class="muted" role="status">{mediaNotice}</p>{/if}
+	{#if support}<SupportOffers />{/if}
 	<details class="earning">
 		<summary>Tokens &amp; unlocks</summary>
 		<p>Finish a season to earn 1 token. Your first earns 2. Replays and head-to-head series do not earn tokens.</p>
 		<p>Each finish or colorway costs 1 token. Shop purchases unlock types without changing any cards. Equip them in Card factory. Foil unlocks work on Silver and Gold cards; colorways work on any Gem holo.</p>
-		<p>Cosmetic only. Unlocks and tokens stay on this device. Compact cards and exported images keep their simplified finish.</p>
+		<p>Cosmetic only. Unlocks and earned tokens stay on this device{#if support}; purchased tokens come back from the App Store{/if}. Compact cards and exported images keep their simplified finish.</p>
 	</details>
 </main>
 
