@@ -28,6 +28,8 @@ targets:
       path: Generated/Info.plist
       properties:
         CFBundleDisplayName: 162-0
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         # Finished consumables stay in Transaction.all, so purchased tokens come back after a reinstall.
         SKIncludeConsumableInAppPurchaseHistory: true
