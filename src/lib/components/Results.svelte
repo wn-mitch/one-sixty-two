@@ -14,10 +14,11 @@
 	import type { WarRankings } from '../rankings/types.ts';
 	import { createShareRenderModel } from '../share/model.ts';
 	import type { ShareAction, ShareFormat, SharePublication, ShareRenderModel } from '../share/types.ts';
-	import type { PitcherLine, SeasonResult } from '../sim/types.ts';
+	import type { SeasonResult } from '../sim/types.ts';
 	import type { NewCard, NewSticker } from '../collection/collection.ts';
 	import type { SeasonReward } from '../cosmetics/ledger.ts';
 	import ResultsReward from './ResultsReward.svelte';
+	import ResultsScoreboard from './ResultsScoreboard.svelte';
 	import ResultsCollection from './ResultsCollection.svelte';
 	import ResultsGrades from './ResultsGrades.svelte';
 	import DailyStandings from './DailyStandings.svelte';
@@ -33,9 +34,8 @@
 	import ResultsHand from './ResultsHand.svelte';
 	import SeasonMoments from './SeasonMoments.svelte';
 	import ShareBlock from './ShareBlock.svelte';
-	import { tableScroll } from './table-scroll.ts';
+	import SeasonTotals from './SeasonTotals.svelte';
 	import { dailyLabel } from '../game/daily.ts';
-	import { BATTING_COLUMNS, nextSort, PITCHING_COLUMNS, sortLines, type SortDirection, type StatColumn } from './stat-sort.ts';
 
 	interface Props {
 		result: SeasonResult;
@@ -139,18 +139,6 @@
 			: null
 	);
 	let inspectedView = $derived(inspectedSeasonId ? cardViews.get(inspectedSeasonId) ?? null : null);
-	function pitcherName(line: PitcherLine): string {
-		return line.displayName;
-	}
-
-	// Season totals open best first by estimated WAR; any header re-sorts its table.
-	let battingSort = $state<{ key: string; direction: SortDirection }>({ key: 'war', direction: 'descending' });
-	let pitchingSort = $state<{ key: string; direction: SortDirection }>({ key: 'war', direction: 'descending' });
-	const battingLines = $derived(sortLines(result.batting, BATTING_COLUMNS.find(column => column.key === battingSort.key)!, battingSort.direction));
-	const pitchingLines = $derived(sortLines(result.pitching, PITCHING_COLUMNS.find(column => column.key === pitchingSort.key)!, pitchingSort.direction));
-	function ariaSort<T>(sort: { key: string; direction: SortDirection }, column: StatColumn<T>): 'ascending' | 'descending' | 'none' {
-		return sort.key === column.key ? sort.direction : 'none';
-	}
 
 	function jumpTo(id: string): void {
 		const heading = document.getElementById(id);
@@ -248,18 +236,8 @@
 			<a class="button primary" href={challengeSeriesPath(encodeReplay(draft), challenge)}>Play the best-of-five</a>
 		</aside>
 	{/if}
-	<header class="scoreboard">
-		<div class="record-block">
-			<h2
-				id="results-heading"
-				bind:this={resultsHeading}
-				tabindex="-1"
-				aria-label={`Final record: ${result.wins} wins and ${result.losses} losses`}
-			>
-				<span>{result.wins}<small>W</small></span>
-				<i aria-hidden="true">–</i>
-				<span>{result.losses}<small>L</small></span>
-			</h2>
+	<ResultsScoreboard wins={result.wins} losses={result.losses} bind:heading={resultsHeading} busy={sharing}>
+		{#snippet record()}
 			{#if draft.daily}<p class="daily-stamp">Daily <span>{dailyLabel(draft.daily)}</span></p>{/if}
 			{#if phrase}<SeasonClipping {phrase} />{/if}
 			<ResultsGrades wins={result.wins} {grade} {rosterGrade} {expected} {scouting} />
@@ -275,9 +253,8 @@
 				<DailyStandings standings={dailyStandings} />
 				{#if onDailyName}<DailyBoardEntry standings={dailyStandings} onName={onDailyName} />{/if}
 			{/if}
-		</div>
-
-		<div class="score-actions" aria-busy={sharing}>
+		{/snippet}
+		{#snippet actions()}
 			<div class="share-shortcuts">
 				<button class="primary" type="button" disabled={sharing} onclick={() => onShare('challenge', 'field', shareModel)}>{sharing ? 'Preparing…' : 'Challenge a friend'}<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 11l6-6M6 5h5v5"></path></svg></button>
 				<button class="secondary" type="button" title="Copy link" disabled={sharing} onclick={() => onShare('copy-link', 'field', shareModel)}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"></path></svg><span class="action-label">{sharing ? 'Preparing…' : 'Copy link'}</span></button>
@@ -287,9 +264,8 @@
 				<button class="new-draft" type="button" onclick={onNew}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>New draft</button>
 			</div>
 			<ResultsReward {reward} {ownSeason} />
-		</div>
-
-	</header>
+		{/snippet}
+	</ResultsScoreboard>
 
 
 
@@ -377,73 +353,7 @@
 		<header class="review-heading">
 			<h3 id="season-review-heading">Season in review</h3>
 		</header>
-	<section class="season-totals" aria-labelledby="batting-heading">
-		<div class="section-heading">
-			<div>
-				<h4 id="batting-heading" tabindex="-1">Batting</h4>
-			</div>
-		</div>
-		<div class="table-scroll stat-table-scroll" role="region" aria-label="Season batting totals" use:tableScroll>
-			<table class="stat-table">
-				<caption class="sr-only">Simulated season batting totals, sorted by {BATTING_COLUMNS.find(column => column.key === battingSort.key)!.title}</caption>
-				<thead>
-					<tr>
-						<th scope="col">Batter</th>
-						{#each BATTING_COLUMNS as column (column.key)}
-							<th scope="col" class={column.className} aria-sort={ariaSort(battingSort, column)}>
-								<button type="button" class="sort-header" class:sorted={battingSort.key === column.key} aria-label={`Sort by ${column.title}`} onclick={() => battingSort = nextSort(battingSort, column)}>{column.label}<span aria-hidden="true">{battingSort.key === column.key ? (battingSort.direction === 'descending' ? '▼' : '▲') : ''}</span></button>
-							</th>
-						{/each}
-					</tr>
-				</thead>
-				<tbody>
-					{#each battingLines as line (line.seasonId)}
-						<tr>
-							<th scope="row">
-								<span class="stat-identity">{line.displayName}<small>{line.position} · {line.year}</small></span>
-							</th>
-							{#each BATTING_COLUMNS as column (column.key)}<td class={column.className}>{column.format(line)}</td>{/each}
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	</section>
-
-	<section class="season-totals" aria-labelledby="pitching-heading">
-		<div class="section-heading">
-			<div>
-				<h4 id="pitching-heading" tabindex="-1">Pitching</h4>
-			</div>
-			<p>RA9 is runs allowed per nine innings. It is not simulated ERA.</p>
-		</div>
-		<div class="table-scroll stat-table-scroll" role="region" aria-label="Season pitching totals" use:tableScroll>
-			<table class="stat-table pitching-table">
-				<caption class="sr-only">Simulated season pitching totals, sorted by {PITCHING_COLUMNS.find(column => column.key === pitchingSort.key)!.title}</caption>
-				<thead>
-					<tr>
-						<th scope="col">Pitcher</th>
-						{#each PITCHING_COLUMNS as column (column.key)}
-							<th scope="col" class={column.className} aria-sort={ariaSort(pitchingSort, column)}>
-								<button type="button" class="sort-header" class:sorted={pitchingSort.key === column.key} aria-label={`Sort by ${column.title}`} onclick={() => pitchingSort = nextSort(pitchingSort, column)}>{column.label}<span aria-hidden="true">{pitchingSort.key === column.key ? (pitchingSort.direction === 'descending' ? '▼' : '▲') : ''}</span></button>
-							</th>
-						{/each}
-					</tr>
-				</thead>
-				<tbody>
-					{#each pitchingLines as line (line.seasonId)}
-						<tr>
-							<th scope="row">
-								<span class="stat-identity">{pitcherName(line)}<small>{line.role === 'support' ? 'BP' : line.role === 'closer' ? 'CL' : line.role === 'reliever' ? 'RP' : 'SP'} · {line.year}</small></span>
-							</th>
-							{#each PITCHING_COLUMNS as column (column.key)}<td class={column.className}>{column.format(line)}</td>{/each}
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-		<p class="support-note muted">A league-average relief pool, listed as BP, covers every relief inning your closer and named relievers do not take.</p>
-	</section>
+	<SeasonTotals batting={result.batting} pitching={result.pitching} />
 	</section>
 
 	<section class="game-log" aria-label="All 162 games">
@@ -463,62 +373,12 @@
 		gap: var(--space-8);
 		min-width: 0;
 	}
-	.scoreboard {
-		display: grid;
-		gap: var(--space-5);
-		padding: var(--space-5) var(--space-6);
-		background: var(--surface);
-		border-block: 1px solid var(--border);
-	}
-	/* The score and its headline share the first line; the grades and the season's facts follow on one line when they fit. */
-	.record-block { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); min-width: 0; }
-	.record-block > :global(.clipping) { flex: 1 1 16rem; }
-	.scoreboard h2 {
-		display: flex;
-		align-items: baseline;
-		gap: var(--space-2);
-		margin: 0;
-		font-size: var(--text-score);
-		font-weight: 850;
-		line-height: 1;
-		letter-spacing: -.05em;
-	}
-	.scoreboard h2 > span { display: inline-flex; align-items: baseline; gap: var(--space-2); }
-	.scoreboard h2 small {
-		color: var(--muted);
-		font-size: var(--text-sm);
-		font-weight: 650;
-		letter-spacing: 0;
-	}
-	.scoreboard h2 i {
-		color: var(--muted);
-		font-size: var(--text-2xl);
-		font-style: normal;
-		font-weight: 500;
-	}
 	/* The daily run's mark: same seed and park for every player that day. */
 	.daily-stamp { flex: none; margin: 0; padding: var(--space-1) var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); font: italic 800 var(--text-lg) / 1 'Barlow Condensed', sans-serif; letter-spacing: .06em; text-transform: uppercase; transform: rotate(-3deg); }
 	.daily-stamp span { color: var(--text); }
-	/* One compact line under the record: label and value pairs, separated by thin rules. */
-	.season-ledger { display: flex; flex-wrap: wrap; gap: var(--space-1) 0; margin: 0; }
-	/* Each label sits over its value, so the three facts fit beside the grades on wide screens. */
-	.season-ledger > div { display: grid; gap: 2px; padding-inline: var(--space-4); border-left: 1px solid var(--border); }
-	.season-ledger > div:first-child { padding-left: 0; border-left: 0; }
-	.season-ledger dt { color: var(--muted); font-size: var(--text-xs); }
-	.season-ledger dd { margin: 0; font-size: var(--text-base); font-weight: 750; font-variant-numeric: tabular-nums; }
-	.season-ledger dd.perfect { color: var(--success); }
-	.run-difference { color: var(--muted); font-size: var(--text-sm); }
-	.run-difference.up { color: var(--success); }
-	.run-difference.down { color: var(--error); }
-	/* Two equal columns: the share pair at full size, then the smaller head-to-head / new-draft pair. */
-	.score-actions { display: grid; align-content: center; gap: var(--space-2); width: min(100%, 24rem); }
-	.share-shortcuts, .more-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-	.score-actions button, .score-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); white-space: nowrap; }
-	.score-actions svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+	.share-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 	.share-shortcuts button { min-height: 3rem; }
 	.share-shortcuts .secondary { border-color: var(--border-strong, var(--border)); }
-	.more-actions .button, .more-actions button { min-height: 2.75rem; padding-inline: var(--space-3); border-color: var(--border); background: transparent; color: var(--muted); font-size: var(--text-sm); }
-	.more-actions .button:hover, .more-actions button:hover { color: var(--text); background: var(--surface-raised); }
 	/* Wide screens set the 2×2 awards beside the share panel; narrower ones stack them. */
 	.awards-share { display: grid; gap: var(--space-8); min-width: 0; }
 	.awards-share > :global(.share-panel) { grid-template-columns: minmax(0, 1fr); padding-block: var(--space-6) 0; border-bottom: 0; }
@@ -533,11 +393,9 @@
 	.season-review { display: grid; gap: var(--space-6); min-width: 0; }
 	.review-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--border); }
 	.review-heading h3 { font-size: var(--text-xl); }
-	.season-totals, .game-log { display: grid; gap: var(--space-3); min-width: 0; }
+	.game-log { display: grid; gap: var(--space-3); min-width: 0; }
 	.section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 	.section-heading h3 { font-size: var(--text-xl); }
-	.section-heading h4 { margin: 0; font-size: var(--text-base); font-weight: 750; }
-	.section-heading > p { max-width: 60ch; margin: 0; color: var(--muted); font-size: var(--text-xs); }
 	.challenge-offer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6); padding: var(--space-4) var(--space-5); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: color-mix(in oklch, var(--accent) 10%, var(--surface)); }
 	.challenge-offer h2 { margin: 0; font-size: var(--text-lg); line-height: 1.25; }
 	.challenge-offer .button { flex: none; min-height: 2.75rem; }
@@ -554,11 +412,6 @@
 		min-height: 2.75rem;
 		font-size: var(--text-sm);
 	}
-	.support-note { margin: 0; font-size: var(--text-xs); }
-	.sort-header { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; width: 100%; min-height: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: 0; }
-	.sort-header:hover:not(:disabled) { background: transparent; color: var(--text); }
-	.sort-header.sorted { color: var(--text); }
-	.sort-header span { font-size: .6em; }
 
 	.hand-step { position: absolute; top: calc((100% - 6.25rem) / 2); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; font-size: 1.5rem; line-height: 1; translate: 0 -50%; }
 	.hand-step.previous { right: calc(100% + .5rem); }
@@ -578,34 +431,18 @@
 		.hand-step { top: calc((100% - 9rem) / 2); }
 	}
 	@media (min-width: 48rem) {
-		.scoreboard {
-			grid-template-columns: minmax(15rem, 1fr) auto;
-			align-items: center;
-			gap: var(--space-6) var(--space-8);
-		}
-		/* The actions shrink to a compact stack so the record, grades and facts keep the width. */
-		.score-actions { justify-self: end; width: auto; }
 		.share-shortcuts { grid-template-columns: minmax(0, 1fr) auto; }
 		.share-shortcuts button { min-height: 2.75rem; }
 		.share-shortcuts .secondary { width: 2.75rem; padding: 0; }
 		.share-shortcuts .secondary .action-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-		.more-actions .button, .more-actions button { min-height: 2.25rem; padding-inline: var(--space-2); font-size: var(--text-xs); }
-		.season-ledger > div { padding-inline: var(--space-3); }
 	}
 	@media (max-width: 40rem) {
 		/* The fixed share bar never covers the last game; the site footer keeps its own clearance. */
 		.results { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
-		.scoreboard { padding: var(--space-4); }
-		.scoreboard h2 { font-size: var(--text-3xl); }
-		/* Phones stack each label over its value so the three facts share one row. */
-		.season-ledger { display: grid; grid-template-columns: repeat(3, minmax(0, max-content)); justify-content: start; }
-		.season-ledger dd { overflow-wrap: anywhere; }
-		.season-ledger > div { display: grid; gap: 0; padding-inline: var(--space-3); }
 		/* Three equal jump links on one row instead of a ragged wrap. */
 		.result-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
 		.result-nav button { justify-content: center; padding-inline: var(--space-1); font-size: var(--text-xs); text-align: center; line-height: 1.2; }
 		.result-nav button + button { border-left: 1px solid var(--border); border-radius: 0; }
-		.score-actions button, .score-actions .button { white-space: normal; text-align: center; line-height: 1.15; }
 		.share-shortcuts {
 			position: fixed;
 			z-index: 30;
