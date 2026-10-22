@@ -1,6 +1,7 @@
 import type { Finish } from '../cards/finish.ts';
 import { POSITIONS, STARTER_SLOTS, type Slot } from '../game/types.ts';
-import { applyAction, heldPile, openSlotsFor, type DraftRun, type RunAction } from './run.ts';
+import type { ClubLineup } from './league.ts';
+import { applyAction, heldPile, openSlotsFor, windowLineup, type DraftRun, type RunAction } from './run.ts';
 import type { DraftCard } from './types.ts';
 
 export function testCard(seasonId: string, eligibleSlots: readonly Slot[], salary = 5, finish: Finish = 'base'): DraftCard {
@@ -41,3 +42,6 @@ export function playDraft(run: DraftRun, choose: (pile: DraftCard[]) => string =
 
 /** A pick of `cardId` into its first open slot, or onto the bench when none is open. */
 export const pickAction = (run: DraftRun, cardId: string): RunAction => ({ type: 'pick', cardId, slot: openSlotsFor(run, cardId)[0] ?? null });
+
+/** A submit of the window's lineup as it stands; it applies only once the field is full. */
+export const submitAction = (run: DraftRun): RunAction => ({ type: 'submit', lineup: windowLineup(run) as ClubLineup });

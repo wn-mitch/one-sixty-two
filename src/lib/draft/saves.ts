@@ -31,6 +31,14 @@ const isSetup = (value: unknown): value is RunSetup => {
   && typeof setup.difficulty === 'string';
 };
 const isIdList = (value: unknown): value is string[] => Array.isArray(value) && value.every(id => typeof id === 'string');
+const isOrders = (value: unknown): boolean => {
+ const orders = value as Record<string, unknown> | null;
+ return typeof orders === 'object' && orders !== null && isIdList(orders.battingOrder) && isIdList(orders.starterOrder) && Array.isArray(orders.reliefRoles);
+};
+const isLineup = (value: unknown): boolean => {
+ const lineup = value as Record<string, unknown> | null;
+ return isOrders(lineup) && typeof lineup!.active === 'object' && lineup!.active !== null && isIdList(Object.values(lineup!.active)) && isIdList(lineup!.reserves);
+};
 const isAction = (value: unknown): value is RunAction => {
  if (typeof value !== 'object' || value === null) return false;
  const action = value as Record<string, unknown>;
@@ -39,7 +47,8 @@ const isAction = (value: unknown): value is RunAction => {
   case 'cut': return typeof action.cardId === 'string';
   case 'cleanup': return (STACK_ROLES as readonly unknown[]).includes(action.role);
   case 'autofix': return true;
-  case 'submit': return typeof action.active === 'object' && action.active !== null && isIdList(Object.values(action.active)) && isIdList(action.reserves);
+  case 'order': return isOrders(action.orders);
+  case 'submit': return isLineup(action.lineup);
   default: return false;
  }
 };

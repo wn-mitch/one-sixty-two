@@ -6,7 +6,7 @@ import { RIVALS } from './franchises.ts';
 import { arrangeRoster, submissionFrom } from './legality.ts';
 import { canSwap, chapterInput, LineupError, swapPlaces, matchRivals, recordChapter, seasonLines, setLineup, standings, startLeague, validateLineup, type LeagueSeason } from './league.ts';
 import { applyAction, newRunSetup, ownedBy, startRun, type DraftRun, type RunData } from './run.ts';
-import { playDraft, testUniverse } from './test-fixtures.ts';
+import { playDraft, submitAction, testUniverse } from './test-fixtures.ts';
 import type { DraftSlot } from './types.ts';
 
 vi.setConfig({ testTimeout: 120_000 });
@@ -19,8 +19,7 @@ function submittedRun(seed: number, franchiseId: string): DraftRun {
  const run = startRun(newRunSetup(seed, franchiseId, 'test-data'), DATA);
  playDraft(run);
  applyAction(run, { type: 'autofix' });
- const { active, reserves } = submissionFrom(run.seating.humanSeat, arrangeRoster(ownedBy(run, run.seating.humanSeat)));
- applyAction(run, { type: 'submit', active: active as Record<DraftSlot, string>, reserves });
+ applyAction(run, submitAction(run));
  return run;
 }
 

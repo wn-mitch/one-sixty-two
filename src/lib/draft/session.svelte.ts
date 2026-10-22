@@ -8,7 +8,7 @@ import type { StackRole } from './cleanup.ts';
 import { seatTable } from './franchises.ts';
 import { chapterInput, LEAGUE_VERSION, LineupError, recordChapter, setLineup, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
-import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup } from './run.ts';
+import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
 import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
 import type { Difficulty } from './scouting.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
@@ -215,7 +215,8 @@ export class DraftModeSession {
  cut(cardId: string) { return this.act({ type: 'cut', cardId }); }
  cleanup(role: StackRole) { return this.act({ type: 'cleanup', role }); }
  autofix() { return this.act({ type: 'autofix' }); }
- submit(active: Record<DraftSlot, string>, reserves: string[]) { return this.act({ type: 'submit', active, reserves }); }
+ order(orders: WindowOrders) { return this.act({ type: 'order', orders }); }
+ submit(lineup: ClubLineup) { return this.act({ type: 'submit', lineup }); }
 
  /** Sets the player's lineup for the next chapter; returns the refusal message, or null. */
  async lineup(lineup: ClubLineup): Promise<string | null> {

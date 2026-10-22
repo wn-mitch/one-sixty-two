@@ -2,6 +2,7 @@
 	import { onDestroy, tick, untrack } from 'svelte';
 	import Lineup from '#lib/components/Lineup.svelte';
 	import { reassignPick } from '#lib/game/draft.ts';
+	import { classicLineupView } from '#lib/game/lineup-view.ts';
 	import { validateReliefRoles, type Draft, type HitterSlot, type ReliefAssignment } from '#lib/game/types.ts';
 	import { simulateSeason } from '#lib/engine/core.ts';
 	import { prepareSeasonInput } from '#lib/game/season-input.ts';
@@ -124,16 +125,16 @@
 	{:else}
 		{#key instance}
 			<Lineup
-				{draft}
+				lineup={classicLineupView(draft, fixtures.manifest, profiles)}
 				manifest={fixtures.manifest}
 				{profiles}
 				rankings={fixtures.rankings}
 				rankingLoading={false}
 				rankingError={false}
 				busy={effectiveBusy}
-				onReassign={reassign}
+				onMove={(seasonId, slot) => reassign(seasonId, slot as HitterSlot)}
 				onOrder={updateOrder}
-				onRoles={updateRoles}
+				onRoles={roles => updateRoles(roles as ReliefAssignment[])}
 				onsimulate={simulate}
 			/>
 		{/key}

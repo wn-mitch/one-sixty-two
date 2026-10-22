@@ -75,28 +75,37 @@ export function defaultLineup(submission: Submission, card: (id: string) => Draf
  };
 }
 
-/** Opens the season once every seat has submitted. */
+/** Opens the season once every seat has submitted: the player with the lineup they submitted, AI clubs with defaults. */
 export function startLeague(run: DraftRun): LeagueSeason {
- if (run.phase !== 'season' || run.submissions.some(submission => submission === null)) throw new Error('The league starts once every club has submitted');
+ if (run.phase !== 'season' || !run.lineup || run.submissions.some(submission => submission === null)) throw new Error('The league starts once every club has submitted');
  const card = (id: string) => run.pool.ledger.cards.get(id)!;
- return { version: LEAGUE_VERSION, rivals: matchRivals(run), lineups: run.submissions.map(submission => defaultLineup(submission!, card)), chapters: [] };
+ const human = run.seating.humanSeat;
+ return {
+  version: LEAGUE_VERSION, rivals: matchRivals(run),
+  lineups: run.submissions.map((submission, seat) => seat === human ? structuredClone(run.lineup!) : defaultLineup(submission!, card)),
+  chapters: []
+ };
 }
 
 /** Checks a lineup against the seat's submitted cards; throws `LineupError` naming the first problem. */
 export function validateLineup(run: DraftRun, seat: number, lineup: ClubLineup): void {
  const submission = run.submissions[seat];
  if (!submission) throw new LineupError('This club has no roster yet');
+ checkLineup(submission, id => run.pool.ledger.cards.get(id)!, run.pool.rules.activeSlots, lineup);
+}
+
+/** Checks that `lineup` places exactly the submission's cards, each where it can play, with complete orders and roles. */
+export function checkLineup(submission: Submission, card: (id: string) => DraftCard, slots: readonly DraftSlot[], lineup: ClubLineup): void {
  const owned = [...Object.values(submission.active), ...submission.reserves].sort(compareId);
  const listed = [...Object.values(lineup.active), ...lineup.reserves].sort(compareId);
- const slots = run.pool.rules.activeSlots;
  if (Object.keys(lineup.active).length !== slots.length || slots.some(slot => !lineup.active[slot]) || listed.join() !== owned.join()) {
   throw new LineupError('A lineup uses exactly the club\'s cards, one per slot');
  }
  for (const slot of slots) {
-  const item = run.pool.ledger.cards.get(lineup.active[slot])!;
+  const item = card(lineup.active[slot]);
   if (!canFill(item, slot)) throw new LineupError(`${item.seasonId} cannot play ${slot}`);
  }
- const same = (order: string[], rows: readonly DraftSlot[]) => order.length === rows.length && [...order].sort(compareId).join() === rows.map(slot => lineup.active[slot]).sort(compareId).join();
+ const same = (order: string[], rows: readonly DraftSlot[]) => Array.isArray(order) && order.length === rows.length && [...order].sort(compareId).join() === rows.map(slot => lineup.active[slot]).sort(compareId).join();
  if (!same(lineup.battingOrder, HITTER_ROWS)) throw new LineupError('The batting order lists the nine active hitters once each');
  if (!same(lineup.starterOrder, STARTER_ROWS)) throw new LineupError('The rotation lists the three starters once each');
  try { validateReliefRoles(lineup.reliefRoles, true, DRAFT_BULLPEN_SLOTS); }

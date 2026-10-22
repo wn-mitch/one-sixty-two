@@ -8,7 +8,7 @@ import { startLeague } from './league.ts';
 import { LEAGUE_CHAPTERS } from '../sim/league-types.ts';
 import type { DraftSlot } from './types.ts';
 import type { Db } from '../storage/sql.ts';
-import { pickAction, playDraft, testUniverse } from './test-fixtures.ts';
+import { pickAction, playDraft, submitAction, testUniverse } from './test-fixtures.ts';
 
 const FRANCHISES = Object.keys(RIVALS);
 const CARDS = testUniverse(120);
@@ -93,8 +93,7 @@ describe('draft run saves', () => {
   const run = startRun(setup, DATA);
   playDraft(run, best);
   applyAction(run, { type: 'autofix' });
-  const { active, reserves } = submissionFrom(run.seating.humanSeat, arrangeRoster(ownedBy(run, run.seating.humanSeat)));
-  applyAction(run, { type: 'submit', active: active as Record<DraftSlot, string>, reserves });
+  applyAction(run, submitAction(run));
   const season = startLeague(run);
   await saveRun(db, 'run', run, season);
   season.chapters = Array.from({ length: LEAGUE_CHAPTERS }, () => ({ games: [], lines: [], carry: [] }));

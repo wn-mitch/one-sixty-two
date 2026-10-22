@@ -4,10 +4,12 @@ import { seatTable, type TableSeating } from './franchises.ts';
 import { heldBy, transfer, UNOWNED } from './ledger.ts';
 import { STACK_ROLES, type StackRole } from './cleanup.ts';
 import { checkSubmission } from './legality.ts';
+import { checkLineup, LineupError, type ClubLineup } from './league.ts';
 import { recoverSeat } from './recovery.ts';
 import { buildRunPool, pileHeldBy, type RunPool } from './pool.ts';
-import { baselineBudget, canFill, DRAFT_RULES, picksPerSeat, rosterSize } from './rules.ts';
+import { baselineBudget, canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, DRAFT_RULES, picksPerSeat, rosterSize, type DraftBullpenSlot } from './rules.ts';
 import { randomStream } from '../game/random.ts';
+import { HITTER_SLOTS, STARTER_SLOTS, validateReliefRoles, type ReliefAssignment } from '../game/types.ts';
 import type { DraftCard, DraftSlot, LegalityReport, PayrollBudget, Submission } from './types.ts';
 import { DRAFT_RULES_VERSION, RUN_VERSION, SALARY_VERSION } from './versions.ts';
 
@@ -35,8 +37,8 @@ export interface RunData {
  * One player decision. Runs are rebuilt by replaying these against the setup. A pick drafts from
  * the held pile into an open slot or onto the bench (`slot: null`), and a place moves an owned card
  * on the field; in the opening window a cut releases an owned card, a cleanup takes the top card of
- * one of the player's stacks, auto-fix applies the AI clubs' recovery to the player's roster, and a
- * submit fixes the opening roster.
+ * one of the player's stacks, auto-fix applies the AI clubs' recovery to the player's roster, an
+ * order sets the batting order, rotation and relief roles, and a submit fixes the opening lineup.
  */
 export type RunAction =
  | { type: 'pick'; cardId: string; slot: DraftSlot | null }
@@ -44,7 +46,18 @@ export type RunAction =
  | { type: 'cut'; cardId: string }
  | { type: 'cleanup'; role: StackRole }
  | { type: 'autofix' }
- | { type: 'submit'; active: Record<DraftSlot, string>; reserves: string[] };
+ | { type: 'order'; orders: WindowOrders }
+ | { type: 'submit'; lineup: ClubLineup };
+
+/**
+ * The player's batting order, rotation and relief roles as last set in the opening window. Orders
+ * may name cards that have since left the field; `windowLineup` reads them against the field.
+ */
+export interface WindowOrders {
+ battingOrder: string[];
+ starterOrder: string[];
+ reliefRoles: ReliefAssignment<DraftBullpenSlot>[];
+}
 
 /** Drafting, then the opening window, then the league season once the player submits. */
 export type RunPhase = 'drafting' | 'window' | 'season';
@@ -79,6 +92,9 @@ export interface DraftRun {
  readonly field: Map<DraftSlot, string>;
  /** The player's unplaced cards, in the order they arrived. */
  readonly bench: string[];
+ orders: WindowOrders;
+ /** The player's opening lineup once submitted. */
+ lineup: ClubLineup | null;
  pick: number;
  phase: RunPhase;
  readonly aiRandoms: (() => number)[];
@@ -119,6 +135,7 @@ export function startRun(setup: RunSetup, data: RunData): DraftRun {
   piles: pool.packs.map(packs => packs.flat()),
   ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), submissions: seating.seats.map(() => null),
   field: new Map(), bench: [], pick: 0, phase: 'drafting',
+  orders: { battingOrder: [], starterOrder: [], reliefRoles: DEFAULT_DRAFT_RELIEF_ROLES.map(role => ({ ...role })) }, lineup: null,
   aiRandoms: seating.seats.map((_, seat) => randomStream(setup.seed, `draft:ai:seat:${seat}`))
  };
 }
@@ -247,7 +264,7 @@ function applyPick(run: DraftRun, cardId: string, slot: DraftSlot | null): void 
  }
 }
 
-function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pick' }>): void {
+function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pick' | 'place' }>): void {
  const human = run.seating.humanSeat;
  const seat = { kind: 'roster', seat: human } as const;
  const owned = ownedBy(run, human);
@@ -269,18 +286,55 @@ function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pi
   for (const [slot, id] of Object.entries(submission.active) as [DraftSlot, string][]) run.field.set(slot, id);
   const placed = new Set(run.field.values());
   run.bench.splice(0, run.bench.length, ...submission.reserves, ...ownedBy(run, human).map(item => item.seasonId).filter(id => !placed.has(id) && !submission.reserves.includes(id)));
+ } else if (action.type === 'order') {
+  const { battingOrder, starterOrder, reliefRoles } = action.orders;
+  const ids = new Set(owned.map(item => item.seasonId));
+  const distinctOwned = (order: unknown) => Array.isArray(order) && new Set(order).size === order.length && order.every(id => ids.has(id));
+  if (!distinctOwned(battingOrder) || !distinctOwned(starterOrder)) throw new RunActionError('An order lists your own cards once each');
+  try { validateReliefRoles(reliefRoles, true, DRAFT_BULLPEN_SLOTS); }
+  catch { throw new RunActionError('Every bullpen slot needs a role, and a backup role may not repeat it'); }
+  run.orders = structuredClone(action.orders);
  } else if (action.type === 'submit') {
-  const submission: Submission = { seat: human, active: { ...action.active }, reserves: [...action.reserves] };
+  const lineup = action.lineup;
+  const submission: Submission = { seat: human, active: { ...lineup.active }, reserves: [...lineup.reserves] };
   let report: LegalityReport;
   try { report = checkSubmission(submission, run.pool.ledger, run.budgets[human], run.pool.rules); }
   catch (error) { throw new RunActionError((error as Error).message); }
   if (!report.legal) throw new RunActionError('That roster is not legal yet');
   if (owned.length !== rosterSize(run.pool.rules)) throw new RunActionError('Place or cut every card you own');
+  try { checkLineup(submission, id => card(run, id), run.pool.rules.activeSlots, lineup); }
+  catch (error) { if (error instanceof LineupError) throw new RunActionError(error.message); throw error; }
+  run.field.clear();
+  for (const [slot, id] of Object.entries(lineup.active) as [DraftSlot, string][]) run.field.set(slot, id);
+  run.bench.splice(0, run.bench.length, ...lineup.reserves);
   run.submissions[human] = submission;
+  run.lineup = structuredClone(lineup);
   run.phase = 'season';
  } else {
   throw new RunActionError(`Unknown action ${(action as { type: string }).type}`);
  }
+}
+
+const HITTER_ROWS = HITTER_SLOTS as readonly DraftSlot[];
+const STARTER_ROWS = STARTER_SLOTS as readonly DraftSlot[];
+
+/**
+ * The player's lineup as the window stands: the field and bench, with the saved orders kept for
+ * cards still in those slots and newcomers appended in slot order. Open slots are missing from
+ * `active`, so the lineup is complete only once the field is full.
+ */
+export function windowLineup(run: DraftRun): Omit<ClubLineup, 'active'> & { active: Partial<Record<DraftSlot, string>> } {
+ const active = Object.fromEntries(run.pool.rules.activeSlots.flatMap(slot => run.field.has(slot) ? [[slot, run.field.get(slot)!]] : [])) as Partial<Record<DraftSlot, string>>;
+ const reconcile = (saved: readonly string[], rows: readonly DraftSlot[]) => {
+  const present = rows.flatMap(slot => active[slot] ?? []);
+  return [...saved.filter(id => present.includes(id)), ...present.filter(id => !saved.includes(id))];
+ };
+ return {
+  active, reserves: [...run.bench],
+  battingOrder: reconcile(run.orders.battingOrder, HITTER_ROWS),
+  starterOrder: reconcile(run.orders.starterOrder, STARTER_ROWS),
+  reliefRoles: run.orders.reliefRoles.map(role => ({ ...role }))
+ };
 }
 
 /** The player's roster as it stands, checked against the cap and slots, for the window's checklist. */

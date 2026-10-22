@@ -15,7 +15,8 @@
  import { freeze, morphInto, riseIn, stash, take } from '#lib/components/phase-motion.ts';
  import { createCardViewModel, type CardMediaStatus } from '#lib/cards/view-model.ts';
  import { loadShowcase } from '#lib/game/data.ts';
- import type { HitterSlot, ShowcaseCard, Slot } from '#lib/game/types.ts';
+ import type { HitterSlot, ReliefAssignment, ShowcaseCard, Slot } from '#lib/game/types.ts';
+ import { classicLineupView } from '#lib/game/lineup-view.ts';
  import { classicBoardSource } from '#lib/game/board-source.ts';
  import { loadMedia } from '#lib/media/client.ts';
  import type { MediaManifest } from '#lib/media/types.ts';
@@ -322,7 +323,7 @@
    {:else if currentSession.phase === 'lineup'}
     <GuideTip step="roster" text="Your team is complete. Adjust the batting order and bullpen roles if you like, then play all 162 games." />
     {#if Lineup}
-     <Lineup draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onReassign={(id, slot) => currentSession.reassign(id, slot)} onOrder={(kind, order) => currentSession.order(kind, order)} onRoles={reliefRoles => currentSession.roles(reliefRoles)} onsimulate={() => void currentSession.simulate()} />
+     <Lineup lineup={classicLineupView(currentSession.draft, currentSession.manifest, currentSession.profiles)} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onMove={(id, slot) => currentSession.reassign(id, slot as HitterSlot)} onOrder={(kind, order) => currentSession.order(kind, order)} onRoles={reliefRoles => currentSession.roles(reliefRoles as ReliefAssignment[])} onsimulate={() => void currentSession.simulate()} />
     {:else if !phaseLoadError}<LineupSkeleton />{/if}
    {:else if currentSession.phase === 'simulating'}
     {#if Progress}

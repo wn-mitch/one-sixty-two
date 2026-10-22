@@ -1,7 +1,7 @@
 <script lang="ts">
- import { onMount, tick } from 'svelte';
- import { RELIEF_ROLES, RELIEF_SLOTS, type BullpenSlot, type Draft, type HitterSlot, type Manifest, type Profile, type ReliefAssignment, type ReliefRole } from '../game/types.ts';
- import { draftRules } from '../game/rules.ts';
+ import { onMount, tick, type Snippet } from 'svelte';
+ import { HITTER_SLOTS, RELIEF_ROLES, type Manifest, type Profile, type ReliefAssignment, type ReliefRole } from '../game/types.ts';
+ import type { LineupView } from '../game/lineup-view.ts';
  import Card from '../cards/Card.svelte';
  import CardReview from '../cards/CardReview.svelte';
  import { createCardViewModel, lineupStats, type CardMediaStatus } from '../cards/view-model.ts';
@@ -14,17 +14,35 @@
  import { MOTION } from '../motion-timing.ts';
  import InfoTooltip from './InfoTooltip.svelte';
  import { smartBattingOrder, smartReliefRoles, smartRotation } from '../game/smart-lineup.ts';
- let { draft, manifest, profiles, rankings, rankingLoading, rankingError, busy, onReassign, onOrder, onRoles, onsimulate }: {
-  draft: Draft;
+ /** A card's season so far against its own line, tinted when it runs well above or below the card. */
+ export type LineupForm = { now: string; card: string; form: 'hot' | 'cold' | null };
+ let {
+  lineup, manifest, profiles, rankings, rankingLoading, rankingError, busy,
+  title = 'Set your lineup', action = { label: 'Simulate 162 games', busyLabel: 'Preparing your season…' }, exit = true,
+  intro, status, rowControl, form, onMove, onOrder, onRoles, onsimulate
+ }: {
+  lineup: LineupView;
   manifest: Manifest;
-  profiles: Profile[];
+  profiles: readonly Profile[];
   rankings: WarRankings | null;
   rankingLoading: boolean;
   rankingError: boolean;
   busy: boolean;
-  onReassign: (seasonId: string, destination: HitterSlot) => void;
+  title?: string;
+  /** The footer button, which starts the season or submits the roster. */
+  action?: { label: string; busyLabel: string };
+  /** Rows drop away before `onsimulate`, for a screen that hands off to the season broadcast. */
+  exit?: boolean;
+  /** Mode-specific panels between the heading and the lists. */
+  intro?: Snippet;
+  /** Replaces the footer's incomplete notice. */
+  status?: Snippet;
+  /** An extra control at the end of each card's row, by season id. */
+  rowControl?: Snippet<[string]>;
+  form?: (seasonId: string) => LineupForm | null;
+  onMove: (seasonId: string, key: string) => void;
   onOrder: (kind: 'batting' | 'starter', order: string[]) => void;
-  onRoles: (reliefRoles: ReliefAssignment[]) => void;
+  onRoles: (reliefRoles: ReliefAssignment<string>[]) => void;
   onsimulate: () => void;
  } = $props();
  let announcement = $state('');
@@ -53,9 +71,6 @@
  let lineupRoot = $state<HTMLElement>();
  let leaving = $state(false);
  const bySeason = $derived(new Map(profiles.map(profile => [profile.seasonId, profile])));
- const bySeasonPick = $derived(new Map(draft.picks.map(pick => [pick.seasonId, pick])));
- const closerPick = $derived(draft.picks.find(pick => pick.slot === 'CL'));
- const closer = $derived(closerPick ? bySeason.get(closerPick.seasonId) : undefined);
  const ROLE_NAMES: Record<ReliefRole, string> = { closer: 'Closer', setup: 'Setup', middle: 'Middle relief', long: 'Long relief', stopper: 'Stopper' };
  /** When the engine calls each role (`workload.rs`), in plain words. */
  const ROLE_HELP: Record<ReliefRole, string> = {
@@ -65,28 +80,24 @@
   long: 'Takes over when the starter leaves before the 6th or either team leads by 4 or more; stays up to 3 innings.',
   stopper: 'Comes in mid-inning from the 6th with a runner in scoring position and a lead of 3 or fewer.'
  };
- const relievers = $derived(RELIEF_SLOTS.flatMap(slot => {
-  const pick = draft.picks.find(item => item.slot === slot);
-  const profile = pick ? bySeason.get(pick.seasonId) : undefined;
-  return profile ? [{ slot, profile }] : [];
- }));
- const complete = $derived(draft.picks.length === draftRules(draft.schemaVersion).slots.length && draft.battingOrder.length === 9 && draft.starterOrder.length === 3 && draft.picks.every(pick => bySeason.has(pick.seasonId)));
- const cardViews = $derived(new Map(draft.picks.flatMap(pick => {
-  const profile = bySeason.get(pick.seasonId);
-  return profile ? [[pick.seasonId, createCardViewModel({ profile, slot: pick.slot, manifest, rankings, media, mediaStatus })] as const] : [];
+ const complete = $derived(lineup.complete);
+ const listed = $derived([...lineup.slots.keys(), ...(lineup.reserves?.ids ?? [])]);
+ const cardViews = $derived(new Map(listed.flatMap(seasonId => {
+  const profile = bySeason.get(seasonId);
+  return profile ? [[seasonId, createCardViewModel({ profile, slot: lineup.slots.get(seasonId) ?? null, manifest, rankings, media, mediaStatus })] as const] : [];
  })));
  const inspectedCard = $derived(inspectedSeasonId ? cardViews.get(inspectedSeasonId) : undefined);
- const bullpenProfiles = $derived(new Map(draft.picks.flatMap(pick => {
-  const profile = bySeason.get(pick.seasonId);
-  return profile && (pick.slot === 'CL' || (RELIEF_SLOTS as readonly string[]).includes(pick.slot)) ? [[pick.slot as BullpenSlot, profile] as const] : [];
+ const bullpenProfiles = $derived(new Map(lineup.bullpen.flatMap(({ slot, seasonId }) => {
+  const profile = seasonId ? bySeason.get(seasonId) : undefined;
+  return profile ? [[slot, profile] as const] : [];
  })));
- const smartBatting = $derived(smartBattingOrder(draft.battingOrder, bySeason));
- const smartStarters = $derived(smartRotation(draft.starterOrder, bySeason));
- const smartRoles = $derived(smartReliefRoles(draft.reliefRoles, bullpenProfiles));
- const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((id, index) => id === b[index]);
- const battingIsSmart = $derived(sameOrder(draft.battingOrder, smartBatting));
- const startersAreSmart = $derived(sameOrder(draft.starterOrder, smartStarters));
- const rolesAreSmart = $derived(draft.reliefRoles.every((assignment, index) => assignment.primary === smartRoles[index]?.primary && assignment.secondary === smartRoles[index]?.secondary));
+ const smartBatting = $derived(smartBattingOrder([...lineup.battingOrder], bySeason));
+ const smartStarters = $derived(smartRotation([...lineup.starterOrder], bySeason));
+ const smartRoles = $derived(smartReliefRoles([...lineup.reliefRoles], bullpenProfiles));
+ const sameOrder = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((id, index) => id === b[index]);
+ const battingIsSmart = $derived(sameOrder(lineup.battingOrder, smartBatting));
+ const startersAreSmart = $derived(sameOrder(lineup.starterOrder, smartStarters));
+ const rolesAreSmart = $derived(lineup.reliefRoles.every((assignment, index) => assignment.primary === smartRoles[index]?.primary && assignment.secondary === smartRoles[index]?.secondary));
 
  function applySmartOrder(kind: OrderKind): void {
   if (busy || drag) return;
@@ -112,14 +123,14 @@
   announcement = 'Smart all set the batting order, starting rotation, and relief roles.';
  }
 
- function rolesFor(slot: BullpenSlot): ReliefAssignment | undefined {
-  return draft.reliefRoles.find(assignment => assignment.slot === slot);
+ function rolesFor(slot: string): ReliefAssignment<string> | undefined {
+  return lineup.reliefRoles.find(assignment => assignment.slot === slot);
  }
 
  /** A primary role that matches the backup clears the backup, since one pitcher holds a role once. */
- function changeRole(slot: BullpenSlot, profile: Profile, kind: 'primary' | 'secondary', value: string): void {
+ function changeRole(slot: string, profile: Profile, kind: 'primary' | 'secondary', value: string): void {
   if (busy) return;
-  const reliefRoles = draft.reliefRoles.map(assignment => {
+  const reliefRoles = lineup.reliefRoles.map(assignment => {
    if (assignment.slot !== slot) return assignment;
    if (kind === 'primary') {
     const primary = value as ReliefRole;
@@ -132,8 +143,8 @@
   announcement = `${profile.displayName} ${profile.year}: ${ROLE_NAMES[next.primary]}${next.secondary ? `, backup ${ROLE_NAMES[next.secondary]}` : ', no backup role'}.`;
  }
 
- function orderFor(kind: OrderKind): string[] {
-  return kind === 'batting' ? draft.battingOrder : draft.starterOrder;
+ function orderFor(kind: OrderKind): readonly string[] {
+  return kind === 'batting' ? lineup.battingOrder : lineup.starterOrder;
  }
 
  function commitOrder(kind: OrderKind, seasonId: string, destination: number): void {
@@ -299,14 +310,15 @@
  /** Rows drop away before the season starts so the broadcast opens on a clear screen. */
  async function simulate(): Promise<void> {
   if (busy || leaving || !lineupRoot) return;
+  if (!exit) { onsimulate(); return; }
   leaving = true;
-  const exit = await clearStage(lineupRoot.querySelectorAll<HTMLElement>('li[data-season-id]'), lineupRoot.querySelectorAll<HTMLElement>(':scope > header, .section-heading, .workload, .simulate'));
+  const leave = await clearStage(lineupRoot.querySelectorAll<HTMLElement>('li[data-season-id]'), lineupRoot.querySelectorAll<HTMLElement>(':scope > header, .section-heading, .workload, .simulate'));
   stash('lineup');
   onsimulate();
   await tick();
   leaving = false;
   // Still mounted means the season did not start.
-  if (lineupRoot?.isConnected) for (const animation of exit) animation.cancel();
+  if (lineupRoot?.isConnected) for (const animation of leave) animation.cancel();
  }
 
  function cancelDragKey(event: KeyboardEvent): void {
@@ -369,33 +381,56 @@
 
 <svelte:window onpointermove={moveDrag} onpointerup={finishDrag} onpointercancel={cancelPointer} onblur={() => cancelDrag()} onkeydown={event => cancelDragKey(event)} onclickcapture={preventDragClick} />
 
-<section bind:this={lineupRoot} class="lineup" aria-label="Set your lineup" aria-busy={busy} inert={leaving}>
+<section bind:this={lineupRoot} class="lineup" aria-label={title} aria-busy={busy} inert={leaving}>
  <header>
-  <div class="lineup-heading"><h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">Set your lineup</h2>{@render smartButton('Smart all', battingIsSmart && startersAreSmart && rolesAreSmart, applySmartAll, 'Smart all applies the batting order, starting rotation, and relief-role recommendations together.')}</div>
+  <div class="lineup-heading"><h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">{title}</h2>{@render smartButton('Smart all', battingIsSmart && startersAreSmart && rolesAreSmart, applySmartAll, 'Smart all applies the batting order, starting rotation, and relief-role recommendations together.')}</div>
   {#if !rankings && (rankingLoading || rankingError)}
    <p class="muted">{rankingLoading ? 'Season value rankings are loading.' : 'Season value rankings are unavailable.'} Your lineup can still be edited.</p>
   {/if}
  </header>
  <p class="announcement" aria-live="polite" aria-atomic="true">{announcement}</p>
+ {@render intro?.()}
  <div class="lineup-columns">
   <section aria-labelledby="batting-heading">
    <div class="section-heading"><h3 id="batting-heading">Batting order</h3>{@render smartButton('Smart lineup', battingIsSmart, () => applySmartOrder('batting'), 'Smart lineup bats your three best hitters 1, 2 and 4: the best on-base hitter leads off and the most power bats cleanup. The next two bat 5 and 3, and the rest follow, best first. Each spot down the order comes up about 18 fewer times a season.')}</div>
-   {@render orderList('batting', draft.battingOrder)}
+   {@render orderList('batting', lineup.battingOrder)}
   </section>
   <section aria-labelledby="rotation-heading">
    <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3>{@render smartButton('Ace first', startersAreSmart, () => applySmartOrder('starter'), 'The three starters cycle in this order, 54 starts each, without injuries or fatigue. The order decides which games each one gets. Ace first gives your best arm opening day.')}</div>
-   {@render orderList('starter', draft.starterOrder)}
+   {@render orderList('starter', lineup.starterOrder)}
    <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3>{@render smartButton('Smart roles', rolesAreSmart, applySmartRoles, "Smart roles gives your best arm the closer's job, the next two setup, and the rest middle and long relief. Roles set first choices; backup roles need a day off. If those choices are unavailable, remaining named arms pitch before the league-average pool, with primary closers last. Rest limits still apply. See Rules & model for details.")}</div>
    <ul class="order fixed" aria-labelledby="relief-heading">
-    {#if closer}
-     {@render fixedPlayer(closer, 'CL')}
-    {:else}
-     <li><span class="order-number fixed-label">CL</span><span class="muted identity">Loading selected closer…</span></li>
-    {/if}
-    {#each relievers as { slot, profile } (slot)}{@render fixedPlayer(profile, slot)}{/each}
+    {#each lineup.bullpen as { slot, seasonId } (slot)}
+     {@const profile = seasonId ? bySeason.get(seasonId) : undefined}
+     {#if profile}
+      {@render fixedPlayer(profile, slot)}
+     {:else}
+      <li><span class="order-number fixed-label">{slot}</span><span class="muted identity">{seasonId ? `Loading selected ${slot === 'CL' ? 'closer' : 'reliever'}…` : `Open ${slot}`}</span></li>
+     {/if}
+    {/each}
    </ul>
    <p class="workload muted"><a href="/about#simulation">Rules &amp; model</a></p>
   </section>
+  {#if lineup.reserves}
+   <section class="reserves" aria-labelledby="reserves-heading">
+    <div class="section-heading"><h3 id="reserves-heading">{lineup.reserves.heading}</h3></div>
+    <ul class="order fixed" aria-labelledby="reserves-heading">
+     {#each lineup.reserves.ids as seasonId, index (seasonId)}
+      {@const profile = bySeason.get(seasonId)}
+      <li class="reserve" data-season-id={seasonId}>
+       <span class="order-number fixed-label">R{index + 1}</span>
+       {#if profile}{@render artwork(profile)}{:else}<span class="card-trigger placeholder" aria-hidden="true"></span>{/if}
+       {@render identity(seasonId, profile)}
+       <div class="meta">
+        {@render placeControl(seasonId, profile)}
+        {#if profile}{@render stats(profile, profile.eligibleSlots.some(slot => (HITTER_SLOTS as readonly string[]).includes(slot)) ? 'batting' : 'starter')}{/if}
+        {@render rowControl?.(seasonId)}
+       </div>
+      </li>
+     {/each}
+    </ul>
+   </section>
+  {/if}
  </div>
  {#if inspectedCard}
   {#key inspectedSeasonId}
@@ -403,15 +438,16 @@
   {/key}
  {/if}
  <footer class="simulate">
-  <button type="button" class="primary" disabled={busy || !complete} onclick={() => void simulate()}>{busy ? 'Preparing your season…' : 'Simulate 162 games'}</button>
-  {#if !complete && !busy}<p class="notice">All {draftRules(draft.schemaVersion).slots.length} selected seasons must finish loading before the season can start.</p>{/if}
+  {@render status?.()}
+  <button type="button" class="primary" disabled={busy || !complete} onclick={() => void simulate()}>{busy ? action.busyLabel : action.label}</button>
+  {#if !status && !complete && !busy}<p class="notice">{lineup.incomplete}</p>{/if}
  </footer>
 </section>
 
 {#snippet smartButton(label: string, applied: boolean, apply: () => void, help?: string)}
  <div class="smart-controls">
   {#if help}<InfoTooltip label={label} text={help} />{/if}
-  <button type="button" class="secondary smart" disabled={busy || applied || !complete} title={applied ? 'Already in this order' : undefined} onclick={apply}>
+  <button type="button" class="secondary smart" disabled={busy || applied || !lineup.ready} title={applied ? 'Already in this order' : undefined} onclick={apply}>
    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 4.5h10M3 8h7M3 11.5h4"></path></svg>
    {label}
   </button>
@@ -439,19 +475,36 @@
  </span>
 {/snippet}
 
-{#snippet fixedPlayer(profile: Profile, slot: BullpenSlot)}
+{#snippet identity(seasonId: string, profile: Profile | undefined)}
+ {@const line = profile ? form?.(seasonId) : null}
+ <div class="identity">
+  <strong class="name">{profile?.displayName ?? 'Loading selected season…'}</strong>
+  {#if profile}<span class="season">{profile.year}</span>{/if}
+  {#if line}<span class="form" data-form={line.form}>{line.now}{#if line.card}<span class="card-line">{` · ${line.card}`}</span>{/if}{#if line.form}<span class="sr-only">, {line.form === 'hot' ? 'running hot' : 'running cold'}</span>{/if}</span>{/if}
+ </div>
+{/snippet}
+
+{#snippet placeControl(seasonId: string, profile: Profile | undefined)}
+ {@const places = lineup.places(seasonId)}
+ {#if places}
+  <span class="assignment-control">
+   <RosterAssignment {seasonId} name={profile?.displayName ?? 'Selected player'} {places} busy={busy || !!drag?.active} {onMove} onAnnounce={message => { announcement = message; }} />
+  </span>
+ {/if}
+{/snippet}
+
+{#snippet fixedPlayer(profile: Profile, slot: string)}
  {@const assigned = rolesFor(slot)}
  {@const name = `${profile.displayName} ${profile.year}`}
  <li class="fixed-player" data-season-id={profile.seasonId} data-bullpen-slot={slot}>
   <span class="order-number fixed-label">{slot}</span>
   {@render artwork(profile)}
-  <div class="identity">
-   <strong class="name">{profile.displayName}</strong>
-   <span class="season">{profile.year}</span>
-  </div>
+  {@render identity(profile.seasonId, profile)}
   <div class="meta">
+   {@render placeControl(profile.seasonId, profile)}
    {@render stats(profile, 'closer')}
   </div>
+  {@render rowControl?.(profile.seasonId)}
   {#if assigned}
    <div class="roles">
     <label><span>Role</span>
@@ -471,11 +524,10 @@
  </li>
 {/snippet}
 
-{#snippet orderList(kind: OrderKind, order: string[])}
+{#snippet orderList(kind: OrderKind, order: readonly string[])}
  <ol class="order {kind}" data-order-kind={kind} aria-label={kind === 'batting' ? 'Batting order' : 'Starting rotation'}>
   {#each order as seasonId, index (seasonId)}
    {@const profile = bySeason.get(seasonId)}
-   {@const pick = bySeasonPick.get(seasonId)}
    {@const dragging = drag?.active && drag.kind === kind}
    {@const label = `${profile?.displayName ?? 'player'}${profile ? ` ${profile.year}` : ''}`}
    {@const listName = kind === 'batting' ? 'batting order' : 'starting rotation'}
@@ -483,18 +535,12 @@
     <button type="button" class="order-number drag-handle" disabled={busy} aria-label={`Position ${index + 1}. Drag ${label} within ${listName}`} title="Drag to reorder" onpointerdown={event => startDrag(event, kind, seasonId)} onlostpointercapture={cancelPointer}>
      <span class="grip" aria-hidden="true">⠿</span><span aria-hidden="true">{index + 1}</span>
     </button>
-    {#if profile && pick}{@render artwork(profile)}{:else}<span class="card-trigger placeholder" aria-hidden="true"></span>{/if}
-    <div class="identity">
-     <strong class="name">{profile?.displayName ?? 'Loading selected season…'}</strong>
-     {#if profile}<span class="season">{profile.year}</span>{/if}
-    </div>
+    {#if profile}{@render artwork(profile)}{:else}<span class="card-trigger placeholder" aria-hidden="true"></span>{/if}
+    {@render identity(seasonId, profile)}
     <div class="meta">
-     {#if kind === 'batting'}
-      <span class="assignment-control">
-       <RosterAssignment {seasonId} {draft} {manifest} {profiles} busy={busy || !!drag?.active} {onReassign} onAnnounce={message => { announcement = message; }} />
-      </span>
-     {/if}
+     {@render placeControl(seasonId, profile)}
      {#if profile}{@render stats(profile, kind === 'batting' ? 'batting' : 'starter')}{/if}
+     {@render rowControl?.(seasonId)}
     </div>
     <div class="move-controls">
      <button type="button" class="quiet move" disabled={busy || index === 0} aria-label="Move {label} up in {listName}" onclick={event => moveBy(kind, seasonId, index - 1, event.currentTarget)}><span aria-hidden="true">↑</span></button>
@@ -540,6 +586,11 @@
  .move-controls { grid-area: move; display: flex; flex-direction: column; }
  .name { font-weight: 650; overflow-wrap: anywhere; font-size: var(--text-sm); }
  .season { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+ .form { flex-basis: 100%; color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+ .form[data-form='hot'] { color: var(--success); }
+ .form[data-form='cold'] { color: var(--error); }
+ .reserves { grid-column: 1 / -1; }
+ .order .reserve { grid-template-areas: 'num card identity identity' 'num card meta meta'; }
 
  .drag-handle {
   display: flex; align-items: center; justify-content: center; gap: var(--space-1);
@@ -555,7 +606,7 @@
  /* The lifted row floats above neighbours that slide aside; the opened gap marks the insertion point. */
  .drag-source { z-index: 2; background: var(--surface-raised); border-radius: var(--radius); box-shadow: 0 12px 32px oklch(8% .01 255 / .52); }
 
- .assignment-control { flex: 0 0 5.5rem; min-width: 0; }
+ .assignment-control { flex: 0 0 6.25rem; min-width: 0; }
  .stats { display: flex; gap: var(--space-3); font-variant-numeric: tabular-nums; }
  .stat { display: grid; justify-items: end; min-width: 2.75rem; line-height: 1.2; }
  .stat .value { font-size: var(--text-sm); font-weight: 650; }

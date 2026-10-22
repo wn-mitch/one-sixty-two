@@ -54,9 +54,20 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  await expect(page.getByText(/16 of 20 cards/)).toBeVisible();
  await page.getByRole('button', { name: 'Auto-fix' }).click();
  await expect(page.getByText('Roster is legal.')).toBeVisible();
+ // The window's batting order survives a reload and opens the season.
+ const batting = page.locator('[data-order-kind="batting"] > li');
+ const order = () => batting.evaluateAll(rows => rows.map(row => row.getAttribute('data-season-id')));
+ const drafted = await order();
+ await batting.first().getByRole('button', { name: /down in batting order/ }).click();
+ const moved = [drafted[1], drafted[0], ...drafted.slice(2)];
+ await expect.poll(order).toEqual(moved);
+ await page.reload();
+ await expect(page.getByText('Roster is legal.')).toBeVisible({ timeout: 60_000 });
+ expect(await order()).toEqual(moved);
  await page.getByRole('button', { name: 'Submit roster' }).click();
 
  await expect(page.getByRole('heading', { name: 'Opening day' })).toBeVisible();
+ expect(await order()).toEqual(moved);
  await page.getByRole('button', { name: 'Play chapter 1' }).click();
  await expect(page.getByRole('heading', { name: 'After chapter 1 of 6' })).toBeVisible({ timeout: 120_000 });
  const standings = page.getByRole('region', { name: 'Standings' });
@@ -64,15 +75,15 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  expect(games).toEqual(Array(8).fill(27));
 
  // A reserve change is kept with the season and survives a reload.
- // The name and year identify the card; the form line beside it changes with the season.
- const firstReserve = page.getByRole('region', { name: 'Reserves' }).locator('li .who .name > span').first();
- const before = await firstReserve.innerText();
- await page.getByLabel(/^Bring /).first().selectOption({ index: 1 });
- await expect(firstReserve).not.toHaveText(before);
- const benched = await firstReserve.innerText();
+ const reserves = page.getByRole('region', { name: 'Reserves' });
+ const firstReserve = reserves.locator('li[data-season-id]').first();
+ const before = await firstReserve.getAttribute('data-season-id');
+ await reserves.getByLabel(/^Position for /).first().selectOption({ index: 1 });
+ await expect(firstReserve).not.toHaveAttribute('data-season-id', before!);
+ const benched = await firstReserve.getAttribute('data-season-id');
  await page.reload();
  await expect(page.getByRole('heading', { name: 'After chapter 1 of 6' })).toBeVisible({ timeout: 60_000 });
- await expect(firstReserve).toHaveText(benched);
+ await expect(firstReserve).toHaveAttribute('data-season-id', benched!);
  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 
  // Completed reports stay in history; starting again from one clears its URL selection.

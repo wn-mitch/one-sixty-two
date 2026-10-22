@@ -3,9 +3,10 @@ import { chooseAiPick, explainPick, scorePile, trueJudgment, type Personality } 
 import { RIVALS, seatTable } from './franchises.ts';
 import { auditLedger } from './ledger.ts';
 import { arrangeRoster, checkSubmission, submissionFrom } from './legality.ts';
-import { applyAction, heldPile, movesFor, newRunSetup, openSlotsFor, ownedBy, placementOf, replayRun, RunActionError, seatView, startRun, type DraftRun, type RunData } from './run.ts';
+import { startLeague } from './league.ts';
+import { applyAction, heldPile, movesFor, newRunSetup, openSlotsFor, ownedBy, placementOf, replayRun, RunActionError, seatView, startRun, windowLineup, type DraftRun, type RunData } from './run.ts';
 import { baselineBudget, canFill, DRAFT_RULES, rosterSize } from './rules.ts';
-import { pickAction, playDraft, testCard, testUniverse, TEST_ROLES } from './test-fixtures.ts';
+import { pickAction, playDraft, submitAction, testCard, testUniverse, TEST_ROLES } from './test-fixtures.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
 
 const FRANCHISES = Object.keys(RIVALS);
@@ -172,8 +173,7 @@ describe('draft run', () => {
   playDraft(run);
   const human = run.seating.humanSeat;
   const submit = () => {
-   const { active, reserves } = submissionFrom(human, arrangeRoster(ownedBy(run, human)));
-   applyAction(run, { type: 'submit', active: active as Record<DraftSlot, string>, reserves });
+   applyAction(run, submitAction(run));
   };
   // Four short of a full roster: submitting now fails and changes nothing.
   expect(submit).toThrow(RunActionError);
@@ -198,6 +198,40 @@ describe('draft run', () => {
   expect(eventsOf(again)).toEqual(eventsOf(run));
   expect(again.submissions).toEqual(run.submissions);
   expect(auditLedger(run.pool.ledger)).toEqual([]);
+ });
+
+ it('keeps the window orders for cards still on the field, and the submitted lineup opens the season', () => {
+  const run = startRun(setup, DATA);
+  playDraft(run);
+  const human = run.seating.humanSeat;
+  applyAction(run, { type: 'autofix' });
+  const lineup = windowLineup(run);
+  expect(lineup.battingOrder).toHaveLength(9);
+  const reversed = [...lineup.battingOrder].reverse();
+  const roles = lineup.reliefRoles.map(role => role.slot === 'RP5' ? { ...role, primary: 'stopper' as const, secondary: null } : role);
+  // An order may not name a card the player does not own.
+  const stranger = ownedBy(run, (human + 1) % 8)[0].seasonId;
+  expect(() => applyAction(run, { type: 'order', orders: { battingOrder: [stranger], starterOrder: [], reliefRoles: roles } })).toThrow(RunActionError);
+  applyAction(run, { type: 'order', orders: { battingOrder: reversed, starterOrder: lineup.starterOrder, reliefRoles: roles } });
+  expect(windowLineup(run).battingOrder).toEqual(reversed);
+  // A hitter benched leaves the order; the card taking the slot joins it at the bottom.
+  const leaving = reversed[0];
+  const slot = placementOf(run, leaving)!;
+  const entering = run.bench.find(id => canFill(run.pool.ledger.cards.get(id)!, slot));
+  applyAction(run, { type: 'place', cardId: leaving, slot: null });
+  expect(windowLineup(run).battingOrder).toEqual(reversed.slice(1));
+  if (entering) {
+   applyAction(run, { type: 'place', cardId: entering, slot });
+   expect(windowLineup(run).battingOrder).toEqual([...reversed.slice(1), entering]);
+  } else {
+   applyAction(run, { type: 'place', cardId: leaving, slot });
+  }
+  const submitted = windowLineup(run);
+  applyAction(run, submitAction(run));
+  const season = startLeague(run);
+  expect(season.lineups[human]).toEqual(submitted);
+  expect(season.lineups[human].reliefRoles.find(role => role.slot === 'RP5')?.primary).toBe('stopper');
+  expect(replayRun(setup, run.actions, DATA).lineup).toEqual(run.lineup);
  });
 
  it('places each pick where the player chose and moves cards between slots and the bench', () => {
