@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { seasonMonths, type CalendarMonth } from '#lib/game/season-calendar.ts';
+	import { seasonMonths, type CalendarMonth, type ScheduledGame } from '#lib/game/season-calendar.ts';
 	import { appSettings } from '#lib/game/settings.svelte.ts';
 	import { loadMedia, selectLogo } from '#lib/media/client.ts';
 	import type { MediaManifest } from '#lib/media/types.ts';
-	import type { SeasonResult } from '#lib/sim/types.ts';
 
 	/**
 	 * The pocket schedule on a slot reel, one month at a time: the window holds exactly one month card while its
@@ -12,16 +11,17 @@
 	 * overshoot, like a slot drum clunking onto its next stop. A finished month's record pops in its header.
 	 * Each date carries its opponent's mark, faint until the game is revealed; the result then lights the square
 	 * and prints its score. While the season is still simulating, blank months spin past. Purely visual: the
-	 * progress bar beside it reports. `--reel-snap` and `--reel-spin` tune the snap and the spin.
+	 * progress bar beside it reports. `--reel-snap` and `--reel-spin` tune the snap and the spin. Games after `shown`
+	 * keep only their opponent's faint mark, so a season still being played can list its unplayed games.
 	 */
-	let { result, shown }: { result: SeasonResult | null; shown: number } = $props();
+	let { games, seed, shown }: { games: readonly ScheduledGame[] | null; seed: number; shown: number } = $props();
 
 	const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 	// Blank April-to-September cards for the spin before the result exists.
-	const BLANK: CalendarMonth[] = ['April', 'May', 'June', 'July', 'August', 'September'].map((name, month) => ({
+	const BLANK: CalendarMonth<ScheduledGame>[] = ['April', 'May', 'June', 'July', 'August', 'September'].map((name, month) => ({
 		month: month + 3, name, lead: (month * 2) % 7, days: Array.from({ length: 30 }, (_, index) => ({ day: index + 1, games: [] })), wins: 0, losses: 0
 	}));
-	const months = $derived(result ? seasonMonths(result.games, result.seed) : BLANK);
+	const months = $derived(games ? seasonMonths(games, seed) : BLANK);
 	const motion = $derived(appSettings.effectiveEnabled);
 
 	// One media read serves every square; a missing mark falls back to the club's short code.
@@ -38,28 +38,28 @@
 	let monthHeight = $state(0);
 	const GAP = 12;
 	// The month on the window: the one holding the latest revealed game, or the first before opening day.
-	const current = $derived(result ? Math.max(0, months.findIndex(month => month.days.some(day => day.games.some(game => game.number === Math.max(1, shown))))) : 0);
+	const current = $derived(games ? Math.max(0, months.findIndex(month => month.days.some(day => day.games.some(game => game.number === Math.max(1, shown))))) : 0);
 
-	function complete(month: CalendarMonth): boolean {
+	function complete(month: CalendarMonth<ScheduledGame>): boolean {
 		const games = month.days.flatMap(day => day.games);
 		return games.length > 0 && games.every(game => game.number <= shown);
 	}
 
-	function record(month: CalendarMonth): string {
+	function record(month: CalendarMonth<ScheduledGame>): string {
 		const played = month.days.flatMap(day => day.games).filter(game => game.number <= shown);
 		const wins = played.filter(game => game.win).length;
 		return `${wins}–${played.length - wins}`;
 	}
 </script>
 
-<div class="season-reel" class:spinning={!result && motion} class:still={!motion} aria-hidden="true">
+<div class="season-reel" class:spinning={!games && motion} class:still={!motion} aria-hidden="true">
 	<div class="reel-window" style:height={monthHeight ? `${monthHeight + 2}px` : undefined}>
-		<div bind:this={strip} class="strip" style:transform={result ? `translateY(${-current * (monthHeight + GAP)}px)` : undefined}>
-			{#each result || !motion ? months : [...months, ...months] as month, index (`${index}-${month.month}`)}
-				{@const done = !!result && complete(month)}
+		<div bind:this={strip} class="strip" style:transform={games ? `translateY(${-current * (monthHeight + GAP)}px)` : undefined}>
+			{#each games || !motion ? months : [...months, ...months] as month, index (`${index}-${month.month}`)}
+				{@const done = !!games && complete(month)}
 				<section class="month" class:done>
 					{#if index === 0}<span class="measure" bind:offsetHeight={monthHeight}></span>{/if}
-					<header><h4>{month.name}</h4>{#if result}{#key done}<span class="month-record">{record(month)}</span>{/key}{/if}</header>
+					<header><h4>{month.name}</h4>{#if games}{#key done}<span class="month-record">{record(month)}</span>{/key}{/if}</header>
 					<div class="weekdays">{#each WEEKDAYS as weekday}<span>{weekday}</span>{/each}</div>
 					<div class="grid">
 						{#each { length: month.lead } as _}<span class="cell blank"></span>{/each}

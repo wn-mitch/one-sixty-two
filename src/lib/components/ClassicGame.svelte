@@ -327,7 +327,7 @@
     {:else if !phaseLoadError}<LineupSkeleton />{/if}
    {:else if currentSession.phase === 'simulating'}
     {#if Progress}
-     <Progress completed={currentSession.completed} revealed={currentSession.revealed} result={currentSession.result} onskip={() => currentSession.skip()} />
+     <Progress count={currentSession.result ? currentSession.revealed : currentSession.completed} games={currentSession.result?.games ?? null} seed={currentSession.result?.seed ?? 0} revealed={currentSession.result ? currentSession.revealed : 0} revealing={!!currentSession.result} onskip={() => currentSession.skip()} />
     {:else if !phaseLoadError}<ProgressSkeleton />{/if}
    {:else if currentSession.phase === 'results' && currentSession.result}
     {#if Results}

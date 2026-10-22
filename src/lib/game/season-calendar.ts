@@ -9,26 +9,29 @@ export const OFF_DAYS = 24;
 /** Makeup doubleheaders; each one returns a date to the open-date budget. */
 export const DOUBLEHEADERS = 3;
 
-export interface CalendarDay {
+/** What laying a season on the calendar reads from each game. */
+export type ScheduledGame = Pick<GameResult, 'number' | 'opponentId' | 'opponentName' | 'isHome' | 'win' | 'challengeRuns' | 'opponentRuns'>;
+
+export interface CalendarDay<G extends ScheduledGame = GameResult> {
 	/** Day of the month, 1-based. */
 	day: number;
 	/** No games on an open date, two on a doubleheader. */
-	games: GameResult[];
+	games: G[];
 }
 
-export interface CalendarMonth {
+export interface CalendarMonth<G extends ScheduledGame = GameResult> {
 	/** UTC month index, 0 = January. */
 	month: number;
 	name: string;
 	/** Blank cells before the first of the month in a Sunday-first week. */
 	lead: number;
-	days: CalendarDay[];
+	days: CalendarDay<G>[];
 	wins: number;
 	losses: number;
 }
 
-export interface DatedGame {
-	game: GameResult;
+export interface DatedGame<G extends ScheduledGame = GameResult> {
+	game: G;
 	date: Date;
 }
 
@@ -57,7 +60,7 @@ export function formatGameDate(date: Date): string {
  * from the season seed away from opening and closing weeks, play their first two games as a
  * doubleheader, and each one adds an off day so the season still spans the same dates.
  */
-export function dateGames(games: readonly GameResult[], seed: number): DatedGame[] {
+export function dateGames<G extends ScheduledGame>(games: readonly G[], seed: number): DatedGame<G>[] {
 	const breaks: number[] = [];
 	const seriesStarts: number[] = [];
 	for (let index = 1; index < games.length; index++) {
@@ -84,20 +87,20 @@ export function dateGames(games: readonly GameResult[], seed: number): DatedGame
 }
 
 /** Groups dated games into full calendar months from opening day through the final game. */
-export function seasonMonths(games: readonly GameResult[], seed: number): CalendarMonth[] {
+export function seasonMonths<G extends ScheduledGame>(games: readonly G[], seed: number): CalendarMonth<G>[] {
 	const dated = dateGames(games, seed);
 	if (!dated.length) return [];
-	const byDay = new Map<number, GameResult[]>();
+	const byDay = new Map<number, G[]>();
 	for (const entry of dated) byDay.set(entry.date.getTime(), [...byDay.get(entry.date.getTime()) ?? [], entry.game]);
 	const first = dated[0].date;
 	const last = dated[dated.length - 1].date;
-	const months: CalendarMonth[] = [];
+	const months: CalendarMonth<G>[] = [];
 	for (let cursor = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 1); cursor <= last.getTime();) {
 		const start = new Date(cursor);
 		const year = start.getUTCFullYear();
 		const month = start.getUTCMonth();
 		const length = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-		const days: CalendarDay[] = Array.from({ length }, (_, index) => ({
+		const days: CalendarDay<G>[] = Array.from({ length }, (_, index) => ({
 			day: index + 1,
 			games: byDay.get(Date.UTC(year, month, index + 1)) ?? []
 		}));

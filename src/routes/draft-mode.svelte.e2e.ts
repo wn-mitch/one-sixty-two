@@ -69,6 +69,8 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  await expect(page.getByRole('heading', { name: 'Opening day' })).toBeVisible();
  expect(await order()).toEqual(moved);
  await page.getByRole('button', { name: 'Play chapter 1' }).click();
+ // The chapter plays on the season broadcast, then returns to the next stop.
+ await expect(page.getByRole('heading', { name: 'Playing chapter 1 of 6' })).toBeVisible();
  await expect(page.getByRole('heading', { name: 'After chapter 1 of 6' })).toBeVisible({ timeout: 120_000 });
  const standings = page.getByRole('region', { name: 'Standings' });
  const games = await standings.locator('tbody tr').evaluateAll(rows => rows.map(row => Number(row.children[1].textContent) + Number(row.children[2].textContent)));

@@ -121,9 +121,11 @@
 	/>
 {:else}
 	<Progress
-		completed={completed}
-		{revealed}
-		{result}
+		count={result ? revealed : completed}
+		games={result?.games ?? null}
+		seed={result?.seed ?? 0}
+		revealed={result ? revealed : 0}
+		revealing={!!result}
 		onskip={skip}
 	/>
 {/if}

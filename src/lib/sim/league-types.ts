@@ -48,4 +48,4 @@ export interface LeagueChapterResult {
 }
 
 export type LeagueWorkerRequest = { runId: number; input: LeagueChapterInput };
-export type LeagueWorkerResponse = { runId: number; type: 'progress'; completed: number } | { runId: number; type: 'result'; result: LeagueChapterResult } | { runId: number; type: 'error'; message: string };
+export type LeagueWorkerResponse = { runId: number; type: 'progress'; completed: number } | { runId: number; type: 'result'; result: LeagueChapterResult; schedule: Fixture[][] } | { runId: number; type: 'error'; message: string };

@@ -1,7 +1,8 @@
 import { compareId, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, STARTER_SLOTS, validateReliefRoles, type Profile, type ReliefAssignment, type SimulationData } from '../game/types.ts';
 import { randomStream, shuffle } from '../game/random.ts';
 import { stadiumRef } from '../sim/park.ts';
-import { LEAGUE_CHAPTERS, type LeagueChapterInput, type LeagueChapterResult, type LeagueGame, type RestState } from '../sim/league-types.ts';
+import { LEAGUE_CHAPTERS, type Fixture, type LeagueChapterInput, type LeagueChapterResult, type LeagueGame, type RestState } from '../sim/league-types.ts';
+import type { ScheduledGame } from '../game/season-calendar.ts';
 import type { BatterLine, PitcherLine } from '../sim/types.ts';
 import { RIVALS } from './franchises.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
@@ -206,6 +207,24 @@ export function standings(season: LeagueSeason): Standing[] {
  const leader = rows[0];
  for (const row of rows) row.gamesBack = ((leader.wins - row.wins) + (row.losses - leader.losses)) / 2;
  return rows;
+}
+
+/**
+ * `seat`'s 162 games in schedule order, numbered from 1, with results for the chapters played.
+ * Unplayed games carry no runs and are not wins.
+ */
+export function clubSchedule(run: DraftRun, season: LeagueSeason, schedule: readonly (readonly Fixture[])[], seat: number, clubName: (seat: number) => string): ScheduledGame[] {
+ const played = new Map(season.chapters.flatMap(chapter => chapter.games).filter(game => game.home === seat || game.away === seat).map(game => [game.matchday, game]));
+ return schedule.map((day, matchday) => {
+  const fixture = day.find(item => item.home === seat || item.away === seat);
+  if (!fixture) throw new Error(`Club ${seat} has no game on matchday ${matchday + 1}`);
+  const isHome = fixture.home === seat;
+  const opponent = isHome ? fixture.away : fixture.home;
+  const game = played.get(matchday);
+  const challengeRuns = game ? (isHome ? game.homeRuns : game.awayRuns) : 0;
+  const opponentRuns = game ? (isHome ? game.awayRuns : game.homeRuns) : 0;
+  return { number: matchday + 1, opponentId: run.seating.seats[opponent], opponentName: clubName(opponent), isHome, win: !!game && challengeRuns > opponentRuns, challengeRuns, opponentRuns };
+ });
 }
 
 /** Head-to-head record of `seat` against `opponent` so far. */

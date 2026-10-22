@@ -1,27 +1,36 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import type { SeasonResult } from '#lib/sim/types.ts';
+	import type { ScheduledGame } from '#lib/game/season-calendar.ts';
 	import { arriveAtTop, riseIn, take } from './phase-motion.ts';
 	import SeasonReel from './SeasonReel.svelte';
 
 	interface Props {
-		completed: number;
+		/** Games simulated, or revealed once the result exists, for the count and the bar. */
+		count: number;
+		/** The season's games in order, played or not; null until any exist. */
+		games: readonly ScheduledGame[] | null;
+		seed: number;
+		/** Games lit on the reel and counted in the record. */
 		revealed: number;
-		result: SeasonResult | null;
+		/** The result exists and is being revealed. */
+		revealing: boolean;
+		heading?: string;
+		note?: string;
 		onskip: () => void;
 	}
 
-	let { completed, revealed, result, onskip }: Props = $props();
+	let { count, games, seed, revealed, revealing, heading, note, onskip }: Props = $props();
 
-	let shown = $derived(Math.max(0, Math.min(162, result ? revealed : completed)));
+	let shown = $derived(Math.max(0, Math.min(162, count)));
+	let lit = $derived(Math.max(0, Math.min(162, revealed)));
 	let record = $derived.by(() => {
-		if (!result) return null;
+		if (!games) return null;
 		let wins = 0;
-		for (let index = 0; index < shown; index++) if (result.games[index]?.win) wins++;
-		return { wins, losses: shown - wins };
+		for (let index = 0; index < lit; index++) if (games[index]?.win) wins++;
+		return { wins, losses: lit - wins };
 	});
-	let phase = $derived(result ? 'Revealing the season' : 'Playing the season');
-	let progressText = $derived(`${shown} of 162 games ${result ? 'revealed' : 'simulated'}`);
+	let phase = $derived(heading ?? (revealing ? 'Revealing the season' : 'Playing the season'));
+	let progressText = $derived(`${shown} of 162 games ${revealing ? 'revealed' : 'simulated'}`);
 	let shell = $state<HTMLElement>();
 
 	onMount(() => {
@@ -43,15 +52,15 @@
 			<p class="record muted">Every game is computed independently.</p>
 		{/if}
 	</div>
-	<SeasonReel {result} {shown} />
+	<SeasonReel {games} {seed} shown={lit} />
 
 	<div class="progress-track">
 		<progress value={shown} max="162" aria-label="Season simulation progress" aria-valuetext={progressText}>{progressText}</progress>
 	</div>
 	<p class="muted explanation">
-		{result
+		{note ?? (revealing
 			? 'The full result is locked. This replay only reveals the completed games.'
-			: 'All 162 games continue, even after a loss.'}
+			: 'All 162 games continue, even after a loss.')}
 	</p>
 
 	<button class="secondary" type="button" onclick={onskip}>Skip animation</button>

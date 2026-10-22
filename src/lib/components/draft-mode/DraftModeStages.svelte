@@ -10,13 +10,14 @@
  import ChapterStatus from '#lib/components/draft-mode/ChapterStatus.svelte';
  import WindowPanel from '#lib/components/draft-mode/WindowPanel.svelte';
  import Lineup from '#lib/components/Lineup.svelte';
+ import Progress from '#lib/components/Progress.svelte';
  import type { CardMediaStatus } from '#lib/cards/view-model.ts';
  import { STACK_ROLES } from '#lib/draft/cleanup.ts';
  import { dealtProfile, pileBoardSource } from '#lib/draft/board-source.ts';
  import { effectiveCap } from '#lib/draft/rules.ts';
  import { heldPile, ownedBy, windowLineup, type WindowOrders } from '#lib/draft/run.ts';
  import { BENCH, placeFromKey, seasonForm, seasonLineupView, windowBlockers, windowLineupView } from '#lib/draft/lineup-view.ts';
- import { seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
+ import { clubSchedule, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
  import type { DraftSlot } from '#lib/draft/types.ts';
  import { CHAPTER_MATCHDAYS, LEAGUE_CHAPTERS, LEAGUE_CLUBS } from '#lib/sim/league-types.ts';
  import type { DraftModeSession } from '#lib/draft/session.svelte.ts';
@@ -95,6 +96,20 @@
   try { await refusal(result); } finally { working = false; }
  }
  const gamesPerChapter = CHAPTER_MATCHDAYS * LEAGUE_CLUBS / 2;
+ /** The broadcast while a chapter plays and reveals: the player's whole schedule once it is known. */
+ const broadcast = $derived.by(() => {
+  void session.revision;
+  const run = session.run;
+  const season = session.season;
+  if (session.screen !== 'playing' || !run || !season) return null;
+  const played = season.chapters.length - (session.playing ? 0 : 1);
+  // While the chapter simulates, its games count up from its league-wide progress.
+  const count = session.playing ? played * CHAPTER_MATCHDAYS + Math.floor(session.completed / gamesPerChapter * CHAPTER_MATCHDAYS) : session.revealed;
+  return {
+   chapter: played + 1, count,
+   games: session.schedule ? clubSchedule(run, season, session.schedule, run.seating.humanSeat, clubName) : null
+  };
+ });
 
  function windowOrders(change: Partial<WindowOrders>): WindowOrders {
   const { battingOrder, starterOrder, reliefRoles } = windowLineup(session.run!);
@@ -187,7 +202,7 @@
   <Lineup
    lineup={current.view} manifest={session.manifest} profiles={dealt} {rankings} rankingLoading={!rankings} rankingError={false}
    busy={session.playing} title={current.played === 0 ? 'Opening day' : `After chapter ${current.played} of ${LEAGUE_CHAPTERS}`}
-   action={{ label: `Play chapter ${current.played + 1}`, busyLabel: `Playing chapter ${current.played + 1}…` }} exit={false}
+   action={{ label: `Play chapter ${current.played + 1}`, busyLabel: `Playing chapter ${current.played + 1}…` }}
    form={id => seasonForm(profiles.get(id), current.lines, id)}
    onMove={moveInSeason}
    onOrder={(kind, order) => void refusal(session.lineup({ ...seasonLineup(), [kind === 'batting' ? 'battingOrder' : 'starterOrder']: order }))}
@@ -196,13 +211,16 @@
   >
    {#snippet intro()}<ChapterStatus run={current.run} season={current.season} revision={session.revision} {clubName} />{/snippet}
    {#snippet status()}
-    {#if session.playing}
-     <p class="progress" aria-live="polite">{session.completed} of {gamesPerChapter} games <progress max={gamesPerChapter} value={session.completed}></progress></p>
-    {:else}
-     <p class="progress">Games {current.played * CHAPTER_MATCHDAYS + 1}–{(current.played + 1) * CHAPTER_MATCHDAYS} of 162. Changes apply from this chapter; AI clubs keep their lineups.</p>
-    {/if}
+    <p class="progress">Games {current.played * CHAPTER_MATCHDAYS + 1}–{(current.played + 1) * CHAPTER_MATCHDAYS} of 162. Changes apply from this chapter; AI clubs keep their lineups.</p>
    {/snippet}
   </Lineup>
+ {:else if broadcast && session.run}
+  <Progress
+   count={broadcast.count} games={broadcast.games} seed={session.run.setup.seed} revealed={session.revealed} revealing={session.revealing}
+   heading={session.revealing ? `Chapter ${broadcast.chapter} of ${LEAGUE_CHAPTERS}` : `Playing chapter ${broadcast.chapter} of ${LEAGUE_CHAPTERS}`}
+   note={session.revealing ? 'The chapter is locked. This replay only reveals its games.' : 'Every club plays its 27 games; lineups change again after the chapter.'}
+   onskip={() => session.skip()}
+  />
  {:else if session.screen === 'report' && session.run && session.season}
   <LeagueReport run={session.run} season={session.season} {clubName} onNew={() => void session.startNew()} />
  {/if}
@@ -218,6 +236,5 @@
  .checklist li { padding: .15rem .55rem; border-radius: .4rem; background: color-mix(in oklch, var(--error) 16%, transparent); color: var(--error); font-size: var(--text-xs); font-weight: 650; }
  .ready { color: var(--success); }
  .cut { min-height: 2.25rem; padding-inline: var(--space-3); border: 1px solid var(--border); background: transparent; font-size: var(--text-xs); }
- .progress { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-sm); }
- .progress progress { flex: 1 1 12rem; accent-color: var(--accent); }
+ .progress { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-sm); }
 </style>

@@ -76,7 +76,7 @@
 		<div class="reel-story" style:--reel-snap={`${values.reel.snap}ms`} style:--reel-spin={`${values.reel.spin}ms`}>
 			<p class="tally"><strong>{values.playback.simulating ? 0 : shown}</strong><span>/ 162</span>
 				{#if !values.playback.simulating}<span class="record"><span class="win">{record.wins} W</span> · <span class="loss">{record.losses} L</span></span>{/if}</p>
-			{#key instance}<SeasonReel result={values.playback.simulating ? null : reelResult} {shown} />{/key}
+			{#key instance}<SeasonReel games={values.playback.simulating ? null : reelResult?.games ?? null} seed={reelResult?.seed ?? 0} {shown} />{/key}
 		</div>
 	{/if}
 </StoryFrame>
