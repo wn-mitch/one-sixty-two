@@ -17,8 +17,9 @@ final class LiveGameSmokeTests: XCTestCase {
         let webView = app.webViews["game-webview"]
         XCTAssertTrue(webView.waitForExistence(timeout: timeout))
 
+        // An unstarted run shows the seat's sealed packs, before and after a restart.
         let draftHeading = webView.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Pick 1 of 16"))
+            .matching(NSPredicate(format: "label == %@", "Open your 2 packs"))
             .firstMatch
         if !draftHeading.waitForExistence(timeout: 3) {
             tap(label: "Seattle Mariners", in: webView)
@@ -33,19 +34,20 @@ final class LiveGameSmokeTests: XCTestCase {
         XCTAssertTrue(relaunchedWebView.waitForExistence(timeout: timeout))
         XCTAssertTrue(
             relaunchedWebView.descendants(matching: .any)
-                .matching(NSPredicate(format: "label == %@", "Pick 1 of 16"))
+                .matching(NSPredicate(format: "label == %@", "Open your 2 packs"))
                 .firstMatch
                 .waitForExistence(timeout: timeout),
             "The live draft must resume from the default persistent website data store"
         )
         addScreenshot(named: "live-draft-resumed")
 
-        for pick in 1...16 {
-            let progress = relaunchedWebView.staticTexts["Pick \(pick) of 16"]
-            XCTAssertTrue(progress.waitForExistence(timeout: timeout))
-            let choice = relaunchedWebView.buttons["Pick"].firstMatch
-            XCTAssertTrue(choice.waitForExistence(timeout: timeout))
-            choice.tap()
+        tap(label: "Open your 2 packs", in: relaunchedWebView)
+        // Every pick goes to the bench; Auto-fix arranges the roster in the opening window.
+        for picked in 0..<16 {
+            XCTAssertTrue(element(label: "Open your field, \(picked) of 16 picked", in: relaunchedWebView).waitForExistence(timeout: timeout))
+            tap(matching: NSPredicate(format: "label BEGINSWITH %@", "Select "), in: relaunchedWebView)
+            tap(label: "Bench. Place on the bench.", in: relaunchedWebView)
+            tap(matching: NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "Draft ", " to the bench"), in: relaunchedWebView)
         }
         tap(label: "Auto-fix", in: relaunchedWebView)
         tap(label: "Submit roster", in: relaunchedWebView)
@@ -57,11 +59,21 @@ final class LiveGameSmokeTests: XCTestCase {
     }
 
     @MainActor
-    private func tap(label: String, in webView: XCUIElement) {
-        let element = webView.descendants(matching: .any)
+    private func element(label: String, in webView: XCUIElement) -> XCUIElement {
+        webView.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", label))
             .firstMatch
-        XCTAssertTrue(element.waitForExistence(timeout: timeout), "Live control \(label) was not visible")
+    }
+
+    @MainActor
+    private func tap(label: String, in webView: XCUIElement) {
+        tap(matching: NSPredicate(format: "label == %@", label), in: webView)
+    }
+
+    @MainActor
+    private func tap(matching predicate: NSPredicate, in webView: XCUIElement) {
+        let element = webView.descendants(matching: .any).matching(predicate).firstMatch
+        XCTAssertTrue(element.waitForExistence(timeout: timeout), "Live control \(predicate.predicateFormat) was not visible")
         element.tap()
     }
 
