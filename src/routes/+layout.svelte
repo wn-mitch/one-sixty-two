@@ -135,17 +135,17 @@
 	{@render children()}
 	<footer>
 		<div class="attribution">
-			<p>Inspired by <a href="https://82-0.com/">82-0</a>. An original baseball challenge.
-				<a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates,
-				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a href="/credits">Full attribution, data download &amp; image credits</a>.</p>
+			<p>Inspired by <a href="https://82-0.com/">82-0</a>. An original baseball challenge.</p>
+			<p><a href="https://sabr.org/lahman-database/">Lahman data via SABR</a>, filtered and repackaged with adjusted rates,
+				<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>. <a class="credits-link" href="/credits">Credits &amp; data download</a></p>
 		</div>
-		<div class="footer-links">
-			<a class="support-link" href="/privacy" aria-label="Privacy policy">Privacy</a>
+		<nav class="footer-links" aria-label="Footer">
+			<a class="footer-link" href="/privacy" aria-label="Privacy policy">Privacy</a>
 			{#if externalSupport}
-				<a class="support-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer" aria-label="Support the developer">Support <span aria-hidden="true">↗</span></a>
+				<a class="footer-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer" aria-label="Support the developer">Support <span aria-hidden="true">↗</span></a>
 			{/if}
-			<a class="studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
-		</div>
+			<a class="footer-link studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
+		</nav>
 	</footer>
 </div>
 <Toaster />
@@ -221,38 +221,31 @@
 	footer {
 		position: relative;
 		z-index: 2;
+		display: grid;
+		gap: var(--space-3);
 		margin-top: var(--space-12);
 		padding: var(--space-6) 0 max(var(--space-6), env(safe-area-inset-bottom));
 		border-top: 1px solid var(--border);
 		color: var(--muted);
 		font-size: var(--text-xs);
+		line-height: 1.6;
 	}
-	footer p { margin: var(--space-1) 0; }
-	footer p a { display: inline-block; padding-block: var(--space-1); }
-	.studio-link {
-		display: inline-flex;
-		min-height: 2.75rem;
-		flex: none;
-		align-items: center;
-		gap: var(--space-2);
-		color: var(--text);
-		font-size: .8125rem;
-		font-weight: 650;
-		text-decoration: none;
-	}
+	.attribution { max-width: 36rem; }
+	.attribution p { margin: 0; }
+	.attribution a { color: var(--text); text-decoration-color: var(--border); text-underline-offset: .2em; }
+	.attribution a:hover { text-decoration-color: currentColor; }
+	.credits-link { white-space: nowrap; }
+	.footer-links { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+	.footer-link { display: inline-flex; min-height: 2.75rem; flex: none; align-items: center; gap: var(--space-1); color: var(--muted); font-size: .8125rem; font-weight: 650; text-decoration: none; }
+	.footer-link:hover { color: var(--text); }
+	.studio-link { gap: var(--space-2); color: var(--text); }
 	.studio-link span:first-child { color: var(--muted); font-weight: 500; }
-	.footer-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-6); }
-	.support-link { display: inline-flex; min-height: 2.75rem; align-items: center; gap: var(--space-1); color: var(--muted); font-size: .8125rem; font-weight: 650; }
-	.support-link:hover { color: var(--text); }
 	@media (min-width: 48rem) {
-		footer { display: flex; justify-content: space-between; align-items: center; gap: var(--space-12); }
+		footer { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-12); }
+		.footer-links { justify-content: flex-end; gap: var(--space-6); }
 	}
-	/* Phones set the attribution as one tight paragraph and the links in one row. */
 	@media (max-width: 47.999rem) {
-		footer { margin-top: var(--space-8); padding-top: var(--space-4); line-height: 1.5; }
-		footer p { margin: 0; }
-		footer p a { padding-block: 0; }
-		.footer-links { flex-wrap: nowrap; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-2); }
+		footer { margin-top: var(--space-8); padding-top: var(--space-4); gap: var(--space-2); }
 	}
 	@media (min-width: 68rem) {
 		.site:has(:global(main.home-start)) .site-header,
