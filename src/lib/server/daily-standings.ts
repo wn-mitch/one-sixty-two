@@ -121,6 +121,26 @@ const SCHEMA: readonly { version: number; statements: readonly string[] }[] = [
 				PRIMARY KEY (date, entry, reporter)
 			)`
 		]
+	},
+	{
+		version: 3,
+		statements: [
+			// Every own season at a home park, daily or not; a replay counts once per device.
+			`CREATE TABLE stadium_runs (
+				device TEXT NOT NULL,
+				replay_id TEXT NOT NULL,
+				stadium TEXT NOT NULL,
+				stadium_version TEXT NOT NULL,
+				data_version TEXT NOT NULL,
+				model_version TEXT NOT NULL,
+				rules_version TEXT NOT NULL,
+				wins INTEGER NOT NULL,
+				submitted_at TEXT NOT NULL,
+				PRIMARY KEY (device, replay_id)
+			)`,
+			'CREATE INDEX stadium_board ON stadium_runs (data_version, model_version, rules_version, stadium, stadium_version, wins)',
+			'CREATE INDEX stadium_age ON stadium_runs (submitted_at)'
+		]
 	}
 ];
 
@@ -198,7 +218,7 @@ export const COUNTED = `date = ?1 AND data_version = ?2 AND model_version = ?3 A
 	AND status NOT IN ('rejected', 'retired')
 	AND device NOT IN (SELECT device FROM devices WHERE banned_at IS NOT NULL)`;
 
-function standing(rank: number, total: number): DailyStanding {
+export function standing(rank: number, total: number): DailyStanding {
 	return { rank, total, topPercent: Math.ceil(100 * rank / total) };
 }
 

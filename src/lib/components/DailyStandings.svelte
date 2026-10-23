@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { DailyStandingsView } from '../game/standings.ts';
-	import DailyCurve from './DailyCurve.svelte';
+	import { placeLabel } from '../game/win-distribution.ts';
+	import WinChart from './WinChart.svelte';
 
 	/**
 	 * Where this device's daily run stands: its percentile among the day's runs and the day's records
@@ -11,15 +12,13 @@
 	const summary = $derived.by(() => {
 		const { standing, final } = standings;
 		if (standing.total <= 1) return final ? 'The only daily run that day' : 'First daily run of the day so far';
-		// "Top 80%" undersells a lower-half run's place, so below the median it reads as a rank.
-		const place = standing.topPercent <= 50 ? `Top ${standing.topPercent}%` : `#${count(standing.rank)}`;
-		return `${place} of ${count(standing.total)} daily runs${final ? '' : ' so far'}`;
+		return `${placeLabel(standing)} of ${count(standing.total)} daily runs${final ? '' : ' so far'}`;
 	});
 </script>
 
 <section class="standings" aria-label="Today’s daily standings">
 	<p class="summary"><strong>{summary}</strong></p>
-	{#if !compact && standings.total > 1}<DailyCurve distribution={standings.distribution} wins={standings.wins} />{/if}
+	{#if !compact && standings.total > 1}<WinChart distribution={standings.distribution} wins={standings.wins} subject="Daily runs" />{/if}
 </section>
 
 <style>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import DailyCurve from '#lib/components/DailyCurve.svelte';
+	import WinChart from '#lib/components/WinChart.svelte';
 	import { dailyLabel } from '#lib/game/daily.ts';
 	import { dailyEntry, loadDailyBoard, reportDailyName, type DailyBoardView } from '#lib/game/standings.ts';
 	import { deviceDb } from '#lib/storage/db.ts';
@@ -79,7 +79,7 @@
 		<p class="muted" role="status">Loading the board…</p>
 	{:else}
 		{#if view.total > 1}
-			<section aria-label="How every run finished"><DailyCurve distribution={view.distribution} /></section>
+			<section aria-label="How every run finished"><WinChart distribution={view.distribution} subject="Daily runs" /></section>
 		{/if}
 		{#if view.board.length}
 			<ol class="board" aria-label={`Daily ${label} board`}>

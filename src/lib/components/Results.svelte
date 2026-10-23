@@ -23,6 +23,8 @@
 	import ResultsGrades from './ResultsGrades.svelte';
 	import DailyStandings from './DailyStandings.svelte';
 	import DailyBoardEntry from './DailyBoardEntry.svelte';
+	import StadiumStandings from './StadiumStandings.svelte';
+	import type { StadiumStandingsView } from '../game/stadium-standings.ts';
 	import type { DailyStandingsView } from '../game/standings.ts';
 	import SeasonClipping from './SeasonClipping.svelte';
 	import { phraseBand, pickSeasonPhrase } from '../news/phrases.ts';
@@ -62,6 +64,8 @@
 		ownSeason?: boolean;
 		/** Where this device's daily run stands among the day's runs, once the standings answer. */
 		dailyStandings?: DailyStandingsView | null;
+		/** Where this own season stands among every run at its home park, once the server answers. */
+		stadiumStandings?: StadiumStandingsView | null;
 		/** Asks for a board name on this device's daily run. */
 		onDailyName?: (name: string) => Promise<void>;
 	}
@@ -85,6 +89,7 @@
 		reward = null,
 		ownSeason = false,
 		dailyStandings = null,
+		stadiumStandings = null,
 		onDailyName
 	}: Props = $props();
 	const grade = $derived(seasonGrade(result.wins, result.losses));
@@ -93,6 +98,7 @@
 		'team-a': { link: `/#replay=${encodeReplay(draft)}`, name: `${result.wins}–${result.losses} team` },
 		'team-b': { link: '', name: '' }
 	})}`);
+	const parkName = $derived(manifest.stadiums.find(stadium => stadium.ref.id === draft.homeStadium?.id)?.name ?? null);
 	const runDifference = $derived(result.runsFor - result.runsAgainst);
 	const expected = $derived(expectedWins(draft.picks.map(pick => profiles.find(profile => profile.seasonId === pick.seasonId) ?? {})));
 	const rosterGrade = $derived(expected === null ? null : draftGrade(expected));
@@ -252,6 +258,8 @@
 			{#if ownSeason && draft.daily && dailyStandings?.date === draft.daily}
 				<DailyStandings standings={dailyStandings} />
 				{#if onDailyName}<DailyBoardEntry standings={dailyStandings} onName={onDailyName} />{/if}
+			{:else if ownSeason && !draft.daily && stadiumStandings?.draft === draft && parkName}
+				<StadiumStandings standings={stadiumStandings} park={parkName} />
 			{/if}
 		{/snippet}
 		{#snippet actions()}

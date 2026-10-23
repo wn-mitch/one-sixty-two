@@ -332,7 +332,7 @@
     {:else if !phaseLoadError}<ProgressSkeleton />{/if}
    {:else if currentSession.phase === 'results' && currentSession.result}
     {#if Results}
-     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} ownSeason={!currentSession.shared} dailyStandings={currentSession.dailyStandings} onDailyName={(name) => currentSession.nameDaily(currentSession.draft!.daily!, name)} />
+     <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} ownSeason={!currentSession.shared} dailyStandings={currentSession.dailyStandings} stadiumStandings={currentSession.stadiumStandings} onDailyName={(name) => currentSession.nameDaily(currentSession.draft!.daily!, name)} />
     {:else if !phaseLoadError}<ResultsSkeleton />{/if}
    {/if}
   {/if}

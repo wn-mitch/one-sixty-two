@@ -12,6 +12,7 @@
 	import type { MediaManifest } from '../media/types.ts';
 	import LibraryCompare from './library/LibraryCompare.svelte';
 	import LibraryLeaders from './library/LibraryLeaders.svelte';
+	import LibraryRecords from './library/LibraryRecords.svelte';
 	import LibraryTeam from './library/LibraryTeam.svelte';
 	import LibraryTile from './library/LibraryTile.svelte';
 
@@ -193,6 +194,7 @@
 						onClose={() => chosen = []}
 					/>
 				{:else}
+					<LibraryRecords {entries} />
 					<LibraryLeaders groups={leaders} {cards} onPick={pick}>
 						{#snippet teamCard(key: string)}
 							{@const entry = entries.find(item => item.key === key)}

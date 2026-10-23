@@ -1,5 +1,5 @@
 <script lang="ts">
- import { tick, untrack } from 'svelte';
+ import { onMount, tick, untrack } from 'svelte';
  import { flip } from 'svelte/animate';
  import { cubicOut } from 'svelte/easing';
  import { SvelteSet } from 'svelte/reactivity';
@@ -11,9 +11,19 @@
  import { clearStage, stash } from './phase-motion.ts';
  import VenueCard from './VenueCard.svelte';
  import GuideTip from './GuideTip.svelte';
+ import WinChart from './WinChart.svelte';
+ import { loadParkSummaries, type ParkSummary } from '#lib/game/stadium-standings.ts';
+ import { MIN_RUNS } from '#lib/game/win-distribution.ts';
 
  let { manifest, busy, initialSelected = '', onSelect }: { manifest: Manifest; busy: boolean; initialSelected?: string; onSelect: (stadiumId: string) => void } = $props();
  let selected = $state(untrack(() => initialSelected));
+ /** Other players' records at each park; absent until loaded, and for parks with too few runs to describe. */
+ let parks = $state.raw<ReadonlyMap<string, ParkSummary>>(new Map());
+ onMount(() => {
+  let live = true;
+  void loadParkSummaries(location.origin).then(value => { if (live) parks = value; }).catch(() => {});
+  return () => { live = false; };
+ });
  const franchiseName = (id: string) => manifest.franchises.find(franchise => franchise.id === id)?.name ?? id;
  const saved = loadStadiumPreferences();
  let sort = $state<StadiumSort>(saved.sort);
@@ -51,7 +61,7 @@
   const id = selected;
   leaving = true;
   const others = [...deck.querySelectorAll<HTMLElement>('.choice-wrap:not(:has(.choice.selected))')];
-  const chrome = [...deck.querySelectorAll<HTMLElement>(':scope > h2, :scope > .intro, :scope > .deck-tools, .commit, .choice-wrap:has(.choice.selected) .favorite')];
+  const chrome = [...deck.querySelectorAll<HTMLElement>(':scope > h2, :scope > .intro, :scope > .deck-tools, .commit, .choice-wrap:has(.choice.selected) .favorite, .choice-wrap:has(.choice.selected) .park-record')];
   const exit = await clearStage(others, chrome);
   const card = deck.querySelector<HTMLElement>('.choice.selected .venue-card');
   if (card) stash('stadium', new Map([['card', card.getBoundingClientRect()]]), new Map([['card', card.cloneNode(true) as HTMLElement]]));
@@ -65,7 +75,7 @@
 
 <section bind:this={deck} class="stadium-deck" aria-labelledby="stadium-heading" inert={leaving}>
  <h2 id="stadium-heading" tabindex="-1">Choose your home stadium</h2>
- <p class="intro muted">You play 81 of your 162 games here; road games use each opponent's 2025 park. Fence distances, wall heights and elevation change how far batted balls carry, for both teams. No park has a rating or bonus.</p>
+ <p class="intro muted">You play 81 of your 162 games here; road games use each opponent's 2025 park. Fence distances, wall heights and elevation change how far batted balls carry, for both teams. No park has a rating or bonus; records under each card are other players' seasons there.</p>
  <GuideTip step="stadium" text="Pick any park to start. Your home park hosts half your season, so its shape affects every home game." />
  <div class="deck-tools">
   <label class="search"><span class="sr-only">Find a stadium by park or team</span>
@@ -84,10 +94,14 @@
    <div class="grid">
     {#each stadiums as stadium (stadium.ref.id)}
      {@const favorite = favorites.has(stadium.ref.id)}
+     {@const park = parks.get(stadium.ref.id)}
      <div class="choice-wrap" animate:flip={reorder()}>
       <label class="choice" class:selected={selected === stadium.ref.id}>
        <input type="radio" name="stadium" value={stadium.ref.id} bind:group={selected} disabled={busy} />
        <VenueCard {stadium} franchiseName={franchiseName(stadium.franchiseId)} />
+       {#if park && park.total >= MIN_RUNS}
+        <span class="park-record"><WinChart distribution={park.distribution} subject={`Runs at ${stadium.name}`} spark /><span>Typical {park.typical} W</span><span>Top 10% {park.top10}+ W</span></span>
+       {/if}
       </label>
       <button type="button" class="favorite" class:on={favorite} aria-pressed={favorite} aria-label={`Favorite ${stadium.name}`} onclick={() => toggleFavorite(stadium.ref.id)}>
        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" focusable="false"><path d="M8 1.6l1.9 4 4.3.5-3.2 3 .9 4.3L8 11.2l-3.9 2.2.9-4.3-3.2-3 4.3-.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>
@@ -140,4 +154,6 @@
   */
  .commit { position: sticky; z-index: 2; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom)); background: var(--background); border-top: 1px solid var(--border); margin-top: var(--space-4); box-shadow: 0 var(--space-16) 0 0 var(--background); }
  .commit p { margin: 0; }
+ .park-record { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 var(--space-2); margin-top: var(--space-2); color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+ .park-record > span:not(:first-child) { white-space: nowrap; }
 </style>

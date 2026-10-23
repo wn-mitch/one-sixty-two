@@ -7,6 +7,7 @@ import { refreshStickers } from '../collection/store.svelte.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import { grantedReward, type SeasonReward } from '../cosmetics/ledger.ts';
 import { loadDailyStandings, type DailyStandingsView } from './standings.ts';
+import { submitStadiumRun, type StadiumStandingsView } from './stadium-standings.ts';
 import { clearCompletedDraft, DAILY_STORAGE_NOTICE, persistDraft, restoreDaily, restoreDraft, RESUME_NOTICE, type DailyRun, type Restore, type SavedPhase } from './persistence.ts';
 import { dailyDate, dailyLabel, dailyStadium } from './daily.ts';
 import { deviceDb } from '../storage/db.ts';
@@ -70,6 +71,8 @@ export class Session {
  daily = $state.raw<{ date: string; run: DailyRun } | null>(null);
  /** Where this device's finished daily stands among the day's runs; null until loaded or when it cannot count. */
  dailyStandings = $state.raw<DailyStandingsView | null>(null);
+ /** Where the finished own season stands among every run at its home park; null until the server answers. */
+ stadiumStandings = $state.raw<StadiumStandingsView | null>(null);
  nativeShareReady = $state(false);
  imageDownloadFallback = $state(false);
  textCopyFallback = $state(false);
@@ -300,6 +303,7 @@ export class Session {
      if (epoch === this.epoch) this.reward = reward;
     } catch { /* the reward is saved; only its announcement is lost */ }
     if (this.draft === draft) this.archivedDraft = draft;
+    void this.refreshStadiumStandings(draft, result.wins);
     if (draft.daily === undefined) {
      if (this.savedDraft === draft) this.savedDraft = null;
      notice = await clearCompletedDraft(db, draft);
@@ -378,6 +382,13 @@ export class Session {
    const view = await loadDailyStandings((await deviceDb()).db, manifest, date, location.origin);
    if (manifest === this.manifest) this.dailyStandings = view;
   } catch { /* offline or unavailable: shown once the next view succeeds */ }
+ }
+ /** Counts the own season at its home park and shows its place; offline or refused leaves none, and a later view retries. */
+ private async refreshStadiumStandings(draft: Draft, wins: number): Promise<void> {
+  try {
+   const view = await submitStadiumRun((await deviceDb()).db, draft, wins, location.origin);
+   if (this.draft === draft) this.stadiumStandings = view;
+  } catch { /* offline or unavailable */ }
  }
  /** Asks for a board name on the day's run; the view says whether it was taken. Throws when the server cannot be reached. */
  async nameDaily(date: string, name: string): Promise<void> {
@@ -637,6 +648,7 @@ export class Session {
   this.newStickers = [];
   this.newCards = [];
   this.reward = null;
+  this.stadiumStandings = null;
   this.skipReveal = !reveal || matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.save('simulating');
   const epoch = this.epoch;

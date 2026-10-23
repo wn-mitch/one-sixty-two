@@ -63,6 +63,6 @@ describe('daily standings', () => {
 		await submitDaily(bindings, DATE, { replayId: replay, token: token(1), record: record(120) }, NOON);
 		const second = { ...bindings, DAILY: d1(sqlite) };
 		expect(await dailyStandings(second, DATE, null, NOON)).toMatchObject({ total: 1 });
-		expect(sqlite.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }]);
+		expect(sqlite.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
 	});
 });
