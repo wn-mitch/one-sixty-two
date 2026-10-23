@@ -104,7 +104,8 @@ describe('daily slot', () => {
   const done = finish(started);
   await persistDraft(db, done, 'results');
   await saveSeason(db, done, result(120), [], manifest);
-  expect(await restoreDaily(db, manifest, date)).toEqual({ kind: 'complete', record: { wins: 120, losses: 42 } });
+  // The finished day reopens its own season's results.
+  expect(await restoreDaily(db, manifest, date)).toMatchObject({ kind: 'complete', record: { wins: 120, losses: 42 }, draft: { daily: date, seed: done.seed, picks: done.picks } });
   // A late write from the finished run does not reopen the day.
   await persistDraft(db, done, 'results');
   expect((await restoreDaily(db, manifest, date)).kind).toBe('complete');
@@ -112,7 +113,7 @@ describe('daily slot', () => {
   const [entry] = (await loadLibrary(db, manifest)).entries;
   expect(entry.daily).toBe(date);
   await deleteSeason(db, entry.key);
-  expect(await restoreDaily(db, manifest, date)).toEqual({ kind: 'complete', record: { wins: 120, losses: 42 } });
+  expect(await restoreDaily(db, manifest, date)).toEqual({ kind: 'complete', record: { wins: 120, losses: 42 }, draft: null });
   expect(await restoreDraft(db, manifest)).toMatchObject({ kind: 'valid', draft: { seed: 9 } });
  });
 

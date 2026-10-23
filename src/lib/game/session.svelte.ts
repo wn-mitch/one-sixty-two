@@ -305,7 +305,7 @@ export class Session {
      notice = await clearCompletedDraft(db, draft);
     } else {
      // The save recorded the day's result with the season.
-     if (this.daily?.date === draft.daily) this.daily = { date: draft.daily, run: { kind: 'complete', record: { wins: result.wins, losses: result.losses } } };
+     if (this.daily?.date === draft.daily) this.daily = { date: draft.daily, run: { kind: 'complete', record: { wins: result.wins, losses: result.losses }, draft } };
      void this.refreshDailyStandings(draft.daily);
     }
     try {
@@ -386,15 +386,15 @@ export class Session {
   const view = await loadDailyStandings((await deviceDb()).db, manifest, date, location.origin, fetch, name);
   if (manifest === this.manifest) this.dailyStandings = view;
  }
- /** Starts today's daily with its seed and stadium pinned, or resumes it; a finished day does nothing. */
+ /** Starts today's daily with its seed and stadium pinned, resumes it, or reopens a finished one's results. */
  async playDaily(): Promise<void> {
   if (!this.manifest || this.loading || !this.daily) return;
   if (this.daily.date !== dailyDate()) { await this.refreshDaily(); return; }
   const { date, run } = this.daily;
-  if (run.kind === 'active') {
+  if (run.kind === 'active' || (run.kind === 'complete' && run.draft)) {
    this.clearShareState();
    this.draft = run.draft;
-   this.resumePhase = run.phase;
+   this.resumePhase = run.kind === 'active' ? run.phase : 'results';
    await this.restoreActive();
    return;
   }
@@ -422,7 +422,8 @@ export class Session {
    else if (this.draft.picks.length === draftRules(this.draft.schemaVersion).slots.length) {
     this.phase = 'lineup';
     this.loading = false;
-    if (this.resumePhase === 'simulating' || this.resumePhase === 'results' || this.shared) await this.simulate();
+    // A season this device already played opens on its results rather than playing back again.
+    if (this.resumePhase === 'simulating' || this.resumePhase === 'results' || this.shared) await this.simulate(this.shared || this.resumePhase !== 'results');
    } else if (this.draft.packs.length) {
     // Two or three open packs wait for the player's choice; the pool loads once one is chosen.
     this.phase = 'choosing';
@@ -625,7 +626,7 @@ export class Session {
    this.save('lineup');
   } catch (error) { this.error = error instanceof Error ? error.message : 'Invalid relief roles'; }
  }
- async simulate(): Promise<void> {
+ async simulate(reveal = true): Promise<void> {
   if (!this.draft || !this.manifest || this.loading || this.worker) return;
   this.phase = 'simulating';
   this.loading = true;
@@ -636,7 +637,7 @@ export class Session {
   this.newStickers = [];
   this.newCards = [];
   this.reward = null;
-  this.skipReveal = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  this.skipReveal = !reveal || matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.save('simulating');
   const epoch = this.epoch;
   performance.mark('season:simulate');

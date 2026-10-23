@@ -120,13 +120,22 @@ test('a finished daily pays two tokens, carries its stamp, joins the standings, 
  // The home screen asks the standings again after its own data loads.
  await expect(panel.getByRole('region', { name: 'Today’s daily standings' }).locator('.summary')).toHaveText(standing, { timeout: 15_000 });
  await expect(panel.getByRole('timer')).toHaveAccessibleName(/^Next daily in /);
- await expect(panel.getByRole('button')).toHaveCount(0);
+ await expect(panel.getByRole('button')).toHaveText(['See results']);
  await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toHaveClass(/primary/);
 
- await panel.getByRole('link', { name: 'See it in My teams' }).click();
- const shelf = page.getByRole('region', { name: /^Daily runs/ });
- await expect(shelf.getByRole('list', { name: 'Daily runs' }).getByRole('listitem')).toHaveCount(1);
- await expect(shelf.locator('.daily').first()).toContainText(`Daily ${dailyLabel(date)}`);
+ // See results reopens the day's own Results without playing the season back, earning nothing new; Back returns home.
+ await panel.getByRole('button', { name: 'See results', exact: true }).click();
+ await expect(page).toHaveURL(/\/daily$/);
+ await expect(page.locator('#results-heading')).toBeVisible({ timeout: 60_000 });
+ await expect(page.locator('#results-heading')).toHaveAttribute('aria-label', `Final record: ${record[0]} wins and ${record[1]} losses`);
+ await expect(page.locator('.daily-stamp')).toHaveText(`Daily ${dailyLabel(date)}`);
+ await expect(page.locator('.reward-chip, [data-reward-flight], .reward-splash')).toHaveCount(0);
+ expect(await deviceRows(page, 'SELECT COUNT(*) AS n FROM seasons')).toEqual([{ n: 1 }]);
+ await page.goBack();
+ await expect(panel.getByRole('button', { name: 'See results', exact: true })).toBeVisible();
+ // Forward lands on the same Results.
+ await page.goForward();
+ await expect(page.locator('#results-heading')).toBeVisible({ timeout: 60_000 });
 });
 
 test('opening someone else’s daily replay leaves this device’s teams, rewards and daily untouched', async ({ page, request, baseURL }) => {

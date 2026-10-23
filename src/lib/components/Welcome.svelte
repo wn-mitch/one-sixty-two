@@ -93,15 +93,17 @@
   {#if daily}
    <section class="daily" class:done={!dailyPending} aria-labelledby="daily-heading">
     {#if daily.run.kind === 'complete'}
-     <!-- A finished daily keeps to two lines so Build my team stays on a phone's first screen. -->
-     <div class="daily-result">
+     <div class="daily-head">
       <h2 id="daily-heading"><span>Daily</span> {dailyLabel(daily.date)}</h2>
-      <a class="daily-record" href="/seasons#dailies" aria-label={`${daily.run.record.wins} wins, ${daily.run.record.losses} losses. See it in My teams`}>{daily.run.record.wins}–{daily.run.record.losses}</a>
       {#if nextDaily}<span class="daily-next" role="timer" aria-label={`Next daily in ${countdown(nextDaily, now)}`}>Next in {countdown(nextDaily, now)}</span>{/if}
      </div>
-     <div class="daily-links">
+     <div class="daily-result">
+      <p class="daily-record" aria-label={`${daily.run.record.wins} wins, ${daily.run.record.losses} losses`}>{daily.run.record.wins}–{daily.run.record.losses}</p>
       {#if dailyStandings?.date === daily.date}<DailyStandings standings={dailyStandings} compact />{/if}
-      <a href={`/daily/${daily.date}`} aria-label="See the day’s board">Board <span aria-hidden="true">›</span></a>
+     </div>
+     <div class="daily-links">
+      {#if daily.run.draft}<button class="secondary" disabled={loading || !manifest} onclick={onDaily}>See results</button>{/if}
+      <a class="button secondary" href={`/daily/${daily.date}`} aria-label="See the day’s board">Board <span aria-hidden="true">›</span></a>
      </div>
     {:else if daily.run.kind === 'unavailable'}
      <h2 id="daily-heading"><span>Daily</span> {dailyLabel(daily.date)}</h2>
@@ -199,23 +201,23 @@
   border-radius: var(--radius-lg);
   background: oklch(16% .009 255 / .94);
  }
- .daily.done { gap: 0; padding-block: var(--space-3) var(--space-1); border-color: var(--border); }
+ .daily.done { gap: var(--space-3); padding-block: var(--space-4); border-color: var(--border); }
  .daily h2 { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; color: var(--muted); font: italic 800 var(--text-lg) / 1 'Barlow Condensed', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
  .daily h2 span { color: var(--accent); }
  .daily p { margin: 0; }
  .daily-park { font-size: var(--text-base); }
  .daily-rules, .daily-next { color: var(--muted); font-size: var(--text-sm); }
  .daily-start { max-width: none; margin-top: var(--space-2); }
- /* A finished daily's two lines flow from the left; the card and Build my team share one width so their edges align. */
- .daily.done { width: min(100%, 22.5rem); box-sizing: border-box; }
- .welcome-copy:has(.daily.done) .start { max-width: 22.5rem; }
- .daily-result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); }
- .daily-record { color: var(--text); font-size: var(--text-xl); font-weight: 850; letter-spacing: -.03em; font-variant-numeric: tabular-nums; text-decoration: none; }
- .daily-record:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
- .daily-result .daily-next { font-size: var(--text-xs); white-space: nowrap; }
- .daily-links { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-3); font-size: var(--text-xs); }
- .daily-links :global(.summary) { font-size: inherit; }
- .daily-links a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--text); font-weight: 650; }
+ .daily-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 var(--space-3); }
+ .daily-head .daily-next { font-size: var(--text-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+ .daily-result { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); }
+ .daily .daily-record { font-size: 2.5rem; font-weight: 850; line-height: 1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+ .daily-result :global(.standings) { flex: 1 1 10rem; }
+ .daily-result :global(.summary) { color: var(--muted); }
+ .daily-links { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-2); }
+ .daily-links > * { gap: var(--space-1); min-height: 2.75rem; font-size: var(--text-sm); }
+ /* A finished daily steps aside for Classic play, whose first button takes the card's width so their edges align. */
+ .welcome-copy:has(.daily.done) .start { max-width: 26rem; }
  .bonus-note { margin: var(--space-3) 0 0; color: var(--accent); font-size: var(--text-sm); font-weight: 650; }
  .start-status { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); }
  /* Always two even rows of four, oldest to newest. */
@@ -264,7 +266,7 @@
   .actions { align-items: stretch; }
   .start { max-width: none; }
   .daily { max-width: none; margin-bottom: var(--space-3); }
-  .daily.done { width: auto; padding-inline: var(--space-4); }
+  .daily.done { padding-inline: var(--space-4); }
   .new-team { width: 100%; }
   .era-strip { margin: 0 max(var(--space-4), env(safe-area-inset-right)) var(--space-6) max(var(--space-4), env(safe-area-inset-left)); }
   .era-strip figure { gap: 4px; }

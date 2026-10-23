@@ -1,6 +1,7 @@
 import { validateDraft } from './draft.ts';
 import { draftRules } from './rules.ts';
 import { libraryKey } from './library.ts';
+import { decodeReplay } from './share.ts';
 import type { Draft, Manifest } from './types.ts';
 import type { Db } from '../storage/sql.ts';
 
@@ -94,18 +95,27 @@ export async function clearCompletedDraft(db: Db, draft: Draft): Promise<string 
 export type DailyRun =
  | { kind: 'unplayed'; notice?: string }
  | { kind: 'active'; draft: Draft; phase: SavedPhase }
- | { kind: 'complete'; record: { wins: number; losses: number } }
+ /** `draft` reopens the finished season's results; null once its saved season is deleted or no longer replays. */
+ | { kind: 'complete'; record: { wins: number; losses: number }; draft: Draft | null }
  | { kind: 'unavailable'; message: string };
 
 export const DAILY_STORAGE_NOTICE = 'The daily needs browser storage to keep its one attempt. Classic play still works.';
 
 export async function restoreDaily(db: Db, manifest: Manifest, date: string): Promise<DailyRun> {
- let rows: { json: string | null; wins: number | null; losses: number | null }[];
- try { rows = await db.all('SELECT json, wins, losses FROM daily_runs WHERE date = ?', [date]); }
+ let rows: { json: string | null; wins: number | null; losses: number | null; token: string | null }[];
+ try {
+  rows = await db.all(`SELECT daily_runs.json, daily_runs.wins, daily_runs.losses, seasons.token
+   FROM daily_runs LEFT JOIN seasons ON seasons.key = daily_runs.season_key WHERE daily_runs.date = ?`, [date]);
+ }
  catch { return { kind: 'unavailable', message: DAILY_STORAGE_NOTICE }; }
  const [row] = rows;
  if (!row) return { kind: 'unplayed' };
- if (row.wins !== null && row.losses !== null) return { kind: 'complete', record: { wins: row.wins, losses: row.losses } };
+ if (row.wins !== null && row.losses !== null) {
+  let draft: Draft | null = null;
+  try { if (row.token !== null) draft = decodeReplay(row.token, manifest); }
+  catch { /* a game update retired its replay; the record stands */ }
+  return { kind: 'complete', record: { wins: row.wins, losses: row.losses }, draft };
+ }
  try {
   const { draft, phase } = parseSaved(row.json!, manifest);
   if (draft.daily !== date) throw new Error('Saved daily is from another day');

@@ -33,7 +33,7 @@
 	});
 	// A finished daily, ranked fourth of four, as the home screen shows it the rest of the day.
 	const dailyDate = '2026-10-21';
-	const finishedDaily = { date: dailyDate, run: { kind: 'complete' as const, record: { wins: 138, losses: 24 } } };
+	const finishedDaily = { date: dailyDate, run: { kind: 'complete' as const, record: { wins: 138, losses: 24 }, draft: fixtures.completeDraft } };
 	const dailyStandings = {
 		date: dailyDate, wins: 138, standing: { rank: 4, total: 4, topPercent: 100 }, total: 4, distribution: [[144, 1], [139, 2], [138, 1]] as [number, number][],
 		final: false, entry: null, name: null, nameRefusal: null, board: []

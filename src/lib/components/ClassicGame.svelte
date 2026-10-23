@@ -96,13 +96,14 @@
   });
  });
  $effect(() => {
-  // Ordinary returns resume unfinished play only; completed seasons belong in My teams.
+  // Ordinary returns resume unfinished play, or today's finished daily on its results; other completed seasons belong in My teams.
   const current = session;
   const path = page.url.pathname;
   if ((path !== '/classic' && path !== '/daily') || !current || current.phase !== 'start') return;
   if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;
   untrack(() => {
-   if (path === '/daily' ? current.daily?.run.kind === 'active' : current.canAutoResume) void (path === '/daily' ? current.playDaily() : current.resume());
+   const daily = current.daily?.run;
+   if (path === '/daily' ? daily?.kind === 'active' || (daily?.kind === 'complete' && !!daily.draft) : current.canAutoResume) void (path === '/daily' ? current.playDaily() : current.resume());
    else void goto('/', { replace: true, reset: false });
   });
  });
