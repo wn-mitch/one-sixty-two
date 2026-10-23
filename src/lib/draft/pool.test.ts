@@ -42,6 +42,10 @@ describe('run pool', () => {
   expect(ratios.every((ratio, index) => cards[index].salary < 20 || (ratio >= 0.9 - 0.03 && ratio <= 1.1 + 0.03))).toBe(true);
   expect(ratios.some(ratio => ratio !== 1)).toBe(true);
   expect(cards.filter(card => card.finish === 'base' && card.salary <= DRAFT_RULES.commonSalaryMax).every(card => priced(card.seasonId) <= DRAFT_RULES.commonSalaryMax)).toBe(true);
+  // Noise never makes a common: a base card priced just above the cleanup limit stays above it.
+  const nearCommons = cards.filter(card => card.finish === 'base' && card.salary > DRAFT_RULES.commonSalaryMax && card.salary <= DRAFT_RULES.commonSalaryMax + 2);
+  expect(nearCommons.length).toBeGreaterThan(0);
+  expect(nearCommons.every(card => priced(card.seasonId) > DRAFT_RULES.commonSalaryMax)).toBe(true);
   expect(cards.every(card => priced(card.seasonId) >= DRAFT_RULES.minSalary)).toBe(true);
   // Another seed draws other prices.
   const other = buildRunPool(8, cards);

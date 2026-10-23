@@ -49,7 +49,7 @@ describe('AI scouting', () => {
   const judge = judgeFor(4, 1, lean('homer'), 'pro');
   const judged = judge(local);
   expect(judged.value).toBeCloseTo(scoutedValue(4, 1, local, 'pro') + judged.bias);
-  expect(explainPick({ landing: 'SS', fills: true, filled: 'SS', marginal: 20, park: 0, bias: 4, quirk: 'homer', scarcity: 0, capPenalty: 0 })).toBe('fills SS · +20.0 runs · homer +4.0 runs');
+  expect(explainPick({ landing: 'SS', fills: true, filled: 'SS', marginal: 20, park: 0, bias: 4, quirk: 'homer', scarcity: 0, capPenalty: 0 })).toBe('fills SS · homer');
  });
 
  it('cuts a big spender’s thrift by the difficulty’s spender share', () => {

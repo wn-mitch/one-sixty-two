@@ -70,9 +70,9 @@ describe('AI general manager', () => {
  });
 
  it('explains a pick from its score', () => {
-  expect(explainPick({ landing: 'C', fills: true, filled: 'C', marginal: 10, park: 2, bias: 0, quirk: null, scarcity: 3, capPenalty: 0 })).toBe('fills C · +10.0 runs · home park +2.0 runs · few C options left');
-  expect(explainPick({ landing: 'SS', fills: false, filled: null, marginal: 4.25, park: -0.2, bias: 0, quirk: null, scarcity: 0, capPenalty: 12.5 })).toBe('upgrades SS · +4.3 runs · over cap −12.5 runs');
-  expect(explainPick({ landing: 'cut', fills: false, filled: null, marginal: 0, park: 0, bias: 0, quirk: null, scarcity: 0, capPenalty: 0 })).toBe('no roster spot · +0.0 runs');
+  expect(explainPick({ landing: 'C', fills: true, filled: 'C', marginal: 10, park: 2, bias: 0, quirk: null, scarcity: 3, capPenalty: 0 })).toBe('fills C · suits its home park · few C options left');
+  expect(explainPick({ landing: 'SS', fills: false, filled: null, marginal: 4.25, park: -0.2, bias: 0, quirk: null, scarcity: 0, capPenalty: 12.5 })).toBe('upgrades SS · over the cap');
+  expect(explainPick({ landing: 'cut', fills: false, filled: null, marginal: 0, park: 0, bias: 0, quirk: null, scarcity: 0, capPenalty: 0 })).toBe('no roster spot');
  });
 
  it('prefers the card that fits its home park when modeled values are close', () => {

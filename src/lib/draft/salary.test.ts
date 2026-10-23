@@ -36,31 +36,46 @@ describe('draft salary table', () => {
   hitter('glove', AVERAGE_RATES, 12), hitter('stone', AVERAGE_RATES, -12),
   starter('ace', power(-0.02)), starter('arm', AVERAGE_RATES), starter('gopher', power(0.03))
  ];
- const table = buildDraftCardTable(profiles, environment, () => undefined);
- const salary = (id: string) => table.salary[table.seasonId.indexOf(`${id}:2025:AL:T`)];
+ // Public WAR runs against modeled value on purpose: the market sees the great hitter as ordinary.
+ const WAR: Record<string, number> = { weak: 1, average: 1, good: 3, great: 1, glove: 2, stone: 2, ace: 4, arm: 2, gopher: 0 };
+ const warOf = (seasonId: string) => {
+  const war = WAR[seasonId.split(':')[0]];
+  return war === undefined ? undefined : { battingWAR162: war, pitchingWAR162: war };
+ };
+ const table = buildDraftCardTable(profiles, environment, warOf);
+ const at = (id: string) => table.seasonId.indexOf(`${id}:2025:AL:T`);
+ const salary = (id: string) => table.salary[at(id)];
+ const value = (id: string) => table.valueRuns[at(id)];
 
- it('prices hitters by modeled run value with replacement at the minimum', () => {
-  expect(salary('weak')).toBe(SALARY_METHOD.minSalary);
-  // Average batting sits at the DH replacement percentile in this small universe.
-  expect(salary('average')).toBe(SALARY_METHOD.minSalary);
-  expect(salary('good')).toBeGreaterThan(salary('average'));
-  expect(salary('great')).toBeGreaterThan(salary('good'));
+ it('values hitters by modeled runs above replacement, with fielding at the position', () => {
+  expect(value('good')).toBeGreaterThan(value('average'));
+  expect(value('great')).toBeGreaterThan(value('good'));
+  expect(value('glove')).toBeGreaterThan(value('stone'));
  });
 
- it('adds fielding runs at the position', () => {
-  expect(salary('glove')).toBeGreaterThan(salary('stone'));
+ it('values pitchers by runs prevented over a starter workload', () => {
+  expect(value('ace')).toBeGreaterThan(value('arm'));
+  expect(value('arm')).toBeGreaterThan(value('gopher'));
+  expect(table.pricedSlot[at('ace')]).toBe('SP1');
  });
 
- it('prices pitchers by runs prevented over a starter workload', () => {
+ it('prices public WAR on each role\'s market line, not modeled value', () => {
+  // Same role and WAR, same price, however the engine values them.
+  expect(salary('great')).toBe(salary('average'));
+  expect(value('great')).toBeGreaterThan(value('average'));
+  // So the great hitter is the bargain: more modeled runs per salary than the good one.
+  expect(salary('good')).toBeGreaterThan(salary('great'));
   expect(salary('ace')).toBeGreaterThan(salary('arm'));
-  expect(salary('arm')).toBeGreaterThan(salary('gopher'));
-  expect(table.pricedSlot[table.seasonId.indexOf('ace:2025:AL:T')]).toBe('SP1');
+  const { market } = table.method;
+  expect(market.hitter.slope).toBeGreaterThan(0);
+  expect(market.starter.cards).toBe(3);
+  const expected = market.starter.intercept + market.starter.slope * 4;
+  expect(salary('ace')).toBe(SALARY_METHOD.minSalary + Math.round(SALARY_METHOD.pricePerRun * Math.max(0, expected)));
  });
 
- it('keeps the cosmetic finish out of the price', () => {
-  const gems = buildDraftCardTable(profiles, environment, () => ({ battingWAR162: 9, pitchingWAR162: 9 }));
-  expect(gems.finish.every(finish => finish === 'gem')).toBe(true);
-  expect(table.finish.every(finish => finish === 'base')).toBe(true);
-  expect(gems.salary).toEqual(table.salary);
+ it('prices a card without WAR at its role\'s zero-WAR level', () => {
+  const unknown = buildDraftCardTable(profiles, environment, id => id.startsWith('great:') ? undefined : warOf(id));
+  const line = unknown.method.market.hitter;
+  expect(unknown.salary[at('great')]).toBe(SALARY_METHOD.minSalary + Math.round(SALARY_METHOD.pricePerRun * Math.max(0, line.intercept)));
  });
 });

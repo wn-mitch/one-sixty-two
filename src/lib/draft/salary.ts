@@ -25,12 +25,17 @@ const PRICING_ROLES: readonly PricingRole[] = [...HITTER_SLOTS, 'SP', 'CL'];
 const pricingRole = (slot: Slot): PricingRole => (STARTER_SLOTS as readonly Slot[]).includes(slot) ? 'SP' : slot === 'CL' || slot.startsWith('RP') ? 'CL' : slot as HitterSlot;
 const roleSlot = (role: PricingRole): Slot => role === 'SP' ? 'SP1' : role;
 
+/** The market's read of a role: the runs it expects from a card's WAR per 162 games. */
+export interface MarketLine { intercept: number; slope: number; cards: number }
+
 export interface DraftCardTable {
  schemaVersion: 1;
  salaryVersion: typeof SALARY_VERSION;
  provisional: true;
  method: typeof SALARY_METHOD & {
   hitterPlateAppearances: number;
+  /** Each finish role's least-squares line from public WAR to modeled runs; salary prices that estimate. */
+  market: Record<FinishRole, MarketLine>;
   /** Season runs at each role's replacement percentile. */
   replacement: Partial<Record<PricingRole, number>>;
  };
@@ -39,7 +44,7 @@ export interface DraftCardTable {
  year: number[];
  salary: number[];
  finish: Finish[];
- /** Runs above replacement, rounded to 0.1. */
+ /** Modeled runs above replacement, rounded to 0.1: the engine's value, never shown to the player. */
  valueRuns: number[];
  pricedSlot: Slot[];
 }
@@ -70,11 +75,34 @@ function finishRole(slot: Slot): FinishRole {
  return role === 'SP' ? 'starter' : role === 'CL' ? 'closer' : 'hitter';
 }
 
+/** The public WAR that prices a card in its priced role, or null when the source has none. */
+const roleWar = (slot: Slot, war: CardWar | undefined): number | null => (finishRole(slot) === 'hitter' ? war?.battingWAR162 : war?.pitchingWAR162) ?? null;
+
+/** Least-squares line of runs on WAR; a role whose cards share one WAR value prices at their mean. */
+function marketLine(points: readonly { war: number; runs: number }[]): MarketLine {
+ if (!points.length) return { intercept: 0, slope: 0, cards: 0 };
+ const meanWar = points.reduce((sum, point) => sum + point.war, 0) / points.length;
+ const meanRuns = points.reduce((sum, point) => sum + point.runs, 0) / points.length;
+ let covariance = 0;
+ let variance = 0;
+ for (const point of points) {
+  covariance += (point.war - meanWar) * (point.runs - meanRuns);
+  variance += (point.war - meanWar) ** 2;
+ }
+ const slope = variance > 0 ? covariance / variance : 0;
+ return { intercept: meanRuns - slope * meanWar, slope, cards: points.length };
+}
+
 /**
- * Prices every candidate by modeled season runs above its role's replacement level: shared-engine
+ * Values every candidate by modeled season runs above its role's replacement level: shared-engine
  * linear weights against a league-average opponent in a neutral park, plus fielding runs at the
- * position, scaled by the role's workload. Named relievers price as closers. Finish is cosmetic
- * and never enters the price. `candidates` are the draftable ones; team bullpens are not priced.
+ * position, scaled by the role's workload. Named relievers value as closers.
+ *
+ * Salary prices public reputation, not that value: each finish role (hitter, starter, closer)
+ * fits one line from WAR per 162 games to modeled runs, and a card costs what its WAR says a card
+ * in its role is worth. The gap between the line and a card's own value is the scouting game. A
+ * card without WAR prices at its role's zero-WAR level. Finish is cosmetic and never enters the
+ * price. `candidates` are the draftable ones; team bullpens are not priced.
  */
 export function buildDraftCardTable(candidates: readonly Profile[], environment: DefensiveEnvironment, war: (seasonId: string) => CardWar | undefined): DraftCardTable {
  const league = environment.leagueRates;
@@ -132,27 +160,34 @@ export function buildDraftCardTable(candidates: readonly Profile[], environment:
   if (values.length) replacement[role] = percentile(values, SALARY_METHOD.replacementPercentile);
  }
 
- const table: DraftCardTable = {
-  schemaVersion: 1, salaryVersion: SALARY_VERSION, provisional: true,
-  method: { ...SALARY_METHOD, hitterPlateAppearances, replacement },
-  seasonId: [], year: [], salary: [], finish: [], valueRuns: [], pricedSlot: []
- };
- candidates.forEach((profile, index) => {
+ const valued = candidates.map((profile, index) => {
   let best: { role: PricingRole; value: number } | null = null;
   for (const [role, runs] of seasonRuns[index]) {
    const value = runs - replacement[role]!;
    if (!best || value > best.value || (value === best.value && PRICING_ROLES.indexOf(role) < PRICING_ROLES.indexOf(best.role))) best = { role, value };
   }
-  const valueRuns = Math.round(best!.value * 10) / 10;
   const slot = roleSlot(best!.role);
   const cardWar = war(profile.seasonId);
+  return { profile, slot, cardWar, valueRuns: Math.round(best!.value * 10) / 10, publicWar: roleWar(slot, cardWar) };
+ });
+ const market = Object.fromEntries((['hitter', 'starter', 'closer'] as const).map(role => [role, marketLine(valued.flatMap(card =>
+  finishRole(card.slot) === role && card.publicWar !== null ? [{ war: card.publicWar, runs: card.valueRuns }] : []))])) as Record<FinishRole, MarketLine>;
+
+ const table: DraftCardTable = {
+  schemaVersion: 1, salaryVersion: SALARY_VERSION, provisional: true,
+  method: { ...SALARY_METHOD, hitterPlateAppearances, market, replacement },
+  seasonId: [], year: [], salary: [], finish: [], valueRuns: [], pricedSlot: []
+ };
+ for (const { profile, slot, cardWar, valueRuns, publicWar } of valued) {
+  const line = market[finishRole(slot)];
+  const expected = line.intercept + line.slope * (publicWar ?? 0);
   table.seasonId.push(profile.seasonId);
   table.year.push(profile.year);
   table.valueRuns.push(valueRuns);
   table.pricedSlot.push(slot);
-  table.salary.push(SALARY_METHOD.minSalary + Math.round(SALARY_METHOD.pricePerRun * Math.max(0, valueRuns)));
+  table.salary.push(SALARY_METHOD.minSalary + Math.round(SALARY_METHOD.pricePerRun * Math.max(0, expected)));
   table.finish.push(finishFor(finishRole(slot), cardWar?.battingWAR162, cardWar?.pitchingWAR162));
- });
+ }
  return table;
 }
 

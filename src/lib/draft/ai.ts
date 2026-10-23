@@ -172,17 +172,15 @@ export function chooseAiPick(scores: readonly PickScore[]): PickScore {
  return scores.reduce((best, score) => score.score > best.score || (score.score === best.score && compareId(score.cardId, best.cardId) < 0) ? score : best);
 }
 
-const runs = (value: number): string => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)} runs`;
-
-/** One line for the pick ticker that says why an AI club took a card, from the parts of its score. */
+/**
+ * One line for the pick ticker that says why an AI club took a card, from the parts of its score.
+ * It names reasons, never the modeled runs behind them, so the ticker does not leak card values.
+ */
 export function explainPick(score: Pick<PickScore, 'landing' | 'fills' | 'filled' | 'marginal' | 'park' | 'bias' | 'quirk' | 'scarcity' | 'capPenalty'>): string {
- const parts = [
-  score.landing === 'cut' ? 'no roster spot' : score.landing === 'reserve' ? 'reserve depth' : `${score.fills ? 'fills' : 'upgrades'} ${score.landing}`,
-  runs(score.marginal)
- ];
- if (Math.abs(score.park) >= 0.5) parts.push(`home park ${runs(score.park)}`);
- if (score.quirk) parts.push(`${BIAS_LABELS[score.quirk].toLowerCase()} ${runs(score.bias)}`);
+ const parts = [score.landing === 'cut' ? 'no roster spot' : score.landing === 'reserve' ? 'reserve depth' : `${score.fills ? 'fills' : 'upgrades'} ${score.landing}`];
+ if (Math.abs(score.park) >= 0.5) parts.push(score.park > 0 ? 'suits its home park' : 'despite its home park');
+ if (score.quirk) parts.push(BIAS_LABELS[score.quirk].toLowerCase());
  if (score.scarcity >= 0.5 && score.filled) parts.push(`few ${score.filled} options left`);
- if (score.capPenalty >= 0.5) parts.push(`over cap ${runs(-score.capPenalty)}`);
+ if (score.capPenalty >= 0.5) parts.push('over the cap');
  return parts.join(' · ');
 }

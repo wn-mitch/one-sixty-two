@@ -48,19 +48,23 @@ Nine-game and chapter boundaries coincide at games 27, 54, 81, 108 and 135. Comb
 
 ## Prices and market conditions
 
-Salary is currently `5 + 4 × modeled runs`, so the price shows the engine's valuation exactly and every card costs the same per run. With the cap binding for most clubs, any roster spent to the cap holds about the same modeled value, and drafting skill barely survives submission (see the [D02 evidence](phases/02-draft-table.md)).
+**Decided: salary is a public reputation price.** Each card is priced from its public WAR/162 on its role's market line (hitter, starter or closer): a least-squares fit of modeled runs on WAR over that role's cards, so a role is neither cheap nor expensive as a whole. A card without WAR prices at its role's zero-WAR level. Modeled runs stay off every player-facing surface, including AI pick explanations, which name the slot, park fit, bias, scarcity and cap pressure but no run figures. Finish never enters the price.
 
-**Proposed direction, not decided:** price from public reputation and keep modeled value off every player-facing surface, including AI pick explanations. Measured on data `1541f124a6ca`, fitting one market scale across all cards gives runs = 3.12 + 10.35 × WAR/162 (Pearson 0.824 over 42,802 cards with WAR). Among cards worth at least 10 modeled runs, a WAR price would misjudge them by:
+The gap between reputation and modeled value is the scouting game. Measured on data `1541f124a6ca`, among cards worth at least 10 modeled runs:
 
-| Role | Cards | Rank correlation | Role bias (runs) | Spread within role (sd, runs) | Off by more than 10 runs |
+| Role | Cards | Gap sd (runs) | Off by more than 10 runs | Gap explained by visible stats (cross-validated R²) | Off by more than 10 runs after reading the stats |
 |---|---|---|---|---|---|
-| Hitter | 15,055 | 0.696 | +4.2 | 13.4 | 43.5% |
-| Starter | 6,586 | 0.702 | +9.4 | 15.3 | 48.4% |
-| Closer | 1,572 | 0.581 | −10.2 | 7.0 | 11.8% |
+| Hitter | 15,055 | 11.5 | 35.6% | 0.57 | 17.0% |
+| Starter | 6,586 | 15.3 | 48.3% | 0.57 | 29.3% |
+| Closer | 1,572 | 2.1 | 0% | — | — |
 
-At 4 salary units per run, a 10-run gap is 40 units. Starters would be systematically cheap and closers expensive under a single WAR scale. Team-season bullpen cards have no WAR, but they leave the Draft pool with [named bullpens](../simulation/model.md#7-pitcher-calibration-workload-and-expectancy). Whether the gaps can be read from visible stats, rather than being engine quirks no player could anticipate, is not yet measured; a usable scouting game needs that.
+At 4 salary units per run, a 10-run gap is 40 units. More than half of the gap can be read from the stats printed on the card, so bargains reward reading rather than luck. One readable angle: WAR rewards innings, but the engine caps every starter's workload, so starters with 60–120 innings average 4.7 runs underpriced (a quarter of them by more than 20) and starters with 240 or more innings average 10.9 runs overpriced. Hitters show no playing-time skew, and closers price close to value.
 
-Further proposals: freeze the price sheet during the opening draft; reprice only new acquisitions at defined season boundaries, driven by legible market conditions (for example a premium on power hitting) rather than unexplained noise; never reprice a signed salary. Development creates surplus value from fixed salaries even when the starting price is accurate; reputation pricing adds a separate scouting opportunity. A hard cap remains the first-playable recommendation, with a table-scaled cap (a candidate of 85% of the table's average salary per club) to be tested after roster size and prices change.
+In a 120-table buyer comparison (any 18 of the 128 dealt cards under the table cap, positions ignored, no competition, so an upper bound), a buyer who sees modeled value assembles 546 runs, a buyer who reads visible stats 473, and a buyer who follows reputation 253. Different legal strategies stay competitive: spending on a few stars and filling with commons reaches 354, and refusing any card over 120 units reaches 496. Under the earlier runs-proportional price the same buyers were within 22 runs of each other.
+
+**Decided: a hard cap scaled to the table.** The cap is 85% of the dealt table's average salary per club. With reputation prices, `just draft-feasibility` (data `2ae60bb8a55e`) reports table caps of 1,276–1,711 units (median 1,491); every seat recovers to a legal roster.
+
+**Decided: the price sheet is frozen through the opening draft.** At chapter boundaries only unowned cards reprice, driven by a stated market condition (for example a premium on power hitting) shown before any acquisition decision. A signed salary never changes, including through development. Development creates surplus value from fixed salaries even when the starting price is accurate; reputation pricing adds a separate scouting opportunity.
 
 ## Injuries and risk choices
 

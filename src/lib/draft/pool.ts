@@ -33,14 +33,15 @@ export function pileHeldBy(seat: number, pick: number, seats = DRAFT_RULES.seats
 
 /**
  * The run's price sheet: each card's salary scaled by a seeded factor within ±`priceNoise`, never
- * below `minSalary`. A common stays within `commonSalaryMax`, so cleanup still guarantees a roster.
+ * below `minSalary`. Noise never changes whether a card is common: a common stays within
+ * `commonSalaryMax`, so cleanup still guarantees a roster, and any other card stays above it.
  */
 export function priceCards(seed: number, cards: readonly DraftCard[], rules: DraftRules = DRAFT_RULES): DraftCard[] {
  const random = randomStream(seed, 'draft:pool:price');
  return [...cards].sort((a, b) => compareId(a.seasonId, b.seasonId)).map(card => {
   const noisy = Math.max(rules.minSalary, Math.round(card.salary * (1 + rules.priceNoise * (2 * random() - 1))));
   const common = card.finish === 'base' && card.salary <= rules.commonSalaryMax;
-  return { ...card, salary: common ? Math.min(noisy, rules.commonSalaryMax) : noisy };
+  return { ...card, salary: common ? Math.min(noisy, rules.commonSalaryMax) : card.finish === 'base' ? Math.max(noisy, rules.commonSalaryMax + 1) : noisy };
  });
 }
 
