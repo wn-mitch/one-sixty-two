@@ -227,6 +227,10 @@ export class DraftModeSession {
  pick(cardId: string, slot: DraftSlot | null) { return this.act({ type: 'pick', cardId, slot }); }
  place(cardId: string, slot: DraftSlot | null) { return this.act({ type: 'place', cardId, slot }); }
  cut(cardId: string) { return this.act({ type: 'cut', cardId }); }
+ propose(seat: number, give: string[], get: string[]) { return this.act({ type: 'propose', seat, give, get }); }
+ respond(offer: number, accept: boolean) { return this.act({ type: 'respond', offer, accept }); }
+ claim(cardId: string, on: boolean) { return this.act({ type: 'claim', cardId, on }); }
+ closeWaivers() { return this.act({ type: 'waivers' }); }
  cleanup(role: StackRole) { return this.act({ type: 'cleanup', role }); }
  autofix() { return this.act({ type: 'autofix' }); }
  order(orders: WindowOrders) { return this.act({ type: 'order', orders }); }

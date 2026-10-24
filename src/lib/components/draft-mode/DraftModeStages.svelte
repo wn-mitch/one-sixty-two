@@ -16,6 +16,7 @@
  import { dealtProfile, pileBoardSource } from '#lib/draft/board-source.ts';
  import { effectiveCap } from '#lib/draft/rules.ts';
  import { heldPile, ownedBy, windowLineup, type WindowOrders } from '#lib/draft/run.ts';
+ import { waiverCards } from '#lib/draft/market.ts';
  import { BENCH, placeFromKey, seasonForm, seasonLineupView, windowBlockers, windowLineupView } from '#lib/draft/lineup-view.ts';
  import { clubSchedule, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
  import type { DraftSlot } from '#lib/draft/types.ts';
@@ -60,7 +61,7 @@
   if (!run) return [];
   const ids = run.seating.seats.flatMap((_, seat) => ownedBy(run, seat).map(card => card.seasonId));
   if (run.phase === 'drafting') ids.push(...heldPile(run).map(card => card.seasonId));
-  if (run.phase === 'window') ids.push(...STACK_ROLES.flatMap(role => run.pool.cleanup.peek(run.seating.humanSeat, role)?.seasonId ?? []));
+  if (run.phase === 'window') ids.push(...STACK_ROLES.flatMap(role => run.pool.cleanup.peek(run.seating.humanSeat, role)?.seasonId ?? []), ...waiverCards(run));
   return ids.filter(id => !profiles.has(id));
  });
  $effect(() => {
@@ -83,7 +84,7 @@
   void session.revision;
   const run = session.run;
   if (!run || !session.manifest) return null;
-  if (session.screen === 'window') return { kind: 'window' as const, run, view: windowLineupView(run, profiles), blockers: windowBlockers(run, profiles) };
+  if (session.screen === 'window') return { kind: 'window' as const, run, step: run.market?.step ?? 'cleanup', view: windowLineupView(run, profiles), blockers: windowBlockers(run, profiles) };
   const season = session.season;
   if (session.screen !== 'season' || !season) return null;
   const totals = seasonLines(season, run.seating.humanSeat);
@@ -175,26 +176,32 @@
   {@const current = stop}
   <Lineup
    lineup={current.view} manifest={session.manifest} profiles={dealt} {rankings} rankingLoading={!rankings} rankingError={false}
-   busy={session.busy || working} title="Opening window" action={{ label: 'Submit roster', busyLabel: 'Submitting…' }} exit={false}
+   busy={session.busy || working} title="Opening window" exit={false}
+   action={current.step === 'market' ? { label: 'Close waivers', busyLabel: 'Closing waivers…', always: true } : { label: 'Submit roster', busyLabel: 'Submitting…' }}
    onMove={(id, key) => void step(session.place(id, key === BENCH ? null : key as DraftSlot))}
    onOrder={(kind, order) => void refusal(session.order(windowOrders(kind === 'batting' ? { battingOrder: order } : { starterOrder: order })))}
    onRoles={roles => void refusal(session.order(windowOrders({ reliefRoles: roles as ReliefAssignment<DraftBullpenSlot>[] })))}
-   onsimulate={submitWindow}
+   onsimulate={() => current.step === 'market' ? void step(session.closeWaivers()) : submitWindow()}
   >
    {#snippet intro()}
     <WindowPanel run={current.run} revision={session.revision} {profiles} manifest={session.manifest} {media} {mediaStatus} {rankings} {clubName} {working}
-     onCleanup={role => void step(session.cleanup(role))} onAutofix={() => void step(session.autofix())} />
+     onCleanup={role => void step(session.cleanup(role))} onAutofix={() => void step(session.autofix())}
+     onPropose={async (seat, give, get) => { working = true; try { const message = await session.propose(seat, give, get); if (message) toasts.show(message, { tone: 'error' }); return !message; } finally { working = false; } }}
+     onRespond={(offer, accept) => void step(session.respond(offer, accept))}
+     onClaim={(cardId, on) => void step(session.claim(cardId, on))} />
    {/snippet}
    {#snippet status()}
     <div class="checklist" aria-live="polite">
-     {#if current.blockers.length}
+     {#if current.step === 'market'}
+     <p class="label">Waivers open</p><p>Commons and Submit open once waivers close.</p>
+    {:else if current.blockers.length}
       <p class="label">Before you submit</p>
       <ul>{#each current.blockers as blocker (blocker)}<li>{blocker}</li>{/each}</ul>
      {:else}<p class="ready">Roster is legal.</p>{/if}
     </div>
    {/snippet}
    {#snippet rowControl(seasonId: string)}
-    <button type="button" class="quiet cut row-control" disabled={working} aria-label={`Cut ${profiles.get(seasonId)?.displayName ?? seasonId}`} onclick={() => void step(session.cut(seasonId))}>Cut</button>
+    <button type="button" class="quiet cut row-control" disabled={working} aria-label={`Cut ${profiles.get(seasonId)?.displayName ?? seasonId}`} title={current.step === 'market' ? 'Goes on waivers until they close' : 'Leaves for good'} onclick={() => void step(session.cut(seasonId))}>Cut</button>
    {/snippet}
   </Lineup>
  {:else if stop?.kind === 'season' && session.manifest}

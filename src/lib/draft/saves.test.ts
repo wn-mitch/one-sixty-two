@@ -92,6 +92,7 @@ describe('draft run saves', () => {
   const { db } = await memoryDb();
   const run = startRun(setup, DATA);
   playDraft(run, best);
+  applyAction(run, { type: 'waivers' });
   applyAction(run, { type: 'autofix' });
   applyAction(run, submitAction(run));
   const season = startLeague(run);

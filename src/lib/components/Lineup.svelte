@@ -30,7 +30,8 @@
   busy: boolean;
   title?: string;
   /** The footer button, which starts the season or submits the roster. */
-  action?: { label: string; busyLabel: string };
+  /** The footer action; `always` enables it before the lineup is complete, for a step that does not play games. */
+  action?: { label: string; busyLabel: string; always?: boolean };
   /** Rows drop away before `onsimulate`, for a screen that hands off to the season broadcast. */
   exit?: boolean;
   /** Mode-specific panels between the heading and the lists. */
@@ -439,8 +440,8 @@
  {/if}
  <footer class="simulate">
   {@render status?.()}
-  <button type="button" class="primary" disabled={busy || !complete} onclick={() => void simulate()}>{busy ? action.busyLabel : action.label}</button>
-  {#if !status && !complete && !busy}<p class="notice">{lineup.incomplete}</p>{/if}
+  <button type="button" class="primary" disabled={busy || (!complete && !action.always)} onclick={() => void simulate()}>{busy ? action.busyLabel : action.label}</button>
+  {#if !status && !complete && !busy && !action.always}<p class="notice">{lineup.incomplete}</p>{/if}
  </footer>
 </section>
 

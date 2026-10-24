@@ -97,6 +97,17 @@ function rosterOutlook(owned: readonly DraftCard[], judge: (card: DraftCard) => 
  return { value, park, payroll, open: arrangement.open.length, openActive: arrangement.open.filter(row => row !== null), landing: id => slotOf.get(id) ?? 'cut' };
 }
 
+/**
+ * What a club believes a roster is worth: its judged home runs less the runs it gives up for projected
+ * payroll over the cap once open rows are filled with commons, at `thrift`. AI clubs weigh trades and
+ * waiver claims by the change this makes.
+ */
+export function clubWorth(owned: readonly DraftCard[], judge: (card: DraftCard) => Judgment, parkFit: (seasonId: string) => number, budget: PayrollBudget, thrift: number, rules: DraftRules = DRAFT_RULES): number {
+ const outlook = rosterOutlook(owned, judge, parkFit, rules);
+ const projected = outlook.payroll + outlook.open * rules.commonSalaryMax;
+ return outlook.value - Math.max(0, projected - effectiveCap(budget)) / SALARY_PER_RUN * thrift;
+}
+
 /** The runs a roster fields at home as `judge` values it: the measure AI clubs maximize, and with `trueJudgment` the true one. */
 export function rosterValue(owned: readonly DraftCard[], judge: (card: DraftCard) => Judgment, parkFit: (seasonId: string) => number, rules: DraftRules = DRAFT_RULES): number {
  return rosterOutlook(owned, judge, parkFit, rules).value;

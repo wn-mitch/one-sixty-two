@@ -45,6 +45,10 @@ const isAction = (value: unknown): value is RunAction => {
  switch (action.type) {
   case 'pick': case 'place': return typeof action.cardId === 'string' && (action.slot === null || (DRAFT_SLOTS as readonly unknown[]).includes(action.slot));
   case 'cut': return typeof action.cardId === 'string';
+  case 'propose': return Number.isInteger(action.seat) && Array.isArray(action.give) && Array.isArray(action.get);
+  case 'respond': return Number.isInteger(action.offer) && typeof action.accept === 'boolean';
+  case 'claim': return typeof action.cardId === 'string' && typeof action.on === 'boolean';
+  case 'waivers': return true;
   case 'cleanup': return (STACK_ROLES as readonly unknown[]).includes(action.role);
   case 'autofix': return true;
   case 'order': return isOrders(action.orders);

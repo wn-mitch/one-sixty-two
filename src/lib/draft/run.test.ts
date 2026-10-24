@@ -108,7 +108,9 @@ describe('draft run', () => {
   expect(run.phase).toBe('window');
   expect(run.ticker).toHaveLength(128);
   expect(run.piles.every(pile => pile.length === 0)).toBe(true);
-  // AI clubs recover to a legal 20-card roster as the window opens; the player still holds the 16 drafted.
+  // AI clubs submit once waivers close, recovered to a legal 20-card roster; the player still holds the 16 drafted.
+  expect(run.submissions.every(submission => submission === null)).toBe(true);
+  applyAction(run, { type: 'waivers' });
   for (let seat = 0; seat < 8; seat++) expect(ownedBy(run, seat)).toHaveLength(seat === run.seating.humanSeat ? 16 : rosterSize(DRAFT_RULES));
   for (let seat = 0; seat < 8; seat++) {
    const submission = run.submissions[seat];
@@ -179,8 +181,12 @@ describe('draft run', () => {
   expect(submit).toThrow(RunActionError);
   expect(run.phase).toBe('window');
   const dropped = ownedBy(run, human)[0].seasonId;
+  // Commons wait until waivers close; a cut before then goes on waivers.
+  expect(() => applyAction(run, { type: 'cleanup', role: 'C' })).toThrow('Close waivers');
   applyAction(run, { type: 'cut', cardId: dropped });
-  expect(run.pool.ledger.instances.get(dropped)!.owner).toEqual({ kind: 'unowned' });
+  expect(run.pool.ledger.instances.get(dropped)!.owner).toEqual({ kind: 'released' });
+  applyAction(run, { type: 'waivers' });
+  expect(run.pool.ledger.instances.get(dropped)!.owner.kind).not.toBe('released');
   expect(() => applyAction(run, { type: 'cut', cardId: dropped })).toThrow(RunActionError);
   const top = run.pool.cleanup.peek(human, 'C')!;
   applyAction(run, { type: 'cleanup', role: 'C' });
@@ -204,6 +210,7 @@ describe('draft run', () => {
   const run = startRun(setup, DATA);
   playDraft(run);
   const human = run.seating.humanSeat;
+  applyAction(run, { type: 'waivers' });
   applyAction(run, { type: 'autofix' });
   const lineup = windowLineup(run);
   expect(lineup.battingOrder).toHaveLength(9);
@@ -278,6 +285,7 @@ describe('draft run', () => {
   applyAction(run, { type: 'cut', cardId: cut });
   expect(placementOf(run, cut)).toBeNull();
   expect(run.bench).not.toContain(cut);
+  applyAction(run, { type: 'waivers' });
   applyAction(run, { type: 'autofix' });
   expect([...run.field.values(), ...run.bench].sort()).toEqual(ownedBy(run, human).map(card => card.seasonId).sort());
   expect(run.field.size).toBe(DRAFT_RULES.activeSlots.length);

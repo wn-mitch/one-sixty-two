@@ -6,6 +6,7 @@ import { STACK_ROLES, type StackRole } from './cleanup.ts';
 import { checkSubmission } from './legality.ts';
 import { checkLineup, LineupError, type ClubLineup } from './league.ts';
 import { recoverSeat } from './recovery.ts';
+import { closeWaivers, MarketError, openMarket, propose, release, respond, setClaim, type Market, type Seating } from './market.ts';
 import { buildRunPool, pileHeldBy, type RunPool } from './pool.ts';
 import { baselineBudget, canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, DRAFT_RULES, picksPerSeat, rosterSize, type DraftBullpenSlot } from './rules.ts';
 import { randomStream } from '../game/random.ts';
@@ -36,14 +37,20 @@ export interface RunData {
 /**
  * One player decision. Runs are rebuilt by replaying these against the setup. A pick drafts from
  * the held pile into an open slot or onto the bench (`slot: null`), and a place moves an owned card
- * on the field; in the opening window a cut releases an owned card, a cleanup takes the top card of
- * one of the player's stacks, auto-fix applies the AI clubs' recovery to the player's roster, an
- * order sets the batting order, rotation and relief roles, and a submit fixes the opening lineup.
+ * on the field. In the opening window's market step a propose offers an AI club a trade, a respond
+ * answers an AI club's offer, a cut releases a card to waivers, a claim marks or unmarks a waiver card
+ * and waivers closes them; in its cleanup step a cut releases a card for good, a cleanup takes the top
+ * card of one of the player's stacks and auto-fix applies the AI clubs' recovery to the player's roster.
+ * An order sets the batting order, rotation and relief roles, and a submit fixes the opening lineup.
  */
 export type RunAction =
  | { type: 'pick'; cardId: string; slot: DraftSlot | null }
  | { type: 'place'; cardId: string; slot: DraftSlot | null }
  | { type: 'cut'; cardId: string }
+ | { type: 'propose'; seat: number; give: string[]; get: string[] }
+ | { type: 'respond'; offer: number; accept: boolean }
+ | { type: 'claim'; cardId: string; on: boolean }
+ | { type: 'waivers' }
  | { type: 'cleanup'; role: StackRole }
  | { type: 'autofix' }
  | { type: 'order'; orders: WindowOrders }
@@ -95,6 +102,8 @@ export interface DraftRun {
  orders: WindowOrders;
  /** The player's opening lineup once submitted. */
  lineup: ClubLineup | null;
+ /** The opening window's trades and waivers; null while drafting. */
+ market: Market | null;
  pick: number;
  phase: RunPhase;
  readonly aiRandoms: (() => number)[];
@@ -134,7 +143,7 @@ export function startRun(setup: RunSetup, data: RunData): DraftRun {
   budgets: seating.seats.map(() => baselineBudget(pool.tableCap)),
   piles: pool.packs.map(packs => packs.flat()),
   ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), submissions: seating.seats.map(() => null),
-  field: new Map(), bench: [], pick: 0, phase: 'drafting',
+  field: new Map(), bench: [], pick: 0, phase: 'drafting', market: null,
   orders: { battingOrder: [], starterOrder: [], reliefRoles: DEFAULT_DRAFT_RELIEF_ROLES.map(role => ({ ...role })) }, lineup: null,
   aiRandoms: seating.seats.map((_, seat) => randomStream(setup.seed, `draft:ai:seat:${seat}`))
  };
@@ -173,9 +182,9 @@ export function seatView(run: DraftRun, seat: number): SeatView {
 
 /**
  * Applies one player action. A pick takes the card from the player's held pile; every AI seat
- * then picks from the pile it holds, and the piles pass left. When the last pick is made the AI
- * clubs recover their opening rosters and the window opens. Invalid actions throw
- * `RunActionError` before anything changes.
+ * then picks from the pile it holds, and the piles pass left. When the last pick is made the
+ * window opens on its market (see `openMarket`). Invalid actions throw `RunActionError` before
+ * anything changes.
  */
 export function applyAction(run: DraftRun, action: RunAction): void {
  if (action.type === 'pick') applyPick(run, action.cardId, action.slot);
@@ -255,22 +264,40 @@ function applyPick(run: DraftRun, cardId: string, slot: DraftSlot | null): void 
  if (run.pick === picksPerSeat(run.pool.rules)) {
   if (run.piles.some(pile => pile.length)) throw new Error('The draft left undrafted cards');
   run.phase = 'window';
-  for (let seat = 0; seat < run.seating.seats.length; seat++) {
-   if (seat === human) continue;
-   const recovered = recoverSeat(run.pool, run.budgets[seat], seat);
-   if (recovered.failures.length) throw new Error(`Seat ${seat} cannot reach a legal opening roster`);
-   run.submissions[seat] = recovered.submission;
-  }
+  openMarket(run);
  }
 }
+
+/** The player's side of a trade or claim: arriving cards take an open slot they fit, or the bench. */
+const seating = (run: DraftRun): Seating => ({
+ arrive: id => seatCard(run, id, openSlotsFor(run, id)[0] ?? null),
+ leave: id => unseatCard(run, id)
+});
+
+const MARKET_ACTIONS = new Set(['propose', 'respond', 'claim', 'waivers']);
+const CLEANUP_ACTIONS = new Set(['cleanup', 'autofix', 'submit']);
 
 function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pick' | 'place' }>): void {
  const human = run.seating.humanSeat;
  const seat = { kind: 'roster', seat: human } as const;
  const owned = ownedBy(run, human);
+ const market = run.market!;
+ if (MARKET_ACTIONS.has(action.type) && market.step !== 'market') throw new RunActionError('Waivers have closed; trades reopen at the next chapter');
+ if (CLEANUP_ACTIONS.has(action.type) && market.step !== 'cleanup') throw new RunActionError('Close waivers before taking commons or submitting');
+ try {
+  if (action.type === 'propose') { propose(run, action.seat, action.give, action.get, seating(run)); return; }
+  if (action.type === 'respond') { respond(run, action.offer, action.accept, seating(run)); return; }
+  if (action.type === 'claim') { setClaim(run, action.cardId, action.on); return; }
+  if (action.type === 'waivers') { closeWaivers(run, seating(run)); return; }
+ } catch (error) {
+  if (error instanceof MarketError) throw new RunActionError(error.message);
+  throw error;
+ }
  if (action.type === 'cut') {
   if (!owned.some(item => item.seasonId === action.cardId)) throw new RunActionError(`${action.cardId} is not on your roster`);
-  transfer(run.pool.ledger, action.cardId, seat, UNOWNED, 'cut');
+  // Cards cut before waivers close go on waivers; afterwards they leave for good.
+  if (market.step === 'market') release(run, human, action.cardId);
+  else transfer(run.pool.ledger, action.cardId, seat, UNOWNED, 'cut');
   unseatCard(run, action.cardId);
  } else if (action.type === 'cleanup') {
   if (!STACK_ROLES.includes(action.role)) throw new RunActionError(`Unknown cleanup stack ${String(action.role)}`);

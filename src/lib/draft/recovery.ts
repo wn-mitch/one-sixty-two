@@ -4,7 +4,7 @@ import { rolesFor } from './cleanup.ts';
 import { arrangeRoster, checkSubmission, rosterRows, sortFailures, type RosterRow } from './legality.ts';
 import type { RunPool } from './pool.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
-import type { DraftCard, LegalityFailure, LegalityReport, Owner, PayrollBudget, Submission } from './types.ts';
+import type { DraftCard, LedgerOp, LegalityFailure, LegalityReport, Owner, PayrollBudget, Submission } from './types.ts';
 
 export interface SeatRecovery {
  seat: number;
@@ -47,6 +47,38 @@ export function recoverOpeningRosters(pool: RunPool, budgets: readonly PayrollBu
 
 export interface SeatRecoveryResult { recovery: SeatRecovery; submission: Submission; failures: LegalityFailure[] }
 
+/**
+ * Cuts what a seat cannot keep: cards with no roster position, then the most overpriced card until the
+ * open rows can be filled with commons under the cap. Cut cards move to `to`, the unowned universe at
+ * recovery or the waiver pool when the opening window opens. Returns the cuts in order.
+ */
+export function trimSeat(pool: RunPool, budget: PayrollBudget, seat: number, to: Owner = UNOWNED, op: LedgerOp = 'cut'): SeatRecovery['cuts'] {
+ const { ledger, rules } = pool;
+ const card = (id: string): DraftCard => ledger.cards.get(id)!;
+ const salary = (id: string): number => ledger.instances.get(id)!.startingSalary;
+ const rows = rosterRows(rules);
+ const cuts: SeatRecovery['cuts'] = [];
+ if (validateBudget(budget, rules).length) return cuts;
+ const cap = effectiveCap(budget);
+ const arrangement = arrangeRoster(heldBy(ledger, roster(seat)).map(card), rules);
+ for (const cardId of arrangement.surplus) {
+  transfer(ledger, cardId, roster(seat), to, op);
+  cuts.push({ cardId, reason: 'surplus' });
+ }
+ const placed: (string | null)[] = rows.map(row => row === null ? null : arrangement.active[row] ?? null);
+ arrangement.reserves.forEach((cardId, index) => { placed[rules.activeSlots.length + index] = cardId; });
+ const keptPayroll = (): number => placed.reduce((sum, id) => sum + (id ? salary(id) : 0), 0);
+ const openRows = (): number => placed.filter(id => id === null).length;
+ while (keptPayroll() + openRows() * rules.commonSalaryMax > cap && openRows() < rows.length) {
+  const cutFirst = (a: string, b: string): number => salary(b) - salary(a) || card(a).valueRuns - card(b).valueRuns || compareId(a, b);
+  const worst = placed.reduce((best, id, index) => id && (best < 0 || cutFirst(id, placed[best]!) < 0) ? index : best, -1);
+  transfer(ledger, placed[worst]!, roster(seat), to, op);
+  cuts.push({ cardId: placed[worst]!, reason: 'over-cap' });
+  placed[worst] = null;
+ }
+ return cuts;
+}
+
 /** Recovers one seat's roster from whatever it holds now; see `recoverOpeningRosters`. */
 export function recoverSeat(pool: RunPool, budget: PayrollBudget, seat: number): SeatRecoveryResult {
  const { ledger, rules, cleanup } = pool;
@@ -56,31 +88,16 @@ export function recoverSeat(pool: RunPool, budget: PayrollBudget, seat: number):
  const failures: LegalityFailure[] = [];
  const cap = effectiveCap(budget);
  const owned = heldBy(ledger, roster(seat)).map(card);
- const arrangement = arrangeRoster(owned, rules);
- const payroll = owned.reduce((sum, item) => sum + salary(item.seasonId), 0);
+ const before = arrangeRoster(owned, rules);
  const recovery: SeatRecovery = {
   seat, effectiveCap: cap,
-  postDraft: { cards: owned.length, payroll, overCap: payroll > cap, missing: arrangement.open.filter(row => row !== null), surplus: arrangement.surplus.length },
-  cuts: [], cleanup: [], report: null
+  postDraft: { cards: owned.length, payroll: owned.reduce((sum, item) => sum + salary(item.seasonId), 0), overCap: owned.reduce((sum, item) => sum + salary(item.seasonId), 0) > cap, missing: before.open.filter(row => row !== null), surplus: before.surplus.length },
+  cuts: trimSeat(pool, budget, seat), cleanup: [], report: null
  };
  const budgetFailures = validateBudget(budget, rules);
-
- for (const cardId of arrangement.surplus) {
-  transfer(ledger, cardId, roster(seat), UNOWNED, 'cut');
-  recovery.cuts.push({ cardId, reason: 'surplus' });
- }
+ const arrangement = arrangeRoster(heldBy(ledger, roster(seat)).map(card), rules);
  const placed: (string | null)[] = rows.map(row => row === null ? null : arrangement.active[row] ?? null);
  arrangement.reserves.forEach((cardId, index) => { placed[rules.activeSlots.length + index] = cardId; });
- // Cut the most overpriced card until the open rows can be filled with commons under the cap.
- const keptPayroll = (): number => placed.reduce((sum, id) => sum + (id ? salary(id) : 0), 0);
- const openRows = (): number => placed.filter(id => id === null).length;
- while (!budgetFailures.length && keptPayroll() + openRows() * rules.commonSalaryMax > cap && openRows() < rows.length) {
-  const cutFirst = (a: string, b: string): number => salary(b) - salary(a) || card(a).valueRuns - card(b).valueRuns || compareId(a, b);
-  const worst = placed.reduce((best, id, index) => id && (best < 0 || cutFirst(id, placed[best]!) < 0) ? index : best, -1);
-  transfer(ledger, placed[worst]!, roster(seat), UNOWNED, 'cut');
-  recovery.cuts.push({ cardId: placed[worst]!, reason: 'over-cap' });
-  placed[worst] = null;
- }
 
  const shortfalls: LegalityFailure[] = [];
  if (!budgetFailures.length) {

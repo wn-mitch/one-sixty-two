@@ -49,9 +49,32 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  }
  for (let picked = 1; picked < 16; picked++) await draftFirstCard(page, picked);
  await expect(page.getByRole('heading', { name: 'Opening window' })).toBeVisible();
- // Sixteen picks leave four open places, so the roster is not yet legal.
- await expect(page.getByRole('button', { name: 'Submit roster' })).toBeDisabled();
  await expect(page.getByText(/16 of 20 cards/)).toBeVisible();
+ // The window opens on trades and waivers; commons wait until waivers close.
+ await expect(page.getByRole('button', { name: 'Auto-fix' })).toHaveCount(0);
+ const desk = page.getByRole('region', { name: 'Trades' });
+ await desk.getByRole('group', { name: 'Propose a trade to' }).getByRole('button').first().click();
+ await desk.locator('fieldset').first().getByRole('checkbox').first().check();
+ await desk.locator('fieldset').nth(1).getByRole('checkbox').last().check();
+ await desk.getByRole('button', { name: 'Send offer' }).click();
+ // The club answers at once, and the answer survives a reload.
+ const answer = desk.getByRole('list', { name: 'Your offers' }).locator('li').first();
+ await expect(answer).toContainText(/^(Accepted|Turned down|Countered) /);
+ const answered = await answer.textContent();
+ const wire = page.getByRole('region', { name: 'Waivers' });
+ const claim = wire.getByRole('button', { name: /^Claim / }).and(page.locator(':enabled')).first();
+ const claimed = await claim.count() ? await claim.getAttribute('aria-label') : null;
+ if (claimed) {
+  await claim.click();
+  await expect(wire.getByRole('button', { name: claimed.replace(/^Claim/, 'Unclaim') })).toHaveAttribute('aria-pressed', 'true');
+ }
+ await page.reload();
+ await expect(desk.getByRole('list', { name: 'Your offers' }).locator('li').first()).toHaveText(answered!, { timeout: 60_000 });
+ if (claimed) await expect(wire.getByRole('button', { name: claimed.replace(/^Claim/, 'Unclaim') })).toHaveAttribute('aria-pressed', 'true');
+ // The market fits the phone width.
+ expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+ await page.getByRole('button', { name: 'Close waivers' }).click();
+ await expect(page.getByRole('region', { name: 'Trades' })).toHaveCount(0);
  await page.getByRole('button', { name: 'Auto-fix' }).click();
  await expect(page.getByText('Roster is legal.')).toBeVisible();
  // The window's batting order survives a reload and opens the season.

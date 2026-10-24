@@ -18,6 +18,7 @@ const DATA: RunData = { cards: testUniverse(120), franchiseIds: FRANCHISES, park
 function submittedRun(seed: number, franchiseId: string): DraftRun {
  const run = startRun(newRunSetup(seed, franchiseId, 'test-data'), DATA);
  playDraft(run);
+ applyAction(run, { type: 'waivers' });
  applyAction(run, { type: 'autofix' });
  applyAction(run, submitAction(run));
  return run;

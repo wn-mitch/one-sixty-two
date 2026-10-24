@@ -1,5 +1,7 @@
 <script lang="ts">
  import CapBar from './CapBar.svelte';
+ import TradeDesk from './TradeDesk.svelte';
+ import WaiverWire from './WaiverWire.svelte';
  import DraftCardTile from './DraftCardTile.svelte';
  import type { CardMediaStatus } from '../../cards/view-model.ts';
  import { STACK_ROLES, type StackRole } from '../../draft/cleanup.ts';
@@ -11,13 +13,20 @@
  import type { WarRankings } from '../../rankings/types.ts';
  import { money } from './format.ts';
 
- /** The opening window above the lineup: payroll against the cap, the cleanup stacks, and Auto-fix. */
- let { run, revision, profiles, manifest, media, mediaStatus, rankings, clubName, working, onCleanup, onAutofix }: {
+ /**
+  * The opening window above the lineup: payroll against the cap, then trades and waivers until waivers
+  * close, then the cleanup stacks and Auto-fix.
+  */
+ let { run, revision, profiles, manifest, media, mediaStatus, rankings, clubName, working, onCleanup, onAutofix, onPropose, onRespond, onClaim }: {
   run: DraftRun; revision: number; profiles: ReadonlyMap<string, Profile>; manifest: Manifest | null;
   media: MediaManifest | null; mediaStatus: CardMediaStatus; rankings: WarRankings | null;
   clubName: (seat: number) => string; working: boolean;
   onCleanup: (role: StackRole) => void; onAutofix: () => void;
+  onPropose: (seat: number, give: string[], get: string[]) => Promise<boolean>;
+  onRespond: (offer: number, accept: boolean) => void;
+  onClaim: (cardId: string, on: boolean) => void;
  } = $props();
+ const step = $derived.by(() => { void revision; return run.market?.step ?? 'cleanup'; });
  const human = $derived(run.seating.humanSeat);
  const owned = $derived.by(() => { void revision; return ownedBy(run, human); });
  const payroll = $derived(owned.reduce((sum, card) => sum + card.salary, 0));
@@ -29,10 +38,14 @@
 
 <div class="window-panel">
  <div class="status">
-  <p>{clubName(human)} · {owned.length} of {size} cards · place, cut and take cleanup commons, then submit a legal roster</p>
+  <p>{clubName(human)} · {owned.length} of {size} cards · {step === 'market' ? 'trade, and cut to waivers or claim from them, then close waivers' : 'place, cut and take cleanup commons, then submit a legal roster'}</p>
   <CapBar {payroll} cap={effectiveCap(run.budgets[human])} />
-  <button type="button" class="secondary" disabled={working} onclick={onAutofix}>Auto-fix</button>
+  {#if step === 'cleanup'}<button type="button" class="secondary" disabled={working} onclick={onAutofix}>Auto-fix</button>{/if}
  </div>
+ {#if step === 'market'}
+ <TradeDesk {run} {revision} {profiles} {clubName} {working} {onPropose} {onRespond} />
+ <WaiverWire {run} {revision} {profiles} {clubName} {working} {onClaim} />
+ {:else}
  <section aria-labelledby="cleanup-heading">
   <h3 id="cleanup-heading">Cleanup commons</h3>
   <p class="note">Each stack shows its top card. Commons cost at most {money(run.pool.rules.commonSalaryMax)}.{#if full}{' '}Your roster is full; cut a card to take another.{/if}</p>
@@ -50,6 +63,7 @@
    {/each}
   </div>
  </section>
+ {/if}
 </div>
 
 <style>
