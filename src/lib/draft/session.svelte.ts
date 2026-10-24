@@ -1,13 +1,13 @@
 import { loadManifest, loadSimulation } from '../game/data.ts';
 import type { Manifest, Profile, SimulationData } from '../game/types.ts';
-import { CHAPTER_MATCHDAYS, LEAGUE_CHAPTERS, type Fixture, type LeagueChapterResult, type LeagueWorkerResponse } from '../sim/league-types.ts';
+import { LEAGUE_SEGMENTS, SEGMENT_MATCHDAYS, type Fixture, type LeagueSegmentResult, type LeagueWorkerResponse } from '../sim/league-types.ts';
 import { appSettings, PLAYBACK_DURATION_MS } from '../game/settings.svelte.ts';
 import { deviceDb } from '../storage/db.ts';
 import type { Db } from '../storage/sql.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import type { StackRole } from './cleanup.ts';
 import { seatTable } from './franchises.ts';
-import { chapterInput, LEAGUE_VERSION, LineupError, recordChapter, setLineup, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
+import { LEAGUE_VERSION, LineupError, recordSegment, segmentInput, setLineup, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
 import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
 import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
@@ -36,15 +36,15 @@ export class DraftModeSession {
  confirmNew = $state(false);
  playing = $state(false);
  completed = $state(0);
- lastChapter = $state.raw<LeagueChapterResult | null>(null);
- /** The season's fixtures, known once a chapter has been played in this tab. */
+ lastSegment = $state.raw<LeagueSegmentResult | null>(null);
+ /** The season's fixtures, known once a segment has been played in this tab. */
  schedule = $state.raw<Fixture[][] | null>(null);
  /** The player's games revealed so far, counted from the first game of the season. */
  revealed = $state(0);
- /** A played chapter's games are being revealed before the next stop. */
+ /** A played segment's games are being revealed before the next stop. */
  revealing = $state(false);
  #revealTimer: number | undefined;
- /** Skip was pressed while the chapter simulated, so its games appear at once. */
+ /** Skip was pressed while the segment simulated, so its games appear at once. */
  #skipReveal = false;
  profiles: ProfileStore | null = null;
  #cards: DraftCard[] = [];
@@ -62,18 +62,18 @@ export class DraftModeSession {
   if (run.phase === 'drafting') return 'drafting';
   if (run.phase === 'window') return 'window';
   if (this.playing || this.revealing) return 'playing';
-  return (this.season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? 'report' : 'season';
+  return (this.season?.segments.length ?? 0) >= LEAGUE_SEGMENTS ? 'report' : 'season';
  }
 
  /** The game shell's name for a failure, shown in its error dialog. */
  get error(): string { return this.failure; }
  set error(message: string) { this.failure = message; }
- /** A failed chapter can be played again; a failed load needs a reload. */
+ /** A failed segment can be played again; a failed load needs a reload. */
  get canRetry(): boolean { return !!this.failure && !!this.season; }
 
  async retry(): Promise<void> {
   this.failure = '';
-  await this.playChapter();
+  await this.playSegment();
  }
 
  /** New draft from the site menu: an unfinished run asks first, a finished report starts over at once. */
@@ -176,7 +176,7 @@ export class DraftModeSession {
    this.#runId = crypto.randomUUID();
    this.run = run;
    this.season = null;
-   this.lastChapter = null;
+   this.lastSegment = null;
    this.schedule = null;
    this.refused = '';
    this.revision++;
@@ -189,7 +189,7 @@ export class DraftModeSession {
   this.#stopWorker();
   this.#stopReveal();
   // A failed final history write must remain recoverable before leaving the report.
-  if ((this.season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS && !await this.#save()) return;
+  if ((this.season?.segments.length ?? 0) >= LEAGUE_SEGMENTS && !await this.#save()) return;
   if (this.#db && this.#runId) {
    try {
     const saved = await getRun(this.#db, this.#runId);
@@ -202,7 +202,7 @@ export class DraftModeSession {
   this.#runId = null;
   this.run = null;
   this.season = null;
-  this.lastChapter = null;
+  this.lastSegment = null;
   this.schedule = null;
   this.revision++;
  }
@@ -236,7 +236,7 @@ export class DraftModeSession {
  order(orders: WindowOrders) { return this.act({ type: 'order', orders }); }
  submit(lineup: ClubLineup) { return this.act({ type: 'submit', lineup }); }
 
- /** Sets the player's lineup for the next chapter; returns the refusal message, or null. */
+ /** Sets the player's lineup for the next segment; returns the refusal message, or null. */
  async lineup(lineup: ClubLineup): Promise<string | null> {
   if (!this.run || !this.season) return 'The season has not started';
   try { setLineup(this.run, this.season, lineup); }
@@ -246,15 +246,15 @@ export class DraftModeSession {
   return null;
  }
 
- /** Plays the next chapter in a worker; resolves once it is recorded or fails. */
- async playChapter(): Promise<void> {
+ /** Plays the next nine-game segment in a worker; resolves once it is recorded or fails. */
+ async playSegment(): Promise<void> {
   const run = this.run;
   const season = this.season;
   const manifest = this.manifest;
   if (!run || !season || !manifest || this.playing || !this.profiles) return;
   this.playing = true;
   this.completed = 0;
-  this.revealed = season.chapters.length * CHAPTER_MATCHDAYS;
+  this.revealed = season.segments.length * SEGMENT_MATCHDAYS;
   this.#skipReveal = false;
   this.failure = '';
   try {
@@ -262,26 +262,26 @@ export class DraftModeSession {
    const active = season.lineups.flatMap(lineup => Object.values(lineup.active));
    const profiles: Map<string, Profile> = await this.profiles.load(active);
    const names = run.seating.seats.map((_, seat) => this.clubName(seat));
-   const input = chapterInput(run, season, profiles, this.#simulation, names);
+   const input = segmentInput(run, season, profiles, this.#simulation, names);
    const { result, schedule } = await this.#simulate(input);
    this.schedule = schedule;
-   recordChapter(season, result);
-   this.lastChapter = result;
+   recordSegment(run, season, result);
+   this.lastSegment = result;
    const saved = await this.#save();
-   if (saved && season.chapters.length >= LEAGUE_CHAPTERS) void refreshShop();
+   if (saved && season.segments.length >= LEAGUE_SEGMENTS) void refreshShop();
    this.revision++;
-   this.#reveal(season.chapters.length * CHAPTER_MATCHDAYS);
+   this.#reveal(season.segments.length * SEGMENT_MATCHDAYS);
   } catch (error) {
-   this.failure = error instanceof Error ? error.message : 'The chapter could not be played.';
+   this.failure = error instanceof Error ? error.message : 'The games could not be played.';
   } finally {
    this.playing = false;
   }
  }
 
- /** Lights the chapter's games on the reel over the playback duration, then returns to the next stop. */
+ /** Lights the segment's games on the reel over the playback duration, then returns to the next stop. */
  #reveal(through: number): void {
   this.#stopReveal();
-  this.revealed = through - CHAPTER_MATCHDAYS;
+  this.revealed = through - SEGMENT_MATCHDAYS;
   if (this.#skipReveal || matchMedia('(prefers-reduced-motion: reduce)').matches) { this.revealed = through; return; }
   this.revealing = true;
   const from = this.revealed;
@@ -289,16 +289,16 @@ export class DraftModeSession {
   const duration = PLAYBACK_DURATION_MS[appSettings.playbackSpeed];
   this.#revealTimer = window.setInterval(() => {
    const progress = Math.min(1, (performance.now() - started) / duration);
-   this.revealed = Math.max(this.revealed, from + Math.round(CHAPTER_MATCHDAYS * (.5 - Math.cos(Math.PI * progress) / 2)));
+   this.revealed = Math.max(this.revealed, from + Math.round(SEGMENT_MATCHDAYS * (.5 - Math.cos(Math.PI * progress) / 2)));
    if (this.revealed >= through) this.skip();
   }, 16);
  }
 
- /** Ends the reveal at once, or skips it when the chapter is still simulating. */
+ /** Ends the reveal at once, or skips it when the segment is still simulating. */
  skip(): void {
   if (this.playing) { this.#skipReveal = true; return; }
   this.#stopReveal();
-  if (this.season) this.revealed = this.season.chapters.length * CHAPTER_MATCHDAYS;
+  if (this.season) this.revealed = this.season.segments.length * SEGMENT_MATCHDAYS;
  }
 
  #stopReveal(): void {
@@ -307,7 +307,7 @@ export class DraftModeSession {
   this.revealing = false;
  }
 
- #simulate(input: ReturnType<typeof chapterInput>): Promise<{ result: LeagueChapterResult; schedule: Fixture[][] }> {
+ #simulate(input: ReturnType<typeof segmentInput>): Promise<{ result: LeagueSegmentResult; schedule: Fixture[][] }> {
   this.#stopWorker();
   const runId = ++this.#workerRun;
   const worker = new Worker(new URL('../engine/league.worker.ts', import.meta.url), { type: 'module' });
@@ -321,7 +321,7 @@ export class DraftModeSession {
     if (message.type === 'error') reject(new Error(message.message));
     else resolve({ result: message.result, schedule: message.schedule });
    };
-   worker.onerror = () => { this.#stopWorker(); reject(new Error('The simulation worker failed. Play the chapter again to retry.')); };
+   worker.onerror = () => { this.#stopWorker(); reject(new Error('The simulation worker failed. Play the games again to retry.')); };
    worker.postMessage({ runId, input });
   });
  }

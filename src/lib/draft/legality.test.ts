@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { arrangeRoster, checkSubmission, submissionFrom } from './legality.ts';
 import { createLedger, transfer, UNOWNED } from './ledger.ts';
 import { minimumCostAssignment } from './matching.ts';
-import { baselineBudget, DRAFT_SLOTS, effectiveCap, validateBudget } from './rules.ts';
+import { baselineBudget, budgetInChapter, DRAFT_SLOTS, effectiveCap, validateBudget } from './rules.ts';
 import { testCard, TEST_ROLES } from './test-fixtures.ts';
 import type { DraftCard, DraftSlot, PayrollBudget } from './types.ts';
 
@@ -56,6 +56,14 @@ describe('roster legality', () => {
   const account = { budget: tight, cash: 1_000_000 };
   expect(checkSubmission(submission, ledger, account.budget)).toEqual(checkSubmission(submission, ledger, tight));
   expect(validateBudget({ ...tight, ceiling: 200 }).map(failure => failure.code)).toEqual(['cap-below-guarantee']);
+ });
+
+ it('grows the nominal cap 3% a chapter, compounded, under the same adjustments and ceiling', () => {
+  const budget: PayrollBudget = { nominalCap: 1500, franchiseAdjustment: 100, obligations: 300, ceiling: null };
+  expect(budgetInChapter(budget, 0)).toEqual(budget);
+  expect(effectiveCap(budgetInChapter(budget, 1))).toBe(1345);
+  expect(budgetInChapter(budget, 5).nominalCap).toBe(Math.round(1500 * 1.03 ** 5));
+  expect(effectiveCap(budgetInChapter({ ...budget, ceiling: 1400 }, 5))).toBe(1400);
  });
 
  it('arranges active slots before reserves and leaves the rest as surplus', () => {

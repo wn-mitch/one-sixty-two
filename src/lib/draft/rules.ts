@@ -97,6 +97,14 @@ export function effectiveCap(budget: PayrollBudget): number {
  return budget.ceiling === null ? adjusted : Math.min(adjusted, budget.ceiling);
 }
 
+/** Payroll allowance growth per chapter, compounded on the nominal cap. Provisional. */
+export const CAP_RAMP = .03;
+
+/** The budget in force during `chapter` (0 for the opening window): the nominal cap grows 3% a chapter. */
+export function budgetInChapter(budget: PayrollBudget, chapter: number): PayrollBudget {
+ return { ...budget, nominalCap: Math.round(budget.nominalCap * (1 + CAP_RAMP) ** chapter) };
+}
+
 /** A budget must always permit an affordable legal roster of commons. */
 export function validateBudget(budget: PayrollBudget, rules: DraftRules = DRAFT_RULES): LegalityFailure[] {
  for (const value of [budget.nominalCap, budget.franchiseAdjustment, budget.obligations, budget.ceiling ?? 0]) {

@@ -1,6 +1,6 @@
 import { json, parseJson, type Db } from '../storage/sql.ts';
 import { completionReward } from '../cosmetics/ledger.ts';
-import { LEAGUE_CHAPTERS } from '../sim/league-types.ts';
+import { LEAGUE_CHAPTERS, LEAGUE_SEGMENTS } from '../sim/league-types.ts';
 import { STACK_ROLES } from './cleanup.ts';
 import { DRAFT_SLOTS } from './rules.ts';
 import { RUN_VERSION } from './versions.ts';
@@ -19,6 +19,8 @@ export interface SavedRun {
  actions: RunAction[];
  phase: RunPhase;
  season: LeagueSeason | null;
+ /** The season exactly as stored, so archiving matches the row even when `season` was read from a legacy format. */
+ seasonJson: string | null;
 }
 
 interface RunRow { [key: string]: string | null; id: string; created_at: string; updated_at: string; setup_json: string; actions_json: string; phase: string; season_json: string | null }
@@ -58,19 +60,31 @@ const isAction = (value: unknown): value is RunAction => {
 };
 const isSeason = (value: unknown): value is LeagueSeason => {
  const season = value as LeagueSeason | null;
- return typeof season === 'object' && season !== null && Array.isArray(season.rivals) && Array.isArray(season.lineups) && Array.isArray(season.chapters) && typeof season.version === 'string';
+ return typeof season === 'object' && season !== null && Array.isArray(season.rivals) && Array.isArray(season.lineups) && Array.isArray(season.segments) && typeof season.version === 'string';
 };
+/**
+ * A season from the six-chapter league format keeps its games for history as six long segments;
+ * `resumeRun` still refuses it by version.
+ */
+const LEGACY_LEAGUE = 'league-v1';
+const historical = (value: unknown): unknown => {
+ const season = value as { version?: unknown; chapters?: unknown } | null;
+ return season && season.version === LEGACY_LEAGUE && Array.isArray(season.chapters) ? { ...season, segments: season.chapters, fans: [], cash: [] } : value;
+};
+/** Whether a season has played every game: eighteen segments, or six chapters in the legacy format. */
+export const seasonComplete = (season: LeagueSeason | null): boolean =>
+ !!season && season.segments.length >= ((season.version as string) === LEGACY_LEAGUE ? LEAGUE_CHAPTERS : LEAGUE_SEGMENTS);
 const PHASES: readonly string[] = ['drafting', 'window', 'season'] satisfies RunPhase[];
 
 /** Parses a stored row; a row that fails the structural check is null, never repaired. */
 function fromRow(row: RunRow): SavedRun | null {
  const setup = parseJson<unknown>(row.setup_json);
  const actions = parseJson<unknown>(row.actions_json);
- const season = row.season_json === null ? null : parseJson<unknown>(row.season_json);
+ const season = row.season_json === null ? null : historical(parseJson<unknown>(row.season_json));
  // A run saved in another run format keeps its row for history; `resumeRun` refuses it by version.
  if (!isSetup(setup) || !Array.isArray(actions) || (setup.runVersion === RUN_VERSION && !actions.every(isAction)) || !PHASES.includes(row.phase)) return null;
  if (season !== null && !isSeason(season)) return null;
- return { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, setup, actions, phase: row.phase as RunPhase, season };
+ return { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, setup, actions, phase: row.phase as RunPhase, season, seasonJson: row.season_json };
 }
 
 /** Writes the run after an action. Returns a notice when storage refuses it; the run itself continues. */
@@ -80,8 +94,8 @@ export async function saveRun(db: Db, id: string, run: DraftRun, season: LeagueS
   await db.run([{
    sql: `INSERT INTO draft_runs (id, created_at, updated_at, setup_json, actions_json, phase, season_json, resume_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (id) DO UPDATE SET updated_at = excluded.updated_at, actions_json = excluded.actions_json, phase = excluded.phase, season_json = excluded.season_json, resume_state = excluded.resume_state`,
-   bind: [id, stamp, stamp, json(run.setup), json(run.actions), run.phase, season === null ? null : json(season), (season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? 'archived' : 'active']
-  }, ...((season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? completionReward('draft:' + id, stamp) : [])]);
+   bind: [id, stamp, stamp, json(run.setup), json(run.actions), run.phase, season === null ? null : json(season), seasonComplete(season) ? 'archived' : 'active']
+  }, ...(seasonComplete(season) ? completionReward('draft:' + id, stamp) : [])]);
   return null;
  } catch { return 'Your draft could not be saved: browser storage is blocked or full. It continues in this tab.'; }
 }
@@ -91,7 +105,7 @@ export async function latestRun(db: Db): Promise<SavedRun | null> {
  const rows = await db.all<RunRow>("SELECT * FROM draft_runs WHERE resume_state = 'active' ORDER BY updated_at DESC, id");
  for (const row of rows) {
   const saved = fromRow(row);
-  if (saved && (saved.season?.chapters.length ?? 0) < LEAGUE_CHAPTERS) return saved;
+  if (saved && !seasonComplete(saved.season)) return saved;
  }
  return null;
 }
@@ -107,7 +121,7 @@ export async function completedRuns(db: Db): Promise<SavedRun[]> {
  const rows = await db.all<RunRow>('SELECT * FROM draft_runs WHERE season_json IS NOT NULL ORDER BY updated_at DESC, id');
  return rows.flatMap(row => {
   const saved = fromRow(row);
-  return saved && (saved.season?.chapters.length ?? 0) >= LEAGUE_CHAPTERS ? [saved] : [];
+  return saved && seasonComplete(saved.season) ? [saved] : [];
  });
 }
 
@@ -116,7 +130,7 @@ export async function archiveRun(db: Db, saved: SavedRun): Promise<void> {
  await db.run([{
   sql: `UPDATE draft_runs SET resume_state = 'archived'
    WHERE id = ? AND updated_at = ? AND setup_json = ? AND actions_json = ? AND phase = ? AND season_json IS ?`,
-  bind: [saved.id, saved.updatedAt, json(saved.setup), json(saved.actions), saved.phase, saved.season === null ? null : json(saved.season)]
+  bind: [saved.id, saved.updatedAt, json(saved.setup), json(saved.actions), saved.phase, saved.seasonJson]
  }]);
 }
 

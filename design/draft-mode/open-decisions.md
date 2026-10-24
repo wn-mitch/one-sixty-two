@@ -32,7 +32,7 @@ The opening decree precedes drafting; later decrees precede chapter decisions. D
 
 Owner: [Fan influence](season-and-economy.md). First relevant gate: [phase](phases/04-season-evolution.md).
 
-Calibrate roster-strength expectations, attendance, packed-stadium hype, directional bias and volatility. Define expectation refresh after training/trades, event persistence and bounds while preserving runaway streaks and the franchise-specific triggers.
+Calibrate roster-strength expectations, attendance, packed-stadium hype, directional bias and volatility. Define expectation refresh after training/trades, event persistence and bounds while preserving runaway streaks and the franchise-specific triggers. Provisional (`src/lib/draft/fans.ts`): the crowd leans the strike zone, fitted so a neutral crowd at 70% full gives a .540 home record, an empty park about .525, euphoric full houses about .574 and hostile crowds about .513, from MLB's long-run .540 home record, the 2020 no-spectator season's non-significant change and soccer's occupancy-driven ghost-game losses; volatility is symmetric. Expectations start from active payroll (±.05 per standard deviation), drift 15% a stop toward the record and reset to it past a .07 gap after 18 games. Paydays are an 8-unit box-seat floor plus 4 units per home game at a full house, about 20 a stop on average; a nine-game segment can be all road games and pay only the floor. Payroll allowance grows 3% a chapter. Open: expectation refresh after trades and training, and the in-game franchise crowd triggers.
 
 ## 6. Pitcher abstraction
 

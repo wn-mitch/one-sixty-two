@@ -1,6 +1,6 @@
 //! wasm-bindgen glue: JSON strings cross the boundary; all logic lives in the `engine` crate.
 use engine::exhibition::ExhibitionRequest;
-use engine::league::LeagueChapterRequest;
+use engine::league::LeagueSegmentRequest;
 use engine::prep::MatchupQuery;
 use engine::series::SeriesRequest;
 use engine::types::{ContactShape, DefensiveEnvironment, DefensiveSkills, SeasonRequest, StadiumConfig};
@@ -46,11 +46,11 @@ impl Engine {
         to_json(&result)
     }
 
-    /// Plays one Draft Mode league chapter; `on_game(count)` runs after every game.
-    #[wasm_bindgen(js_name = simulateLeagueChapter)]
-    pub fn simulate_league_chapter(&self, request_json: &str, on_game: &js_sys::Function) -> Result<String, JsError> {
-        let request: LeagueChapterRequest = parse(request_json, "league chapter request")?;
-        let result = self.inner.simulate_league_chapter(&request, &mut |count| { let _ = on_game.call1(&JsValue::NULL, &JsValue::from(count as u32)); })
+    /// Plays one Draft Mode league segment; `on_game(count)` runs after every game.
+    #[wasm_bindgen(js_name = simulateLeagueSegment)]
+    pub fn simulate_league_segment(&self, request_json: &str, on_game: &js_sys::Function) -> Result<String, JsError> {
+        let request: LeagueSegmentRequest = parse(request_json, "league segment request")?;
+        let result = self.inner.simulate_league_segment(&request, &mut |count| { let _ = on_game.call1(&JsValue::NULL, &JsValue::from(count as u32)); })
             .map_err(fail)?;
         to_json(&result)
     }

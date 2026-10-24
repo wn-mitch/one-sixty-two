@@ -1,7 +1,7 @@
 //! One half inning: steals, plate appearances, contact, and defensive credit (`src/lib/sim/inning.ts`).
 use crate::advancement::Bases;
 use crate::contact::{resolve_contact, ContactOptions, ContactResult, Decisions, Play, PreparedDefense, DECISION_DOUBLE_PLAY, DECISION_ERROR, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT, DECISION_SECOND_ATTEMPT, DECISION_SECOND_OUT, DECISION_THIRD_ATTEMPT, DECISION_THIRD_OUT};
-use crate::contact_profile::{sample_contact, sample_non_contact, ContactDraw, PreparedMatchups, ShapeTables, CONTACT_UNIFORMS};
+use crate::contact_profile::{sample_contact, sample_shifted_non_contact, ContactDraw, PreparedMatchups, ShapeTables, CONTACT_UNIFORMS};
 use crate::defense_rules::{double_play_participants, steal_success_probability};
 use crate::fielding::{build_fielding_plan, compute_candidates, fielding_outcomes, select_outcome, FieldingCandidates, FieldingPlan, PhysicalOutcomes, OUTCOME_AUTOMATIC_DOUBLE, OUTCOME_CAUGHT, OUTCOME_FOUL, OUTCOME_GROUND_OUT};
 use crate::flight::{trace_flight, ContactSample, FlightTrace, PreparedPark, TRACE_DEAD_BALL};
@@ -74,6 +74,8 @@ pub struct Shared<'a> {
 /// One side's per-game batting state and reusable scratch buffers.
 pub struct InningContext<'a> {
     pub matchups: &'a PreparedMatchups,
+    /// The strike zone's lean toward this side's batters, from the home crowd; zero is neutral.
+    pub edge: f64,
     pub prepared: PreparedDefense,
     /// Offense speed skills by lineup index.
     speeds: Vec<f64>,
@@ -98,7 +100,7 @@ impl<'a> InningContext<'a> {
     pub fn new(offense: &TeamInput, defense: &TeamInput, matchups: &'a PreparedMatchups, prepared: PreparedDefense) -> Result<Self, String> {
         if matchups.batter_count != offense.hitters.len() || matchups.pitcher_count != defense.pitchers.len() { return Err("Invalid game matchup table".into()); }
         Ok(Self {
-            matchups, prepared, speeds: offense.hitters.iter().map(|profile| profile.speed).collect(), next: 0, bases: Bases::default(),
+            matchups, edge: 0.0, prepared, speeds: offense.hitters.iter().map(|profile| profile.speed).collect(), next: 0, bases: Bases::default(),
             trace: FlightTrace::default(), candidates: FieldingCandidates::default(), plan: FieldingPlan::default(), outcomes: PhysicalOutcomes::default(),
             draw: ContactDraw { carry: 1.0, ..Default::default() }, uniforms: [0.0; CONTACT_UNIFORMS], decisions: Decisions::default(), reach_uniform: 0.0,
             reach: [0; 8], throwing: [0.0; 8], contact: ContactResult::default(), dp_participants: [0; 3], options: ContactOptions::default(),
@@ -411,7 +413,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         let runner_runs = runners_before.map(|id| if id >= 0 { sides.batting.batting[id as usize].r } else { 0 });
         let pair = hitter_index * defense.pitchers.len() + active_index;
         let pa_uniform = uniform(&mut streams.pa)?;
-        let event = sample_non_contact(context.matchups, pair, pa_uniform);
+        let event = sample_shifted_non_contact(context.matchups, pair, pa_uniform, context.edge);
         sides.batting.batting[hitter_index].pa += 1;
         let runs_before = sides.batting.runs;
         let runs_needed = if target == f64::INFINITY { f64::INFINITY } else { target - f64::from(runs_before) };

@@ -38,6 +38,8 @@ pub struct GameInput<'a, 'p> {
     /// Home hitters against away pitchers, and the reverse.
     pub home_matchups: &'a PreparedMatchups,
     pub away_matchups: &'a PreparedMatchups,
+    /// The home crowd's lean on the strike zone: home batters get `+home_edge`, visitors `-home_edge`.
+    pub home_edge: f64,
 }
 
 /// Engine tables shared by every game.
@@ -59,6 +61,8 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
     // Top: away bats against the home defense; bottom: home bats against the away defense.
     let mut top = InningContext::new(input.away, input.home, input.away_matchups, input.home_defense)?;
     let mut bottom = InningContext::new(input.home, input.away, input.home_matchups, input.away_defense)?;
+    top.edge = -input.home_edge;
+    bottom.edge = input.home_edge;
     let mut highlight: Option<SeasonMoment> = None;
     let mut lowlight: Option<SeasonMoment> = None;
     let mut active_inning = 1u32;

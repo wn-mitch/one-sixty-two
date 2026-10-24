@@ -38,7 +38,7 @@ The **opening decree is revealed before the initial draft**, along with franchis
 |---|---|---|
 | Before initial draft | Franchise/park information and opening decree | Schedule disclosure and opening venue details |
 | After draft | Trading, cuts, waivers, common-only cleanup and legal roster submission | Pack allocation, ordering and repeated cut/claim cycles |
-| Every nine games | Minimum income, ticket revenue and segment-win bonuses before purchases; basics/specials; one purchase per player; lineup/rotation/reserve changes | Amounts, special offers and exact within-visit ordering |
+| Every nine games | Ticket revenue (box-seat floor plus attendance gate) before purchases; basics/specials; one purchase per player; lineup/rotation/reserve changes | Special offers and exact within-visit ordering |
 | Every 27 games | Incoming decree/venue revealed before spending; major budget changes, supplemental acquisition and eligible trades | Exact order, acquisition format, shop contents and budget curves |
 | After game 162 | Season completion and reporting | Whether a final shop has any purpose; none is assumed |
 

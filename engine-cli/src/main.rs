@@ -1,6 +1,7 @@
-//! Native engine commands: seasons, series, benches, season spreads, sticker samples, and the roster hill climb.
+//! Native engine commands: seasons, series, benches, season and league-crowd spreads, sticker samples, and the roster hill climb.
 mod climb;
 mod draft;
+mod league;
 mod spread;
 
 use engine::types::SeasonRequest;
@@ -72,6 +73,7 @@ fn main() -> ExitCode {
         Some("bench") => bench(&arguments[1..]),
         Some("series") => series(&arguments[1..]),
         Some("season-spread") => spread::season_spread(&arguments[1..]),
+        Some("league-crowd") => league::league_crowd(&arguments[1..]),
         Some("draft-spread") => draft::draft_spread(&arguments[1..]),
         Some("sticker-sample") => draft::sample::sticker_sample(&arguments[1..]),
         Some("hill-climb") => climb::hill_climb(&arguments[1..]),

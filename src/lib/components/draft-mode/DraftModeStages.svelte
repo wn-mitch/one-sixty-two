@@ -20,7 +20,7 @@
  import { BENCH, placeFromKey, seasonForm, seasonLineupView, windowBlockers, windowLineupView } from '#lib/draft/lineup-view.ts';
  import { clubSchedule, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
  import type { DraftSlot } from '#lib/draft/types.ts';
- import { CHAPTER_MATCHDAYS, LEAGUE_CHAPTERS, LEAGUE_CLUBS } from '#lib/sim/league-types.ts';
+ import { LEAGUE_CLUBS, SEGMENT_MATCHDAYS, SEGMENTS_PER_CHAPTER } from '#lib/sim/league-types.ts';
  import type { DraftModeSession } from '#lib/draft/session.svelte.ts';
  import type { Profile, ReliefAssignment } from '#lib/game/types.ts';
  import type { DraftBullpenSlot } from '#lib/draft/rules.ts';
@@ -79,7 +79,7 @@
   if (!run || run.phase === 'drafting') return [];
   return ownedBy(run, run.seating.humanSeat).flatMap(card => { const profile = profiles.get(card.seasonId); return profile ? [dealtProfile(profile, card)] : []; });
  });
- /** The lineup screen for the opening window or the next chapter. */
+ /** The lineup screen for the opening window or the next segment. */
  const stop = $derived.by(() => {
   void session.revision;
   const run = session.run;
@@ -89,25 +89,28 @@
   if (session.screen !== 'season' || !season) return null;
   const totals = seasonLines(season, run.seating.humanSeat);
   const lines = { batting: new Map(totals.batting.map(line => [line.seasonId, line])), pitching: new Map(totals.pitching.map(line => [line.seasonId, line])) };
-  return { kind: 'season' as const, run, season, view: seasonLineupView(run, season, profiles), lines, played: season.chapters.length };
+  return { kind: 'season' as const, run, season, view: seasonLineupView(run, season, profiles), lines, played: season.segments.length };
  });
  let working = $state(false);
  async function step(result: Promise<string | null>) {
   working = true;
   try { await refusal(result); } finally { working = false; }
  }
- const gamesPerChapter = CHAPTER_MATCHDAYS * LEAGUE_CLUBS / 2;
- /** The broadcast while a chapter plays and reveals: the player's whole schedule once it is known. */
+ const gamesPerSegment = SEGMENT_MATCHDAYS * LEAGUE_CLUBS / 2;
+ /** A stop's title: opening day, the end of a chapter, or the game count at a light stop. */
+ const stopTitle = (played: number) => played === 0 ? 'Opening day'
+  : played % SEGMENTS_PER_CHAPTER === 0 ? `Chapter ${played / SEGMENTS_PER_CHAPTER} complete` : `After game ${played * SEGMENT_MATCHDAYS}`;
+ /** The broadcast while a segment plays and reveals: the player's whole schedule once it is known. */
  const broadcast = $derived.by(() => {
   void session.revision;
   const run = session.run;
   const season = session.season;
   if (session.screen !== 'playing' || !run || !season) return null;
-  const played = season.chapters.length - (session.playing ? 0 : 1);
-  // While the chapter simulates, its games count up from its league-wide progress.
-  const count = session.playing ? played * CHAPTER_MATCHDAYS + Math.floor(session.completed / gamesPerChapter * CHAPTER_MATCHDAYS) : session.revealed;
+  const played = season.segments.length - (session.playing ? 0 : 1);
+  // While the segment simulates, its games count up from its league-wide progress.
+  const count = session.playing ? played * SEGMENT_MATCHDAYS + Math.floor(session.completed / gamesPerSegment * SEGMENT_MATCHDAYS) : session.revealed;
   return {
-   chapter: played + 1, count,
+   first: played * SEGMENT_MATCHDAYS + 1, last: (played + 1) * SEGMENT_MATCHDAYS, count,
    games: session.schedule ? clubSchedule(run, season, session.schedule, run.seating.humanSeat, clubName) : null
   };
  });
@@ -208,24 +211,24 @@
   {@const current = stop}
   <Lineup
    lineup={current.view} manifest={session.manifest} profiles={dealt} {rankings} rankingLoading={!rankings} rankingError={false}
-   busy={session.playing} title={current.played === 0 ? 'Opening day' : `After chapter ${current.played} of ${LEAGUE_CHAPTERS}`}
-   action={{ label: `Play chapter ${current.played + 1}`, busyLabel: `Playing chapter ${current.played + 1}…` }}
+   busy={session.playing} title={stopTitle(current.played)}
+   action={{ label: `Play games ${current.played * SEGMENT_MATCHDAYS + 1}–${(current.played + 1) * SEGMENT_MATCHDAYS}`, busyLabel: 'Playing…' }}
    form={id => seasonForm(profiles.get(id), current.lines, id)}
    onMove={moveInSeason}
    onOrder={(kind, order) => void refusal(session.lineup({ ...seasonLineup(), [kind === 'batting' ? 'battingOrder' : 'starterOrder']: order }))}
    onRoles={roles => void refusal(session.lineup({ ...seasonLineup(), reliefRoles: roles as ReliefAssignment<DraftBullpenSlot>[] }))}
-   onsimulate={() => void session.playChapter()}
+   onsimulate={() => void session.playSegment()}
   >
    {#snippet intro()}<ChapterStatus run={current.run} season={current.season} revision={session.revision} {clubName} />{/snippet}
    {#snippet status()}
-    <p class="progress">Games {current.played * CHAPTER_MATCHDAYS + 1}–{(current.played + 1) * CHAPTER_MATCHDAYS} of 162. Changes apply from this chapter; AI clubs keep their lineups.</p>
+    <p class="progress">Games {current.played * SEGMENT_MATCHDAYS + 1}–{(current.played + 1) * SEGMENT_MATCHDAYS} of 162. Lineup changes apply from the next game; AI clubs keep their lineups.</p>
    {/snippet}
   </Lineup>
  {:else if broadcast && session.run}
   <Progress
    count={broadcast.count} games={broadcast.games} seed={session.run.setup.seed} revealed={session.revealed} revealing={session.revealing}
-   heading={session.revealing ? `Chapter ${broadcast.chapter} of ${LEAGUE_CHAPTERS}` : `Playing chapter ${broadcast.chapter} of ${LEAGUE_CHAPTERS}`}
-   note={session.revealing ? 'The chapter is locked. This replay only reveals its games.' : 'Every club plays its 27 games; lineups change again after the chapter.'}
+   heading={session.revealing ? `Games ${broadcast.first}–${broadcast.last}` : `Playing games ${broadcast.first}–${broadcast.last}`}
+   note={session.revealing ? 'These games are locked. This replay only reveals them.' : 'Every club plays nine games; lineups change again at the next stop.'}
    onskip={() => session.skip()}
   />
  {:else if session.screen === 'report' && session.run && session.season}

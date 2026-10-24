@@ -4,8 +4,8 @@ import { RIVALS } from './franchises.ts';
 import { applyAction, heldPile, newRunSetup, ownedBy, startRun, type DraftRun, type RunData } from './run.ts';
 import { archiveRun, completedRuns, deleteRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
 import { arrangeRoster, submissionFrom } from './legality.ts';
-import { startLeague } from './league.ts';
-import { LEAGUE_CHAPTERS } from '../sim/league-types.ts';
+import { standings, startLeague } from './league.ts';
+import { LEAGUE_SEGMENTS } from '../sim/league-types.ts';
 import type { DraftSlot } from './types.ts';
 import type { Db } from '../storage/sql.ts';
 import { pickAction, playDraft, submitAction, testUniverse } from './test-fixtures.ts';
@@ -97,20 +97,45 @@ describe('draft run saves', () => {
   applyAction(run, submitAction(run));
   const season = startLeague(run);
   await saveRun(db, 'run', run, season);
-  season.chapters = Array.from({ length: LEAGUE_CHAPTERS }, () => ({ games: [], lines: [], carry: [] }));
+  season.segments = Array.from({ length: LEAGUE_SEGMENTS }, () => ({ games: [], lines: [], carry: [], crowds: [], paydays: [] }));
   const failing: Db = { all: db.all, run: async () => { throw new Error('full'); } };
   expect(await saveRun(failing, 'run', run, season)).toContain('could not be saved');
-  expect((await latestRun(db))?.season?.chapters).toHaveLength(0);
+  expect((await latestRun(db))?.season?.segments).toHaveLength(0);
   expect(await saveRun(db, 'run', run, season)).toBeNull();
   expect(await latestRun(db)).toBeNull();
   const saved = (await getRun(db, 'run'))!;
-  expect(saved.season?.chapters).toHaveLength(LEAGUE_CHAPTERS);
+  expect(saved.season?.segments).toHaveLength(LEAGUE_SEGMENTS);
   expect(resumeRun(saved, DATA, VERSION).ok).toBe(true);
   expect(await completedRuns(db)).toEqual([saved]);
   await db.run([{ sql: "UPDATE draft_runs SET setup_json = json_set(setup_json, '$.dataVersion', 'retired-data') WHERE id = 'run'" }]);
   const retired = (await completedRuns(db))[0];
   expect(retired.id).toBe('run');
   expect(resumeRun(retired, DATA, VERSION).ok).toBe(false);
+ });
+
+ it('keeps a six-chapter season in history with its record, refuses to resume it, and can still retire it', async () => {
+  const { db } = await memoryDb();
+  const run = startRun(setup, DATA);
+  playDraft(run, best);
+  applyAction(run, { type: 'waivers' });
+  applyAction(run, { type: 'autofix' });
+  applyAction(run, submitAction(run));
+  const { segments: _segments, fans: _fans, cash: _cash, ...rest } = startLeague(run);
+  const game = { matchday: 0, home: 0, away: 1, homeRuns: 3, awayRuns: 2 };
+  const legacy = (chapters: number) => JSON.stringify({ ...rest, version: 'league-v1', chapters: Array.from({ length: chapters }, () => ({ games: [game], lines: [], carry: [] })) });
+  await saveRun(db, 'done', run);
+  await saveRun(db, 'open', run);
+  await db.run([
+   { sql: "UPDATE draft_runs SET season_json = ? WHERE id = 'done'", bind: [legacy(6)] },
+   { sql: "UPDATE draft_runs SET season_json = ? WHERE id = 'open'", bind: [legacy(2)] }
+  ]);
+  const [done] = await completedRuns(db);
+  expect(done.id).toBe('done');
+  expect(standings(done.season!).find(row => row.seat === 0)!.wins).toBe(6);
+  expect(resumeRun(done, DATA, VERSION)).toMatchObject({ ok: false, reason: expect.stringContaining('league rules') });
+  const open = (await getRun(db, 'open'))!;
+  await archiveRun(db, open);
+  expect((await db.all<{ resume_state: string }>("SELECT resume_state FROM draft_runs WHERE id = 'open'"))[0].resume_state).toBe('archived');
  });
 
  it('reports a blocked database without losing the run', async () => {

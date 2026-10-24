@@ -35,7 +35,7 @@ import {
 import { validateStadium } from './park.ts';
 import type { ParkRef, StadiumConfig } from './park-types.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
-import { LEAGUE_CHAPTERS, LEAGUE_CLUBS, type LeagueChapterInput, type LeagueClubInput } from './league-types.ts';
+import { LEAGUE_CLUBS, LEAGUE_SEGMENTS, MAX_CROWD_EDGE, type LeagueClubInput, type LeagueSegmentInput } from './league-types.ts';
 import { DRAFT_BULLPEN_SLOTS, DRAFT_SLOTS } from '../draft/rules.ts';
 
 const hitterSlotSet: ReadonlySet<string> = new Set(HITTER_SLOTS);
@@ -404,7 +404,7 @@ function validateLeagueClub(club: LeagueClubInput, data: SimulationData): void {
  resolveStadium(data, club.homeStadium);
 }
 
-export function validateLeagueChapter(input: LeagueChapterInput): void {
+export function validateLeagueSegment(input: LeagueSegmentInput): void {
  if (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff) throw new Error('Invalid simulation seed');
  if (input.modelVersion !== MODEL_VERSION || input.rulesVersion !== RULES_VERSION) throw new Error('League model is incompatible');
  if (input.clubs.length !== LEAGUE_CLUBS || new Set(input.clubs.map(club => club.id)).size !== LEAGUE_CLUBS) throw new Error('A league needs eight distinct clubs');
@@ -412,8 +412,11 @@ export function validateLeagueChapter(input: LeagueChapterInput): void {
  if (input.rivals.length !== LEAGUE_CLUBS / 2 || new Set(paired).size !== LEAGUE_CLUBS || paired.some(club => !Number.isInteger(club) || club < 0 || club >= LEAGUE_CLUBS)) {
   throw new Error('Rival pairs must cover each club exactly once');
  }
- if (!Number.isInteger(input.chapter) || input.chapter < 0 || input.chapter >= LEAGUE_CHAPTERS) throw new Error('Invalid league chapter');
- if (input.carry.length !== (input.chapter === 0 ? 0 : LEAGUE_CLUBS)) throw new Error('Carried rest must come from the previous chapter');
+ if (!Number.isInteger(input.segment) || input.segment < 0 || input.segment >= LEAGUE_SEGMENTS) throw new Error('Invalid league segment');
+ if (input.carry.length !== (input.segment === 0 ? 0 : LEAGUE_CLUBS)) throw new Error('Carried rest must come from the previous segment');
+ if (input.crowds.length !== LEAGUE_CLUBS || input.crowds.some(crowd => !(Math.abs(crowd.edge) <= MAX_CROWD_EDGE && crowd.volatility >= 0 && crowd.volatility <= MAX_CROWD_EDGE))) {
+  throw new Error('Every club needs a home crowd within bounds');
+ }
  if (!Number.isInteger(input.detailClub) || input.detailClub < 0 || input.detailClub >= LEAGUE_CLUBS) throw new Error('Invalid detail club');
  validateDefensiveEnvironment(input.data);
  validateStadiumDeck(input.data);

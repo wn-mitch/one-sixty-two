@@ -19,7 +19,7 @@
 
 <section class="entry" aria-labelledby="entry-heading">
  <h1 id="entry-heading">Draft Mode</h1>
- <p class="lede">Draft against seven AI clubs from passed packs, build a legal roster under the cap, then play a 162-game league season in six chapters.</p>
+ <p class="lede">Draft against seven AI clubs from passed packs, build a legal roster under the cap, then play a 162-game league season in six chapters, with a stop every nine games.</p>
  {#if refused}<p class="refused" role="status">{refused}</p>{/if}
 
  <fieldset>

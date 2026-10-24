@@ -463,6 +463,17 @@ pub fn sample_non_contact(prepared: &PreparedMatchups, pair: usize, uniform: f64
     NON_CONTACT - 1
 }
 
+/// `sample_non_contact` with the strike zone leaning `edge` toward the batter: walks scale by
+/// `1 + edge`, strikeouts by `1 - edge`, and contact takes up the difference. Zero edge is exact.
+pub fn sample_shifted_non_contact(prepared: &PreparedMatchups, pair: usize, uniform: f64, edge: f64) -> usize {
+    if edge == 0.0 { return sample_non_contact(prepared, pair, uniform); }
+    let cdf = &prepared.non_contact_cdf[pair * NON_CONTACT..(pair + 1) * NON_CONTACT];
+    let walk = cdf[0] * (1.0 + edge);
+    let hit_by_pitch = walk + (cdf[1] - cdf[0]);
+    let strikeout = hit_by_pitch + (cdf[2] - cdf[1]) * (1.0 - edge);
+    if uniform < walk { 0 } else if uniform < hit_by_pitch { 1 } else if uniform < strikeout { 2 } else { 3 }
+}
+
 pub fn sample_contact(prepared: &PreparedMatchups, tables: &ShapeTables, pair: usize, uniforms: &[f64; CONTACT_UNIFORMS], output: &mut ContactDraw) {
     draw_contact(tables, &prepared.region_cdf[pair * REGION_COUNT..(pair + 1) * REGION_COUNT], prepared.shift[pair], prepared.side[pair], uniforms, output);
 }

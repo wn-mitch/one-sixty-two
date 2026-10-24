@@ -1,21 +1,22 @@
 import { compareId, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, STARTER_SLOTS, validateReliefRoles, type Profile, type ReliefAssignment, type SimulationData } from '../game/types.ts';
 import { randomStream, shuffle } from '../game/random.ts';
 import { stadiumRef } from '../sim/park.ts';
-import { LEAGUE_CHAPTERS, type Fixture, type LeagueChapterInput, type LeagueChapterResult, type LeagueGame, type RestState } from '../sim/league-types.ts';
+import { LEAGUE_SEGMENTS, SEGMENTS_PER_CHAPTER, type Crowd, type Fixture, type LeagueGame, type LeagueSegmentInput, type LeagueSegmentResult, type RestState } from '../sim/league-types.ts';
 import type { ScheduledGame } from '../game/season-calendar.ts';
 import type { BatterLine, PitcherLine } from '../sim/types.ts';
+import { afterSegment, crowd, openingFans, payday, paydayTotal, priors, type FanState, type Payday } from './fans.ts';
 import { RIVALS } from './franchises.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
-/** League season format: rival matching, AI lineups and the stored chapter record. */
-export const LEAGUE_VERSION = 'league-v1' as const;
+/** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
+export const LEAGUE_VERSION = 'league-v2' as const;
 
 /**
- * A club's lineup for the next chapter. The cards are the club's submitted roster; between
- * chapters only their places change: who fields which slot, who sits in reserve, the batting and
- * rotation orders and the relief roles.
+ * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
+ * only their places change: who fields which slot, who sits in reserve, the batting and rotation
+ * orders and the relief roles.
  */
 export interface ClubLineup {
  active: Record<DraftSlot, string>;
@@ -25,11 +26,16 @@ export interface ClubLineup {
  reliefRoles: ReliefAssignment<DraftBullpenSlot>[];
 }
 
-/** One played chapter as the device keeps it: compact games, each club's lines and the rest carried forward. */
-export interface ChapterRecord {
+/**
+ * One played segment as the device keeps it: compact games, each club's lines, the rest carried
+ * forward, and each club's home crowd and payday.
+ */
+export interface SegmentRecord {
  games: LeagueGame[];
  lines: { batting: BatterLine[]; pitching: PitcherLine[] }[];
  carry: RestState[][];
+ crowds: Crowd[];
+ paydays: Payday[];
 }
 
 export interface LeagueSeason {
@@ -37,7 +43,11 @@ export interface LeagueSeason {
  /** Four seat pairs; the player's pair is the player and the guaranteed rival. */
  rivals: [number, number][];
  lineups: ClubLineup[];
- chapters: ChapterRecord[];
+ segments: SegmentRecord[];
+ /** Each club's fans going into the next segment. */
+ fans: FanState[];
+ /** Each club's banked cash: every payday credited, less what it has spent. */
+ cash: number[];
 }
 
 export class LineupError extends Error {}
@@ -76,16 +86,27 @@ export function defaultLineup(submission: Submission, card: (id: string) => Draf
  };
 }
 
-/** Opens the season once every seat has submitted: the player with the lineup they submitted, AI clubs with defaults. */
+/**
+ * Opens the season once every seat has submitted: the player with the lineup they submitted, AI
+ * clubs with defaults, and every club's fans expecting what its active payroll promises.
+ */
 export function startLeague(run: DraftRun): LeagueSeason {
  if (run.phase !== 'season' || !run.lineup || run.submissions.some(submission => submission === null)) throw new Error('The league starts once every club has submitted');
  const card = (id: string) => run.pool.ledger.cards.get(id)!;
  const human = run.seating.humanSeat;
+ const lineups = run.submissions.map((submission, seat) => seat === human ? structuredClone(run.lineup!) : defaultLineup(submission!, card));
+ const payrolls = lineups.map(lineup => Object.values(lineup.active).reduce((sum, id) => sum + card(id).salary, 0));
  return {
-  version: LEAGUE_VERSION, rivals: matchRivals(run),
-  lineups: run.submissions.map((submission, seat) => seat === human ? structuredClone(run.lineup!) : defaultLineup(submission!, card)),
-  chapters: []
+  version: LEAGUE_VERSION, rivals: matchRivals(run), lineups, segments: [],
+  fans: priors(run.seating.seats, payrolls).map(openingFans),
+  cash: lineups.map(() => 0)
  };
+}
+
+/** Where the season stands: segments played, and whether the stop after the last one closes a chapter. */
+export function seasonStop(season: LeagueSeason): { played: number; chapter: number; chapterStop: boolean; over: boolean } {
+ const played = season.segments.length;
+ return { played, chapter: Math.floor(played / SEGMENTS_PER_CHAPTER), chapterStop: played > 0 && played % SEGMENTS_PER_CHAPTER === 0, over: played >= LEAGUE_SEGMENTS };
 }
 
 /** Checks a lineup against the seat's submitted cards; throws `LineupError` naming the first problem. */
@@ -148,23 +169,26 @@ export function canSwap(run: DraftRun, lineup: ClubLineup, a: Place, b: Place): 
  return fitsPlace(card(a), b) && fitsPlace(card(b), a);
 }
 
-/** Sets the player's lineup for the next chapter. */
+/** Sets the player's lineup for the next segment. */
 export function setLineup(run: DraftRun, season: LeagueSeason, lineup: ClubLineup): void {
- if (season.chapters.length >= LEAGUE_CHAPTERS) throw new LineupError('The season is over');
+ if (season.segments.length >= LEAGUE_SEGMENTS) throw new LineupError('The season is over');
  validateLineup(run, run.seating.humanSeat, lineup);
  season.lineups[run.seating.humanSeat] = structuredClone(lineup);
 }
 
+/** Each club's home crowd for the next segment, from its fans now. */
+export const seasonCrowds = (run: DraftRun, season: LeagueSeason): Crowd[] => season.fans.map((fans, seat) => crowd(run.seating.seats[seat], fans));
+
 /**
- * The engine input for the next chapter. `profiles` must hold every active card; `names` labels
- * each seat's club, and each club plays in its franchise's park.
+ * The engine input for the next segment. `profiles` must hold every active card; `names` labels
+ * each seat's club, and each club plays in its franchise's park before its own crowd.
  */
-export function chapterInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueChapterInput {
- const chapter = season.chapters.length;
- if (chapter >= LEAGUE_CHAPTERS) throw new Error('The season is over');
+export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueSegmentInput {
+ const segment = season.segments.length;
+ if (segment >= LEAGUE_SEGMENTS) throw new Error('The season is over');
  return {
-  modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed: run.setup.seed, data, chapter,
-  rivals: season.rivals, carry: season.chapters.at(-1)?.carry ?? [], detailClub: run.seating.humanSeat,
+  modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed: run.setup.seed, data, segment, crowds: seasonCrowds(run, season),
+  rivals: season.rivals, carry: season.segments.at(-1)?.carry ?? [], detailClub: run.seating.humanSeat,
   clubs: season.lineups.map((lineup, seat) => {
    const franchiseId = run.seating.seats[seat];
    const stadium = data.stadiums.find(item => item.franchiseId === franchiseId);
@@ -182,10 +206,22 @@ export function chapterInput(run: DraftRun, season: LeagueSeason, profiles: Read
  };
 }
 
-/** Keeps a played chapter; results must arrive in chapter order. */
-export function recordChapter(season: LeagueSeason, result: LeagueChapterResult): void {
- if (result.chapter !== season.chapters.length) throw new Error(`Expected chapter ${season.chapters.length + 1}, got ${result.chapter + 1}`);
- season.chapters.push({ games: result.games, lines: result.totals.map(box => ({ batting: box.batting, pitching: box.pitching })), carry: result.carry });
+/**
+ * Keeps a played segment, in segment order: credits each club's payday from the crowd that watched
+ * it, then moves its fans on the results. Each payday is credited once, with the segment it pays for.
+ */
+export function recordSegment(run: DraftRun, season: LeagueSeason, result: LeagueSegmentResult): void {
+ if (result.segment !== season.segments.length) throw new Error(`Expected segment ${season.segments.length + 1}, got ${result.segment + 1}`);
+ const franchises = run.seating.seats;
+ const crowds = seasonCrowds(run, season);
+ const paydays = season.fans.map((fans, seat) => payday(seat, franchises, fans, result.games));
+ season.segments.push({ games: result.games, lines: result.totals.map(box => ({ batting: box.batting, pitching: box.pitching })), carry: result.carry, crowds, paydays });
+ const records = standings(season);
+ season.fans = season.fans.map((fans, seat) => {
+  const row = records.find(item => item.seat === seat)!;
+  return afterSegment(seat, franchises, fans, result.games, { wins: row.wins, games: row.wins + row.losses });
+ });
+ season.cash = season.cash.map((cash, seat) => cash + paydayTotal(paydays[seat]));
 }
 
 export interface Standing { seat: number; wins: number; losses: number; runsFor: number; runsAgainst: number; gamesBack: number }
@@ -195,7 +231,7 @@ export interface Standing { seat: number; wins: number; losses: number; runsFor:
  */
 export function standings(season: LeagueSeason): Standing[] {
  const rows: Standing[] = season.lineups.map((_, seat) => ({ seat, wins: 0, losses: 0, runsFor: 0, runsAgainst: 0, gamesBack: 0 }));
- for (const game of season.chapters.flatMap(chapter => chapter.games)) {
+ for (const game of season.segments.flatMap(segment => segment.games)) {
   const home = rows[game.home];
   const away = rows[game.away];
   home.runsFor += game.homeRuns; home.runsAgainst += game.awayRuns;
@@ -210,11 +246,11 @@ export function standings(season: LeagueSeason): Standing[] {
 }
 
 /**
- * `seat`'s 162 games in schedule order, numbered from 1, with results for the chapters played.
+ * `seat`'s 162 games in schedule order, numbered from 1, with results for the segments played.
  * Unplayed games carry no runs and are not wins.
  */
 export function clubSchedule(run: DraftRun, season: LeagueSeason, schedule: readonly (readonly Fixture[])[], seat: number, clubName: (seat: number) => string): ScheduledGame[] {
- const played = new Map(season.chapters.flatMap(chapter => chapter.games).filter(game => game.home === seat || game.away === seat).map(game => [game.matchday, game]));
+ const played = new Map(season.segments.flatMap(segment => segment.games).filter(game => game.home === seat || game.away === seat).map(game => [game.matchday, game]));
  return schedule.map((day, matchday) => {
   const fixture = day.find(item => item.home === seat || item.away === seat);
   if (!fixture) throw new Error(`Club ${seat} has no game on matchday ${matchday + 1}`);
@@ -231,7 +267,7 @@ export function clubSchedule(run: DraftRun, season: LeagueSeason, schedule: read
 export function headToHead(season: LeagueSeason, seat: number, opponent: number): { wins: number; losses: number } {
  let wins = 0;
  let losses = 0;
- for (const game of season.chapters.flatMap(chapter => chapter.games)) {
+ for (const game of season.segments.flatMap(segment => segment.games)) {
   if (!((game.home === seat && game.away === opponent) || (game.home === opponent && game.away === seat))) continue;
   const won = game.home === seat ? game.homeRuns > game.awayRuns : game.awayRuns > game.homeRuns;
   if (won) wins++; else losses++;
@@ -247,12 +283,12 @@ const sumInto = <T extends object>(target: T, source: T): void => {
  }
 };
 
-/** A club's season lines so far, one per card, summed over chapters in first-appearance order. */
+/** A club's season lines so far, one per card, summed over segments in first-appearance order. */
 export function seasonLines(season: LeagueSeason, seat: number): { batting: BatterLine[]; pitching: PitcherLine[] } {
  const batting = new Map<string, BatterLine>();
  const pitching = new Map<string, PitcherLine>();
- for (const chapter of season.chapters) {
-  const lines = chapter.lines[seat];
+ for (const segment of season.segments) {
+  const lines = segment.lines[seat];
   for (const line of lines.batting) {
    const total = batting.get(line.seasonId);
    if (total) sumInto(total, line); else batting.set(line.seasonId, structuredClone(line));

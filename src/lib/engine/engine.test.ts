@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MODEL_VERSION, POSITIONS } from '../game/types.ts';
 import { neutralDefensivePosition } from '../sim/defense.ts';
-import { testDefenseEnvironment, testLeagueChapter, testSeason } from '../sim/test-fixtures.ts';
-import type { LeagueChapterResult } from '../sim/league-types.ts';
+import { testDefenseEnvironment, testLeagueSegment, testSeason } from '../sim/test-fixtures.ts';
+import type { LeagueSegmentResult } from '../sim/league-types.ts';
 import type { SeriesProgress } from '../sim/series-types.ts';
 import type { GameResult } from '../sim/types.ts';
-import { buildLeagueSchedule, buildSchedule, createContactReference, simulateLeagueChapter, simulateSeason, simulateSeries } from './node.ts';
+import { buildLeagueSchedule, buildSchedule, createContactReference, simulateLeagueSegment, simulateSeason, simulateSeries } from './node.ts';
 import { neutralPark } from '../sim/park.ts';
 import type { Rates } from '../game/types.ts';
 
@@ -85,37 +85,72 @@ describe('wasm engine boundary', () => {
   expect(stoppers).not.toEqual(defaults);
  });
 
- it('plays a league season chapter by chapter with rest carried between chapters', () => {
-  const first = testLeagueChapter(162);
-  const chapters: LeagueChapterResult[] = [];
-  for (let chapter = 0; chapter < 6; chapter++) {
-   chapters.push(simulateLeagueChapter({ ...first, chapter, carry: chapters.at(-1)?.carry ?? [] }));
+ it('plays a league season segment by segment with rest carried between segments', () => {
+  const first = testLeagueSegment(162);
+  const segments: LeagueSegmentResult[] = [];
+  for (let segment = 0; segment < 18; segment++) {
+   segments.push(simulateLeagueSegment({ ...first, segment, carry: segments.at(-1)?.carry ?? [] }));
   }
-  const games = chapters.flatMap(result => result.games);
+  const games = segments.flatMap(result => result.games);
   expect(games).toHaveLength(648);
   const schedule = buildLeagueSchedule(162, first.rivals);
   expect(games.map(game => [game.matchday, game.home, game.away])).toEqual(schedule.flatMap((day, matchday) => day.map(fixture => [matchday, fixture.home, fixture.away])));
   for (let club = 0; club < 8; club++) {
    expect(games.filter(game => game.home === club || game.away === club)).toHaveLength(162);
-   expect(chapters.reduce((sum, result) => sum + result.totals[club].runs, 0)).toBe(games.reduce((sum, game) => sum + (game.home === club ? game.homeRuns : game.away === club ? game.awayRuns : 0), 0));
+   expect(segments.reduce((sum, result) => sum + result.totals[club].runs, 0)).toBe(games.reduce((sum, game) => sum + (game.home === club ? game.homeRuns : game.away === club ? game.awayRuns : 0), 0));
   }
   // The detail club's games come back whole, from its side.
-  const detail = chapters[2].detailGames;
-  expect(detail).toHaveLength(27);
+  const detail = segments[7].detailGames;
+  expect(detail).toHaveLength(9);
   expect(detail.every(game => (game.isHome ? game.home : game.away).id === 'club-0')).toBe(true);
-  expect(detail.map(game => game.challengeRuns)).toEqual(chapters[2].games.filter(game => game.home === 0 || game.away === 0).map(game => game.home === 0 ? game.homeRuns : game.awayRuns));
-  // Carried rest matters: the same chapter from fresh arms uses the bullpen differently, and repeats exactly.
-  const second = { ...first, chapter: 1, carry: chapters[0].carry };
-  expect(simulateLeagueChapter(second)).toEqual(chapters[1]);
-  const fresh = chapters[0].carry.map(club => club.map(state => ({ ...state, last: -1, previous: -1, restThrough: -1 })));
-  const outs = (result: LeagueChapterResult) => result.totals.map(box => box.pitching.map(line => line.outs));
-  expect(outs(simulateLeagueChapter({ ...second, carry: fresh }))).not.toEqual(outs(chapters[1]));
-  expect(() => simulateLeagueChapter({ ...first, chapter: 1 })).toThrow(/previous chapter/);
+  expect(detail.map(game => game.challengeRuns)).toEqual(segments[7].games.filter(game => game.home === 0 || game.away === 0).map(game => game.home === 0 ? game.homeRuns : game.awayRuns));
+  // Carried rest matters: the same segment from fresh arms uses the bullpen differently, and repeats exactly.
+  const second = { ...first, segment: 1, carry: segments[0].carry };
+  expect(simulateLeagueSegment(second)).toEqual(segments[1]);
+  const fresh = segments[0].carry.map(club => club.map(state => ({ ...state, last: -1, previous: -1, restThrough: -1 })));
+  const outs = (result: LeagueSegmentResult) => result.totals.map(box => box.pitching.map(line => line.outs));
+  expect(outs(simulateLeagueSegment({ ...second, carry: fresh }))).not.toEqual(outs(segments[1]));
+  expect(() => simulateLeagueSegment({ ...first, segment: 1 })).toThrow(/previous segment/);
   // Draft legality lets a club hold two seasons of one player.
   const twice = structuredClone(first);
   twice.clubs[0].roster[1].profile.playerId = twice.clubs[0].roster[0].profile.playerId;
-  expect(simulateLeagueChapter(twice).games).toHaveLength(108);
-  expect(() => simulateLeagueChapter({ ...first, rivals: [[0, 1], [1, 2], [3, 4], [5, 6]] })).toThrow(/rival/i);
+  expect(simulateLeagueSegment(twice).games).toHaveLength(36);
+  expect(() => simulateLeagueSegment({ ...first, rivals: [[0, 1], [1, 2], [3, 4], [5, 6]] })).toThrow(/rival/i);
+ });
+
+ it('leans the strike zone toward the home side by the home crowd, within bounds', () => {
+  const first = testLeagueSegment(162);
+  // Club 0's home crowd only: its home games change, nobody else's do.
+  const leaning = { ...first, crowds: first.crowds.map((crowd, club) => club === 0 ? { edge: .3, volatility: 0 } : crowd) };
+  const neutral = simulateLeagueSegment(first);
+  const leaned = simulateLeagueSegment(leaning);
+  const away = (result: LeagueSegmentResult) => result.games.filter(game => game.home !== 0);
+  expect(away(leaned)).toEqual(away(neutral));
+  // Over a season of club 0's home games, the home hitters walk more and strike out less, the visitors the reverse.
+  const sides = (edge: number) => {
+   const tally = { homeBB: 0, homeSO: 0, awayBB: 0, awaySO: 0 };
+   let carry: LeagueSegmentResult['carry'] = [];
+   for (let segment = 0; segment < 18; segment++) {
+    const crowds = first.crowds.map(() => ({ edge, volatility: 0 }));
+    const result = simulateLeagueSegment({ ...first, segment, carry, crowds, detailClub: 0 });
+    carry = result.carry;
+    for (const game of result.detailGames.filter(item => item.isHome)) {
+     tally.homeBB += game.home.batting.reduce((sum, line) => sum + line.BB, 0);
+     tally.homeSO += game.home.batting.reduce((sum, line) => sum + line.SO, 0);
+     tally.awayBB += game.away.batting.reduce((sum, line) => sum + line.BB, 0);
+     tally.awaySO += game.away.batting.reduce((sum, line) => sum + line.SO, 0);
+    }
+   }
+   return tally;
+  };
+  const flat = sides(0);
+  const tilted = sides(.25);
+  expect(tilted.homeBB).toBeGreaterThan(flat.homeBB);
+  expect(tilted.homeSO).toBeLessThan(flat.homeSO);
+  expect(tilted.awayBB).toBeLessThan(flat.awayBB);
+  expect(tilted.awaySO).toBeGreaterThan(flat.awaySO);
+  expect(() => simulateLeagueSegment({ ...first, crowds: first.crowds.map(() => ({ edge: .5, volatility: 0 })) })).toThrow(/crowd/);
+  expect(() => simulateLeagueSegment({ ...first, crowds: first.crowds.slice(1) })).toThrow(/crowd/);
  });
 
  it('plays a decided best-of-five with seeding from both regular seasons', () => {

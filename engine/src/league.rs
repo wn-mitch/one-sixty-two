@@ -1,6 +1,8 @@
-//! Draft Mode's eight-club league: one shared 648-game schedule played in six 27-matchday
-//! chapters, with relief rest carried between chapters and lineups free to change at each one.
+//! Draft Mode's eight-club league: one shared 648-game schedule played in eighteen nine-matchday
+//! segments, with relief rest carried between segments and lineups free to change at each stop.
+//! Each club's home crowd leans the strike zone at its home games.
 use crate::game::{simulate_game, team_defense, GameInput, GameModels};
+use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
 use crate::season::{club_team, Engine};
@@ -10,14 +12,16 @@ use serde::{Deserialize, Serialize};
 
 pub const CLUBS: usize = 8;
 pub const MATCHDAYS: usize = 162;
-pub const CHAPTERS: usize = 6;
-pub const CHAPTER_MATCHDAYS: usize = MATCHDAYS / CHAPTERS;
+pub const SEGMENTS: usize = 18;
+pub const SEGMENT_MATCHDAYS: usize = MATCHDAYS / SEGMENTS;
+/// The largest strike-zone lean a single game may carry, after volatility.
+pub const MAX_EDGE: f64 = 0.4;
 /// Series lengths for each pairing in every round-robin round: 23 games a pairing.
 const SERIES: [usize; 8] = [3, 3, 3, 3, 3, 3, 3, 2];
 /// The pairing's designated host takes this many of a round's series (twelve of 23 games).
 const HOST_SERIES: usize = 4;
 
-/// One club's active roster and lineup for a chapter.
+/// One club's active roster and lineup for a segment.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LeagueClub {
@@ -30,17 +34,26 @@ pub struct LeagueClub {
     pub relief_roles: Vec<RoleAssignment>,
 }
 
+/// A club's home crowd for a segment: the strike zone's mean lean toward the home side, and the
+/// spread of a game's lean around it. Volatility is symmetric, so it never favors either side.
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Crowd { pub edge: f64, pub volatility: f64 }
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LeagueChapterRequest {
+pub struct LeagueSegmentRequest {
     pub model_version: String,
     pub rules_version: String,
     pub seed: u32,
     pub clubs: Vec<LeagueClub>,
     /// Four disjoint rival pairs by club index; rivals meet once more than other pairings.
     pub rivals: Vec<[usize; 2]>,
-    pub chapter: usize,
-    /// Each club's relief rest from the previous chapter; empty for the first.
+    /// 0-17.
+    pub segment: usize,
+    /// Each club's home crowd, by club index.
+    pub crowds: Vec<Crowd>,
+    /// Each club's relief rest from the previous segment; empty for the first.
     pub carry: Vec<Vec<RestState>>,
     /// The club whose full game results are returned.
     pub detail_club: usize,
@@ -57,10 +70,10 @@ pub struct LeagueGame { pub matchday: usize, pub home: usize, pub away: usize, p
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LeagueChapterResult {
-    pub chapter: usize,
+pub struct LeagueSegmentResult {
+    pub segment: usize,
     pub games: Vec<LeagueGame>,
-    /// Each club's batting and pitching totals for the chapter, by club index.
+    /// Each club's batting and pitching totals for the segment, by club index.
     pub totals: Vec<TeamBox>,
     /// The detail club's games in full; its side is the challenge side.
     pub detail_games: Vec<GameResult>,
@@ -159,13 +172,15 @@ pub fn build_league_schedule(seed: u32, rivals: &[[usize; 2]]) -> Result<Vec<[Fi
 }
 
 impl Engine {
-    /// Plays one chapter of the league: 27 matchdays of the shared schedule with the given lineups.
-    pub fn simulate_league_chapter(&self, request: &LeagueChapterRequest, on_game: &mut dyn FnMut(usize)) -> Result<LeagueChapterResult, String> {
+    /// Plays one segment of the league: nine matchdays of the shared schedule with the given lineups and crowds.
+    pub fn simulate_league_segment(&self, request: &LeagueSegmentRequest, on_game: &mut dyn FnMut(usize)) -> Result<LeagueSegmentResult, String> {
         if request.clubs.len() != CLUBS { return Err("A league needs eight clubs".into()); }
-        if request.chapter >= CHAPTERS { return Err("A league season has six chapters".into()); }
+        if request.segment >= SEGMENTS { return Err("A league season has eighteen segments".into()); }
         if request.detail_club >= CLUBS { return Err("Detail club is outside the league".into()); }
+        if request.crowds.len() != CLUBS { return Err("Every club needs a home crowd".into()); }
+        if request.crowds.iter().any(|crowd| !(crowd.edge.abs() <= MAX_EDGE && (0.0..=MAX_EDGE).contains(&crowd.volatility))) { return Err("Crowd effects are out of bounds".into()); }
         if !request.carry.is_empty() && request.carry.len() != CLUBS { return Err("Carried rest must cover every club".into()); }
-        if request.chapter > 0 && request.carry.is_empty() { return Err("A later chapter needs the previous chapter's rest".into()); }
+        if request.segment > 0 && request.carry.is_empty() { return Err("A later segment needs the previous segment's rest".into()); }
         let schedule = build_league_schedule(request.seed, &request.rivals)?;
         let remainder = &self.data.bullpen;
         let mut clubs: Vec<TeamInput> = request.clubs.iter()
@@ -183,9 +198,9 @@ impl Engine {
         let mut usage: Vec<ReliefUsage> = clubs.iter().enumerate().map(|(index, club)| ReliefUsage::resume(club, request.carry.get(index).map_or(&[][..], Vec::as_slice))).collect();
         let mut totals: Vec<TeamBox> = clubs.iter().map(create_totals_box).collect();
         let models = GameModels { values: &self.values, tables: &self.tables, win_expectancy: None };
-        let mut result = LeagueChapterResult { chapter: request.chapter, games: Vec::with_capacity(CHAPTER_MATCHDAYS * 4), totals: Vec::new(), detail_games: Vec::new(), carry: Vec::new() };
-        let first = request.chapter * CHAPTER_MATCHDAYS;
-        for (matchday, fixtures) in schedule.iter().enumerate().skip(first).take(CHAPTER_MATCHDAYS) {
+        let mut result = LeagueSegmentResult { segment: request.segment, games: Vec::with_capacity(SEGMENT_MATCHDAYS * 4), totals: Vec::new(), detail_games: Vec::new(), carry: Vec::new() };
+        let first = request.segment * SEGMENT_MATCHDAYS;
+        for (matchday, fixtures) in schedule.iter().enumerate().skip(first).take(SEGMENT_MATCHDAYS) {
             for (index, club) in clubs.iter_mut().enumerate() {
                 club.starter_index = matchday % 3;
                 usage[index].prepare(club, matchday as i64);
@@ -196,12 +211,14 @@ impl Engine {
                 let challenge_is_home = away != request.detail_club;
                 let opponent = if challenge_is_home { away } else { home };
                 let number = (matchday * 4 + slot + 1) as u32;
+                let home_edge = crowd_edge(request.seed, number, request.crowds[home])?;
                 let game = simulate_game(GameInput {
                     number, opponent_id: &clubs[opponent].id, opponent_name: &clubs[opponent].name, challenge_is_home,
                     home: &clubs[home], away: &clubs[away], home_defense: defenses[home].clone(), away_defense: defenses[away].clone(),
                     park: parks[home],
                     home_matchups: matchups[home * CLUBS + away].as_ref().unwrap(),
                     away_matchups: matchups[away * CLUBS + home].as_ref().unwrap(),
+                    home_edge,
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
                 usage[home].record(matchday as i64, &game.home.pitching);
                 usage[away].record(matchday as i64, &game.away.pitching);
@@ -216,6 +233,13 @@ impl Engine {
         result.totals = totals;
         Ok(result)
     }
+}
+
+/// One game's strike-zone lean: the crowd's edge plus its volatility times a seeded standard normal draw.
+fn crowd_edge(seed: u32, number: u32, crowd: Crowd) -> Result<f64, String> {
+    if crowd.volatility == 0.0 { return Ok(crowd.edge); }
+    let draw = random_stream(seed, &format!("league:crowd:{number}")).next().clamp(1e-9, 1.0 - 1e-9);
+    Ok((crowd.edge + crowd.volatility * normal_quantile(draw)?).clamp(-MAX_EDGE, MAX_EDGE))
 }
 
 #[cfg(test)]

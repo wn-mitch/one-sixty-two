@@ -77,7 +77,7 @@ impl Engine {
         simulate_game(GameInput {
             number: request.number, opponent_id: &opponent.id, opponent_name: &opponent.name, challenge_is_home: request.challenge_is_home,
             home: &home, away: &away, home_defense: team_defense(&home, errors)?, away_defense: team_defense(&away, errors)?,
-            park: &park, home_matchups: &home_matchups, away_matchups: &away_matchups,
+            park: &park, home_matchups: &home_matchups, away_matchups: &away_matchups, home_edge: 0.0,
         }, &models, &mut GameStreams::new(request.seed, request.game), None)
     }
 }

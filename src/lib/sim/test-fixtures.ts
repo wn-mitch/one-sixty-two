@@ -4,7 +4,7 @@ import { neutralDefensivePosition } from './defense.ts';
 import { AVERAGE_RATES, syntheticProfile, syntheticStadium } from './fixtures.ts';
 import { stadiumRef } from './park.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
-import type { LeagueChapterInput, LeagueClubInput } from './league-types.ts';
+import type { LeagueClubInput, LeagueSegmentInput } from './league-types.ts';
 import { DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_SLOTS } from '../draft/rules.ts';
 import type { DraftSlot } from '../draft/types.ts';
 
@@ -107,10 +107,10 @@ function leagueClub(id: string, data: SimulationData, park: number): LeagueClubI
   reliefRoles: DEFAULT_DRAFT_RELIEF_ROLES.map(role => ({ ...role })) };
 }
 
-/** The first chapter of an eight-club league on the synthetic season data. */
-export function testLeagueChapter(seed = 162): LeagueChapterInput {
+/** The first segment of an eight-club league on the synthetic season data, before neutral crowds. */
+export function testLeagueSegment(seed = 162): LeagueSegmentInput {
  const { data } = seasonFixture(seed);
  return { modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed, data,
   clubs: Array.from({ length: 8 }, (_, index) => leagueClub(`club-${index}`, data, index)),
-  rivals: [[0, 4], [1, 5], [2, 6], [3, 7]], chapter: 0, carry: [], detailClub: 0 };
+  rivals: [[0, 4], [1, 5], [2, 6], [3, 7]], segment: 0, crowds: Array.from({ length: 8 }, () => ({ edge: 0, volatility: 0 })), carry: [], detailClub: 0 };
 }

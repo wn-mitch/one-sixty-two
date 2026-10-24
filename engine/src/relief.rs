@@ -52,7 +52,7 @@ pub fn default_assignments(named: usize) -> Vec<RoleAssignment> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Rest { last: i64, previous: i64, rest_through: i64 }
 
-/// One named pitcher's rest, carried across simulation calls by season id (league chapters).
+/// One named pitcher's rest, carried across simulation calls by season id (league segments).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestState { pub season_id: String, pub last: i64, pub previous: i64, pub rest_through: i64 }

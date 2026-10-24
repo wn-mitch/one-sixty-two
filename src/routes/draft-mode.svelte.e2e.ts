@@ -31,7 +31,7 @@ test('public visitors cannot enter unfinished Draft Mode; a developer opt-in can
  await expect(page.getByRole('heading', { name: 'This mode isn’t available' })).toBeVisible();
 });
 
-test('a Draft Mode run goes from franchise to a played chapter and resumes after a reload', async ({ page }) => {
+test('a Draft Mode run goes from franchise to played nine-game stops and resumes after a reload', async ({ page }) => {
  await page.goto('/draft?developer=on');
  await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
  await page.getByRole('button', { name: 'Start draft' }).click();
@@ -91,13 +91,18 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
 
  await expect(page.getByRole('heading', { name: 'Opening day' })).toBeVisible();
  expect(await order()).toEqual(moved);
- await page.getByRole('button', { name: 'Play chapter 1' }).click();
- // The chapter plays on the season broadcast, then returns to the next stop.
- await expect(page.getByRole('heading', { name: 'Playing chapter 1 of 6' })).toBeVisible();
- await expect(page.getByRole('heading', { name: 'After chapter 1 of 6' })).toBeVisible({ timeout: 120_000 });
+ await page.getByRole('button', { name: 'Play games 1–9' }).click();
+ // The segment plays on the season broadcast, then returns to the next stop.
+ await expect(page.getByRole('heading', { name: 'Playing games 1–9' })).toBeVisible();
+ await expect(page.getByRole('heading', { name: 'After game 9' })).toBeVisible({ timeout: 120_000 });
  const standings = page.getByRole('region', { name: 'Standings' });
  const games = await standings.locator('tbody tr').evaluateAll(rows => rows.map(row => Number(row.children[1].textContent) + Number(row.children[2].textContent)));
- expect(games).toEqual(Array(8).fill(27));
+ expect(games).toEqual(Array(8).fill(9));
+ // The first payday is credited and banked, and the bank survives the reload below.
+ const crowd = page.getByRole('region', { name: 'Crowd and cash' });
+ const payday = Number((await crowd.locator('dt:text-is("Payday") + dd').textContent())!.match(/^\+(\d+)/)![1]);
+ expect(payday).toBeGreaterThan(0);
+ await expect(crowd.locator('dt:text-is("Bank") + dd')).toHaveText(String(payday));
 
  // A reserve change is kept with the season and survives a reload.
  const reserves = page.getByRole('region', { name: 'Reserves' });
@@ -107,14 +112,17 @@ test('a Draft Mode run goes from franchise to a played chapter and resumes after
  await expect(firstReserve).not.toHaveAttribute('data-season-id', before!);
  const benched = await firstReserve.getAttribute('data-season-id');
  await page.reload();
- await expect(page.getByRole('heading', { name: 'After chapter 1 of 6' })).toBeVisible({ timeout: 60_000 });
+ await expect(page.getByRole('heading', { name: 'After game 9' })).toBeVisible({ timeout: 60_000 });
  await expect(firstReserve).toHaveAttribute('data-season-id', benched!);
+ await expect(crowd.locator('dt:text-is("Bank") + dd')).toHaveText(String(payday));
  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 
  // Completed reports stay in history; starting again from one clears its URL selection.
- for (let chapter = 2; chapter <= 6; chapter++) {
-  await page.getByRole('button', { name: `Play chapter ${chapter}`, exact: true }).click();
-  if (chapter < 6) await expect(page.getByRole('heading', { name: `After chapter ${chapter} of 6` })).toBeVisible({ timeout: 120_000 });
+ for (let segment = 2; segment <= 18; segment++) {
+  await page.getByRole('button', { name: `Play games ${segment * 9 - 8}–${segment * 9}`, exact: true }).click();
+  if (segment === 18) break;
+  const title = segment % 3 === 0 ? `Chapter ${segment / 3} complete` : `After game ${segment * 9}`;
+  await expect(page.getByRole('heading', { name: title })).toBeVisible({ timeout: 120_000 });
  }
  await expect(page.getByRole('heading', { name: 'Final standings' })).toBeVisible({ timeout: 120_000 });
  await expect(page.getByRole('link', { name: 'Shop, 1 token', exact: true })).toBeVisible();
