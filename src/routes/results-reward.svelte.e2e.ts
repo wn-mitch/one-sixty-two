@@ -124,3 +124,40 @@ test('the results arrival never widens the phone page or lifts the share bar off
 	expect(samples.wide).toBe(0);
 	expect(samples.barOffset).toBeLessThan(1);
 });
+
+test('the reveal rolls the pocket calendar upward month by month while the count ticks, and nothing around it moves', async ({ page, request }) => {
+	await prepareSeason(page, request);
+	await page.getByRole('button', { name: 'Simulate 162 games', exact: true }).click();
+	// Sample every frame of the broadcast until Results replace it.
+	const frames = await page.evaluate(() => new Promise<{ strip: number; count: number; reel: number; skip: number; scroll: number }[]>(resolve => {
+		const out: { strip: number; count: number; reel: number; skip: number; scroll: number }[] = [];
+		const sample = () => {
+			const strip = document.querySelector<HTMLElement>('.season-reel:not(.spinning) .strip');
+			const reel = document.querySelector('.season-reel');
+			const skip = [...document.querySelectorAll('.progress-shell button')].find(button => button.textContent === 'Skip animation');
+			if (strip && reel && skip) out.push({
+				strip: new DOMMatrixReadOnly(getComputedStyle(strip).transform).m42,
+				count: Number(document.querySelector('.game-count strong')?.textContent),
+				reel: reel.getBoundingClientRect().top,
+				skip: skip.getBoundingClientRect().top,
+				scroll: scrollY
+			});
+			if (document.querySelector('#results-heading')) resolve(out);
+			else requestAnimationFrame(sample);
+		};
+		requestAnimationFrame(sample);
+	}));
+	expect(frames.length).toBeGreaterThan(30);
+	const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
+	expect(spread(frames.map(frame => frame.reel))).toBeLessThan(1);
+	expect(spread(frames.map(frame => frame.skip))).toBeLessThan(1);
+	expect(spread(frames.map(frame => frame.scroll))).toBe(0);
+	// The count only climbs, through many distinct values rather than one jump.
+	const counts = frames.map(frame => frame.count);
+	expect(counts.every((count, index) => index === 0 || count >= counts[index - 1])).toBe(true);
+	expect(new Set(counts).size).toBeGreaterThan(20);
+	// The strip's stops only rise; the overshoot may bounce a little past a stop but never back to an earlier month.
+	const stops = frames.map(frame => frame.strip);
+	expect(Math.min(...stops)).toBeLessThan(-200);
+	expect(stops.every((stop, index) => stop <= Math.min(...stops.slice(0, index + 1)) + 40)).toBe(true);
+});

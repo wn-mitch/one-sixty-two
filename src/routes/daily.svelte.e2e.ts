@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { dailyDate, dailyLabel, dailyStadium } from '../lib/game/daily.ts';
 import { availableCandidates, commitPick, createDailyDraft, legalSlots, rollDraft } from '../lib/game/draft.ts';
 import { encodeReplay, storeReplay } from '../lib/game/share.ts';
@@ -7,6 +7,18 @@ import { currentManifest, deviceRows, openPack, runDeviceSql } from './draft-tes
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(180_000);
+
+/**
+ * Expects each control wholly on the first screen of an iPhone 14 in Safari, whose toolbars leave 390×664 of
+ * the 390×844 display, then restores the test viewport.
+ */
+async function expectAboveFold(page: Page, controls: Locator[]): Promise<void> {
+ const size = page.viewportSize()!;
+ await page.setViewportSize({ width: 390, height: 664 });
+ await page.evaluate(() => scrollTo(0, 0));
+ for (const control of controls) expect(await control.evaluate(node => innerHeight - node.getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(0);
+ await page.setViewportSize(size);
+}
 
 /** Today's daily drafted to a full roster, taking the n-th legal card each pick until a strategy finishes. */
 function completeDaily(manifest: Manifest, date: string): Draft {
@@ -33,6 +45,7 @@ test('the daily leads the home screen, skips the stadium choice, keeps its own s
  const panel = page.getByRole('region', { name: `Daily ${dailyLabel(date)}` });
  await expect(panel).toContainText(dailyStadium(date, manifest).name);
  await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toHaveClass(/secondary/);
+ await expectAboveFold(page, [panel.getByRole('button', { name: 'Play today’s daily', exact: true }), page.getByRole('button', { name: 'Build my team', exact: true })]);
  await panel.getByRole('button', { name: 'Play today’s daily', exact: true }).click();
  await expect(page).toHaveURL(/\/daily$/);
  await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeFocused();
@@ -122,6 +135,7 @@ test('a finished daily pays two tokens, carries its stamp, joins the standings, 
  await expect(panel.getByRole('timer')).toHaveAccessibleName(/^Next daily in /);
  await expect(panel.getByRole('button')).toHaveText(['See results']);
  await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toHaveClass(/primary/);
+ await expectAboveFold(page, [page.getByRole('button', { name: 'Build my team', exact: true }), panel.getByRole('button', { name: 'See results', exact: true })]);
 
  // See results reopens the day's own Results without playing the season back, earning nothing new; Back returns home.
  await panel.getByRole('button', { name: 'See results', exact: true }).click();
