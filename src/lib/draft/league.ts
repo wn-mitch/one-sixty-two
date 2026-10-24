@@ -11,7 +11,7 @@ import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v2' as const;
+export const LEAGUE_VERSION = 'league-v3' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop

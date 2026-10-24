@@ -27,10 +27,10 @@ export interface FanState {
  sentiment: number;
 }
 
-/** A franchise's crowd: seats it fills when sentiment is neutral, how strongly it leans, how hard it swings, and its box-seat floor. */
-export interface FanProfile { baseFill: number; crowdScale: number; fairWeather: number; expectationBias: number; boxSeats: number }
+/** A franchise's crowd: seats it fills when sentiment is neutral, how strongly it leans, and how hard it swings. */
+export interface FanProfile { baseFill: number; crowdScale: number; fairWeather: number; expectationBias: number }
 
-const DEFAULT_PROFILE: FanProfile = { baseFill: .7, crowdScale: 1, fairWeather: 1, expectationBias: 0, boxSeats: 8 };
+const DEFAULT_PROFILE: FanProfile = { baseFill: .7, crowdScale: 1, fairWeather: 1, expectationBias: 0 };
 /** Catalog traits: Atlanta's remote park draws thinner, quieter crowds; Baltimore's fans expect little; LA and New York are fair-weather. */
 const PROFILES: Readonly<Record<string, Partial<FanProfile>>> = {
  ATL: { baseFill: .6, crowdScale: .6 },
@@ -67,8 +67,18 @@ export const CROWD_EDGE = .025;
 const SATURATION = .35;
 /** Game-to-game spread of the edge at a full house; thinner crowds spread less. */
 export const MAX_VOLATILITY = .06;
-/** Cash per home game at a full house. */
-export const GATE_PER_FULL_HOUSE = 4;
+/**
+ * Payday, about 20 a stop on average: a fixed salary (about half), the gate (about a quarter: 1.6 a
+ * home game at a full house, about 4.5 home games at 70% full), and the win bonus (about a
+ * quarter). Like a blind cleared with hands to spare, a win pays more the wider its margin: 0.7,
+ * plus 0.25 for each run beyond the first up to four. `engine league-crowd` measured 30% of
+ * league wins by one run and a mean margin of 3.2, so a win pays about 1.15 and a .500 stop about 5.
+ */
+export const SALARY = 10;
+export const GATE_PER_FULL_HOUSE = 1.6;
+export const WIN_BASE = .7;
+export const WIN_PER_RUN = .25;
+export const MARGIN_RUNS_PAID = 4;
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 const round = (value: number, places = 4) => Math.round(value * 10 ** places) / 10 ** places;
@@ -101,17 +111,24 @@ export function crowd(franchiseId: string, fans: FanState): Crowd {
  return { edge: round(BASE_EDGE + CROWD_EDGE * profile.crowdScale * saturation(share) * mood), volatility: round(MAX_VOLATILITY * profile.crowdScale * share ** 3) };
 }
 
-export interface Payday { boxSeats: number; gate: number; homeGames: number; attendance: number }
+export interface Payday { salary: number; gate: number; winBonus: number; homeGames: number; wins: number; attendance: number }
 
-export const paydayTotal = (payday: Payday): number => payday.boxSeats + payday.gate;
+export const paydayTotal = (payday: Payday): number => payday.salary + payday.gate + payday.winBonus;
 
-/** A club's segment payday: its box-seat floor plus the gate from each home game's filled seats. */
+/** A win's bonus by its run margin. */
+export const winBonus = (margin: number): number => WIN_BASE + WIN_PER_RUN * Math.min(margin - 1, MARGIN_RUNS_PAID);
+
+/** A club's segment payday: its salary, the gate from each home game's filled seats, and a bonus for each win by its margin. */
 export function payday(seat: number, franchiseIds: readonly string[], fans: FanState, games: readonly LeagueGame[]): Payday {
  const franchiseId = franchiseIds[seat];
  const base = fill(franchiseId, fans);
  const shares = games.filter(game => game.home === seat).map(game => Math.min(1, base + (isRivalry(franchiseId, franchiseIds[game.away]) ? RIVAL_FILL : 0)));
  const seats = shares.reduce((sum, share) => sum + share, 0);
- return { boxSeats: fanProfile(franchiseId).boxSeats, gate: Math.round(GATE_PER_FULL_HOUSE * seats), homeGames: shares.length, attendance: shares.length ? round(seats / shares.length, 3) : 0 };
+ const margins = games.flatMap(game => game.home === seat ? [game.homeRuns - game.awayRuns] : game.away === seat ? [game.awayRuns - game.homeRuns] : []).filter(margin => margin > 0);
+ return {
+  salary: SALARY, gate: Math.round(GATE_PER_FULL_HOUSE * seats), winBonus: Math.round(margins.reduce((sum, margin) => sum + winBonus(margin), 0)),
+  homeGames: shares.length, wins: margins.length, attendance: shares.length ? round(seats / shares.length, 3) : 0
+ };
 }
 
 /**

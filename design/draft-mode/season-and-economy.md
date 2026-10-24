@@ -6,7 +6,7 @@ Authoritative league, checkpoint, economy, transaction, development and general 
 
 **Salary cap and cash are separate resources.** The cap is a payroll allowance: roster salaries occupy that allowance without spending development cash. Use available cap space to improve the roster; unused room is capacity under the current ceiling, not a cash balance. Spendable revenue pays for development purchases, and **unspent cash carries throughout the run**. Revenue does not automatically expand payroll allowance. Starting player salaries remain the roster cost after development; any repricing exceptions require a separate decision.
 
-**Payday is every nine games, before purchases, and it is ticket revenue.** Box seats are a fixed floor set by the franchise; the gate scales with attendance, which follows fan sentiment against expectations, so winning pays through the crowd rather than through a separate bonus. Ticket prices never change. An average payday funds about two basic trainings. Royal Flush adds its earned home-win development-cash reward; other declared franchise payouts retain their own triggers. Keep these components visible without a merchandise-store management system.
+**Payday is every nine games, before purchases: salary, gate and win bonus.** A fixed salary is about half of an average payday, so a nine-game road trip still pays. The gate scales with attendance, which follows fan sentiment against expectations. Each win pays a bonus that grows with its run margin up to a cap, the way Balatro pays for hands left over. Ticket prices never change. An average payday funds about two basic trainings. Royal Flush adds its earned home-win development-cash reward; other declared franchise payouts retain their own triggers. Keep these components visible without a merchandise-store management system.
 
 ## A genuine eight-team season
 
@@ -38,7 +38,7 @@ The **opening decree is revealed before the initial draft**, along with franchis
 |---|---|---|
 | Before initial draft | Franchise/park information and opening decree | Schedule disclosure and opening venue details |
 | After draft | Trading, cuts, waivers, common-only cleanup and legal roster submission | Pack allocation, ordering and repeated cut/claim cycles |
-| Every nine games | Ticket revenue (box-seat floor plus attendance gate) before purchases; basics/specials; one purchase per player; lineup/rotation/reserve changes | Special offers and exact within-visit ordering |
+| Every nine games | Salary, attendance gate and margin-scaled win bonus before purchases; basics/specials; one purchase per player; lineup/rotation/reserve changes | Special offers and exact within-visit ordering |
 | Every 27 games | Incoming decree/venue revealed before spending; major budget changes, supplemental acquisition and eligible trades | Exact order, acquisition format, shop contents and budget curves |
 | After game 162 | Season completion and reporting | Whether a final shop has any purpose; none is assumed |
 

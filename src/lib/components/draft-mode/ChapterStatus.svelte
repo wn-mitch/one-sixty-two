@@ -42,10 +42,10 @@
    <div><dt>Mood</dt><dd data-mood={mood.toLowerCase()}>{mood}</dd></div>
    <div><dt>Fans expect</dt><dd>{pct(fans.expectation)}</dd></div>
    <div><dt>Seats filled</dt><dd>{Math.round(share * 100)}%</dd></div>
-   {#if payday}<div><dt>Payday</dt><dd>+{paydayTotal(payday)} <small>{payday.homeGames ? `${payday.boxSeats} box seats + ${payday.gate} gate, ${payday.homeGames} home` : `${payday.boxSeats} box seats, all road games`}</small></dd></div>{/if}
+   {#if payday}<div><dt>Payday</dt><dd>+{paydayTotal(payday)} <small>{payday.salary} salary + {payday.gate} gate{payday.homeGames ? '' : ' (all road)'} + {payday.winBonus} for {payday.wins} {payday.wins === 1 ? 'win' : 'wins'}</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>
-  <p class="note">Win more than they expect and the stands fill, the gate grows and the home crowd leans the strike zone your way. Disappoint them and it turns.</p>
+  <p class="note">Every win pays, more the wider the margin. Win more than your fans expect and the stands fill, the gate grows and the home crowd leans the strike zone your way. Disappoint them and it turns.</p>
  </section>
 
  <Standings rows={table} {human} {rival} {clubName} />
