@@ -10,6 +10,8 @@ Modifiers must change parameters that the simulation actually uses, rather than 
 
 Each exaggerated stadium has one prominent physical or environmental identity, normally active at all its home games and affecting **both** teams on the field. Ordinary fields do not require a special physical modifier. A park may influence ball flight, collisions, runner advancement, stealing, or fielding. The existing conventional park factors already contribute to baseline historical normalization; fantasy park effects must be layered explicitly, without unintentional double counting.
 
+Park effects are cartoonish but bounded: clearly beyond any real park, yet capped so a park changes which roster wins there without deciding every game. A park's strength is measured with paired native seasons, the same rosters at the franchise park and at a neutral park, so ordinary home advantage cancels out; a raw home record is not the measure.
+
 Examples:
 
 | Franchise | Satirical park condition | Intended simulation consequences |
@@ -59,18 +61,18 @@ Other possible compensation levers include cap space, scouting visibility, permi
 
 ## The Commissioner's Office: league-wide, temporary chaos
 
-A fictional commissioner issues deadpan official memoranda between chapters. Decrees apply to **every** team for a **27-game chapter**, then the next decree replaces the previous one. One decree is active at a time, alongside stadium conditions and fan effects. Accumulating decrees is a separate candidate, not a default rule. The viewership-driven premise supports increasingly absurd changes to identifiable rules of baseball, rather than unexplained behavior buffs.
+Mad Fred, the commissioner, issues deadpan official memoranda between chapters. Decrees apply to **every** team for a **27-game chapter**, then the next decree replaces the previous one. One decree is active at a time, alongside stadium conditions and fan effects. Accumulating decrees is a separate candidate, not a default rule. The viewership-driven premise supports increasingly absurd changes to identifiable rules of baseball, rather than unexplained behavior buffs.
 
 Examples:
 
 - **Mound Everest:** The mound rises ten inches; reweight strikeouts, walks, and contact outcomes in favor of pitching. This is a deliberately exaggerated rule effect, not a physical prediction.
 - **Last Call:** Beer sales have become intolerable; regulation games now last seven innings. Change the game-ending logic, closer-entry timing, seasonal pitching usage, and win-expectancy calculation together.
 - **Honey, I Shrunk the Diamond:** Bases are closer together; modify steal success, advancement, and possibly double-play rates.
-- **Singles Appreciation Night** (also called **Singles Awareness Week**): runners may advance only one base at a time; steals are banned. “No one likes a stolen heart.” The direction is agreed; advancement units, home-run classification, forced advances, errors, sacrifice flies and extra-inning interactions remain open.
+- **Singles Appreciation Night** (also called **Singles Awareness Week**): runners may advance only one base at a time; steals are banned. “No one likes a stolen heart.” Every hit, home runs included, puts the batter on first and moves every runner exactly one base; errors and sacrifices also advance one base.
 
 Further candidates: **lowering the mound**; **legalized steroids**; **random starting baserunners**, with starting configurations and runner identities unresolved; and **Ticky Tocky Bases**, a lopsided diamond distorted to suit vertical video. Its geometry and baseball consequences remain open. Rule changes should produce distinct adaptations, not merely different names for the same multiplier.
 
-The opening decree is **revealed before drafting**. Later decrees are **announced at chapter checkpoints before spending and roster decisions**. The full future decree calendar is hidden. Seeded-random versus reactive selection and future schedule disclosure remain open. Opposing GMs only respond to information they could legitimately know.
+The opening decree is **revealed before drafting**. Later decrees are **announced at chapter checkpoints before spending and roster decisions**. The full future decree calendar is hidden. Each decree is drawn by the run seed from the decrees the engine supports, never repeating within a run. The whole season's schedule is visible from the start. Opposing GMs only respond to information they could legitimately know.
 
 The selected twenty-item catalog below is **accepted for continued design**, not a set of twenty completely specified rules. Both batter's-box candidates remain in scope.
 
@@ -78,7 +80,7 @@ The selected twenty-item catalog below is **accepted for continued design**, not
 |---|---|---|
 | 1 | Last Call | Seven-inning regulation, with extras for ties; ending logic, closer entry, workload and win expectancy change together. |
 | 2 | Ticky Tocky Bases | Lopsided diamond for vertical video; legs have different distances. Geometry remains open. |
-| 3 | Singles Appreciation Night | One-base advancement and no steals; define advancement units, HRs, forced runners, errors, sacrifices and extras. |
+| 3 | Singles Appreciation Night | Every hit, home runs included, is a single: the batter takes first and every runner advances exactly one base. No steals; errors and sacrifices advance one base. |
 | 4 | Mound Everest | Dramatically higher mound changes pitching; the exaggerated effect still needs calibration. |
 | 5 | Honey, I Shrunk the Diamond | Shorter basepaths; advancement, stealing and double plays need consistent treatment. |
 | 6 | One Strike, You're Out | One called or swinging strike retires the batter; ordinary fouls are exempt. Needs a count/pitch abstraction. |
@@ -91,11 +93,11 @@ The selected twenty-item catalog below is **accepted for continued design**, not
 | 13 | Two-Out Express | Two outs per half-inning. |
 | 14 | Wrong-Way Round | Run third → second → first → home; force plays and throws follow that route. |
 | 15 | The Designated Runner | A nominated rostered reserve runs for batters reaching base while hitters stay in the lineup; concurrent runners need definition. |
-| 16 | No Free Passes | Ball four awards second; other runners advance as forced. Define force chains and HBP treatment. |
+| 16 | No Free Passes | A walk or hit-by-pitch puts the batter on second and advances every runner two bases. |
 | 17 | Foul Play | An ordinary foul with two strikes becomes strike three. |
-| 18 | Double Jeopardy | A grounded double play retires two runners but counts as three outs, capped by remaining outs; scoring and identities need definition. |
+| 18 | Double Jeopardy | A grounded double play with fewer than two outs ends the half-inning; no run scores on the play. |
 | 19 | Small-Ball Subsidy | A successful sacrifice bunt retiring the batter and advancing a runner earns a bonus run; success/failure rules need support. |
-| 20 | Everybody Tags | A caught fly retires the batter and automatically advances each existing runner one base; eligible catches need definition. |
+| 20 | Everybody Tags | A caught outfield fly or line drive retires the batter and advances every runner one base (a runner on third scores); infield pop-ups and third-out catches advance nobody. |
 
 Lowered mound, legalized steroids and random starting baserunners remain additional candidates. **The Great Wall**, which raises every outfield fence, is deferred outside the selected twenty-decree catalog; Boston's permanent tall-wall park remains intact. Decrees may substantially change baseball rules rather than being limited to small statistical nudges.
 
