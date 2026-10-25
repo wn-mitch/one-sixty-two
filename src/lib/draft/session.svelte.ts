@@ -11,6 +11,8 @@ import { LEAGUE_VERSION, LineupError, recordSegment, segmentInput, setLineup, st
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
 import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
 import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
+import { aiShop, buyTraining, ShopError } from './shop.ts';
+import type { TrainingKind } from './training.ts';
 import type { Difficulty } from './scouting.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
 import { DRAFT_RULES } from './rules.ts';
@@ -246,6 +248,20 @@ export class DraftModeSession {
   return null;
  }
 
+ /** Buys a training for one of the player's cards at this stop; returns the refusal message, or null. */
+ async train(cardId: string, kind: TrainingKind): Promise<string | null> {
+  const run = this.run;
+  const season = this.season;
+  if (!run || !season || !this.profiles || this.playing) return 'The season is not at a stop';
+  const [profile] = (await this.profiles.load([cardId])).values();
+  if (!profile) return 'That card could not be loaded';
+  try { buyTraining(run, season, run.seating.humanSeat, profile, kind); }
+  catch (error) { if (error instanceof ShopError) return error.message; throw error; }
+  await this.#save();
+  this.revision++;
+  return null;
+ }
+
  /** Plays the next nine-game segment in a worker; resolves once it is recorded or fails. */
  async playSegment(): Promise<void> {
   const run = this.run;
@@ -261,6 +277,8 @@ export class DraftModeSession {
    this.#simulation ??= await loadSimulation(manifest);
    const active = season.lineups.flatMap(lineup => Object.values(lineup.active));
    const profiles: Map<string, Profile> = await this.profiles.load(active);
+   // AI clubs shop at this stop before its games; the player has shopped already.
+   aiShop(run, season, profiles);
    const names = run.seating.seats.map((_, seat) => this.clubName(seat));
    const input = segmentInput(run, season, profiles, this.#simulation, names);
    const { result, schedule } = await this.#simulate(input);

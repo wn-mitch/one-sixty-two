@@ -104,7 +104,7 @@ function leagueClub(id: string, data: SimulationData, park: number): LeagueClubI
  });
  return { id, name: `Club ${id}`, homeStadium: stadiumRef(data.stadiums[park]), roster,
   battingOrder: roster.slice(0, 9).map(pick => pick.profile.seasonId), starterOrder: roster.slice(9, 12).map(pick => pick.profile.seasonId),
-  reliefRoles: DEFAULT_DRAFT_RELIEF_ROLES.map(role => ({ ...role })) };
+  reliefRoles: DEFAULT_DRAFT_RELIEF_ROLES.map(role => ({ ...role })), quickRecovery: [] };
 }
 
 /** The first segment of an eight-club league on the synthetic season data, before neutral crowds. */

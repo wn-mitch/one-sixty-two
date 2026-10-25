@@ -6,12 +6,13 @@ import type { ScheduledGame } from '../game/season-calendar.ts';
 import type { BatterLine, PitcherLine } from '../sim/types.ts';
 import { afterSegment, crowd, openingFans, payday, paydayTotal, priors, type FanState, type Payday } from './fans.ts';
 import { RIVALS } from './franchises.ts';
+import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v3' as const;
+export const LEAGUE_VERSION = 'league-v4' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -48,6 +49,10 @@ export interface LeagueSeason {
  fans: FanState[];
  /** Each club's banked cash: every payday credited, less what it has spent. */
  cash: number[];
+ /** Every training bought this season, in purchase order; each stays with its card. */
+ upgrades: Upgrade[];
+ /** The last stop at which AI clubs shopped, so they shop once per stop; -1 before the first. */
+ aiShopped: number;
 }
 
 export class LineupError extends Error {}
@@ -99,7 +104,7 @@ export function startLeague(run: DraftRun): LeagueSeason {
  return {
   version: LEAGUE_VERSION, rivals: matchRivals(run), lineups, segments: [],
   fans: priors(run.seating.seats, payrolls).map(openingFans),
-  cash: lineups.map(() => 0)
+  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1
  };
 }
 
@@ -180,8 +185,9 @@ export function setLineup(run: DraftRun, season: LeagueSeason, lineup: ClubLineu
 export const seasonCrowds = (run: DraftRun, season: LeagueSeason): Crowd[] => season.fans.map((fans, seat) => crowd(run.seating.seats[seat], fans));
 
 /**
- * The engine input for the next segment. `profiles` must hold every active card; `names` labels
- * each seat's club, and each club plays in its franchise's park before its own crowd.
+ * The engine input for the next segment. `profiles` must hold every active card's printed
+ * profile; each plays with the training in force. `names` labels each seat's club, and each club
+ * plays in its franchise's park before its own crowd.
  */
 export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueSegmentInput {
  const segment = season.segments.length;
@@ -198,9 +204,10 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     roster: run.pool.rules.activeSlots.map(slot => {
      const profile = profiles.get(lineup.active[slot]);
      if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
-     return { profile, slot };
+     return { profile: developed(profile, season.upgrades, segment), slot };
     }),
-    battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role }))
+    battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })),
+    quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort()
    };
   })
  };

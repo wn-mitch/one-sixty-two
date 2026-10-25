@@ -23,6 +23,8 @@ export interface LeagueClubInput {
  roster: { profile: Profile; slot: DraftSlot }[];
  battingOrder: string[]; starterOrder: string[];
  reliefRoles: ReliefAssignment<DraftBullpenSlot>[];
+ /** Named relievers, by season id, trained to recover quickly. */
+ quickRecovery: string[];
 }
 
 /** A named reliever's rest, carried from one segment into the next by season id. */

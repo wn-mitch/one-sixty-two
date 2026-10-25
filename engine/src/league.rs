@@ -32,6 +32,9 @@ pub struct LeagueClub {
     pub batting_order: Vec<String>,
     pub starter_order: Vec<String>,
     pub relief_roles: Vec<RoleAssignment>,
+    /// Named relievers, by season id, trained to recover quickly.
+    #[serde(default)]
+    pub quick_recovery: Vec<String>,
 }
 
 /// A club's home crowd for a segment: the strike zone's mean lean toward the home side, and the
@@ -195,7 +198,9 @@ impl Engine {
                 matchups.push(if a == b { None } else { Some(self.matchups(&clubs[a].hitters, &clubs[b].pitchers)?) });
             }
         }
-        let mut usage: Vec<ReliefUsage> = clubs.iter().enumerate().map(|(index, club)| ReliefUsage::resume(club, request.carry.get(index).map_or(&[][..], Vec::as_slice))).collect();
+        let mut usage: Vec<ReliefUsage> = clubs.iter().enumerate()
+            .map(|(index, club)| ReliefUsage::with_recovery(club, request.carry.get(index).map_or(&[][..], Vec::as_slice), &request.clubs[index].quick_recovery))
+            .collect();
         let mut totals: Vec<TeamBox> = clubs.iter().map(create_totals_box).collect();
         let models = GameModels { values: &self.values, tables: &self.tables, win_expectancy: None };
         let mut result = LeagueSegmentResult { segment: request.segment, games: Vec::with_capacity(SEGMENT_MATCHDAYS * 4), totals: Vec::new(), detail_games: Vec::new(), carry: Vec::new() };

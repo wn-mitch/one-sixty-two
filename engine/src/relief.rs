@@ -50,20 +50,23 @@ pub fn default_assignments(named: usize) -> Vec<RoleAssignment> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Rest { last: i64, previous: i64, rest_through: i64 }
+struct Rest { last: i64, previous: i64, rest_through: i64, quick: bool }
 
 /// One named pitcher's rest, carried across simulation calls by season id (league segments).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestState { pub season_id: String, pub last: i64, pub previous: i64, pub rest_through: i64 }
 
-impl Default for Rest { fn default() -> Self { Self { last: -1, previous: -1, rest_through: -1 } } }
+impl Default for Rest { fn default() -> Self { Self { last: -1, previous: -1, rest_through: -1, quick: false } } }
 
 impl Rest {
-    fn ready(&self, game: i64) -> bool { game > self.rest_through && !(self.last == game - 1 && self.previous == game - 2) }
-    /// Every inning beyond the first costs one more game of rest.
+    /// A quick recoverer may pitch a third straight day.
+    fn ready(&self, game: i64) -> bool { game > self.rest_through && (self.quick || !(self.last == game - 1 && self.previous == game - 2)) }
+    /// Every inning beyond the first costs one more game of rest; a quick recoverer's first two innings are free.
     fn record(&mut self, game: i64, outs: i32, appeared: bool) {
-        if outs > 3 { self.rest_through = game + i64::from((outs + 2) / 3 - 1); }
+        let free = if self.quick { 2 } else { 1 };
+        let innings = (outs + 2) / 3;
+        if innings > free { self.rest_through = game + i64::from(innings - free); }
         if appeared { self.previous = self.last; self.last = game; }
     }
 }
@@ -77,10 +80,15 @@ impl ReliefUsage {
     pub fn new(team: &TeamInput) -> Self { Self::resume(team, &[]) }
 
     /// Usage that continues from carried rest; a pitcher without a carried state starts fresh.
-    pub fn resume(team: &TeamInput, carried: &[RestState]) -> Self {
+    pub fn resume(team: &TeamInput, carried: &[RestState]) -> Self { Self::with_recovery(team, carried, &[]) }
+
+    /// `resume`, with the named pitchers in `quick` (by season id) recovering quickly.
+    pub fn with_recovery(team: &TeamInput, carried: &[RestState], quick: &[String]) -> Self {
         Self { pitchers: team.named_relief().map(|index| {
-            let rest = carried.iter().find(|state| state.season_id == team.pitchers[index].season_id)
-                .map_or_else(Rest::default, |state| Rest { last: state.last, previous: state.previous, rest_through: state.rest_through });
+            let id = &team.pitchers[index].season_id;
+            let mut rest = carried.iter().find(|state| &state.season_id == id)
+                .map_or_else(Rest::default, |state| Rest { last: state.last, previous: state.previous, rest_through: state.rest_through, quick: false });
+            rest.quick = quick.contains(id);
             (index, rest)
         }).collect() }
     }
@@ -110,6 +118,19 @@ impl ReliefUsage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_quick_recoverer_rests_one_game_less_and_may_pitch_a_third_straight_day() {
+        let mut quick = Rest { quick: true, ..Rest::default() };
+        quick.record(1, 3, true);
+        quick.record(2, 3, true);
+        assert!(quick.ready(3));
+        let mut long = Rest { quick: true, ..Rest::default() };
+        long.record(1, 6, true);
+        assert!(long.ready(2));
+        long.record(2, 9, true);
+        assert!(!long.ready(3) && long.ready(4));
+    }
 
     #[test]
     fn rest_scales_with_innings_and_blocks_a_third_straight_day() {

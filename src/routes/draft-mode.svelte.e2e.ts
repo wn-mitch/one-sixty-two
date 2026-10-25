@@ -103,6 +103,15 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  const payday = Number((await crowd.locator('dt:text-is("Payday") + dd').textContent())!.match(/^\+(\d+)/)![1]);
  expect(payday).toBeGreaterThan(0);
  await expect(crowd.locator('dt:text-is("Bank") + dd')).toHaveText(String(payday));
+ // A hitting lesson spends 10 from the bank, marks the card trained, and survives the reload below.
+ const shop = page.getByRole('region', { name: 'Training' });
+ await shop.getByRole('radio', { name: /^Hitting/ }).click();
+ const lesson = shop.getByRole('button', { name: /^Train / }).first();
+ const trainee = (await lesson.getAttribute('aria-label'))!.replace(/^Train (.*): Hitting$/, '$1');
+ await lesson.click();
+ await expect(shop.locator('.bank strong')).toHaveText(String(payday - 10));
+ await expect(shop.getByRole('button', { name: `Train ${trainee}: Hitting` })).toHaveText('Trained');
+ await expect(page.getByLabel('1 lasting training')).toHaveCount(1);
 
  // A reserve change is kept with the season and survives a reload.
  const reserves = page.getByRole('region', { name: 'Reserves' });
@@ -114,7 +123,8 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  await page.reload();
  await expect(page.getByRole('heading', { name: 'After game 9' })).toBeVisible({ timeout: 60_000 });
  await expect(firstReserve).toHaveAttribute('data-season-id', benched!);
- await expect(crowd.locator('dt:text-is("Bank") + dd')).toHaveText(String(payday));
+ await expect(crowd.locator('dt:text-is("Bank") + dd')).toHaveText(String(payday - 10));
+ await expect(page.getByLabel('1 lasting training')).toHaveCount(1);
  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 
  // Completed reports stay in history; starting again from one clears its URL selection.

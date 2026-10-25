@@ -8,6 +8,7 @@
  import PileStatus from '#lib/components/draft-mode/PileStatus.svelte';
  import LeagueReport from '#lib/components/draft-mode/LeagueReport.svelte';
  import ChapterStatus from '#lib/components/draft-mode/ChapterStatus.svelte';
+import TrainingShop from '#lib/components/draft-mode/TrainingShop.svelte';
  import WindowPanel from '#lib/components/draft-mode/WindowPanel.svelte';
  import Lineup from '#lib/components/Lineup.svelte';
  import Progress from '#lib/components/Progress.svelte';
@@ -19,6 +20,7 @@
  import { waiverCards } from '#lib/draft/market.ts';
  import { BENCH, placeFromKey, seasonForm, seasonLineupView, windowBlockers, windowLineupView } from '#lib/draft/lineup-view.ts';
  import { clubSchedule, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
+import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts';
  import type { DraftSlot } from '#lib/draft/types.ts';
  import { LEAGUE_CLUBS, SEGMENT_MATCHDAYS, SEGMENTS_PER_CHAPTER } from '#lib/sim/league-types.ts';
  import type { DraftModeSession } from '#lib/draft/session.svelte.ts';
@@ -114,6 +116,14 @@
    games: session.schedule ? clubSchedule(run, season, session.schedule, run.seating.humanSeat, clubName) : null
   };
  });
+
+ /** A season row's form line, with a trained card's line in place of its printed one. */
+ function trainedForm(id: string, season: NonNullable<typeof session.season>, lines: Parameters<typeof seasonForm>[1]) {
+  const printed = profiles.get(id);
+  const form = seasonForm(printed, lines, id);
+  const note = printed ? trainedLine(printed, developed(printed, season.upgrades, season.segments.length)) : null;
+  return note ? { ...form, card: form.card ? `${form.card} · ${note}` : note } : form;
+ }
 
  function windowOrders(change: Partial<WindowOrders>): WindowOrders {
   const { battingOrder, starterOrder, reliefRoles } = windowLineup(session.run!);
@@ -213,13 +223,20 @@
    lineup={current.view} manifest={session.manifest} profiles={dealt} {rankings} rankingLoading={!rankings} rankingError={false}
    busy={session.playing} title={stopTitle(current.played)}
    action={{ label: `Play games ${current.played * SEGMENT_MATCHDAYS + 1}–${(current.played + 1) * SEGMENT_MATCHDAYS}`, busyLabel: 'Playing…' }}
-   form={id => seasonForm(profiles.get(id), current.lines, id)}
+   form={id => trainedForm(id, current.season, current.lines)}
    onMove={moveInSeason}
    onOrder={(kind, order) => void refusal(session.lineup({ ...seasonLineup(), [kind === 'batting' ? 'battingOrder' : 'starterOrder']: order }))}
    onRoles={roles => void refusal(session.lineup({ ...seasonLineup(), reliefRoles: roles as ReliefAssignment<DraftBullpenSlot>[] }))}
    onsimulate={() => void session.playSegment()}
   >
-   {#snippet intro()}<ChapterStatus run={current.run} season={current.season} revision={session.revision} {clubName} />{/snippet}
+   {#snippet intro()}
+    <ChapterStatus run={current.run} season={current.season} revision={session.revision} {clubName} />
+    <TrainingShop run={current.run} season={current.season} revision={session.revision} {profiles} {working} onTrain={(id, kind) => session.train(id, kind)} />
+   {/snippet}
+   {#snippet rowControl(seasonId: string)}
+    {@const count = lastingUpgrades(current.season.upgrades, seasonId)}
+    {#if count}<span class="trained" title={`${count} lasting ${count === 1 ? 'training' : 'trainings'}`} aria-label={`${count} lasting ${count === 1 ? 'training' : 'trainings'}`}>+{count}</span>{/if}
+   {/snippet}
    {#snippet status()}
     <p class="progress">Games {current.played * SEGMENT_MATCHDAYS + 1}–{(current.played + 1) * SEGMENT_MATCHDAYS} of 162. Lineup changes apply from the next game; AI clubs keep their lineups.</p>
    {/snippet}
@@ -247,4 +264,5 @@
  .ready { color: var(--success); }
  .cut { min-height: 2.25rem; padding-inline: var(--space-3); border: 1px solid var(--border); background: transparent; font-size: var(--text-xs); }
  .progress { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-sm); }
+ .trained { display: inline-grid; place-items: center; min-width: 2rem; min-height: 1.5rem; padding-inline: var(--space-1); border-radius: .4rem; background: color-mix(in oklch, var(--success) 18%, transparent); color: var(--success); font-size: var(--text-xs); font-weight: 700; font-variant-numeric: tabular-nums; }
 </style>
