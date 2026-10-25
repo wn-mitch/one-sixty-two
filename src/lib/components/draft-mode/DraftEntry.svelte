@@ -24,7 +24,7 @@
 
  <fieldset>
   <legend>Your franchise</legend>
-  <p class="note">A franchise brings its home park and a guaranteed rival. Franchise packages and Commissioner decrees are later content.</p>
+  <p class="note">A franchise brings its home park and a guaranteed rival. Franchise packages are later content. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
   <div class="franchises">
    {#each sorted as franchise (franchise.id)}
     <label class="franchise" class:selected={franchiseId === franchise.id}>

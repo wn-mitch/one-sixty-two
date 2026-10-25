@@ -18,6 +18,7 @@ import TrainingShop from '#lib/components/draft-mode/TrainingShop.svelte';
  import { effectiveCap } from '#lib/draft/rules.ts';
  import { heldPile, ownedBy, windowLineup, type WindowOrders } from '#lib/draft/run.ts';
  import { waiverCards } from '#lib/draft/market.ts';
+ import { decreeAt } from '#lib/draft/decrees.ts';
  import { BENCH, placeFromKey, seasonForm, seasonLineupView, windowBlockers, windowLineupView } from '#lib/draft/lineup-view.ts';
  import { clubSchedule, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
 import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts';
@@ -174,7 +175,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
   onNew={() => session.requestNew()}
   {caption}
  />
- {#snippet opening()}<PileOpening packs={current.run.pool.rules.packsPerSeat} packSize={current.run.pool.rules.packSize} pickCount={current.source.pickCount} onOpen={() => opened = true} />{/snippet}
+ {#snippet opening()}<PileOpening decree={decreeAt(current.run.setup.seed, 0)} packs={current.run.pool.rules.packsPerSeat} packSize={current.run.pool.rules.packSize} pickCount={current.source.pickCount} onOpen={() => opened = true} />{/snippet}
  {#snippet status()}<PileStatus club={clubName(current.run.seating.humanSeat)} rival={current.rival} payroll={current.payroll} cap={current.cap} />{/snippet}
  {#snippet league()}<LeagueTab run={current.run} revision={session.revision} {profiles} {clubName} />{/snippet}
  {#snippet caption(profile: Profile)}

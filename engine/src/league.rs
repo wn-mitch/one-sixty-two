@@ -5,6 +5,7 @@ use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
+use crate::rules::GameRules;
 use crate::season::{club_team, Engine};
 use crate::team::{accumulate_box, create_totals_box, TeamInput};
 use crate::types::{GameResult, ParkRef, RosterPick, TeamBox};
@@ -60,6 +61,9 @@ pub struct LeagueSegmentRequest {
     pub carry: Vec<Vec<RestState>>,
     /// The club whose full game results are returned.
     pub detail_club: usize,
+    /// The rules every game of the segment is played under, from the commissioner's decree.
+    #[serde(default)]
+    pub rules: GameRules,
 }
 
 /// One scheduled game by club index.
@@ -180,6 +184,7 @@ impl Engine {
         if request.clubs.len() != CLUBS { return Err("A league needs eight clubs".into()); }
         if request.segment >= SEGMENTS { return Err("A league season has eighteen segments".into()); }
         if request.detail_club >= CLUBS { return Err("Detail club is outside the league".into()); }
+        request.rules.validate()?;
         if request.crowds.len() != CLUBS { return Err("Every club needs a home crowd".into()); }
         if request.crowds.iter().any(|crowd| !(crowd.edge.abs() <= MAX_EDGE && (0.0..=MAX_EDGE).contains(&crowd.volatility))) { return Err("Crowd effects are out of bounds".into()); }
         if !request.carry.is_empty() && request.carry.len() != CLUBS { return Err("Carried rest must cover every club".into()); }
@@ -223,7 +228,7 @@ impl Engine {
                     park: parks[home],
                     home_matchups: matchups[home * CLUBS + away].as_ref().unwrap(),
                     away_matchups: matchups[away * CLUBS + home].as_ref().unwrap(),
-                    home_edge,
+                    home_edge, rules: request.rules,
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
                 usage[home].record(matchday as i64, &game.home.pitching);
                 usage[away].record(matchday as i64, &game.away.pitching);

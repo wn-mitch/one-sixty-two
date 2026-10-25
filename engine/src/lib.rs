@@ -20,6 +20,7 @@ pub mod prep;
 pub mod random;
 pub mod rates;
 pub mod relief;
+pub mod rules;
 pub mod season;
 pub mod series;
 pub mod team;

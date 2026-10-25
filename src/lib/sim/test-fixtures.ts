@@ -4,7 +4,7 @@ import { neutralDefensivePosition } from './defense.ts';
 import { AVERAGE_RATES, syntheticProfile, syntheticStadium } from './fixtures.ts';
 import { stadiumRef } from './park.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
-import type { LeagueClubInput, LeagueSegmentInput } from './league-types.ts';
+import { STANDARD_RULES, type LeagueClubInput, type LeagueSegmentInput } from './league-types.ts';
 import { DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_SLOTS } from '../draft/rules.ts';
 import type { DraftSlot } from '../draft/types.ts';
 
@@ -112,5 +112,5 @@ export function testLeagueSegment(seed = 162): LeagueSegmentInput {
  const { data } = seasonFixture(seed);
  return { modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed, data,
   clubs: Array.from({ length: 8 }, (_, index) => leagueClub(`club-${index}`, data, index)),
-  rivals: [[0, 4], [1, 5], [2, 6], [3, 7]], segment: 0, crowds: Array.from({ length: 8 }, () => ({ edge: 0, volatility: 0 })), carry: [], detailClub: 0 };
+  rivals: [[0, 4], [1, 5], [2, 6], [3, 7]], segment: 0, crowds: Array.from({ length: 8 }, () => ({ edge: 0, volatility: 0 })), carry: [], detailClub: 0, rules: { ...STANDARD_RULES } };
 }

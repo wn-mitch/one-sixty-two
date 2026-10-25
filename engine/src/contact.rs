@@ -1,6 +1,7 @@
 //! Legal resolution of a physical fielding outcome (`src/lib/sim/contact.ts`).
 use crate::defense_rules::{advancement_attempt_probability, advancement_out_probability, double_play_participants, double_play_probability, fielding_error_probability};
 use crate::fielding::{OUTCOME_AUTOMATIC_DOUBLE, OUTCOME_CAUGHT, OUTCOME_GROUND_OUT, OUTCOME_HIT, OUTCOME_HOME_RUN, OUTCOME_INFIELD_HIT};
+use crate::rules::GameRules;
 use crate::types::{DefensiveSkills, POSITIONS};
 use std::collections::HashMap;
 
@@ -109,6 +110,8 @@ pub struct ContactResult {
     pub scored_pitchers: [i16; 4],
     pub caught_runners: [i16; 3],
     pub outs_after: u32,
+    /// Outs that end the half inning under the play's rules.
+    pub limit: u32,
     pub runs: u32,
     pub caught_count: usize,
     pub score_count: usize,
@@ -130,8 +133,9 @@ pub struct ContactOptions {
     pub outfield_throwing: bool,
 }
 
-fn reset_result(result: &mut ContactResult, runners: &[i16; 3], pitchers: &[i16; 3], outs: u32, credited: u32) {
+fn reset_result(result: &mut ContactResult, runners: &[i16; 3], pitchers: &[i16; 3], outs: u32, limit: u32, credited: u32) {
     result.runners = *runners;
+    result.limit = limit;
     result.pitchers = *pitchers;
     result.scored_runners = [-1; 4];
     result.scored_pitchers = [-1; 4];
@@ -149,6 +153,9 @@ fn reset_result(result: &mut ContactResult, runners: &[i16; 3], pitchers: &[i16;
     result.ended = false;
     result.winning_advance = 0;
 }
+
+/// The half inning is over, by outs or a walkoff.
+fn over(result: &ContactResult) -> bool { result.outs_after >= result.limit || result.ended }
 
 fn remove_runner(result: &mut ContactResult, base: usize) {
     result.runners[base] = -1;
@@ -179,7 +186,7 @@ fn score_runner(result: &mut ContactResult, base: usize, advance: u32, offense_r
 #[allow(clippy::too_many_arguments)]
 fn attempt_advance(result: &mut ContactResult, decisions: &mut Decisions, from: usize, held_base: usize, safe_base: Option<usize>, baseline: f64, arm: f64, attempt_slot: usize, out_slot: usize, offense_runs: f64, target: f64) {
     let runner = result.runners[from];
-    if runner < 0 || result.outs_after >= 3 || result.ended { return; }
+    if runner < 0 || over(result) { return; }
     if !decide(decisions, attempt_slot, advancement_attempt_probability(baseline, arm)) {
         if held_base != from { move_runner(result, from, held_base); }
         return;
@@ -209,6 +216,15 @@ fn force_one_base(result: &mut ContactResult, hitter: i16, pitcher: i16, offense
     result.pitchers[0] = pitcher;
 }
 
+/// Every runner moves up exactly one base, the lead runner first, and the batter takes first.
+fn advance_all_one_base(result: &mut ContactResult, hitter: i16, pitcher: i16, offense_runs: f64, target: f64) {
+    if result.runners[2] >= 0 && score_runner(result, 2, 1, offense_runs, target, true) { return; }
+    if result.runners[1] >= 0 { move_runner(result, 1, 2); }
+    if result.runners[0] >= 0 { move_runner(result, 0, 1); }
+    result.runners[0] = hitter;
+    result.pitchers[0] = pitcher;
+}
+
 /// Lead runners move first; trailing runners on singles and doubles may try for an extra base.
 #[allow(clippy::too_many_arguments)]
 fn resolve_hit(result: &mut ContactResult, decisions: &mut Decisions, bases_taken: i8, hitter: i16, pitcher: i16, speeds: &[f64], arm: f64, offense_runs: f64, target: f64) {
@@ -223,7 +239,7 @@ fn resolve_hit(result: &mut ContactResult, decisions: &mut Decisions, bases_take
         if result.runners[0] >= 0 {
             let speed = speeds[result.runners[0] as usize];
             attempt_advance(result, decisions, 0, 2, None, 0.35 + 0.40 * speed, arm, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT, offense_runs, target);
-            if result.outs_after >= 3 || result.ended { return; }
+            if over(result) { return; }
         }
         result.runners[1] = hitter;
         result.pitchers[1] = pitcher;
@@ -233,13 +249,13 @@ fn resolve_hit(result: &mut ContactResult, decisions: &mut Decisions, bases_take
     if result.runners[1] >= 0 {
         let speed = speeds[result.runners[1] as usize];
         attempt_advance(result, decisions, 1, 2, None, 0.45 + 0.40 * speed, arm, DECISION_SECOND_ATTEMPT, DECISION_SECOND_OUT, offense_runs, target);
-        if result.outs_after >= 3 || result.ended { return; }
+        if over(result) { return; }
     }
     if result.runners[0] >= 0 {
         if result.runners[2] >= 0 { move_runner(result, 0, 1); } else {
             let speed = speeds[result.runners[0] as usize];
             attempt_advance(result, decisions, 0, 1, Some(2), 0.15 + 0.35 * speed, arm, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT, offense_runs, target);
-            if result.outs_after >= 3 || result.ended { return; }
+            if over(result) { return; }
         }
     }
     result.runners[0] = hitter;
@@ -261,13 +277,14 @@ fn team_double_play_skill(prepared: &PreparedDefense, fielder: isize, enabled: &
     skill
 }
 
-/// Fielded balls: an error puts the batter on first; otherwise the play is an out.
+/// Fielded balls: an error puts the batter on first, moving every runner up a base when only
+/// singles are allowed; otherwise the play is an out.
 #[allow(clippy::too_many_arguments)]
-fn fielding_error(result: &mut ContactResult, decisions: &mut Decisions, prepared: &PreparedDefense, options: &ContactOptions, fielder: usize, hitter: i16, pitcher: i16, offense_runs: f64, target: f64) -> bool {
+fn fielding_error(result: &mut ContactResult, decisions: &mut Decisions, prepared: &PreparedDefense, options: &ContactOptions, fielder: usize, hitter: i16, pitcher: i16, offense_runs: f64, target: f64, singles_only: bool) -> bool {
     let skill = if options.error_positions[fielder] != 0 { prepared.error_avoidance[fielder] } else { 0.0 };
     if !decide(decisions, DECISION_ERROR, fielding_error_probability(prepared.error_baseline[fielder], skill)) { return false; }
     result.error = true;
-    force_one_base(result, hitter, pitcher, offense_runs, target);
+    if singles_only { advance_all_one_base(result, hitter, pitcher, offense_runs, target); } else { force_one_base(result, hitter, pitcher, offense_runs, target); }
     true
 }
 
@@ -286,16 +303,23 @@ pub struct Play<'a> {
     pub batter_double_play: f64,
     pub offense_runs: f64,
     pub target: f64,
+    pub rules: GameRules,
 }
 
 /// Converts one physical fielding outcome into the legal base/out/score transition. Geometry
 /// chooses the fielder, retriever, and batter bases; this adapter applies errors, double plays,
 /// tag-ups, runner advancement, and walkoff stopping.
 pub fn resolve_contact(result: &mut ContactResult, play: &Play, prepared: &PreparedDefense, options: &ContactOptions, decisions: &mut Decisions, participants: &mut [usize; 3]) -> Result<(), String> {
-    let Play { runners, pitchers, outs, kind, fielder, bases_taken, hitter, pitcher, speeds, batter_double_play, offense_runs, target } = *play;
-    let credited = if kind == OUTCOME_HOME_RUN { 4 } else if kind == OUTCOME_HIT || kind == OUTCOME_INFIELD_HIT || kind == OUTCOME_AUTOMATIC_DOUBLE { bases_taken as u32 } else { 0 };
-    reset_result(result, runners, pitchers, outs, credited);
+    let Play { runners, pitchers, outs, kind, fielder, bases_taken, hitter, pitcher, speeds, batter_double_play, offense_runs, target, rules } = *play;
+    let hit = kind == OUTCOME_HOME_RUN || kind == OUTCOME_HIT || kind == OUTCOME_INFIELD_HIT || kind == OUTCOME_AUTOMATIC_DOUBLE;
+    let credited = if !hit { 0 } else if rules.singles_only { 1 } else if kind == OUTCOME_HOME_RUN { 4 } else { bases_taken as u32 };
+    reset_result(result, runners, pitchers, outs, rules.outs, credited);
     result.fielder = fielder as isize;
+    if hit && rules.singles_only {
+        if kind == OUTCOME_HIT { result.thrower = fielder as isize; }
+        advance_all_one_base(result, hitter, pitcher, offense_runs, target);
+        return Ok(());
+    }
     if kind == OUTCOME_HOME_RUN {
         for base in (0..3).rev() { if result.runners[base] >= 0 { score_runner(result, base, 3 - base as u32, offense_runs, target, false); } }
         result.scored_runners[result.score_count] = hitter;
@@ -324,18 +348,27 @@ pub fn resolve_contact(result: &mut ContactResult, play: &Play, prepared: &Prepa
     }
     if kind != OUTCOME_CAUGHT && kind != OUTCOME_GROUND_OUT { return Err("Invalid physical contact outcome".into()); }
     let fielder_index = fielder as usize;
-    if fielding_error(result, decisions, prepared, options, fielder_index, hitter, pitcher, offense_runs, target) { return Ok(()); }
-    if kind == OUTCOME_GROUND_OUT && (1..=4).contains(&fielder) && result.runners[0] >= 0 && outs < 2 {
+    if fielding_error(result, decisions, prepared, options, fielder_index, hitter, pitcher, offense_runs, target, rules.singles_only) { return Ok(()); }
+    if kind == OUTCOME_GROUND_OUT && (1..=4).contains(&fielder) && result.runners[0] >= 0 && rules.double_play_possible(outs) {
         let team_skill = team_double_play_skill(prepared, fielder as isize, &options.double_play_positions, participants);
         if decide(decisions, DECISION_DOUBLE_PLAY, double_play_probability(batter_double_play, team_skill)) {
             result.double_play = true;
             remove_runner(result, 0);
-            result.outs_after += 2;
+            result.outs_after = if rules.double_play_ends { rules.outs } else { result.outs_after + 2 };
             return Ok(());
         }
     }
     result.outs_after += 1;
-    if kind == OUTCOME_CAUGHT && fielder >= 5 && result.runners[2] >= 0 && outs < 2 {
+    if kind == OUTCOME_CAUGHT && fielder >= 5 && rules.everybody_tags && result.outs_after < rules.outs {
+        if result.runners[2] >= 0 {
+            result.sacrifice_fly = true;
+            if score_runner(result, 2, 1, offense_runs, target, true) { return Ok(()); }
+        }
+        if result.runners[1] >= 0 { move_runner(result, 1, 2); }
+        if result.runners[0] >= 0 { move_runner(result, 0, 1); }
+        return Ok(());
+    }
+    if kind == OUTCOME_CAUGHT && fielder >= 5 && result.runners[2] >= 0 && result.outs_after < rules.outs {
         result.thrower = fielder as isize;
         let arm = if options.outfield_throwing { prepared.outfield_throwing[fielder_index] } else { 0.0 };
         if decide(decisions, DECISION_THIRD_ATTEMPT, advancement_attempt_probability(0.625, arm)) {
@@ -352,4 +385,67 @@ pub fn resolve_contact(result: &mut ContactResult, play: &Play, prepared: &Prepa
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SPEEDS: [f64; 9] = [0.0; 9];
+
+    /// Resolves one play from `runners` (lineup indices 1-3, -1 empty) with `outs`; every decision
+    /// declines except a double play when `double_play` is set.
+    fn resolve(rules: GameRules, runners: [i16; 3], outs: u32, kind: u8, fielder: i8, bases_taken: i8, double_play: bool) -> ContactResult {
+        let mut result = ContactResult::default();
+        let mut decisions = Decisions { packet: [1.0; DECISION_COUNT], ..Default::default() };
+        if double_play { decisions.packet[DECISION_DOUBLE_PLAY] = 0.0; }
+        let play = Play {
+            runners: &runners, pitchers: &[0; 3], outs, kind, fielder, bases_taken, hitter: 0, pitcher: 0,
+            speeds: &SPEEDS, batter_double_play: 0.5, offense_runs: 0.0, target: f64::INFINITY, rules,
+        };
+        resolve_contact(&mut result, &play, &PreparedDefense::default(), &ContactOptions::default(), &mut decisions, &mut [0; 3]).unwrap();
+        result
+    }
+
+    #[test]
+    fn singles_appreciation_turns_every_hit_into_a_single_that_moves_each_runner_one_base() {
+        let rules = GameRules { singles_only: true, ..Default::default() };
+        let homer = resolve(rules, [-1, 2, 3], 0, OUTCOME_HOME_RUN, -1, 4, false);
+        assert_eq!((homer.credited_bases, homer.runs, homer.runners), (1, 1, [0, -1, 2]));
+        // A runner on second with first open still moves exactly one base.
+        let double = resolve(rules, [-1, 2, -1], 1, OUTCOME_HIT, 6, 2, false);
+        assert_eq!((double.credited_bases, double.runs, double.runners), (1, 0, [0, -1, 2]));
+        let standard = resolve(GameRules::default(), [-1, 2, -1], 1, OUTCOME_HIT, 6, 2, false);
+        assert_eq!((standard.credited_bases, standard.runs, standard.runners), (2, 1, [-1, 0, -1]));
+    }
+
+    #[test]
+    fn double_jeopardy_ends_the_half_on_a_double_play_and_scores_nobody() {
+        let rules = GameRules { double_play_ends: true, ..Default::default() };
+        let result = resolve(rules, [1, -1, 3], 0, OUTCOME_GROUND_OUT, 3, 0, true);
+        assert!(result.double_play);
+        assert_eq!((result.outs_after, result.runs), (3, 0));
+        let standard = resolve(GameRules::default(), [1, -1, 3], 0, OUTCOME_GROUND_OUT, 3, 0, true);
+        assert_eq!(standard.outs_after, 2);
+        // Two-out halves leave no room for a double play with one down.
+        let two = resolve(GameRules { outs: 2, ..Default::default() }, [1, -1, -1], 1, OUTCOME_GROUND_OUT, 3, 0, true);
+        assert_eq!((two.double_play, two.outs_after), (false, 2));
+        // A fourth out leaves room for one with two down.
+        let four = resolve(GameRules { outs: 4, ..Default::default() }, [1, -1, -1], 2, OUTCOME_GROUND_OUT, 3, 0, true);
+        assert_eq!((four.double_play, four.outs_after), (true, 4));
+    }
+
+    #[test]
+    fn everybody_tags_on_an_outfield_catch_but_not_on_the_last_out_or_an_infield_pop() {
+        let rules = GameRules { everybody_tags: true, ..Default::default() };
+        let fly = resolve(rules, [1, 2, 3], 1, OUTCOME_CAUGHT, 7, 0, false);
+        assert_eq!((fly.outs_after, fly.runs, fly.sacrifice_fly, fly.runners), (2, 1, true, [-1, 1, 2]));
+        let last = resolve(rules, [1, 2, 3], 2, OUTCOME_CAUGHT, 7, 0, false);
+        assert_eq!((last.runs, last.runners), (0, [1, 2, 3]));
+        let pop = resolve(rules, [1, 2, 3], 0, OUTCOME_CAUGHT, 3, 0, false);
+        assert_eq!((pop.runs, pop.runners), (0, [1, 2, 3]));
+        // With a fourth out a catch for the third out still tags.
+        let four = resolve(GameRules { outs: 4, ..rules }, [-1, 2, -1], 2, OUTCOME_CAUGHT, 6, 0, false);
+        assert_eq!((four.outs_after, four.runners), (3, [-1, -1, 2]));
+    }
 }

@@ -71,7 +71,7 @@ fn visit_contact_class(environment: &DefensiveEnvironment, variant: &Variant, re
     let Replayer { result, decisions, participants } = replay;
     let play = Play {
         runners: &runners, pitchers: &pitchers, outs, kind, fielder, bases_taken: bases, hitter: 0, pitcher: 0,
-        speeds: &NEUTRAL_SPEEDS, batter_double_play: environment.league_double_play, offense_runs: 0.0, target,
+        speeds: &NEUTRAL_SPEEDS, batter_double_play: environment.league_double_play, offense_runs: 0.0, target, rules: Default::default(),
     };
     let result_cell = std::cell::RefCell::new(result);
     enumerate_decisions(decisions, &mut |decisions: &mut Decisions| {

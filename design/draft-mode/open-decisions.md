@@ -62,7 +62,7 @@ Home-win development cash is credited every nine games before purchases. Calibra
 
 Owner: [Decree semantics](catalog.md). First relevant gate: [phase](../simulation/phases/04-rule-extensions.md).
 
-Define Singles Appreciation Night's advancement unit and HR/forced-runner behavior; designated-runner multiplicity; pitch/count and check-swing rules; batting-position effects; bunt awards; reverse routes and altered outs. Keep both batter's-box candidates in the selected twenty-item catalog. The Great Wall is deferred; Dynamic Lineup and decree accumulation remain outside default rules.
+Singles Appreciation Night, altered innings and altered outs are settled and implemented. Define designated-runner multiplicity; pitch/count and check-swing rules; batting-position effects; bunt awards and reverse routes. Keep both batter's-box candidates in the selected twenty-item catalog. The Great Wall is deferred; Dynamic Lineup and decree accumulation remain outside default rules.
 
 ## 11. Development details
 

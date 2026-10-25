@@ -421,6 +421,8 @@ export function validateLeagueSegment(input: LeagueSegmentInput): void {
   throw new Error('Every club needs a home crowd within bounds');
  }
  if (!Number.isInteger(input.detailClub) || input.detailClub < 0 || input.detailClub >= LEAGUE_CLUBS) throw new Error('Invalid detail club');
+ const { innings, outs } = input.rules;
+ if (!Number.isInteger(innings) || innings < 5 || innings > 15 || !Number.isInteger(outs) || outs < 2 || outs > 4) throw new Error('Game rules are out of bounds');
  validateDefensiveEnvironment(input.data);
  validateStadiumDeck(input.data);
  validatePitcher(input.data.bullpen);

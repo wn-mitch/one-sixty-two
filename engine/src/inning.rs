@@ -6,6 +6,7 @@ use crate::defense_rules::{double_play_participants, steal_success_probability};
 use crate::fielding::{build_fielding_plan, compute_candidates, fielding_outcomes, select_outcome, FieldingCandidates, FieldingPlan, PhysicalOutcomes, OUTCOME_AUTOMATIC_DOUBLE, OUTCOME_CAUGHT, OUTCOME_FOUL, OUTCOME_GROUND_OUT};
 use crate::flight::{trace_flight, ContactSample, FlightTrace, PreparedPark, TRACE_DEAD_BALL};
 use crate::random::{GameStreams, Mulberry32};
+use crate::rules::GameRules;
 use crate::team::TeamInput;
 use crate::types::{DefenseComponent, MomentContact, MomentFielding, MomentOutcome, MomentPlay, MomentRunner, TeamBox, POSITIONS};
 use crate::value::RunValueModel;
@@ -69,6 +70,7 @@ pub struct Shared<'a> {
     pub park: &'a PreparedPark,
     pub tables: &'a ShapeTables,
     pub max_pa: usize,
+    pub rules: GameRules,
 }
 
 /// One side's per-game batting state and reusable scratch buffers.
@@ -150,11 +152,11 @@ fn resolve_pass(context: &mut InningContext, shared: &Shared, input: PassInput) 
         runners: &context.bases.runners, pitchers: &context.bases.pitchers, outs: input.outs, kind,
         fielder: context.outcomes.fielder[selected], bases_taken: context.outcomes.bases[selected],
         hitter: input.hitter as i16, pitcher: input.pitcher as i16, speeds: &context.speeds, batter_double_play: input.double_play,
-        offense_runs: f64::from(input.runs_before), target: input.target,
+        offense_runs: f64::from(input.runs_before), target: input.target, rules: shared.rules,
     };
     resolve_contact(&mut context.contact, &play, &context.prepared, &context.options, &mut context.decisions, &mut context.dp_participants)?;
     let result = &context.contact;
-    Ok(result.runs as f64 + shared.values.remaining(result.outs_after, bases_mask(&result.runners), result.ended))
+    Ok(result.runs as f64 + shared.values.remaining(shared.rules.value_outs(result.outs_after), bases_mask(&result.runners), result.ended))
 }
 
 fn reset_switches(context: &mut InningContext) {
@@ -297,6 +299,32 @@ fn force(context: &mut InningContext, sides: &mut Sides, hitter: usize, pitcher:
     bases.pitchers[0] = pitcher as i16;
 }
 
+/// A walk or hit by pitch under No Free Passes: runners on second and third score, a runner on first
+/// takes third, and the batter takes second; a run that wins the game ends it there.
+fn award_two_bases(context: &mut InningContext, sides: &mut Sides, hitter: usize, pitcher: usize) {
+    let bases = &mut context.bases;
+    for base in [2, 1] {
+        if bases.runners[base] == -1 { continue; }
+        let (runner, responsible) = (bases.runners[base] as usize, bases.pitchers[base] as usize);
+        bases.runners[base] = -1;
+        bases.pitchers[base] = -1;
+        sides.batting.runs += 1;
+        sides.batting.batting[runner].r += 1;
+        sides.pitching.pitching[responsible].r += 1;
+        if f64::from(sides.batting.runs) >= bases.target {
+            bases.ended = true;
+            bases.winning_advance = 3 - base as u32;
+            return;
+        }
+    }
+    bases.runners[2] = bases.runners[0];
+    bases.pitchers[2] = bases.pitchers[0];
+    bases.runners[0] = -1;
+    bases.pitchers[0] = -1;
+    bases.runners[1] = hitter as i16;
+    bases.pitchers[1] = pitcher as i16;
+}
+
 fn record_steal(context: &mut InningContext, shared: &Shared, sides: &mut Sides, offense: &TeamInput, mut outs: u32, runner_index: usize, pitcher_index: usize, success_uniform: f64) -> Result<u32, String> {
     let bases_before = bases_mask(&context.bases.runners);
     let catcher_skill = context.prepared.catcher_throwing[0];
@@ -317,11 +345,12 @@ fn record_steal(context: &mut InningContext, shared: &Shared, sides: &mut Sides,
     context.bases.runners[0] = -1;
     context.bases.pitchers[0] = -1;
     let actual_bases = bases_mask(&context.bases.runners);
-    let neutral_value = shared.values.remaining(neutral_outs, neutral_bases, false);
-    let actual_value = shared.values.remaining(outs, actual_bases, false);
+    let value_outs = |outs| shared.rules.value_outs(outs);
+    let neutral_value = shared.values.remaining(value_outs(neutral_outs), neutral_bases, false);
+    let actual_value = shared.values.remaining(value_outs(outs), actual_bases, false);
     let defensive_runs = neutral_value - actual_value;
     add_defense(context, sides, 0, DefenseComponent::CatcherThrowing, defensive_runs);
-    let offensive_runs = shared.values.centered_steal(outs - if actual_success { 0 } else { 1 }, bases_before, outs, actual_bases);
+    let offensive_runs = shared.values.centered_steal(value_outs(outs - if actual_success { 0 } else { 1 }), bases_before, value_outs(outs), actual_bases);
     sides.batting.batting[runner_index].steal_runs += offensive_runs;
     sides.batting.steal_runs += offensive_runs;
     record_pitching_value(sides, pitcher_index, offensive_runs, defensive_runs)?;
@@ -374,11 +403,12 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
             }
         };
     }
-    while outs < 3 && !context.bases.ended {
+    let limit = shared.rules.outs;
+    while outs < limit && !context.bases.ended {
         workload.before_plate_appearance(defense, &sides.pitching.pitching, sides.pitching.runs - sides.batting.runs, context.bases.runners[1] != -1 || context.bases.runners[2] != -1);
         let steal_pitcher_index = workload.current;
         sides.pitching.pitching[steal_pitcher_index].appearances = 1;
-        if context.bases.runners[0] != -1 && context.bases.runners[1] == -1 {
+        if !shared.rules.singles_only && context.bases.runners[0] != -1 && context.bases.runners[1] == -1 {
             let runner_index = context.bases.runners[0] as usize;
             let runner = offense.hitters[runner_index];
             if streams.advancement.next() < runner.steal_attempt {
@@ -393,7 +423,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
                 outs = steal_outs;
                 let pitcher = defense.pitchers[steal_pitcher_index];
                 observe!(outs_before, bases_before, runs_before, runner, pitcher, outcome, runners_before, runner_runs, false);
-                if outs == 3 { break; }
+                if outs == limit { break; }
                 workload.before_plate_appearance(defense, &sides.pitching.pitching, sides.pitching.runs - sides.batting.runs, context.bases.runners[1] != -1 || context.bases.runners[2] != -1);
             }
         }
@@ -429,7 +459,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
                 sides.pitching.pitching[active_index].hbp += 1;
                 outcome = MomentOutcome::HitByPitch;
             }
-            force(context, sides, hitter_index, active_index);
+            if shared.rules.free_pass_two { award_two_bases(context, sides, hitter_index, active_index); } else { force(context, sides, hitter_index, active_index); }
             sides.batting.batting[hitter_index].rbi += sides.batting.runs - runs_before;
         } else if event == 2 {
             let hitter = &mut sides.batting.batting[hitter_index];
@@ -480,7 +510,7 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         }
         let runs_scored = sides.batting.runs - runs_before;
         let after_bases = bases_mask(&context.bases.runners);
-        let offensive_runs = shared.values.centered_plate_appearance(outs_before, bases_before, runs_scored as u32, outs, after_bases, context.bases.ended, runs_needed);
+        let offensive_runs = shared.values.centered_plate_appearance(shared.rules.value_outs(outs_before), bases_before, runs_scored as u32, shared.rules.value_outs(outs), after_bases, context.bases.ended, runs_needed);
         sides.batting.batting[hitter_index].batting_runs += offensive_runs;
         sides.batting.batting_runs += offensive_runs;
         record_pitching_value(sides, active_index, offensive_runs, defensive_runs)?;

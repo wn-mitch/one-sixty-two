@@ -3,9 +3,11 @@
  import TradeDesk from './TradeDesk.svelte';
  import WaiverWire from './WaiverWire.svelte';
  import SupplementalPack from './SupplementalPack.svelte';
+ import DecreeMemo from './DecreeMemo.svelte';
  import DraftCardTile from './DraftCardTile.svelte';
  import type { CardMediaStatus } from '../../cards/view-model.ts';
  import { STACK_ROLES, type StackRole } from '../../draft/cleanup.ts';
+ import { decreeAt } from '../../draft/decrees.ts';
  import { effectiveCap, rosterSize } from '../../draft/rules.ts';
  import { ownedBy, type DraftRun } from '../../draft/run.ts';
  import type { DraftCard } from '../../draft/types.ts';
@@ -15,8 +17,8 @@
  import { money } from './format.ts';
 
  /**
-  * The opening window or a chapter market above the lineup: payroll against the cap, then (at a
-  * chapter) the market condition and supplemental pack, trades and waivers until waivers close, then
+  * The opening window or a chapter market above the lineup: the chapter's decree, payroll against the
+  * cap, then (at a chapter) the market condition and supplemental pack, trades and waivers until waivers close, then
   * the cleanup stacks and Auto-fix.
   */
  let { run, revision, profiles, manifest, media, mediaStatus, rankings, clubName, working, onCleanup, onAutofix, onPropose, onRespond, onClaim, onSign }: {
@@ -37,9 +39,11 @@
  const full = $derived(owned.length >= size);
  const tops = $derived.by(() => { void revision; return STACK_ROLES.map(role => ({ role, card: run.pool.cleanup.peek(human, role) })); });
  const nameOf = (card: DraftCard) => profiles.get(card.seasonId)?.displayName ?? card.playerId;
+ const decree = $derived.by(() => { void revision; return decreeAt(run.setup.seed, run.chapter); });
 </script>
 
 <div class="window-panel">
+ <DecreeMemo {decree} label={run.chapter ? `Chapter ${run.chapter + 1} decree` : 'Opening decree'} />
  <div class="status">
   <p>{clubName(human)} · {owned.length} of {size} cards · {step === 'market' ? 'trade, and cut to waivers or claim from them, then close waivers' : 'place, cut and take cleanup commons, then submit a legal roster'}</p>
   <CapBar {payroll} cap={effectiveCap(run.budgets[human])} />

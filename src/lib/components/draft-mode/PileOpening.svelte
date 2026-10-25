@@ -1,14 +1,16 @@
 <script lang="ts">
  import { onMount } from 'svelte';
  import SealedPack from '../SealedPack.svelte';
+ import DecreeMemo from './DecreeMemo.svelte';
+ import type { Decree } from '../../draft/decrees.ts';
  import { appSettings } from '../../game/settings.svelte.ts';
  import { EASE_IN_OUT, EASE_OUT, MOTION } from '../../motion-timing.ts';
 
  /**
-  * The seat's sealed packs before the first pick. Tapping either tears both open the way a franchise
-  * pack tears; the packs fall away and their cards deal into the pile.
+  * The seat's sealed packs before the first pick, under the opening decree. Tapping either tears both
+  * open the way a franchise pack tears; the packs fall away and their cards deal into the pile.
   */
- let { packs, packSize, pickCount, onOpen }: { packs: number; packSize: number; pickCount: number; onOpen: () => void } = $props();
+ let { packs, packSize, pickCount, decree, onOpen }: { packs: number; packSize: number; pickCount: number; decree: Decree; onOpen: () => void } = $props();
  const elements: (HTMLButtonElement | undefined)[] = $state([]);
  const seals: (HTMLElement | undefined)[] = $state([]);
  let opening = $state(false);
@@ -55,6 +57,7 @@
   {/each}
  </div>
  <p class="caption">Open your packs. Each pick, the pile you hold passes left; {pickCount} picks in all.</p>
+ <div class="decree"><DecreeMemo {decree} label="Opening decree" /></div>
 </div>
 
 <style>
@@ -65,5 +68,6 @@
  .mark { width: .55rem; height: .55rem; border: 2px solid currentColor; transform: rotate(45deg); }
  .pack-title { font: italic 900 1.05rem / 1 'Barlow Condensed', sans-serif; letter-spacing: .02em; text-transform: uppercase; color: var(--accent); }
  .pack-count { color: var(--muted); font-size: var(--text-xs); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+ .decree { width: min(100%, 30rem); }
  .caption { max-width: 34ch; margin: 0; color: var(--muted); font-size: var(--text-sm); text-align: center; }
 </style>

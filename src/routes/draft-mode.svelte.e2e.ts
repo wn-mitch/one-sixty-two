@@ -35,6 +35,10 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  await page.goto('/draft?developer=on');
  await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
  await page.getByRole('button', { name: 'Start draft' }).click();
+ // The commissioner's opening decree is known before the first pick and still in force at the window.
+ const opening = page.getByRole('complementary', { name: /^Opening decree: / });
+ await expect(opening).toBeVisible();
+ const decree = (await opening.getAttribute('aria-label'))!.replace('Opening decree: ', '');
  // The seat's two sealed packs open together into the first pile.
  await page.getByRole('button', { name: 'Open your 2 packs' }).first().click();
  // The first pick goes to the bench, and a reload keeps it there.
@@ -50,6 +54,7 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  for (let picked = 1; picked < 16; picked++) await draftFirstCard(page, picked);
  await expect(page.getByRole('heading', { name: 'Opening window' })).toBeVisible();
  await expect(page.getByText(/16 of 20 cards/)).toBeVisible();
+ await expect(page.getByRole('complementary', { name: `Opening decree: ${decree}` })).toBeVisible();
  // The window opens on trades and waivers; commons wait until waivers close.
  await expect(page.getByRole('button', { name: 'Auto-fix' })).toHaveCount(0);
  const desk = page.getByRole('region', { name: 'Trades' });
@@ -134,7 +139,13 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
   if (segment % 3 === 0) {
    // A chapter stop opens the market first: the condition and pack, then waivers, then submission.
    await expect(page.getByRole('heading', { name: `Chapter ${segment / 3} market` })).toBeVisible({ timeout: 120_000 });
-   if (segment === 3) await expect(page.getByRole('list', { name: 'Pack cards' }).locator('li')).toHaveCount(4);
+   if (segment === 3) {
+    await expect(page.getByRole('list', { name: 'Pack cards' }).locator('li')).toHaveCount(4);
+    // The next chapter's decree is revealed before any spending, and never repeats the last.
+    const incoming = page.getByRole('complementary', { name: /^Chapter 2 decree: / });
+    await expect(incoming).toBeVisible();
+    await expect(incoming).not.toHaveAttribute('aria-label', `Chapter 2 decree: ${decree}`);
+   }
    await page.getByRole('button', { name: 'Close waivers' }).click();
    await page.getByRole('button', { name: 'Auto-fix' }).click();
    await expect(page.getByText('Roster is legal.')).toBeVisible({ timeout: 60_000 });
@@ -142,6 +153,7 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
   }
   const title = segment % 3 === 0 ? `Chapter ${segment / 3} complete` : `After game ${segment * 9}`;
   await expect(page.getByRole('heading', { name: title })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole('complementary', { name: /^Decree in force: / })).toBeVisible();
  }
  await expect(page.getByRole('heading', { name: 'Final standings' })).toBeVisible({ timeout: 120_000 });
  await expect(page.getByRole('link', { name: 'Shop, 1 token', exact: true })).toBeVisible();

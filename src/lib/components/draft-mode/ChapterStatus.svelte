@@ -1,13 +1,15 @@
 <script lang="ts">
  import Standings from './Standings.svelte';
+ import DecreeMemo from './DecreeMemo.svelte';
+ import { segmentDecree } from '../../draft/decrees.ts';
  import { fill, paydayTotal } from '../../draft/fans.ts';
  import { headToHead, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
- import { SEGMENT_MATCHDAYS, type LeagueGame } from '../../sim/league-types.ts';
+ import { LEAGUE_SEGMENTS, SEGMENT_MATCHDAYS, type LeagueGame } from '../../sim/league-types.ts';
 
  /**
-  * A stop above the lineup: the club's record and rival series, its crowd and cash, the standings,
-  * and the last nine games.
+  * A stop above the lineup: the club's record and rival series, the decree in force for the next
+  * games, its crowd and cash, the standings, and the last nine games.
   */
  let { run, season, revision, clubName }: {
   run: DraftRun; season: LeagueSeason; revision: number; clubName: (seat: number) => string;
@@ -30,11 +32,14 @@
  const pct = (value: number) => value.toFixed(3).replace(/^0/, '');
  const won = (game: LeagueGame) => game.home === human ? game.homeRuns > game.awayRuns : game.awayRuns > game.homeRuns;
  const ordinal = (value: number) => `${value}${value === 1 ? 'st' : value === 2 ? 'nd' : value === 3 ? 'rd' : 'th'}`;
+ const decree = $derived(segmentDecree(run.setup.seed, Math.min(played, LEAGUE_SEGMENTS - 1)));
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
 </script>
 
 <div class="season">
  <p class="status">{[clubName(human), ...(played ? [`${mine.wins}–${mine.losses}`, ordinal(place)] : []), `rival ${clubName(rival)}`, ...(played ? [`series ${series.wins}–${series.losses}`] : [])].join(' · ')}</p>
+
+ {#if played < LEAGUE_SEGMENTS}<DecreeMemo {decree} label="Decree in force" />{/if}
 
  <section class="crowd" aria-labelledby="crowd-heading">
   <h3 id="crowd-heading">Crowd and cash</h3>

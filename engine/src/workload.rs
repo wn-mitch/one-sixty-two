@@ -11,8 +11,9 @@ pub fn starter_budget(profile: &Profile) -> Result<u32, String> {
     Ok(math::js_round(clamp(counts.ip_outs / counts.gs, 12.0, 24.0)) as u32)
 }
 
-/// Setup and middle relief, and the stopper, work from this inning on.
-const LATE_INNING: u32 = 6;
+/// Setup and middle relief, and the stopper, work from this many innings before the last
+/// regulation inning (the 6th of nine).
+const LATE_INNINGS_LEFT: u32 = 3;
 /// A middle reliever who has faced at most this many batters may stay for a second inning.
 const EXTEND_BATTERS: i32 = 4;
 /// A long reliever stays until this many outs.
@@ -26,6 +27,8 @@ pub struct Workload {
     used: Vec<bool>,
     budget: u32,
     inning: u32,
+    /// The last regulation inning: the closer's inning, with setup men in the two before it.
+    regulation: u32,
     /// The role the current reliever was called in for; None for the starter and the remainder arm.
     entered: Option<ReliefRole>,
     /// Save bookkeeping by pitcher index, from the first batter each one faced.
@@ -49,8 +52,16 @@ impl Workload {
         if team.available.len() != team.pitchers.len() || team.rested.len() != team.pitchers.len() || team.roles.len() != team.pitchers.len() {
             return Err("Pitcher availability and roles must cover the staff".into());
         }
-        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])?, inning: 1, entered: None, entries: vec![None; team.pitchers.len()] })
+        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])?, inning: 1, regulation: 9, entered: None, entries: vec![None; team.pitchers.len()] })
     }
+
+    /// Plays games of `innings` regulation innings, moving the late-inning roles with the last one.
+    pub fn regulation(mut self, innings: u32) -> Self {
+        self.regulation = innings;
+        self
+    }
+
+    fn late(&self) -> bool { self.inning + LATE_INNINGS_LEFT >= self.regulation }
 
     /// A named pitcher may enter once per game, and only when rested enough for today.
     fn ready(&self, team: &TeamInput, index: usize) -> bool { team.available[index] && !self.used[index] }
@@ -75,7 +86,7 @@ impl Workload {
     /// Prefer Long for early exits or a margin of 4+, otherwise Middle. Exhaust named arms
     /// before the remainder, keeping a primary closer last in the emergency order.
     fn relieve(&mut self, team: &TeamInput, lead: i32) {
-        let long = self.inning < LATE_INNING || lead <= -4 || lead >= 4;
+        let long = !self.late() || lead <= -4 || lead >= 4;
         if long && self.call(team, ReliefRole::Long, false) { return; }
         if self.call(team, ReliefRole::Middle, false) { return; }
         let eligible = |index: usize| self.ready(team, index) && team.roles[index].is_some();
@@ -103,28 +114,29 @@ impl Workload {
         }
     }
 
-    /// Chooses the pitcher for a half inning. The closer takes the 9th or later with a 0-3 run
-    /// lead, even over a starter still going. Once the starter is done, setup men take the 8th and
-    /// 7th with that lead; otherwise the current reliever may stay, else fresh relief.
+    /// Chooses the pitcher for a half inning. The closer takes the last regulation inning (the 9th)
+    /// or later with a 0-3 run lead, even over a starter still going. Once the starter is done,
+    /// setup men take the two innings before it with that lead; otherwise the current reliever may stay, else fresh relief.
     pub fn begin_half(&mut self, team: &TeamInput, lines: &[PitcherLine], inning: u32, lead: i32) {
         self.inning = inning;
         if lines[team.starter_index].r >= 6 || lines[team.starter_index].outs as u32 >= self.budget { self.starter_done = true; }
         let leverage = (0..=3).contains(&lead);
-        if inning >= 9 && leverage && self.call(team, ReliefRole::Closer, false) { self.starter_done = true; return; }
+        let last = self.regulation;
+        if inning >= last && leverage && self.call(team, ReliefRole::Closer, false) { self.starter_done = true; return; }
         if !self.starter_done { self.current = team.starter_index; return; }
-        if leverage && (inning == 7 || inning == 8) && self.call(team, ReliefRole::Setup, inning == 7) { return; }
+        if leverage && inning + 2 >= last && inning < last && self.call(team, ReliefRole::Setup, inning + 2 == last) { return; }
         if self.entered.is_some() && self.extends(lines) { return; }
         self.relieve(team, lead);
     }
 
     /// Before each plate appearance: a starter at the out budget hands over to relief, and from the
-    /// 6th a stopper takes over with a runner in scoring position and a 0-3 run lead.
+    /// 6th of nine a stopper takes over with a runner in scoring position and a 0-3 run lead.
     pub fn before_plate_appearance(&mut self, team: &TeamInput, lines: &[PitcherLine], lead: i32, scoring_position: bool) {
         if self.current == team.starter_index && lines[self.current].outs as u32 >= self.budget {
             self.starter_done = true;
             self.relieve(team, lead);
         }
-        let jam = self.inning >= LATE_INNING && scoring_position && (0..=3).contains(&lead);
+        let jam = self.late() && scoring_position && (0..=3).contains(&lead);
         if jam && !matches!(self.entered, Some(ReliefRole::Closer | ReliefRole::Stopper)) && self.call(team, ReliefRole::Stopper, false) {
             self.starter_done = true;
         }
@@ -202,8 +214,10 @@ mod tests {
 
     /// Starts each listed half inning with the given lead, the starter already at the out budget;
     /// the pitcher of each half records `outs` after facing `bf` batters.
-    fn relief_innings(team: &TeamInput, innings: &[(u32, i32)], outs: i32, bf: i32) -> Vec<usize> {
-        let mut workload = Workload::new(team).unwrap();
+    fn relief_innings(team: &TeamInput, innings: &[(u32, i32)], outs: i32, bf: i32) -> Vec<usize> { regulation_relief(team, 9, innings, outs, bf) }
+
+    fn regulation_relief(team: &TeamInput, regulation: u32, innings: &[(u32, i32)], outs: i32, bf: i32) -> Vec<usize> {
+        let mut workload = Workload::new(team).unwrap().regulation(regulation);
         let mut lines: Vec<PitcherLine> = create_box(team).pitching;
         lines[0].outs = 18;
         innings.iter().map(|&(inning, lead)| {
@@ -227,6 +241,15 @@ mod tests {
         // With RP2 out the 7th goes to middle relief: RP1 is kept for the 8th and the closer for the 9th.
         team.available[3] = false;
         assert_eq!(relief_innings(&team, &[(7, 2), (8, 2), (9, 2)], 3, 3), [4, 2, 1]);
+    }
+
+    #[test]
+    fn late_roles_follow_the_last_regulation_inning() {
+        let staff = staff();
+        let team = team(&staff);
+        assert_eq!(regulation_relief(&team, 7, &[(5, 2), (6, 2), (7, 2)], 3, 3), [3, 2, 1]);
+        // Twelve-inning games keep the closer for the 12th and the setup men for the 10th and 11th.
+        assert_eq!(regulation_relief(&team, 12, &[(9, 2), (10, 2), (11, 2), (12, 2)], 3, 3), [4, 3, 2, 1]);
     }
 
     #[test]

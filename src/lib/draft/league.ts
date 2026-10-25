@@ -5,6 +5,7 @@ import { LEAGUE_SEGMENTS, SEGMENTS_PER_CHAPTER, type Crowd, type Fixture, type L
 import type { ScheduledGame } from '../game/season-calendar.ts';
 import type { BatterLine, PitcherLine } from '../sim/types.ts';
 import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTotal, priors, type FanState, type Payday } from './fans.ts';
+import { segmentDecree } from './decrees.ts';
 import { RIVALS } from './franchises.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
@@ -12,7 +13,7 @@ import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v4' as const;
+export const LEAGUE_VERSION = 'league-v5' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -211,7 +212,7 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
  if (segment >= LEAGUE_SEGMENTS) throw new Error('The season is over');
  return {
   modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed: run.setup.seed, data, segment, crowds: seasonCrowds(run, season),
-  rivals: season.rivals, carry: season.segments.at(-1)?.carry ?? [], detailClub: run.seating.humanSeat,
+  rivals: season.rivals, carry: season.segments.at(-1)?.carry ?? [], detailClub: run.seating.humanSeat, rules: { ...segmentDecree(run.setup.seed, segment).rules },
   clubs: season.lineups.map((lineup, seat) => {
    const franchiseId = run.seating.seats[seat];
    const stadium = data.stadiums.find(item => item.franchiseId === franchiseId);

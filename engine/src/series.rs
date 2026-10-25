@@ -270,7 +270,7 @@ impl Engine {
                 number, opponent_id: "team-b", opponent_name: &request.teams[1].name, challenge_is_home: home_id == TeamId::A,
                 home: &clubs[home_id.index()], away: &clubs[away_id.index()],
                 home_defense: defenses[home_id.index()].clone(), away_defense: defenses[away_id.index()].clone(),
-                park: parks[home_id.index()], home_matchups: &batting[home_id.index()], away_matchups: &batting[away_id.index()], home_edge: 0.0,
+                park: parks[home_id.index()], home_matchups: &batting[home_id.index()], away_matchups: &batting[away_id.index()], home_edge: 0.0, rules: Default::default(),
             }, &models, &mut GameStreams::new(seed, number), Some(&mut win_trace))?;
             let boxes = |id: TeamId| if id == home_id { &game.home } else { &game.away };
             for id in [TeamId::A, TeamId::B] {

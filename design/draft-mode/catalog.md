@@ -74,13 +74,13 @@ Further candidates: **lowering the mound**; **legalized steroids**; **random sta
 
 The opening decree is **revealed before drafting**. Later decrees are **announced at chapter checkpoints before spending and roster decisions**. The full future decree calendar is hidden. Each decree is drawn by the run seed from the decrees the engine supports, never repeating within a run. The whole season's schedule is visible from the start. Opposing GMs only respond to information they could legitimately know.
 
-The selected twenty-item catalog below is **accepted for continued design**, not a set of twenty completely specified rules. Both batter's-box candidates remain in scope.
+The selected twenty-item catalog below is **accepted for continued design**, not a set of twenty completely specified rules. Both batter's-box candidates remain in scope. The draw currently uses the eight decrees marked *implemented*; the others join it once their rules are complete and the engine supports them.
 
 | # | Decree | Candidate rule / unresolved semantics |
 |---|---|---|
-| 1 | Last Call | Seven-inning regulation, with extras for ties; ending logic, closer entry, workload and win expectancy change together. |
+| 1 | Last Call | *Implemented.* Seven-inning regulation, with extras for ties; ending logic, closer entry, workload and win expectancy change together. |
 | 2 | Ticky Tocky Bases | Lopsided diamond for vertical video; legs have different distances. Geometry remains open. |
-| 3 | Singles Appreciation Night | Every hit, home runs included, is a single: the batter takes first and every runner advances exactly one base. No steals; errors and sacrifices advance one base. |
+| 3 | Singles Appreciation Night | *Implemented.* Every hit, home runs included, is a single: the batter takes first and every runner advances exactly one base. No steals; errors and sacrifices advance one base. |
 | 4 | Mound Everest | Dramatically higher mound changes pitching; the exaggerated effect still needs calibration. |
 | 5 | Honey, I Shrunk the Diamond | Shorter basepaths; advancement, stealing and double plays need consistent treatment. |
 | 6 | One Strike, You're Out | One called or swinging strike retires the batter; ordinary fouls are exempt. Needs a count/pitch abstraction. |
@@ -88,16 +88,16 @@ The selected twenty-item catalog below is **accepted for continued design**, not
 | 8 | Commit to the Bit | Every checked swing counts as a swing; contact resolves normally. Check-swing modeling is open. |
 | 9 | Standing Room Only | Smaller batter's box restricts batting position; strike zone is unchanged. |
 | 10 | Room to Swing | Larger batter's box permits more extreme batting positions; the positioning/contact link is open. |
-| 11 | Overtime Mandate | Twelve-inning regulation, with extras if tied; pitcher endurance and ending logic change. |
-| 12 | Four-Out Baseball | Four outs per half-inning. |
-| 13 | Two-Out Express | Two outs per half-inning. |
+| 11 | Overtime Mandate | *Implemented.* Twelve-inning regulation, with extras if tied; pitcher endurance and ending logic change. |
+| 12 | Four-Out Baseball | *Implemented.* Four outs per half-inning. |
+| 13 | Two-Out Express | *Implemented.* Two outs per half-inning. |
 | 14 | Wrong-Way Round | Run third → second → first → home; force plays and throws follow that route. |
 | 15 | The Designated Runner | A nominated rostered reserve runs for batters reaching base while hitters stay in the lineup; concurrent runners need definition. |
-| 16 | No Free Passes | A walk or hit-by-pitch puts the batter on second and advances every runner two bases. |
+| 16 | No Free Passes | *Implemented.* A walk or hit-by-pitch puts the batter on second and advances every runner two bases. |
 | 17 | Foul Play | An ordinary foul with two strikes becomes strike three. |
-| 18 | Double Jeopardy | A grounded double play with fewer than two outs ends the half-inning; no run scores on the play. |
+| 18 | Double Jeopardy | *Implemented.* A grounded double play, possible with at least two outs to spare, ends the half-inning; no run scores on the play. |
 | 19 | Small-Ball Subsidy | A successful sacrifice bunt retiring the batter and advancing a runner earns a bonus run; success/failure rules need support. |
-| 20 | Everybody Tags | A caught outfield fly or line drive retires the batter and advances every runner one base (a runner on third scores); infield pop-ups and third-out catches advance nobody. |
+| 20 | Everybody Tags | *Implemented.* A caught outfield fly or line drive retires the batter and advances every runner one base (a runner on third scores); infield pop-ups and third-out catches advance nobody. |
 
 Lowered mound, legalized steroids and random starting baserunners remain additional candidates. **The Great Wall**, which raises every outfield fence, is deferred outside the selected twenty-decree catalog; Boston's permanent tall-wall park remains intact. Decrees may substantially change baseball rules rather than being limited to small statistical nudges.
 

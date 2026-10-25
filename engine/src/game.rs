@@ -4,6 +4,7 @@ use crate::contact_profile::{PreparedMatchups, ShapeTables};
 use crate::flight::PreparedPark;
 use crate::inning::{play_half, InningContext, InningEvent, Shared, Sides};
 use crate::random::GameStreams;
+use crate::rules::GameRules;
 use crate::team::{create_box, TeamInput};
 use crate::types::{GameResult, Half, ParkRef, SeasonMoment, POSITIONS};
 use crate::value::RunValueModel;
@@ -40,6 +41,7 @@ pub struct GameInput<'a, 'p> {
     pub away_matchups: &'a PreparedMatchups,
     /// The home crowd's lean on the strike zone: home batters get `+home_edge`, visitors `-home_edge`.
     pub home_edge: f64,
+    pub rules: GameRules,
 }
 
 /// Engine tables shared by every game.
@@ -51,13 +53,17 @@ pub struct GameModels<'a> {
 }
 
 /// Full innings in the home team's venue, with no synthetic ties, ghost runners, or fallback winners.
+/// Win expectancy assumes the standard rules, so games under other rules must skip it.
 /// `trace` receives the pre-game win chance, the chance after every play, and the final 1 or 0, from the challenge side.
 pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameStreams, mut trace: Option<&mut Vec<crate::types::WinPoint>>) -> Result<GameResult, String> {
+    input.rules.validate()?;
+    if models.win_expectancy.is_some() && input.rules != GameRules::default() { return Err("Win expectancy needs the standard rules".into()); }
+    let regulation = input.rules.innings;
     let mut home = create_box(input.home);
     let mut away = create_box(input.away);
-    let mut home_workload = Workload::new(input.home)?;
-    let mut away_workload = Workload::new(input.away)?;
-    let shared = Shared { values: models.values, park: input.park, tables: models.tables, max_pa: MAX_PA };
+    let mut home_workload = Workload::new(input.home)?.regulation(regulation);
+    let mut away_workload = Workload::new(input.away)?.regulation(regulation);
+    let shared = Shared { values: models.values, park: input.park, tables: models.tables, max_pa: MAX_PA, rules: input.rules };
     // Top: away bats against the home defense; bottom: home bats against the away defense.
     let mut top = InningContext::new(input.away, input.home, input.away_matchups, input.home_defense)?;
     let mut bottom = InningContext::new(input.home, input.away, input.home_matchups, input.away_defense)?;
@@ -86,7 +92,7 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
             };
             workload.begin_half(defense, &defense_box.pitching, inning, defense_box.runs - offense_box.runs);
             let before = offense_box.runs;
-            let target = if half == Half::Bottom && inning >= 9 { f64::from(defense_box.runs) + 1.0 } else { f64::INFINITY };
+            let target = if half == Half::Bottom && inning >= regulation { f64::from(defense_box.runs) + 1.0 } else { f64::INFINITY };
             let mut observe = |event: &InningEvent| {
                 let Some(model) = models.win_expectancy else { return; };
                 let (home_before, away_before, home_after, away_after) = if half == Half::Top {
@@ -130,12 +136,12 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
             play_half(context, &shared, offense, defense, &mut sides, workload, target, streams, &mut observer)?;
             if let Some(message) = failure.take() { return Err(message); }
             offense_box.innings.push(Some(offense_box.runs - before));
-            if half == Half::Top && inning >= 9 && home.runs > away.runs {
+            if half == Half::Top && inning >= regulation && home.runs > away.runs {
                 home.innings.push(None);
                 finished = true;
                 break;
             }
-            if half == Half::Bottom && inning >= 9 && home.runs != away.runs { finished = true; }
+            if half == Half::Bottom && inning >= regulation && home.runs != away.runs { finished = true; }
         }
         if finished { break; }
     }

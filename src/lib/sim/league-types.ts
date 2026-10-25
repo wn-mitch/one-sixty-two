@@ -36,6 +36,23 @@ export interface RestState { seasonId: string; last: number; previous: number; r
  */
 export interface Crowd { edge: number; volatility: number }
 
+/** The rules a segment's games are played under; the commissioner's decree changes them. */
+export interface GameRules {
+ /** Regulation length; tied games continue an inning at a time. */
+ innings: number;
+ /** Outs that end a half inning. */
+ outs: number;
+ /** Every hit is a single that moves each runner one base, as are errors; nobody steals. */
+ singlesOnly: boolean;
+ /** A walk or hit batter takes second and every runner advances two bases. */
+ freePassTwo: boolean;
+ /** A double play ends the half inning. */
+ doublePlayEnds: boolean;
+ /** Every runner advances one base on a caught outfield fly that is not the last out. */
+ everybodyTags: boolean;
+}
+export const STANDARD_RULES: Readonly<GameRules> = { innings: 9, outs: 3, singlesOnly: false, freePassTwo: false, doublePlayEnds: false, everybodyTags: false };
+
 export interface LeagueSegmentInput {
  modelVersion: typeof MODEL_VERSION; rulesVersion: typeof RULES_VERSION; seed: number;
  clubs: LeagueClubInput[];
@@ -49,6 +66,7 @@ export interface LeagueSegmentInput {
  carry: RestState[][];
  /** The club whose games come back in full, as the challenge side. */
  detailClub: number;
+ rules: GameRules;
  data: SimulationData;
 }
 
