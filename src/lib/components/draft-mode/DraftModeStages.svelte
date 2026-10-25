@@ -63,7 +63,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
   if (!run) return [];
   const ids = run.seating.seats.flatMap((_, seat) => ownedBy(run, seat).map(card => card.seasonId));
   if (run.phase === 'drafting') ids.push(...heldPile(run).map(card => card.seasonId));
-  if (run.phase === 'window') ids.push(...STACK_ROLES.flatMap(role => run.pool.cleanup.peek(run.seating.humanSeat, role)?.seasonId ?? []), ...waiverCards(run));
+  if (run.phase === 'window') ids.push(...STACK_ROLES.flatMap(role => run.pool.cleanup.peek(run.seating.humanSeat, role)?.seasonId ?? []), ...waiverCards(run), ...run.packs.flat());
   return ids.filter(id => !profiles.has(id));
  });
  $effect(() => {
@@ -189,7 +189,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
   {@const current = stop}
   <Lineup
    lineup={current.view} manifest={session.manifest} profiles={dealt} {rankings} rankingLoading={!rankings} rankingError={false}
-   busy={session.busy || working} title="Opening window" exit={false}
+   busy={session.busy || working} title={current.run.chapter ? `Chapter ${current.run.chapter} market` : 'Opening window'} exit={false}
    action={current.step === 'market' ? { label: 'Close waivers', busyLabel: 'Closing waivers…', always: true } : { label: 'Submit roster', busyLabel: 'Submitting…' }}
    onMove={(id, key) => void step(session.place(id, key === BENCH ? null : key as DraftSlot))}
    onOrder={(kind, order) => void refusal(session.order(windowOrders(kind === 'batting' ? { battingOrder: order } : { starterOrder: order })))}
@@ -201,6 +201,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
      onCleanup={role => void step(session.cleanup(role))} onAutofix={() => void step(session.autofix())}
      onPropose={async (seat, give, get) => { working = true; try { const message = await session.propose(seat, give, get); if (message) toasts.show(message, { tone: 'error' }); return !message; } finally { working = false; } }}
      onRespond={(offer, accept) => void step(session.respond(offer, accept))}
+     onSign={id => void step(session.sign(id))}
      onClaim={(cardId, on) => void step(session.claim(cardId, on))} />
    {/snippet}
    {#snippet status()}

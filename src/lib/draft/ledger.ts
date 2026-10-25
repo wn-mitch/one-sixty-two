@@ -19,16 +19,17 @@ export const ownerOf = (ledger: Ledger, cardId: string): Owner => ledger.instanc
 
 /**
  * Moves one card between owners. The caller states where it believes the card is; a mismatch is a
- * contract violation, never a silent overwrite. The first move creates the run-owned instance.
+ * contract violation, never a silent overwrite. The first move creates the run-owned instance, at
+ * `salary` when given (a card signed at a market price) and otherwise at the sheet salary.
  */
-export function transfer(ledger: Ledger, cardId: string, expected: Owner, to: Owner, op: LedgerOp): CardInstance {
+export function transfer(ledger: Ledger, cardId: string, expected: Owner, to: Owner, op: LedgerOp, salary = ledger.cards.get(cardId)?.salary ?? 0): CardInstance {
  const card = ledger.cards.get(cardId);
  if (!card) throw new Error(`Unknown card ${cardId}`);
  const from = ownerOf(ledger, cardId);
  if (!sameOwner(from, expected)) throw new Error(`${cardId} is held by ${describeOwner(from)}, not ${describeOwner(expected)}`);
  let instance = ledger.instances.get(cardId);
  if (!instance) {
-  instance = { cardId, startingSalary: card.salary, originalTier: card.finish, provenance: [], tradeDeadline: null, owner: UNOWNED };
+  instance = { cardId, startingSalary: salary, originalTier: card.finish, provenance: [], tradeDeadline: null, owner: UNOWNED };
   ledger.instances.set(cardId, instance);
  }
  const seq = ledger.events.length;

@@ -14,7 +14,7 @@ export const MAX_TRADE_CARDS = 3;
 /** Offers the player may send each AI club per window, counteroffers excluded. */
 export const OFFERS_PER_CLUB = 3;
 /** Runs an AI club needs to gain before it accepts or offers a trade or claims a card. */
-const MARGIN = 1;
+export const MARGIN = 1;
 /** Extra runs an AI club demands from a partner whose projected payroll is over the cap. */
 const LEVERAGE = 3;
 
@@ -95,7 +95,7 @@ function underPressure(run: DraftRun, seat: number): boolean {
 const swap = (ids: readonly string[], out: readonly string[], add: readonly string[]): string[] => [...ids.filter(id => !out.includes(id)), ...add];
 
 /** The runs AI seat `ai` believes it gains by sending `send` and receiving `receive`. */
-function gain(run: DraftRun, ai: number, send: readonly string[], receive: readonly string[]): number {
+export function gain(run: DraftRun, ai: number, send: readonly string[], receive: readonly string[]): number {
  const ids = ownedIds(run, ai);
  return worth(run, ai, ai, swap(ids, send, receive)) - worth(run, ai, ai, ids);
 }

@@ -7,8 +7,10 @@ import { checkSubmission } from './legality.ts';
 import { checkLineup, LineupError, type ClubLineup } from './league.ts';
 import { recoverSeat } from './recovery.ts';
 import { closeWaivers, MarketError, openMarket, propose, release, respond, setClaim, type Market, type Seating } from './market.ts';
+import { aiSign, canSign, dealPacks, signCard } from './chapter.ts';
+import { CHAPTER_MATCHDAYS, LEAGUE_CHAPTERS } from '../sim/league-types.ts';
 import { buildRunPool, pileHeldBy, type RunPool } from './pool.ts';
-import { baselineBudget, canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, DRAFT_RULES, picksPerSeat, rosterSize, type DraftBullpenSlot } from './rules.ts';
+import { baselineBudget, budgetInChapter, canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, DRAFT_RULES, picksPerSeat, rosterSize, type DraftBullpenSlot } from './rules.ts';
 import { randomStream } from '../game/random.ts';
 import { HITTER_SLOTS, STARTER_SLOTS, validateReliefRoles, type ReliefAssignment } from '../game/types.ts';
 import type { DraftCard, DraftSlot, LegalityReport, PayrollBudget, Submission } from './types.ts';
@@ -54,7 +56,10 @@ export type RunAction =
  | { type: 'cleanup'; role: StackRole }
  | { type: 'autofix' }
  | { type: 'order'; orders: WindowOrders }
- | { type: 'submit'; lineup: ClubLineup };
+ | { type: 'submit'; lineup: ClubLineup }
+ /** Opens chapter `chapter`'s market with the player's season lineup and the seats in reverse standings order. */
+ | { type: 'chapter'; chapter: number; order: number[]; lineup: ClubLineup }
+ | { type: 'sign'; cardId: string };
 
 /**
  * The player's batting order, rotation and relief roles as last set in the opening window. Orders
@@ -66,7 +71,7 @@ export interface WindowOrders {
  reliefRoles: ReliefAssignment<DraftBullpenSlot>[];
 }
 
-/** Drafting, then the opening window, then the league season once the player submits. */
+/** Drafting, then the opening window, then the league season once the player submits; each chapter stop reopens the window. */
 export type RunPhase = 'drafting' | 'window' | 'season';
 
 /** A pick as the ticker shows it; AI picks carry the score that explains them (see `explainPick`). */
@@ -86,7 +91,15 @@ export interface DraftRun {
  readonly personalities: readonly (Personality | null)[];
  /** Each AI seat's fixed judgment of cards; null at the player's seat. */
  readonly judges: readonly (((card: DraftCard) => Judgment) | null)[];
- readonly budgets: readonly PayrollBudget[];
+ /** Each seat's budget in force: the opening budget with the chapter's cap ramp. */
+ budgets: PayrollBudget[];
+ readonly openingBudgets: readonly PayrollBudget[];
+ /** 0 for the opening window, then the chapter whose market last opened (1-5). */
+ chapter: number;
+ /** Each seat's supplemental pack at the current chapter market; empty in the opening window. */
+ packs: string[][];
+ /** The pack card each seat signed at the current chapter market, or null. */
+ signed: (string | null)[];
  /** Undrafted card ids in each pile, indexed by the seat first dealt it. */
  readonly piles: string[][];
  readonly ticker: TickerPick[];
@@ -102,7 +115,7 @@ export interface DraftRun {
  orders: WindowOrders;
  /** The player's opening lineup once submitted. */
  lineup: ClubLineup | null;
- /** The opening window's trades and waivers; null while drafting. */
+ /** The current window's trades and waivers; null while drafting. */
  market: Market | null;
  pick: number;
  phase: RunPhase;
@@ -140,7 +153,8 @@ export function startRun(setup: RunSetup, data: RunData): DraftRun {
   setup, data, pool, seating,
   personalities,
   judges: personalities.map((personality, seat) => personality && judgeFor(setup.seed, seat, personality, setup.difficulty)),
-  budgets: seating.seats.map(() => baselineBudget(pool.tableCap)),
+  budgets: seating.seats.map(() => baselineBudget(pool.tableCap)), openingBudgets: seating.seats.map(() => baselineBudget(pool.tableCap)),
+  chapter: 0, packs: seating.seats.map(() => []), signed: seating.seats.map(() => null),
   piles: pool.packs.map(packs => packs.flat()),
   ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), submissions: seating.seats.map(() => null),
   field: new Map(), bench: [], pick: 0, phase: 'drafting', market: null,
@@ -152,7 +166,12 @@ export function startRun(setup: RunSetup, data: RunData): DraftRun {
 const card = (run: DraftRun, id: string): DraftCard => run.pool.ledger.cards.get(id)!;
 
 /** Cards a seat has drafted, in id order. */
-export const ownedBy = (run: DraftRun, seat: number): DraftCard[] => heldBy(run.pool.ledger, { kind: 'roster', seat }).map(id => card(run, id));
+/** A seat's cards, each at its signed salary (a card signed at a chapter market keeps that market's price). */
+export const ownedBy = (run: DraftRun, seat: number): DraftCard[] => heldBy(run.pool.ledger, { kind: 'roster', seat }).map(id => {
+ const item = card(run, id);
+ const salary = run.pool.ledger.instances.get(id)!.startingSalary;
+ return salary === item.salary ? item : { ...item, salary };
+});
 
 /** The pile a seat holds at the current pick, or an empty list once the draft is over. */
 export function heldPile(run: DraftRun, seat = run.seating.humanSeat): DraftCard[] {
@@ -189,7 +208,8 @@ export function seatView(run: DraftRun, seat: number): SeatView {
 export function applyAction(run: DraftRun, action: RunAction): void {
  if (action.type === 'pick') applyPick(run, action.cardId, action.slot);
  else if (action.type === 'place') applyPlace(run, action.cardId, action.slot);
- else if (run.phase !== 'window') throw new RunActionError(run.phase === 'drafting' ? 'The draft is still on' : 'The opening window is closed');
+ else if (action.type === 'chapter') openChapter(run, action.chapter, action.order, action.lineup);
+ else if (run.phase !== 'window') throw new RunActionError(run.phase === 'drafting' ? 'The draft is still on' : 'The window is closed');
  else applyWindowAction(run, action);
  run.actions.push(action);
 }
@@ -274,7 +294,7 @@ const seating = (run: DraftRun): Seating => ({
  leave: id => unseatCard(run, id)
 });
 
-const MARKET_ACTIONS = new Set(['propose', 'respond', 'claim', 'waivers']);
+const MARKET_ACTIONS = new Set(['propose', 'respond', 'claim', 'waivers', 'sign']);
 const CLEANUP_ACTIONS = new Set(['cleanup', 'autofix', 'submit']);
 
 function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pick' | 'place' }>): void {
@@ -288,7 +308,17 @@ function applyWindowAction(run: DraftRun, action: Exclude<RunAction, { type: 'pi
   if (action.type === 'propose') { propose(run, action.seat, action.give, action.get, seating(run)); return; }
   if (action.type === 'respond') { respond(run, action.offer, action.accept, seating(run)); return; }
   if (action.type === 'claim') { setClaim(run, action.cardId, action.on); return; }
-  if (action.type === 'waivers') { closeWaivers(run, seating(run)); return; }
+  if (action.type === 'waivers') {
+   if (run.chapter > 0) aiSign(run);
+   closeWaivers(run, seating(run));
+   return;
+  }
+  if (action.type === 'sign') {
+   if (!canSign(run, human, action.cardId)) throw new RunActionError(run.signed[human] ? 'You have already signed a card this chapter' : 'That card is not in your pack or does not fit under the cap');
+   signCard(run, human, action.cardId);
+   seating(run).arrive(action.cardId);
+   return;
+  }
  } catch (error) {
   if (error instanceof MarketError) throw new RunActionError(error.message);
   throw error;
@@ -367,6 +397,32 @@ export function windowLineup(run: DraftRun): Omit<ClubLineup, 'active'> & { acti
 /** The player's roster as it stands, checked against the cap and slots, for the window's checklist. */
 export function windowReport(run: DraftRun, submission: Submission): LegalityReport {
  return checkSubmission(submission, run.pool.ledger, run.budgets[run.seating.humanSeat], run.pool.rules);
+}
+
+/**
+ * Reopens the window at chapter `chapter`'s stop: the cap ramps, the market condition and
+ * supplemental packs are revealed, clubs trade, cut and claim in reverse standings order, and the
+ * player places, fills and submits as in the opening window. `lineup` is the player's season
+ * lineup, which seats the field and bench.
+ */
+function openChapter(run: DraftRun, chapter: number, order: readonly number[], lineup: ClubLineup): void {
+ if (run.phase !== 'season') throw new RunActionError('A chapter market opens only between chapters');
+ if (chapter !== run.chapter + 1 || chapter >= LEAGUE_CHAPTERS) throw new RunActionError(`Chapter ${run.chapter + 1} opens next`);
+ const seats = run.seating.seats.map((_, seat) => seat);
+ if (!Array.isArray(order) || order.length !== seats.length || [...order].sort((a, b) => a - b).join() !== seats.join()) throw new RunActionError('The standings order must list every club once');
+ const human = run.seating.humanSeat;
+ try { checkLineup(run.submissions[human]!, id => card(run, id), run.pool.rules.activeSlots, lineup); }
+ catch (error) { if (error instanceof LineupError) throw new RunActionError(error.message); throw error; }
+ run.chapter = chapter;
+ run.budgets = run.openingBudgets.map(budget => budgetInChapter(budget, chapter));
+ run.field.clear();
+ for (const [slot, id] of Object.entries(lineup.active) as [DraftSlot, string][]) run.field.set(slot, id);
+ run.bench.splice(0, run.bench.length, ...lineup.reserves);
+ run.orders = { battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })) };
+ run.packs = dealPacks(run, order);
+ run.signed = seats.map(() => null);
+ run.phase = 'window';
+ openMarket(run, chapter * CHAPTER_MATCHDAYS).priority = [...order];
 }
 
 /** Rebuilds a run from its setup and action log; throws if any action no longer applies. */

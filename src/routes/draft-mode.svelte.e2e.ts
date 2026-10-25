@@ -131,6 +131,15 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  for (let segment = 2; segment <= 18; segment++) {
   await page.getByRole('button', { name: `Play games ${segment * 9 - 8}–${segment * 9}`, exact: true }).click();
   if (segment === 18) break;
+  if (segment % 3 === 0) {
+   // A chapter stop opens the market first: the condition and pack, then waivers, then submission.
+   await expect(page.getByRole('heading', { name: `Chapter ${segment / 3} market` })).toBeVisible({ timeout: 120_000 });
+   if (segment === 3) await expect(page.getByRole('list', { name: 'Pack cards' }).locator('li')).toHaveCount(4);
+   await page.getByRole('button', { name: 'Close waivers' }).click();
+   await page.getByRole('button', { name: 'Auto-fix' }).click();
+   await expect(page.getByText('Roster is legal.')).toBeVisible({ timeout: 60_000 });
+   await page.getByRole('button', { name: 'Submit roster' }).click();
+  }
   const title = segment % 3 === 0 ? `Chapter ${segment / 3} complete` : `After game ${segment * 9}`;
   await expect(page.getByRole('heading', { name: title })).toBeVisible({ timeout: 120_000 });
  }

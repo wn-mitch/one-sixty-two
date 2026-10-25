@@ -55,6 +55,8 @@ const isAction = (value: unknown): value is RunAction => {
   case 'autofix': return true;
   case 'order': return isOrders(action.orders);
   case 'submit': return isLineup(action.lineup);
+  case 'chapter': return Number.isInteger(action.chapter) && Array.isArray(action.order) && action.order.every(Number.isInteger) && isLineup(action.lineup);
+  case 'sign': return typeof action.cardId === 'string';
   default: return false;
  }
 };
@@ -151,8 +153,10 @@ export function resumeRun(saved: SavedRun, data: RunData, dataVersion: string): 
  try {
   const run = replayRun(saved.setup, saved.actions, data);
   if (saved.season) {
-   if (run.phase !== 'season' || saved.season.lineups.length !== run.seating.seats.length) throw new LineupError('Season does not match the run');
-   saved.season.lineups.forEach((lineup, seat) => validateLineup(run, seat, lineup));
+   // A season saved mid chapter market holds the lineups from before the market opened.
+   const atMarket = run.phase === 'window' && run.chapter > 0;
+   if ((run.phase !== 'season' && !atMarket) || saved.season.lineups.length !== run.seating.seats.length) throw new LineupError('Season does not match the run');
+   if (!atMarket) saved.season.lineups.forEach((lineup, seat) => validateLineup(run, seat, lineup));
   }
   return { ok: true, run, season: saved.season };
  } catch (error) {

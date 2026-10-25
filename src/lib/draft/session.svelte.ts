@@ -7,7 +7,7 @@ import type { Db } from '../storage/sql.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import type { StackRole } from './cleanup.ts';
 import { seatTable } from './franchises.ts';
-import { LEAGUE_VERSION, LineupError, recordSegment, segmentInput, setLineup, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
+import { closeChapter, LEAGUE_VERSION, LineupError, recordSegment, seasonStop, segmentInput, setLineup, standings, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
 import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
 import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
@@ -62,8 +62,9 @@ export class DraftModeSession {
   const run = this.run;
   if (!run) return 'entry';
   if (run.phase === 'drafting') return 'drafting';
-  if (run.phase === 'window') return 'window';
+  // A chapter stop's market opens as the segment is recorded; its games reveal first.
   if (this.playing || this.revealing) return 'playing';
+  if (run.phase === 'window') return 'window';
   return (this.season?.segments.length ?? 0) >= LEAGUE_SEGMENTS ? 'report' : 'season';
  }
 
@@ -220,6 +221,7 @@ export class DraftModeSession {
    throw error;
   }
   if (run.phase === 'season' && !this.season) this.season = startLeague(run);
+  else if (action.type === 'submit' && this.season) closeChapter(run, this.season);
   // The view changes once the action is saved, so what the player sees survives a reload.
   await this.#save();
   this.revision++;
@@ -233,6 +235,7 @@ export class DraftModeSession {
  respond(offer: number, accept: boolean) { return this.act({ type: 'respond', offer, accept }); }
  claim(cardId: string, on: boolean) { return this.act({ type: 'claim', cardId, on }); }
  closeWaivers() { return this.act({ type: 'waivers' }); }
+ sign(cardId: string) { return this.act({ type: 'sign', cardId }); }
  cleanup(role: StackRole) { return this.act({ type: 'cleanup', role }); }
  autofix() { return this.act({ type: 'autofix' }); }
  order(orders: WindowOrders) { return this.act({ type: 'order', orders }); }
@@ -267,7 +270,7 @@ export class DraftModeSession {
   const run = this.run;
   const season = this.season;
   const manifest = this.manifest;
-  if (!run || !season || !manifest || this.playing || !this.profiles) return;
+  if (!run || !season || !manifest || this.playing || !this.profiles || run.phase !== 'season') return;
   this.playing = true;
   this.completed = 0;
   this.revealed = season.segments.length * SEGMENT_MATCHDAYS;
@@ -285,6 +288,12 @@ export class DraftModeSession {
    this.schedule = schedule;
    recordSegment(run, season, result);
    this.lastSegment = result;
+   const stop = seasonStop(season);
+   if (stop.chapterStop && !stop.over) {
+    // Payday is in; the chapter market opens next, the worst club first.
+    const order = standings(season).map(row => row.seat).reverse();
+    applyAction(run, { type: 'chapter', chapter: stop.chapter, order, lineup: structuredClone(season.lineups[run.seating.humanSeat]) });
+   }
    const saved = await this.#save();
    if (saved && season.segments.length >= LEAGUE_SEGMENTS) void refreshShop();
    this.revision++;

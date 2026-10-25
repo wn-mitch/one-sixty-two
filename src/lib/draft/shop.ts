@@ -30,6 +30,7 @@ export const trainedThisVisit = (season: LeagueSeason, cardId: string): boolean 
 export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind): string | null {
  const stop = season.segments.length;
  if (stop >= LEAGUE_SEGMENTS) return 'The season is over';
+ if (run.phase !== 'season') return 'Finish the chapter market first';
  if (!offersAt(run.setup.seed, stop).includes(kind)) return `${TRAININGS[kind].name} is not on offer at this stop`;
  if (!seasonRoster(season, seat).includes(profile.seasonId)) return `${profile.displayName} is not on this roster`;
  if (trainedThisVisit(season, profile.seasonId)) return `${profile.displayName} has already trained at this stop`;

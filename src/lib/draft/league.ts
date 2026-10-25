@@ -4,7 +4,7 @@ import { stadiumRef } from '../sim/park.ts';
 import { LEAGUE_SEGMENTS, SEGMENTS_PER_CHAPTER, type Crowd, type Fixture, type LeagueGame, type LeagueSegmentInput, type LeagueSegmentResult, type RestState } from '../sim/league-types.ts';
 import type { ScheduledGame } from '../game/season-calendar.ts';
 import type { BatterLine, PitcherLine } from '../sim/types.ts';
-import { afterSegment, crowd, openingFans, payday, paydayTotal, priors, type FanState, type Payday } from './fans.ts';
+import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTotal, priors, type FanState, type Payday } from './fans.ts';
 import { RIVALS } from './franchises.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
@@ -100,12 +100,29 @@ export function startLeague(run: DraftRun): LeagueSeason {
  const card = (id: string) => run.pool.ledger.cards.get(id)!;
  const human = run.seating.humanSeat;
  const lineups = run.submissions.map((submission, seat) => seat === human ? structuredClone(run.lineup!) : defaultLineup(submission!, card));
- const payrolls = lineups.map(lineup => Object.values(lineup.active).reduce((sum, id) => sum + card(id).salary, 0));
+ const payrolls = lineups.map(lineup => activePayroll(run, lineup));
  return {
   version: LEAGUE_VERSION, rivals: matchRivals(run), lineups, segments: [],
   fans: priors(run.seating.seats, payrolls).map(openingFans),
   cash: lineups.map(() => 0), upgrades: [], aiShopped: -1
  };
+}
+
+/** A lineup's active payroll at signed salaries: the visible measure fans judge a roster by. */
+const activePayroll = (run: DraftRun, lineup: ClubLineup): number => Object.values(lineup.active).reduce((sum, id) => sum + run.pool.ledger.instances.get(id)!.startingSalary, 0);
+
+/**
+ * Carries a closed chapter market into the season: the player's submitted lineup, AI clubs'
+ * default lineups for their new rosters, and each club's fan expectation moved by as much as its
+ * payroll-based prior moved.
+ */
+export function closeChapter(run: DraftRun, season: LeagueSeason): void {
+ if (run.phase !== 'season' || !run.lineup) throw new Error('A chapter closes when the player submits');
+ const card = (id: string) => run.pool.ledger.cards.get(id)!;
+ const human = run.seating.humanSeat;
+ season.lineups = run.submissions.map((submission, seat) => seat === human ? structuredClone(run.lineup!) : defaultLineup(submission!, card));
+ const next = priors(run.seating.seats, season.lineups.map(lineup => activePayroll(run, lineup)));
+ season.fans = season.fans.map((fans, seat) => ({ ...fans, prior: next[seat], expectation: Math.min(EXPECTATION_RANGE[1], Math.max(EXPECTATION_RANGE[0], Math.round((fans.expectation + next[seat] - fans.prior) * 1e4) / 1e4)) }));
 }
 
 /** Where the season stands: segments played, and whether the stop after the last one closes a chapter. */

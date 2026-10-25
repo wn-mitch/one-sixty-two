@@ -2,6 +2,7 @@
  import CapBar from './CapBar.svelte';
  import TradeDesk from './TradeDesk.svelte';
  import WaiverWire from './WaiverWire.svelte';
+ import SupplementalPack from './SupplementalPack.svelte';
  import DraftCardTile from './DraftCardTile.svelte';
  import type { CardMediaStatus } from '../../cards/view-model.ts';
  import { STACK_ROLES, type StackRole } from '../../draft/cleanup.ts';
@@ -14,10 +15,11 @@
  import { money } from './format.ts';
 
  /**
-  * The opening window above the lineup: payroll against the cap, then trades and waivers until waivers
-  * close, then the cleanup stacks and Auto-fix.
+  * The opening window or a chapter market above the lineup: payroll against the cap, then (at a
+  * chapter) the market condition and supplemental pack, trades and waivers until waivers close, then
+  * the cleanup stacks and Auto-fix.
   */
- let { run, revision, profiles, manifest, media, mediaStatus, rankings, clubName, working, onCleanup, onAutofix, onPropose, onRespond, onClaim }: {
+ let { run, revision, profiles, manifest, media, mediaStatus, rankings, clubName, working, onCleanup, onAutofix, onPropose, onRespond, onClaim, onSign }: {
   run: DraftRun; revision: number; profiles: ReadonlyMap<string, Profile>; manifest: Manifest | null;
   media: MediaManifest | null; mediaStatus: CardMediaStatus; rankings: WarRankings | null;
   clubName: (seat: number) => string; working: boolean;
@@ -25,6 +27,7 @@
   onPropose: (seat: number, give: string[], get: string[]) => Promise<boolean>;
   onRespond: (offer: number, accept: boolean) => void;
   onClaim: (cardId: string, on: boolean) => void;
+  onSign: (cardId: string) => void;
  } = $props();
  const step = $derived.by(() => { void revision; return run.market?.step ?? 'cleanup'; });
  const human = $derived(run.seating.humanSeat);
@@ -43,6 +46,7 @@
   {#if step === 'cleanup'}<button type="button" class="secondary" disabled={working} onclick={onAutofix}>Auto-fix</button>{/if}
  </div>
  {#if step === 'market'}
+ {#if run.chapter > 0}<SupplementalPack {run} {revision} {profiles} {working} {onSign} />{/if}
  <TradeDesk {run} {revision} {profiles} {clubName} {working} {onPropose} {onRespond} />
  <WaiverWire {run} {revision} {profiles} {clubName} {working} {onClaim} />
  {:else}

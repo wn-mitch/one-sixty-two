@@ -29,7 +29,7 @@ export type Owner =
  | { kind: 'released' }
  | { kind: 'roster'; seat: number };
 
-export type LedgerOp = 'deal' | 'draft' | 'cut' | 'cleanup' | 'release' | 'claim' | 'trade';
+export type LedgerOp = 'deal' | 'draft' | 'cut' | 'cleanup' | 'release' | 'claim' | 'trade' | 'sign';
 
 export interface Provenance { op: LedgerOp; seat: number | null; seq: number }
 
