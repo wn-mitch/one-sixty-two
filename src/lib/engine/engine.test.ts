@@ -89,7 +89,7 @@ describe('wasm engine boundary', () => {
   const first = testLeagueSegment(162);
   const segments: LeagueSegmentResult[] = [];
   for (let segment = 0; segment < 18; segment++) {
-   segments.push(simulateLeagueSegment({ ...first, segment, carry: segments.at(-1)?.carry ?? [] }));
+   segments.push(simulateLeagueSegment({ ...first, segment, carry: segments.at(-1)?.carry ?? [], hype: segments.at(-1)?.hype ?? [] }));
   }
   const games = segments.flatMap(result => result.games);
   expect(games).toHaveLength(648);

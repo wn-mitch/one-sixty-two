@@ -18,6 +18,7 @@ fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd,
     request.seed = seed;
     request.crowds = vec![crowd; request.clubs.len()];
     request.carry = Vec::new();
+    request.hype = Vec::new();
     let mut tally = [0u64; 17];
     for segment in 0..SEGMENTS {
         request.segment = segment;
@@ -31,6 +32,7 @@ fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd,
             if Some(game.home) == park { tally[14] += 1; tally[15] += (game.home_runs + game.away_runs) as u64; tally[16] += (game.home_runs > game.away_runs) as u64; }
         }
         request.carry = result.carry;
+        request.hype = result.hype;
     }
     Ok(tally)
 }

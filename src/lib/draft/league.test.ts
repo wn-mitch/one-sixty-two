@@ -103,7 +103,7 @@ describe('league season', () => {
   expect(lines.pitching.reduce((sum, line) => sum + line.R, 0)).toBe(row.runsAgainst);
   expect(new Set(lines.batting.map(line => line.seasonId)).size).toBe(lines.batting.length);
   const cash = [...season.cash];
-  expect(() => recordSegment(run, season, { segment: 0, games: [], totals: [], detailGames: [], carry: [] })).toThrow(/Expected segment 7/);
+  expect(() => recordSegment(run, season, { segment: 0, games: [], totals: [], detailGames: [], carry: [], hype: [] })).toThrow(/Expected segment 7/);
   expect(season.cash).toEqual(cash);
  });
 });

@@ -6,7 +6,7 @@
  import { fill, paydayTotal } from '../../draft/fans.ts';
  import { headToHead, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
- import { LEAGUE_SEGMENTS, SEGMENT_MATCHDAYS, type LeagueGame } from '../../sim/league-types.ts';
+ import { LEAGUE_SEGMENTS, MAX_CROWD_HYPE, SEGMENT_MATCHDAYS, type LeagueGame } from '../../sim/league-types.ts';
 
  /**
   * A stop above the lineup: the club's record and rival series, the decree in force for the next
@@ -35,6 +35,8 @@
  const ordinal = (value: number) => `${value}${value === 1 ? 'st' : value === 2 ? 'nd' : value === 3 ? 'rd' : 'th'}`;
  const pack = $derived(franchisePackage(run.seating.seats[human]));
  const decree = $derived(segmentDecree(run.setup.seed, Math.min(played, LEAGUE_SEGMENTS - 1)));
+ // A trigger that fills a meter shows how full it is; front-runners have no meter.
+ const hype = $derived.by(() => { void revision; return pack?.crowd && pack.crowd !== 'frontRunners' ? Math.round((season.segments.at(-1)?.hype[human] ?? 0) / MAX_CROWD_HYPE * 100) : null; });
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
 </script>
 
@@ -50,6 +52,7 @@
    <div><dt>Fans expect</dt><dd>{pct(fans.expectation)}</dd></div>
    <div><dt>Seats filled</dt><dd>{Math.round(share * 100)}%</dd></div>
    {#if payday}<div><dt>Payday</dt><dd>+{paydayTotal(payday)} <small>{payday.salary} salary + {payday.gate} gate{payday.homeGames ? '' : ' (all road)'} + {payday.winBonus} for {payday.wins} {payday.wins === 1 ? 'win' : 'wins'}{payday.franchise ? ` + ${payday.franchise} ${pack?.name ?? 'franchise'}` : ''}</small></dd></div>{/if}
+   {#if hype !== null}<div><dt>Hype</dt><dd>{hype}% <small>of the most the crowd can lean</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>
   {#if pack}<p class="note"><strong>{pack.name}.</strong> {pack.summary}</p>{/if}

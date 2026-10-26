@@ -16,6 +16,8 @@ export const SEGMENTS_PER_CHAPTER = LEAGUE_SEGMENTS / LEAGUE_CHAPTERS;
 export const CHAPTER_MATCHDAYS = SEGMENT_MATCHDAYS * SEGMENTS_PER_CHAPTER;
 /** The engine's bound on a crowd's edge and volatility. */
 export const MAX_CROWD_EDGE = 0.4;
+/** The engine's cap on a club's crowd hype meter (`engine/src/crowd.rs`). */
+export const MAX_CROWD_HYPE = 0.15;
 
 /** One club's active roster and lineup for a segment. */
 export interface LeagueClubInput {
@@ -31,7 +33,7 @@ export interface LeagueClubInput {
  tireless: string[];
  /** The franchise's exaggerated park condition at its home games, or null for the real park. */
  parkPackage: ParkPackage | null;
- /** The franchise's in-game crowd trigger at its home games, or null. */
+ /** The franchise's crowd trigger, which fills its season hype meter, or null. */
  crowdTrigger: CrowdTrigger | null;
 }
 
@@ -39,8 +41,12 @@ export interface LeagueClubInput {
 export const PARK_PACKAGES = ['thinAir', 'heavyAir', 'tallLeftWall', 'shortRightField', 'windToRight'] as const;
 export type ParkPackage = typeof PARK_PACKAGES[number];
 
-/** Franchise crowds that react during a home game; hype leans the strike zone further toward the home side. */
-export const CROWD_TRIGGERS = ['homeRunHappyHour', 'guardTheLead', 'winningUgly', 'beatTheTraffic', 'closingTime'] as const;
+/**
+ * Franchise fan bases that react to how their club plays. A trigger's events fill the club's
+ * season hype meter in every game; the meter leans the strike zone toward the club at home and
+ * decays after each game. Front-runners instead swell the home lean with a lead.
+ */
+export const CROWD_TRIGGERS = ['homeRunHappyHour', 'guardTheLead', 'winningUgly', 'frontRunners', 'closingTime'] as const;
 export type CrowdTrigger = typeof CROWD_TRIGGERS[number];
 
 /** A named reliever's rest, carried from one segment into the next by season id. */
@@ -83,6 +89,8 @@ export interface LeagueSegmentInput {
  /** The club whose games come back in full, as the challenge side. */
  detailClub: number;
  rules: GameRules;
+ /** Each club's crowd hype meter from the previous segment's result; empty for the first segment. */
+ hype: number[];
  data: SimulationData;
 }
 
@@ -97,6 +105,8 @@ export interface LeagueSegmentResult {
  totals: TeamBox[];
  detailGames: GameResult[];
  carry: RestState[][];
+ /** Each club's crowd hype meter after the segment. */
+ hype: number[];
 }
 
 export type LeagueWorkerRequest = { runId: number; input: LeagueSegmentInput };

@@ -15,7 +15,7 @@ import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v9' as const;
+export const LEAGUE_VERSION = 'league-v10' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -32,7 +32,7 @@ export interface ClubLineup {
 
 /**
  * One played segment as the device keeps it: compact games, each club's lines, the rest carried
- * forward, and each club's home crowd and payday.
+ * forward, each club's home crowd and payday, and each club's crowd hype meter after it.
  */
 export interface SegmentRecord {
  games: LeagueGame[];
@@ -40,6 +40,7 @@ export interface SegmentRecord {
  carry: RestState[][];
  crowds: Crowd[];
  paydays: Payday[];
+ hype: number[];
 }
 
 export interface LeagueSeason {
@@ -223,7 +224,7 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
  if (segment >= LEAGUE_SEGMENTS) throw new Error('The season is over');
  return {
   modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed: run.setup.seed, data, segment, crowds: seasonCrowds(run, season),
-  rivals: season.rivals, carry: season.segments.at(-1)?.carry ?? [], detailClub: run.seating.humanSeat, rules: { ...segmentDecree(run.setup.seed, segment).rules },
+  rivals: season.rivals, carry: season.segments.at(-1)?.carry ?? [], hype: season.segments.at(-1)?.hype ?? [], detailClub: run.seating.humanSeat, rules: { ...segmentDecree(run.setup.seed, segment).rules },
   clubs: season.lineups.map((_, seat) => {
    const { lineup } = fieldedLineup(run, season, seat, segment);
    const franchiseId = run.seating.seats[seat];
@@ -258,7 +259,7 @@ export function recordSegment(run: DraftRun, season: LeagueSeason, result: Leagu
  const franchises = run.seating.seats;
  const crowds = seasonCrowds(run, season);
  const paydays = season.fans.map((fans, seat) => payday(seat, franchises, fans, result.games));
- season.segments.push({ games: result.games, lines: result.totals.map(box => ({ batting: box.batting, pitching: box.pitching })), carry: result.carry, crowds, paydays });
+ season.segments.push({ games: result.games, lines: result.totals.map(box => ({ batting: box.batting, pitching: box.pitching })), carry: result.carry, crowds, paydays, hype: result.hype });
  const records = standings(season);
  season.fans = season.fans.map((fans, seat) => {
   const row = records.find(item => item.seat === seat)!;

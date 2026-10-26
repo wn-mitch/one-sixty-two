@@ -4,7 +4,7 @@ import { simulateLeagueSegment } from '../engine/node.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
-import { segmentInput, startLeague, type LeagueSeason } from './league.ts';
+import { recordSegment, segmentInput, startLeague, type LeagueSeason } from './league.ts';
 import { PACKAGES, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
@@ -15,7 +15,7 @@ import type { DraftSlot } from './types.ts';
 
 const FRANCHISES = [...new Set([...Object.keys(RIVALS), ...Object.keys(PACKAGES)])];
 
-/** Gives `franchiseId` `pack` for one test: the cap, cash, price, park and crowd mechanisms have no live package while they are reworked. */
+/** Gives `franchiseId` `pack` for one test: the cap, cash, price and park mechanisms have no live package while they are reworked. */
 function install(franchiseId: string, pack: Partial<FranchisePackage>): void {
  const table = PACKAGES as Record<string, FranchisePackage>;
  const before = table[franchiseId];
@@ -41,7 +41,6 @@ function seasonFor(franchiseId: string): { run: DraftRun; season: LeagueSeason; 
 
 describe('franchise packages', () => {
  it('sends each franchise\'s crowd trigger to the engine, which changes only its home games', () => {
-  install('CLE', { crowd: 'guardTheLead' });
   const { run, season, profile } = seasonFor('CLE');
   const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
@@ -53,6 +52,17 @@ describe('franchise packages', () => {
   const changed = after.games.filter((game, index) => game.homeRuns !== before.games[index].homeRuns || game.awayRuns !== before.games[index].awayRuns);
   expect(changed.length).toBeGreaterThan(0);
   expect(changed.every(game => game.home === run.seating.humanSeat)).toBe(true);
+  // Only Cleveland's meter fills, and it starts the next segment where this one left it.
+  const human = run.seating.humanSeat;
+  expect(input.clubs[human].crowdTrigger).toBe('guardTheLead');
+  expect(after.hype[human]).toBeGreaterThan(0);
+  expect(after.hype.filter((_, seat) => seat !== human).every(hype => hype === 0)).toBe(true);
+  recordSegment(run, season, after);
+  expect(segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8)).hype).toEqual(after.hype);
+  const next = { ...cleveland, segment: 1, carry: after.carry };
+  const carried = simulateLeagueSegment({ ...next, hype: after.hype });
+  const fresh = simulateLeagueSegment({ ...next, hype: [] });
+  expect(carried.games).not.toEqual(fresh.games);
  });
 
  it('sends each franchise\'s park condition to the engine for its home games', () => {

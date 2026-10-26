@@ -5,7 +5,7 @@ use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
-use crate::crowd::CrowdTrigger;
+use crate::crowd::{ClubCrowd, CrowdTrigger, GameCrowd, HYPE_MAX};
 use crate::park_package::{apply, ParkPackage};
 use crate::flight::PreparedPark;
 use crate::rules::GameRules;
@@ -50,7 +50,7 @@ pub struct LeagueClub {
     /// The franchise's exaggerated park condition at its home games, if it has one.
     #[serde(default)]
     pub park_package: Option<ParkPackage>,
-    /// The franchise's in-game crowd trigger at its home games, if it has one.
+    /// The franchise's crowd trigger, which fills its hype meter, if it has one.
     #[serde(default)]
     pub crowd_trigger: Option<CrowdTrigger>,
 }
@@ -81,6 +81,9 @@ pub struct LeagueSegmentRequest {
     /// The rules every game of the segment is played under, from the commissioner's decree.
     #[serde(default)]
     pub rules: GameRules,
+    /// Each club's crowd hype meter from the previous segment; empty for the first.
+    #[serde(default)]
+    pub hype: Vec<f64>,
 }
 
 /// One scheduled game by club index.
@@ -102,6 +105,8 @@ pub struct LeagueSegmentResult {
     /// The detail club's games in full; its side is the challenge side.
     pub detail_games: Vec<GameResult>,
     pub carry: Vec<Vec<RestState>>,
+    /// Each club's crowd hype meter after the segment.
+    pub hype: Vec<f64>,
 }
 
 fn check_rivals(rivals: &[[usize; 2]]) -> Result<(), String> {
@@ -206,6 +211,11 @@ impl Engine {
         if request.crowds.iter().any(|crowd| !(crowd.edge.abs() <= MAX_EDGE && (0.0..=MAX_EDGE).contains(&crowd.volatility))) { return Err("Crowd effects are out of bounds".into()); }
         if !request.carry.is_empty() && request.carry.len() != CLUBS { return Err("Carried rest must cover every club".into()); }
         if request.segment > 0 && request.carry.is_empty() { return Err("A later segment needs the previous segment's rest".into()); }
+        if !request.hype.is_empty() && request.hype.len() != CLUBS { return Err("Crowd hype must cover every club".into()); }
+        if request.hype.iter().any(|hype| !(0.0..=HYPE_MAX).contains(hype)) { return Err("Crowd hype is out of bounds".into()); }
+        let mut crowds: Vec<ClubCrowd> = request.clubs.iter().enumerate()
+            .map(|(index, club)| ClubCrowd { trigger: club.crowd_trigger, hype: request.hype.get(index).copied().unwrap_or(0.0) })
+            .collect();
         let schedule = build_league_schedule(request.seed, &request.rivals)?;
         let remainder = &self.data.bullpen;
         let mut clubs: Vec<TeamInput> = request.clubs.iter()
@@ -228,7 +238,7 @@ impl Engine {
             .collect();
         let mut totals: Vec<TeamBox> = clubs.iter().map(create_totals_box).collect();
         let models = GameModels { values: &self.values, tables: &self.tables, win_expectancy: None };
-        let mut result = LeagueSegmentResult { segment: request.segment, games: Vec::with_capacity(SEGMENT_MATCHDAYS * 4), totals: Vec::new(), detail_games: Vec::new(), carry: Vec::new() };
+        let mut result = LeagueSegmentResult { segment: request.segment, games: Vec::with_capacity(SEGMENT_MATCHDAYS * 4), totals: Vec::new(), detail_games: Vec::new(), carry: Vec::new(), hype: Vec::new() };
         let first = request.segment * SEGMENT_MATCHDAYS;
         for (matchday, fixtures) in schedule.iter().enumerate().skip(first).take(SEGMENT_MATCHDAYS) {
             for (index, club) in clubs.iter_mut().enumerate() {
@@ -243,14 +253,17 @@ impl Engine {
                 let opponent = if challenge_is_home { away } else { home };
                 let number = (matchday * 4 + slot + 1) as u32;
                 let home_edge = crowd_edge(request.seed, number, request.crowds[home])?;
+                let mut crowd = GameCrowd::new(crowds[home], crowds[away]);
                 let game = simulate_game(GameInput {
                     number, opponent_id: &clubs[opponent].id, opponent_name: &clubs[opponent].name, challenge_is_home,
                     home: &clubs[home], away: &clubs[away], home_defense: defenses[home].clone(), away_defense: defenses[away].clone(),
                     park: parks[home],
                     home_matchups: matchups[home * CLUBS + away].as_ref().unwrap(),
                     away_matchups: matchups[away * CLUBS + home].as_ref().unwrap(),
-                    home_edge, home_trigger: request.clubs[home].crowd_trigger, rules: request.rules,
+                    home_edge, crowd: &mut crowd, rules: request.rules,
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
+                crowds[home] = crowd.home.after_game(game.home.runs > game.away.runs);
+                crowds[away] = crowd.away.after_game(game.away.runs > game.home.runs);
                 usage[home].record(matchday as i64, &game.home.pitching);
                 usage[away].record(matchday as i64, &game.away.pitching);
                 accumulate_box(&mut totals[home], &game.home)?;
@@ -262,6 +275,7 @@ impl Engine {
         }
         result.carry = usage.iter().zip(&clubs).map(|(usage, club)| usage.carry(club)).collect();
         result.totals = totals;
+        result.hype = crowds.iter().map(|crowd| crowd.hype).collect();
         Ok(result)
     }
 }

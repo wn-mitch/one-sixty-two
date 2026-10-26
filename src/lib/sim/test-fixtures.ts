@@ -112,5 +112,5 @@ export function testLeagueSegment(seed = 162): LeagueSegmentInput {
  const { data } = seasonFixture(seed);
  return { modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed, data,
   clubs: Array.from({ length: 8 }, (_, index) => leagueClub(`club-${index}`, data, index)),
-  rivals: [[0, 4], [1, 5], [2, 6], [3, 7]], segment: 0, crowds: Array.from({ length: 8 }, () => ({ edge: 0, volatility: 0 })), carry: [], detailClub: 0, rules: { ...STANDARD_RULES } };
+  rivals: [[0, 4], [1, 5], [2, 6], [3, 7]], segment: 0, crowds: Array.from({ length: 8 }, () => ({ edge: 0, volatility: 0 })), carry: [], hype: [], detailClub: 0, rules: { ...STANDARD_RULES } };
 }

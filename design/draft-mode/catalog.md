@@ -123,7 +123,7 @@ Lowered mound, legalized steroids and random starting baserunners remain additio
 
 ## Full stadium roster and running mechanics ledger
 
-**Implemented** marks a package the game runs today, with its provisional numbers in `src/lib/draft/packages.ts`; every other entry is pending. A package should be worth roughly five to ten wins a season to a roster built around it, measured over paired native seasons; **pulled for rework** marks a built package that fell short and plays ordinary rules until it is resized. **Agreed direction** records a chosen premise, not calibrated numbers or implemented code. **Working premise** records an established design or conversation-derived candidate still needing discussion. **Open** means no package has been selected; an ordinary field with fan/economic traits is acceptable. Reference venues follow [MLB's ballpark directory](https://www.mlb.com/fans/ballpark-guides); fictional packages do not claim real conditions or policies.
+**Implemented** marks a package the game runs today, with its provisional numbers in `src/lib/draft/packages.ts`; every other entry is pending. A package should be worth roughly five to ten wins a season to a roster built around it, measured over paired native seasons; **pulled for rework** marks a built package that fell short and plays ordinary rules until it is resized. Crowd hype meters cap at +0.15 of strike-zone lean, keep 90% after each game, fill in every game and lean only at home. **Agreed direction** records a chosen premise, not calibrated numbers or implemented code. **Working premise** records an established design or conversation-derived candidate still needing discussion. **Open** means no package has been selected; an ordinary field with fan/economic traits is acceptable. Reference venues follow [MLB's ballpark directory](https://www.mlb.com/fans/ballpark-guides); fictional packages do not claim real conditions or policies.
 
 | Franchise | Reference venue | Package / status |
 |---|---|---|
@@ -132,16 +132,16 @@ Lowered mound, legalized steroids and random starting baserunners remain additio
 | Athletics | Sutter Health Park | House Always Wins — *pulled for rework* (measured about −2 wins net a season at these first strengths): cap −12%; every training 25% cheaper |
 | Baltimore Orioles | Oriole Park at Camden Yards | Tight Spending Ceiling — *pulled for rework* (measured about −6 wins a season at these first strengths): cap −10%; fan expectations .04 lower |
 | Boston Red Sox | Fenway Park | Greenest Monster — *pulled for rework* (home club +0.1 wins a season as drafted, since both clubs play under it; the rework adds a home familiarity edge): fair left-field fences 2.5× taller; about 17% fewer runs at Fenway |
-| Chicago Cubs | Wrigley Field | Wrigleyville / Home Run Happy Hour — *pulled for rework* (measured +0.5 wins a season at these first strengths): +0.015 strike-zone lean per Cubs home homer for the rest of the game |
-| Chicago White Sox | Rate Field | Winning Ugly — *pulled for rework* (measured +0.6 wins a season at these first strengths): +0.008 lean per run in a half without a homer |
+| Chicago Cubs | Wrigley Field | Wrigleyville / Home Run Happy Hour — *implemented*: each Cubs homer, home or away, adds 0.013 to a season hype meter; about +6.3 wins a season |
+| Chicago White Sox | Rate Field | Winning Ugly — *implemented*: each run in a half without a homer adds 0.009 to the hype meter; about +5.5 wins |
 | Cincinnati Reds | Great American Ball Park | Crosley Cliff — agreed direction; steep outfield terrace rewards range and placement |
-| Cleveland Guardians | Progressive Field | Guard the Lead — *pulled for rework* (measured +1.4 wins a season at these first strengths): +0.01 lean per scoreless top half, reset by a run against |
+| Cleveland Guardians | Progressive Field | Guard the Lead — *implemented*: each scoreless half in the field adds 0.0019 to the hype meter; about +6.5 wins |
 | Colorado Rockies | Coors Field | Mile High-er — *pulled for rework* (home club 0 wins a season as drafted, since both clubs play under it; the rework adds a home familiarity edge): air density 0.92× Coors; about 19% more runs |
 | Detroit Tigers | Comerica Park | Assembly Line — *implemented*: +5% training gain per active common at purchase, up to +40%, for every recipient; at the full 40% about +5 wins a season over ordinary training |
 | Houston Astros | Daikin Park | Trash Can Confidential — agreed premise; disclosed home-side information and opposing adaptation cost |
 | Kansas City Royals | Kauffman Stadium | Royal Flush — *pulled for rework* (measured about −3 wins net a season at these first strengths): cap −10%; 1.5 cash per home win with each payday |
 | Los Angeles Angels | Angel Stadium | Locked Payroll / Relocation — agreed direction; move every chapter among fictional perk parks; local attachment resets |
-| Los Angeles Dodgers | Dodger Stadium | Beat the Traffic — *pulled for rework* (measured +0.5 wins a season at these first strengths): crowd lean 0.6× early, 1.2× middle innings, 0.8× late (0.4× trailing); fair-weather fans |
+| Los Angeles Dodgers | Dodger Stadium | Front-Runners — *implemented*: each win adds 0.03 to the hype meter; home lean 2.5× with a lead, 0.3× trailing in the last three innings; fair-weather fans; about +6.4 wins |
 | Miami Marlins | loanDepot park | Everglades — working premise; slow runners and easier ground-ball fielding |
 | Milwaukee Brewers | American Family Field | Seventh-Inning Fermentation — agreed direction; inning-seven power gain and fielding loss for both clubs |
 | Minnesota Twins | Target Field | Deep Freeze — agreed direction; cold-driven pitcher endurance, secondary carry effect; visible seasonal calendar |
@@ -149,7 +149,7 @@ Lowered mound, legalized steroids and random starting baserunners remain additio
 | New York Yankees | Yankee Stadium | Shortest Porch — *pulled for rework* (home club +1.0 wins a season as drafted, since both clubs play under it; the rework adds a home familiarity edge): right field pulled in up to 14% (full from the line to 60°, easing to right-center); about 19% more runs; fair-weather fans |
 | Philadelphia Phillies | Citizens Bank Park | Booing / Yips — working premise; hostile pressure below expectations |
 | Pittsburgh Pirates | PNC Park | Farm Team — agreed direction; restrictive cap, active development/sales, once-per-player bonus for Pittsburgh-funded upgrades |
-| San Diego Padres | Petco Park | Trevor Time — *pulled for rework* (measured no measurable change a season at these first strengths): +0.03 lean when the CL-slot closer enters with a lead |
+| San Diego Padres | Petco Park | Trevor Time — *implemented*: the CL-slot closer entering with a lead, home or away, adds 0.08 to the hype meter once a game; about +5.7 wins |
 | San Francisco Giants | Oracle Park | Splash Zone — *pulled for rework* (home club +0.2 wins a season as drafted, since both clubs play under it; the rework adds a home familiarity edge): 3 m/s wind toward right field; about 21% more runs |
 | Seattle Mariners | T-Mobile Park | Marine Layer — *pulled for rework* (home club −1.0 wins a season as drafted, since both clubs play under it; the rework adds a home familiarity edge): air density 1.08×; about 17% fewer runs |
 | St. Louis Cardinals | Busch Stadium | Cardinal Way — *pulled for rework* (measured about +0.4 wins over ordinary fielding training a season at these first strengths): fielding and baserunning training gain 1.5× |

@@ -97,7 +97,7 @@ describe('draft run saves', () => {
   applyAction(run, submitAction(run));
   const season = startLeague(run);
   await saveRun(db, 'run', run, season);
-  season.segments = Array.from({ length: LEAGUE_SEGMENTS }, () => ({ games: [], lines: [], carry: [], crowds: [], paydays: [] }));
+  season.segments = Array.from({ length: LEAGUE_SEGMENTS }, () => ({ games: [], lines: [], carry: [], crowds: [], paydays: [], hype: [] }));
   const failing: Db = { all: db.all, run: async () => { throw new Error('full'); } };
   expect(await saveRun(failing, 'run', run, season)).toContain('could not be saved');
   expect((await latestRun(db))?.season?.segments).toHaveLength(0);

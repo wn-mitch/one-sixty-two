@@ -35,7 +35,7 @@ import {
 import { validateStadium } from './park.ts';
 import type { ParkRef, StadiumConfig } from './park-types.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
-import { CROWD_TRIGGERS, LEAGUE_CLUBS, LEAGUE_SEGMENTS, MAX_CROWD_EDGE, PARK_PACKAGES, type LeagueClubInput, type LeagueSegmentInput } from './league-types.ts';
+import { CROWD_TRIGGERS, LEAGUE_CLUBS, LEAGUE_SEGMENTS, MAX_CROWD_EDGE, MAX_CROWD_HYPE, PARK_PACKAGES, type LeagueClubInput, type LeagueSegmentInput } from './league-types.ts';
 import { DRAFT_BULLPEN_SLOTS, DRAFT_SLOTS } from '../draft/rules.ts';
 
 const hitterSlotSet: ReadonlySet<string> = new Set(HITTER_SLOTS);
@@ -422,6 +422,7 @@ export function validateLeagueSegment(input: LeagueSegmentInput): void {
  }
  if (!Number.isInteger(input.segment) || input.segment < 0 || input.segment >= LEAGUE_SEGMENTS) throw new Error('Invalid league segment');
  if (input.carry.length !== (input.segment === 0 ? 0 : LEAGUE_CLUBS)) throw new Error('Carried rest must come from the previous segment');
+ if (!Array.isArray(input.hype) || (input.hype.length !== 0 && input.hype.length !== LEAGUE_CLUBS) || input.hype.some(hype => !(hype >= 0 && hype <= MAX_CROWD_HYPE))) throw new Error('Crowd hype must cover every club within its bounds');
  if (input.crowds.length !== LEAGUE_CLUBS || input.crowds.some(crowd => !(Math.abs(crowd.edge) <= MAX_CROWD_EDGE && crowd.volatility >= 0 && crowd.volatility <= MAX_CROWD_EDGE))) {
   throw new Error('Every club needs a home crowd within bounds');
  }
