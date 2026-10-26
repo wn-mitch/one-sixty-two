@@ -1,3 +1,4 @@
+import { franchisePackage } from './packages.ts';
 import type { Crowd, LeagueGame } from '../sim/league-types.ts';
 import { RIVALS } from './franchises.ts';
 
@@ -111,14 +112,15 @@ export function crowd(franchiseId: string, fans: FanState): Crowd {
  return { edge: round(BASE_EDGE + CROWD_EDGE * profile.crowdScale * saturation(share) * mood), volatility: round(MAX_VOLATILITY * profile.crowdScale * share ** 3) };
 }
 
-export interface Payday { salary: number; gate: number; winBonus: number; homeGames: number; wins: number; attendance: number }
+/** `franchise` is a franchise package's own payout, such as Kansas City's casino cash for home wins. */
+export interface Payday { salary: number; gate: number; winBonus: number; franchise: number; homeGames: number; wins: number; attendance: number }
 
-export const paydayTotal = (payday: Payday): number => payday.salary + payday.gate + payday.winBonus;
+export const paydayTotal = (payday: Payday): number => payday.salary + payday.gate + payday.winBonus + payday.franchise;
 
 /** A win's bonus by its run margin. */
 export const winBonus = (margin: number): number => WIN_BASE + WIN_PER_RUN * Math.min(margin - 1, MARGIN_RUNS_PAID);
 
-/** A club's segment payday: its salary, the gate from each home game's filled seats, and a bonus for each win by its margin. */
+/** A club's segment payday: its salary, the gate from each home game's filled seats, a bonus for each win by its margin, and its franchise's payout for home wins. */
 export function payday(seat: number, franchiseIds: readonly string[], fans: FanState, games: readonly LeagueGame[]): Payday {
  const franchiseId = franchiseIds[seat];
  const base = fill(franchiseId, fans);
@@ -127,6 +129,7 @@ export function payday(seat: number, franchiseIds: readonly string[], fans: FanS
  const margins = games.flatMap(game => game.home === seat ? [game.homeRuns - game.awayRuns] : game.away === seat ? [game.awayRuns - game.homeRuns] : []).filter(margin => margin > 0);
  return {
   salary: SALARY, gate: Math.round(GATE_PER_FULL_HOUSE * seats), winBonus: Math.round(margins.reduce((sum, margin) => sum + winBonus(margin), 0)),
+  franchise: Math.round((franchisePackage(franchiseId)?.homeWinCash ?? 0) * games.filter(game => game.home === seat && game.homeRuns > game.awayRuns).length),
   homeGames: shares.length, wins: margins.length, attendance: shares.length ? round(seats / shares.length, 3) : 0
  };
 }

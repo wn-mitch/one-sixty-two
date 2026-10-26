@@ -33,7 +33,11 @@ test('public visitors cannot enter unfinished Draft Mode; a developer opt-in can
 
 test('a Draft Mode run goes from franchise to played nine-game stops and resumes after a reload', async ({ page }) => {
  await page.goto('/draft?developer=on');
+ // A franchise's package is explained before the run starts.
+ await page.locator('label.franchise', { hasText: 'Atlanta Braves' }).click();
+ await expect(page.locator('.package')).toContainText('The Cherokee Commute. A sweetheart stadium deal pays for a salary cap 15% above the table.');
  await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
+ await expect(page.locator('.package')).toHaveText('An ordinary franchise: the table cap and standard training.');
  await page.getByRole('button', { name: 'Start draft' }).click();
  // The commissioner's opening decree is known before the first pick and still in force at the window.
  const opening = page.getByRole('complementary', { name: /^Opening decree: / });

@@ -1,3 +1,4 @@
+import { franchisePackage } from './packages.ts';
 import type { Finish } from '../cards/finish.ts';
 import { defaultReliefRoles, HITTER_SLOTS, MAX_SEASON_YEAR, MIN_SEASON_YEAR, STARTER_SLOTS, type ReliefAssignment, type Slot } from '../game/types.ts';
 import type { DraftCard, DraftSlot, LegalityFailure, PayrollBudget } from './types.ts';
@@ -85,6 +86,10 @@ export const rosterSize = (rules: DraftRules): number => rules.activeSlots.lengt
 
 /** The cheapest roster every budget must admit: a full roster of cleanup commons. */
 export const guaranteePayroll = (rules: DraftRules): number => rosterSize(rules) * rules.commonSalaryMax;
+
+/** A franchise's opening budget at a table's cap: the table cap moved by its package's share. */
+export const franchiseBudget = (tableCap: number, franchiseId: string): PayrollBudget =>
+ ({ ...baselineBudget(tableCap), franchiseAdjustment: Math.round(tableCap * (franchisePackage(franchiseId)?.capShare ?? 0)) });
 
 /** An unadjusted budget at a table's cap (`RunPool.tableCap`). */
 export function baselineBudget(tableCap: number): PayrollBudget {

@@ -56,7 +56,7 @@ Define and calibrate estimated speed/angle/spray profiles, matchup contributions
 
 Owner: [Royal Flush accounting](catalog.md). First relevant gate: [phase](phases/04-season-evolution.md).
 
-Home-win development cash is credited every nine games before purchases. Calibrate payout size and ceiling. Payroll follows the general cap ramp; rewards do not add a separate cap-growth rule.
+Home-win development cash is credited every nine games before purchases: 1.5 per home win (provisional), bounded by the home games in a segment. Calibrate payout size. Payroll follows the general cap ramp; rewards do not add a separate cap-growth rule.
 
 ## 10. Decree semantics
 
@@ -80,7 +80,7 @@ Decided: up to 3-for-3, player and AI offers, no AI-to-AI trades, accept/reject/
 
 Owner: [Pittsburgh and Detroit](catalog.md). First relevant gate: [phase](phases/04-season-evolution.md).
 
-Calibrate Pittsburgh-funded, once-per-player sale bonuses and the retained-core/sale balance. Paid reserve development is permitted generally; decide whether Pittsburgh's special payout requires active playing history. Define payout identity across different seasons of the same athlete. Detroit benefits every eligible recipient; middle-tier treatment, scaling and snapshot timing remain open.
+Calibrate Pittsburgh-funded, once-per-player sale bonuses and the retained-core/sale balance. Paid reserve development is permitted generally; decide whether Pittsburgh's special payout requires active playing history. Define payout identity across different seasons of the same athlete. Detroit benefits every eligible recipient; the boost counts original-tier commons (base finish, at most the common salary) on the active roster when the training is bought, 5% each up to 40% (provisional). Middle-tier treatment and the curve remain open.
 
 ## 14. Angels venues and payroll
 

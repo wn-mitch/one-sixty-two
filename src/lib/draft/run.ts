@@ -10,7 +10,7 @@ import { closeWaivers, MarketError, openMarket, propose, release, respond, setCl
 import { aiSign, canSign, dealPacks, signCard } from './chapter.ts';
 import { CHAPTER_MATCHDAYS, LEAGUE_CHAPTERS } from '../sim/league-types.ts';
 import { buildRunPool, pileHeldBy, type RunPool } from './pool.ts';
-import { baselineBudget, budgetInChapter, canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, DRAFT_RULES, picksPerSeat, rosterSize, type DraftBullpenSlot } from './rules.ts';
+import { budgetInChapter, franchiseBudget, canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, DRAFT_RULES, picksPerSeat, rosterSize, type DraftBullpenSlot } from './rules.ts';
 import { randomStream } from '../game/random.ts';
 import { HITTER_SLOTS, STARTER_SLOTS, validateReliefRoles, type ReliefAssignment } from '../game/types.ts';
 import type { DraftCard, DraftSlot, LegalityReport, PayrollBudget, Submission } from './types.ts';
@@ -153,7 +153,7 @@ export function startRun(setup: RunSetup, data: RunData): DraftRun {
   setup, data, pool, seating,
   personalities,
   judges: personalities.map((personality, seat) => personality && judgeFor(setup.seed, seat, personality, setup.difficulty)),
-  budgets: seating.seats.map(() => baselineBudget(pool.tableCap)), openingBudgets: seating.seats.map(() => baselineBudget(pool.tableCap)),
+  budgets: seating.seats.map(franchiseId => franchiseBudget(pool.tableCap, franchiseId)), openingBudgets: seating.seats.map(franchiseId => franchiseBudget(pool.tableCap, franchiseId)),
   chapter: 0, packs: seating.seats.map(() => []), signed: seating.seats.map(() => null),
   piles: pool.packs.map(packs => packs.flat()),
   ticker: [], actions: [], seen: seating.seats.map(() => new Set<string>()), submissions: seating.seats.map(() => null),

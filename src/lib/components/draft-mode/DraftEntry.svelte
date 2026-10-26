@@ -1,6 +1,7 @@
 <script lang="ts">
  import TeamLogo from '../TeamLogo.svelte';
  import { RIVALS } from '../../draft/franchises.ts';
+ import { franchisePackage } from '../../draft/packages.ts';
  import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty } from '../../draft/scouting.ts';
  import type { Franchise } from '../../game/types.ts';
 
@@ -12,6 +13,7 @@
  let difficulty = $state<Difficulty>(DEFAULT_DIFFICULTY);
  const sorted = $derived([...franchises].sort((a, b) => a.name.localeCompare(b.name)));
  const nameOf = (id: string) => franchises.find(item => item.id === id)?.name ?? id;
+ const pack = $derived(franchiseId ? franchisePackage(franchiseId) : null);
  const rivals = $derived(franchiseId ? (franchiseId === 'NYM' ? ['NYY'] : RIVALS[franchiseId] ?? []) : []);
  const LABELS: Record<Difficulty, string> = { rookie: 'Rookie', pro: 'Pro', ace: 'Ace' };
  const DETAILS: Record<Difficulty, string> = { rookie: 'AI clubs misjudge cards often.', pro: 'AI clubs misjudge some cards.', ace: 'AI clubs rarely misjudge a card.' };
@@ -24,13 +26,13 @@
 
  <fieldset>
   <legend>Your franchise</legend>
-  <p class="note">A franchise brings its home park and a guaranteed rival. Franchise packages are later content. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
+  <p class="note">A franchise brings its home park and a guaranteed rival, and some bring a package of economic or training perks that every club of that franchise plays with. Park conditions are later content. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
   <div class="franchises">
    {#each sorted as franchise (franchise.id)}
     <label class="franchise" class:selected={franchiseId === franchise.id}>
      <input type="radio" name="franchise" value={franchise.id} bind:group={franchiseId} />
      <TeamLogo franchiseId={franchise.id} label={franchise.name} size="small" />
-     <span>{franchise.name}</span>
+     <span>{franchise.name}{#if franchisePackage(franchise.id)}<small>{franchisePackage(franchise.id)!.name}</small>{/if}</span>
     </label>
    {/each}
   </div>
@@ -62,6 +64,7 @@
   {:else}
    <p>Choose a franchise to start.</p>
   {/if}
+  {#if franchiseId}<p class="package" aria-live="polite">{#if pack}<strong>{pack.name}.</strong> {pack.summary}{:else}An ordinary franchise: the table cap and standard training.{/if}</p>{/if}
   <button class="primary" disabled={!franchiseId || busy} onclick={() => onStart(franchiseId, difficulty)}>{busy ? 'Dealing…' : 'Start draft'}</button>
  </div>
 </section>
@@ -78,6 +81,9 @@
  .franchises { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-2); }
  .franchise, .difficulty { display: flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
  .franchise span { font-size: var(--text-sm); line-height: 1.25; }
+ .franchise small { display: block; color: var(--muted); font-size: var(--text-xs); }
+ .start .package { order: 3; flex: 1 0 100%; max-width: 68ch; color: var(--text); }
+ .package strong { color: var(--accent); }
  .franchise:hover, .difficulty:hover { background: var(--surface-hover); }
  .selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
  label:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 4px; }

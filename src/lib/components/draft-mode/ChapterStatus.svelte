@@ -2,6 +2,7 @@
  import Standings from './Standings.svelte';
  import DecreeMemo from './DecreeMemo.svelte';
  import { segmentDecree } from '../../draft/decrees.ts';
+ import { franchisePackage } from '../../draft/packages.ts';
  import { fill, paydayTotal } from '../../draft/fans.ts';
  import { headToHead, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
@@ -32,6 +33,7 @@
  const pct = (value: number) => value.toFixed(3).replace(/^0/, '');
  const won = (game: LeagueGame) => game.home === human ? game.homeRuns > game.awayRuns : game.awayRuns > game.homeRuns;
  const ordinal = (value: number) => `${value}${value === 1 ? 'st' : value === 2 ? 'nd' : value === 3 ? 'rd' : 'th'}`;
+ const pack = $derived(franchisePackage(run.seating.seats[human]));
  const decree = $derived(segmentDecree(run.setup.seed, Math.min(played, LEAGUE_SEGMENTS - 1)));
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
 </script>
@@ -47,9 +49,10 @@
    <div><dt>Mood</dt><dd data-mood={mood.toLowerCase()}>{mood}</dd></div>
    <div><dt>Fans expect</dt><dd>{pct(fans.expectation)}</dd></div>
    <div><dt>Seats filled</dt><dd>{Math.round(share * 100)}%</dd></div>
-   {#if payday}<div><dt>Payday</dt><dd>+{paydayTotal(payday)} <small>{payday.salary} salary + {payday.gate} gate{payday.homeGames ? '' : ' (all road)'} + {payday.winBonus} for {payday.wins} {payday.wins === 1 ? 'win' : 'wins'}</small></dd></div>{/if}
+   {#if payday}<div><dt>Payday</dt><dd>+{paydayTotal(payday)} <small>{payday.salary} salary + {payday.gate} gate{payday.homeGames ? '' : ' (all road)'} + {payday.winBonus} for {payday.wins} {payday.wins === 1 ? 'win' : 'wins'}{payday.franchise ? ` + ${payday.franchise} ${pack?.name ?? 'franchise'}` : ''}</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>
+  {#if pack}<p class="note"><strong>{pack.name}.</strong> {pack.summary}</p>{/if}
   <p class="note">Every win pays, more the wider the margin. Win more than your fans expect and the stands fill, the gate grows and the home crowd leans the strike zone your way. Disappoint them and it turns.</p>
  </section>
 

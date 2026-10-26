@@ -20,9 +20,10 @@ export type TrainingKind = BasicKind | SpecialKind;
 
 /**
  * One bought training, kept with the card through trades; `stop` counts segments played when it was
- * bought. An intensive training gains `INTENSIVE_SCALE` times as much, at a risk of injury.
+ * bought. `scale` multiplies its gain: `INTENSIVE_SCALE` for intensive training, at a risk of
+ * injury, times the buyer's franchise perk, both fixed at purchase.
  */
-export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number; intensive?: boolean }
+export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number; intensive?: boolean; scale?: number }
 
 export interface TrainingInfo { name: string; detail: string; price: number; temporary: boolean }
 
@@ -185,7 +186,7 @@ export const inForce = (upgrade: Upgrade, segment: number): boolean => TRAININGS
 
 /** The card as it plays segment `segment`: its profile with every upgrade in force applied in purchase order. */
 export function developed(profile: Profile, upgrades: readonly Upgrade[], segment: number): Profile {
- return upgrades.filter(upgrade => upgrade.cardId === profile.seasonId && inForce(upgrade, segment)).reduce((card, upgrade) => train(card, upgrade.kind, upgrade.intensive ? INTENSIVE_SCALE : 1), profile);
+ return upgrades.filter(upgrade => upgrade.cardId === profile.seasonId && inForce(upgrade, segment)).reduce((card, upgrade) => train(card, upgrade.kind, upgrade.scale ?? 1), profile);
 }
 
 /** Lasting upgrades on a card, for its badge. */

@@ -123,23 +123,23 @@ Lowered mound, legalized steroids and random starting baserunners remain additio
 
 ## Full stadium roster and running mechanics ledger
 
-**Agreed direction** records a chosen premise, not calibrated numbers or implemented code. **Working premise** records an established design or conversation-derived candidate still needing discussion. **Open** means no package has been selected; an ordinary field with fan/economic traits is acceptable. Reference venues follow [MLB's ballpark directory](https://www.mlb.com/fans/ballpark-guides); fictional packages do not claim real conditions or policies.
+**Implemented** marks a package the game runs today, with its provisional numbers in `src/lib/draft/packages.ts`; every other entry is pending. **Agreed direction** records a chosen premise, not calibrated numbers or implemented code. **Working premise** records an established design or conversation-derived candidate still needing discussion. **Open** means no package has been selected; an ordinary field with fan/economic traits is acceptable. Reference venues follow [MLB's ballpark directory](https://www.mlb.com/fans/ballpark-guides); fictional packages do not claim real conditions or policies.
 
 | Franchise | Reference venue | Package / status |
 |---|---|---|
 | Arizona Diamondbacks | Chase Field | Hot Corner — agreed core; faster ground balls and harder fielding; heat fatigue optional |
-| Atlanta Braves | Truist Park | Cherokee Commute — working premise; higher cap, weaker crowd support |
-| Athletics | Sutter Health Park | House Always Wins — agreed fictional Vegas identity; low cap, development discount |
-| Baltimore Orioles | Oriole Park at Camden Yards | Tight Spending Ceiling — agreed direction; ordinary field, low baseline expectations |
+| Atlanta Braves | Truist Park | Cherokee Commute — *implemented*: cap +15% of the table cap; weaker crowd (60% base fill, 0.6 crowd scale) |
+| Athletics | Sutter Health Park | House Always Wins — *implemented*: cap −12%; every training 25% cheaper |
+| Baltimore Orioles | Oriole Park at Camden Yards | Tight Spending Ceiling — *implemented*: cap −10%; fan expectations .04 lower |
 | Boston Red Sox | Fenway Park | Greenest Monster — working premise; exaggerated left-field wall |
 | Chicago Cubs | Wrigley Field | Wrigleyville / Home Run Happy Hour — agreed direction; homers drive crowd hype |
 | Chicago White Sox | Rate Field | Winning Ugly — agreed direction; non-homer runs build crowd hype |
 | Cincinnati Reds | Great American Ball Park | Crosley Cliff — agreed direction; steep outfield terrace rewards range and placement |
 | Cleveland Guardians | Progressive Field | Guard the Lead — agreed direction; scoreless innings build special hype, reset each game |
 | Colorado Rockies | Coors Field | Mile High-er — working premise; exaggerated elevation |
-| Detroit Tigers | Comerica Park | Assembly Line — agreed direction; active original-tier commons boost purchased training gains for every eligible recipient |
+| Detroit Tigers | Comerica Park | Assembly Line — *implemented*: +5% training gain per active common at purchase, up to +40%, for every recipient |
 | Houston Astros | Daikin Park | Trash Can Confidential — agreed premise; disclosed home-side information and opposing adaptation cost |
-| Kansas City Royals | Kauffman Stadium | Royal Flush — agreed direction; lean initial cap, home-win development cash |
+| Kansas City Royals | Kauffman Stadium | Royal Flush — *implemented*: cap −10%; 1.5 cash per home win with each payday |
 | Los Angeles Angels | Angel Stadium | Locked Payroll / Relocation — agreed direction; move every chapter among fictional perk parks; local attachment resets |
 | Los Angeles Dodgers | Dodger Stadium | Beat the Traffic — agreed direction; middle-inning crowd peak, score-dependent departures, fair-weather support |
 | Miami Marlins | loanDepot park | Everglades — working premise; slow runners and easier ground-ball fielding |
@@ -152,9 +152,9 @@ Lowered mound, legalized steroids and random starting baserunners remain additio
 | San Diego Padres | Petco Park | Trevor Time — agreed direction; crowd surge when designated closer protects a lead |
 | San Francisco Giants | Oracle Park | Splash Zone — agreed direction; consistent wind toward the Cove |
 | Seattle Mariners | T-Mobile Park | Marine Layer — working premise; general carry suppression |
-| St. Louis Cardinals | Busch Stadium | Cardinal Way — agreed direction; stronger purchased fielding/baserunning gains |
+| St. Louis Cardinals | Busch Stadium | Cardinal Way — *implemented*: fielding and baserunning training gain 1.5× |
 | Tampa Bay Rays | Tropicana Field | Catwalk Baseball — agreed direction; lower roof, actual ring rulings |
-| Texas Rangers | Globe Life Field | Ryan Express — agreed direction; stronger purchased strikeout training |
+| Texas Rangers | Globe Life Field | Ryan Express — *implemented*: strikeout-pitch training offered at every stop, gain 1.5× |
 | Toronto Blue Jays | Rogers Centre | Exchange Rate — agreed direction; development prices and whole-crowd attendance move oppositely |
 | Washington Nationals | Nationals Park | Government Shutdown — working premise; chapter funding votes change shared groundskeeping; exact effects open |
 

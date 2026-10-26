@@ -2,8 +2,8 @@
  import type { Profile } from '../../game/types.ts';
  import type { LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
- import { offersAt, refusal, seasonRoster, trainedThisVisit } from '../../draft/shop.ts';
- import { canTrain, developed, INTENSIVE_SCALE, statLine, train, TRAININGS, woba, type TrainingKind } from '../../draft/training.ts';
+ import { gainScale, offersFor, priceFor, refusal, seasonRoster, trainedThisVisit } from '../../draft/shop.ts';
+ import { canTrain, developed, statLine, train, TRAININGS, woba, type TrainingKind } from '../../draft/training.ts';
  import { injuryAt, pushChance, segmentGames } from '../../draft/injuries.ts';
 
  /**
@@ -18,7 +18,8 @@
  } = $props();
  const human = $derived(run.seating.humanSeat);
  const stop = $derived.by(() => { void revision; return season.segments.length; });
- const offers = $derived(offersAt(run.setup.seed, stop));
+ const offers = $derived(offersFor(run, human, stop));
+ const price = (kind: TrainingKind) => priceFor(run, human, kind);
  const cash = $derived.by(() => { void revision; return season.cash[human]; });
  let chosen = $state<TrainingKind>('hitting');
  let intensive = $state(false);
@@ -31,7 +32,7 @@
  const rows = $derived.by(() => {
   void revision;
   const kind = chosen;
-  const scale = hard ? INTENSIVE_SCALE : 1;
+  const scale = gainScale(run, season, human, kind, hard);
   return seasonRoster(season, human).flatMap(id => {
    const printed = profiles.get(id);
    if (!printed) return [];
@@ -60,7 +61,7 @@
  <div class="kinds" role="radiogroup" aria-label="Training">
   {#each offers as kind, index (kind)}
    <button type="button" role="radio" aria-checked={chosen === kind} class:special={index >= 4} onclick={() => { chosen = kind; notice = ''; }}>
-    <span>{TRAININGS[kind].name}</span><small>{TRAININGS[kind].price}</small>
+    <span>{TRAININGS[kind].name}</span><small>{price(kind)}</small>
    </button>
   {/each}
  </div>
@@ -77,7 +78,7 @@
     <li>
      <span class="who">{row.name}<small>{row.before} → <strong>{row.after}</strong>{#if hard} · {Math.round(row.risk * 100)}% injury risk{/if}</small></span>
      <button type="button" class="buy" disabled={working || !!row.reason} title={row.reason ?? ''} aria-label={`Train ${row.name}: ${hard ? 'intensive ' : ''}${TRAININGS[chosen].name}`} onclick={() => void buy(row.id, row.name)}>
-      {row.done ? 'Trained' : `Buy ${TRAININGS[chosen].price}`}
+      {row.done ? 'Trained' : `Buy ${price(chosen)}`}
      </button>
     </li>
    {/each}
