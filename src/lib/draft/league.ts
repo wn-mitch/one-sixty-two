@@ -8,13 +8,14 @@ import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTota
 import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
+import { franchisePackage } from './packages.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v7' as const;
+export const LEAGUE_VERSION = 'league-v8' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -241,7 +242,8 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     }),
     battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })),
     quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort(),
-    ridden: pushed('ride', slot => slot.startsWith('SP')), tireless: pushed('skipRest', slot => slot === 'CL' || slot.startsWith('RP'))
+    ridden: pushed('ride', slot => slot.startsWith('SP')), tireless: pushed('skipRest', slot => slot === 'CL' || slot.startsWith('RP')),
+    parkPackage: franchisePackage(franchiseId)?.park ?? null
    };
   })
  };

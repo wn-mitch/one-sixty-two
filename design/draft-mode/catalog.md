@@ -131,12 +131,12 @@ Lowered mound, legalized steroids and random starting baserunners remain additio
 | Atlanta Braves | Truist Park | Cherokee Commute — *implemented*: cap +15% of the table cap; weaker crowd (60% base fill, 0.6 crowd scale) |
 | Athletics | Sutter Health Park | House Always Wins — *implemented*: cap −12%; every training 25% cheaper |
 | Baltimore Orioles | Oriole Park at Camden Yards | Tight Spending Ceiling — *implemented*: cap −10%; fan expectations .04 lower |
-| Boston Red Sox | Fenway Park | Greenest Monster — working premise; exaggerated left-field wall |
+| Boston Red Sox | Fenway Park | Greenest Monster — *implemented*: fair left-field fences 2.5× taller; about 17% fewer runs at Fenway |
 | Chicago Cubs | Wrigley Field | Wrigleyville / Home Run Happy Hour — agreed direction; homers drive crowd hype |
 | Chicago White Sox | Rate Field | Winning Ugly — agreed direction; non-homer runs build crowd hype |
 | Cincinnati Reds | Great American Ball Park | Crosley Cliff — agreed direction; steep outfield terrace rewards range and placement |
 | Cleveland Guardians | Progressive Field | Guard the Lead — agreed direction; scoreless innings build special hype, reset each game |
-| Colorado Rockies | Coors Field | Mile High-er — working premise; exaggerated elevation |
+| Colorado Rockies | Coors Field | Mile High-er — *implemented*: air density 0.92× Coors; about 19% more runs |
 | Detroit Tigers | Comerica Park | Assembly Line — *implemented*: +5% training gain per active common at purchase, up to +40%, for every recipient |
 | Houston Astros | Daikin Park | Trash Can Confidential — agreed premise; disclosed home-side information and opposing adaptation cost |
 | Kansas City Royals | Kauffman Stadium | Royal Flush — *implemented*: cap −10%; 1.5 cash per home win with each payday |
@@ -146,12 +146,12 @@ Lowered mound, legalized steroids and random starting baserunners remain additio
 | Milwaukee Brewers | American Family Field | Seventh-Inning Fermentation — agreed direction; inning-seven power gain and fielding loss for both clubs |
 | Minnesota Twins | Target Field | Deep Freeze — agreed direction; cold-driven pitcher endurance, secondary carry effect; visible seasonal calendar |
 | New York Mets | Citi Field | Subway Spite / New York Bandwagon — agreed direction; fan buy-in for outperforming Yankees in standings |
-| New York Yankees | Yankee Stadium | Shortest Porch — working physical premise; agreed fair-weather fan layer |
+| New York Yankees | Yankee Stadium | Shortest Porch — *implemented*: right field pulled in up to 14% (full from the line to 60°, easing to right-center); about 19% more runs; fair-weather fans |
 | Philadelphia Phillies | Citizens Bank Park | Booing / Yips — working premise; hostile pressure below expectations |
 | Pittsburgh Pirates | PNC Park | Farm Team — agreed direction; restrictive cap, active development/sales, once-per-player bonus for Pittsburgh-funded upgrades |
 | San Diego Padres | Petco Park | Trevor Time — agreed direction; crowd surge when designated closer protects a lead |
-| San Francisco Giants | Oracle Park | Splash Zone — agreed direction; consistent wind toward the Cove |
-| Seattle Mariners | T-Mobile Park | Marine Layer — working premise; general carry suppression |
+| San Francisco Giants | Oracle Park | Splash Zone — *implemented*: 3 m/s wind toward right field; about 21% more runs |
+| Seattle Mariners | T-Mobile Park | Marine Layer — *implemented*: air density 1.08×; about 17% fewer runs |
 | St. Louis Cardinals | Busch Stadium | Cardinal Way — *implemented*: fielding and baserunning training gain 1.5× |
 | Tampa Bay Rays | Tropicana Field | Catwalk Baseball — agreed direction; lower roof, actual ring rulings |
 | Texas Rangers | Globe Life Field | Ryan Express — *implemented*: strikeout-pitch training offered at every stop, gain 1.5× |

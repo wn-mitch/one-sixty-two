@@ -26,7 +26,7 @@
 
  <fieldset>
   <legend>Your franchise</legend>
-  <p class="note">A franchise brings its home park and a guaranteed rival, and some bring a package of economic or training perks that every club of that franchise plays with. Park conditions are later content. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
+  <p class="note">A franchise brings its home park and a guaranteed rival, and some bring a package of economic or training perks, or an exaggerated home park that both clubs play in. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
   <div class="franchises">
    {#each sorted as franchise (franchise.id)}
     <label class="franchise" class:selected={franchiseId === franchise.id}>
@@ -64,7 +64,7 @@
   {:else}
    <p>Choose a franchise to start.</p>
   {/if}
-  {#if franchiseId}<p class="package" aria-live="polite">{#if pack}<strong>{pack.name}.</strong> {pack.summary}{:else}An ordinary franchise: the table cap and standard training.{/if}</p>{/if}
+  {#if franchiseId}<p class="package" aria-live="polite">{#if pack}<strong>{pack.name}.</strong> {pack.summary}{:else}An ordinary franchise: the table cap, standard training and its real park.{/if}</p>{/if}
   <button class="primary" disabled={!franchiseId || busy} onclick={() => onStart(franchiseId, difficulty)}>{busy ? 'Dealing…' : 'Start draft'}</button>
  </div>
 </section>

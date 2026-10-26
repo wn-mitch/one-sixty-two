@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Profile } from '../game/types.ts';
-import { leagueProfile } from '../sim/test-fixtures.ts';
+import { simulateLeagueSegment } from '../engine/node.ts';
+import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
-import { startLeague, type LeagueSeason } from './league.ts';
+import { segmentInput, startLeague, type LeagueSeason } from './league.ts';
 import { PACKAGES } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
@@ -31,6 +32,20 @@ function seasonFor(franchiseId: string): { run: DraftRun; season: LeagueSeason; 
 }
 
 describe('franchise packages', () => {
+ it('sends each franchise\'s park condition to the engine for its home games', () => {
+  const { run, season, profile } = seasonFor('COL');
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
+  input.clubs.forEach((club, seat) => expect(club.parkPackage).toBe(PACKAGES[run.seating.seats[seat]]?.park ?? null));
+  expect(input.clubs[run.seating.humanSeat].parkPackage).toBe('thinAir');
+  const plain = simulateLeagueSegment({ ...input, clubs: input.clubs.map(club => ({ ...club, parkPackage: null })) });
+  const thin = simulateLeagueSegment(input);
+  // Same seeds and rosters: only the packaged parks' games can change.
+  const changed = thin.games.filter((game, index) => game.homeRuns !== plain.games[index].homeRuns || game.awayRuns !== plain.games[index].awayRuns);
+  expect(changed.length).toBeGreaterThan(0);
+  expect(changed.every(game => input.clubs[game.home].parkPackage !== null)).toBe(true);
+ });
+
  it('moves each franchise\'s cap by its share of the table cap, always leaving room for a roster of commons', () => {
   for (const franchiseId of ['ATL', 'BAL', 'OAK', 'SEA']) {
    const run = startRun(newRunSetup(29, franchiseId, 'test-data'), DATA);

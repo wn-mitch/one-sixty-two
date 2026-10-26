@@ -5,6 +5,8 @@ use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
+use crate::park_package::{apply, ParkPackage};
+use crate::flight::PreparedPark;
 use crate::rules::GameRules;
 use crate::season::{club_team, Engine};
 use crate::team::{accumulate_box, create_totals_box, TeamInput};
@@ -44,6 +46,9 @@ pub struct LeagueClub {
     /// Named relievers, by season id, who skip rest this segment.
     #[serde(default)]
     pub tireless: Vec<String>,
+    /// The franchise's exaggerated park condition at its home games, if it has one.
+    #[serde(default)]
+    pub park_package: Option<ParkPackage>,
 }
 
 /// A club's home crowd for a segment: the strike zone's mean lean toward the home side, and the
@@ -202,7 +207,10 @@ impl Engine {
         let mut clubs: Vec<TeamInput> = request.clubs.iter()
             .map(|club| club_team(&club.roster, &club.batting_order, &club.starter_order, &club.relief_roles, remainder, &club.id, &club.name))
             .collect::<Result<_, _>>()?;
-        let parks = request.clubs.iter().map(|club| self.park(&club.home_stadium)).collect::<Result<Vec<_>, _>>()?;
+        // A club with a park package plays its home games in its park under that condition.
+        let variants = request.clubs.iter().map(|club| club.park_package.map(|package| PreparedPark::new(&apply(&self.park(&club.home_stadium)?.stadium, package))).transpose())
+            .collect::<Result<Vec<_>, _>>()?;
+        let parks = request.clubs.iter().zip(&variants).map(|(club, variant)| variant.as_ref().map_or_else(|| self.park(&club.home_stadium), Ok)).collect::<Result<Vec<_>, _>>()?;
         let defenses = clubs.iter().map(|club| team_defense(club, &self.data.environment.league_error_rates)).collect::<Result<Vec<_>, _>>()?;
         // Batting matchups for every ordered pair: club a's hitters against club b's staff.
         let mut matchups = Vec::with_capacity(CLUBS * CLUBS);

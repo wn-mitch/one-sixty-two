@@ -29,7 +29,13 @@ export interface LeagueClubInput {
  ridden: string[];
  /** Named relievers, by season id, who skip rest this segment. */
  tireless: string[];
+ /** The franchise's exaggerated park condition at its home games, or null for the real park. */
+ parkPackage: ParkPackage | null;
 }
+
+/** Draft Mode's exaggerated park conditions; both clubs play under them. */
+export const PARK_PACKAGES = ['thinAir', 'heavyAir', 'tallLeftWall', 'shortRightField', 'windToRight'] as const;
+export type ParkPackage = typeof PARK_PACKAGES[number];
 
 /** A named reliever's rest, carried from one segment into the next by season id. */
 export interface RestState { seasonId: string; last: number; previous: number; restThrough: number }

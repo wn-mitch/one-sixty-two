@@ -1,9 +1,11 @@
+import type { ParkPackage } from '../sim/league-types.ts';
 import type { TrainingKind } from './training.ts';
 
 /**
- * Franchise packages: economic and development perks a franchise brings to every run, at any
- * seat. Physical park conditions and in-game crowd triggers are separate. A franchise without an
- * entry plays the ordinary rules. Every number is provisional; `design/draft-mode/catalog.md`
+ * Franchise packages: economic, development or physical park perks a franchise brings to every
+ * run, at any seat. A park condition applies to both clubs at the franchise's home games; its
+ * strength lives in the engine (`engine/src/park_package.rs`). In-game crowd triggers are
+ * separate. A franchise without an entry plays the ordinary rules. Every number is provisional; `design/draft-mode/catalog.md`
  * tracks which premises are active.
  */
 export interface FranchisePackage {
@@ -23,6 +25,8 @@ export interface FranchisePackage {
  commonBoostMax?: number;
  /** Cash for each home win, credited with the payday. */
  homeWinCash?: number;
+ /** The exaggerated condition of the franchise's home park. */
+ park?: ParkPackage;
 }
 
 export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
@@ -32,6 +36,11 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  OAK: { name: 'The House Always Wins', summary: 'Vegas runs lean: a cap 12% below the table, and every training costs a quarter less.', capShare: -.12, trainingPrice: .75 },
  STL: { name: 'The Cardinal Way', summary: 'Fundamentals: fielding and baserunning training gain half as much again.', trainingGain: { fielding: 1.5, baserunning: 1.5 } },
  TEX: { name: 'The Ryan Express', summary: 'Strikeout-pitch training is on offer at every stop and gains half as much again.', trainingGain: { strikeout: 1.5 }, alwaysOffered: ['strikeout'] },
+ COL: { name: 'Mile High-er', summary: 'An earthquake raised Coors Field another 3,000 feet. The air is thinner still and fly balls carry: about a fifth more runs, for both clubs.', park: 'thinAir' },
+ SEA: { name: 'Marine Layer', summary: 'Heavy sea air hangs over the park and kills carry: about a sixth fewer runs, for both clubs.', park: 'heavyAir' },
+ BOS: { name: 'The Greenest Monster', summary: 'The left-field wall has grown two and a half times taller. Would-be homers become doubles and outs: about a sixth fewer runs, for both clubs.', park: 'tallLeftWall' },
+ NYY: { name: 'The Shortest Porch', summary: 'Right field keeps creeping toward the plate. Pulled fly balls from left-handed hitters clear it: about a fifth more runs, for both clubs. Fans are fair-weather.', park: 'shortRightField' },
+ SFG: { name: 'Splash Zone', summary: 'A steady wind blows out toward McCovey Cove, carrying balls hit to right: about a fifth more runs, for both clubs.', park: 'windToRight' },
  DET: { name: 'The Assembly Line', summary: 'Every training gains 5% more for each common on the active roster, up to 40%.', commonBoost: .05, commonBoostMax: .4 }
 };
 

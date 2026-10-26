@@ -10,6 +10,8 @@ pub fn sin(x: f64) -> f64 { libm::sin(x) }
 #[inline]
 pub fn cos(x: f64) -> f64 { libm::cos(x) }
 #[inline]
+pub fn atan2(y: f64, x: f64) -> f64 { libm::atan2(y, x) }
+#[inline]
 pub fn pow(x: f64, y: f64) -> f64 { libm::pow(x, y) }
 
 /// JavaScript `Math.round`: nearest integer, ties toward positive infinity.
