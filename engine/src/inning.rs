@@ -78,6 +78,8 @@ pub struct InningContext<'a> {
     pub matchups: &'a PreparedMatchups,
     /// The strike zone's lean toward this side's batters, from the home crowd; zero is neutral.
     pub edge: f64,
+    /// Multiplier on this side's batted-ball exit speed, from the home park's familiarity edge; one is neutral.
+    pub speed_scale: f64,
     pub prepared: PreparedDefense,
     /// Offense speed skills by lineup index.
     speeds: Vec<f64>,
@@ -102,7 +104,7 @@ impl<'a> InningContext<'a> {
     pub fn new(offense: &TeamInput, defense: &TeamInput, matchups: &'a PreparedMatchups, prepared: PreparedDefense) -> Result<Self, String> {
         if matchups.batter_count != offense.hitters.len() || matchups.pitcher_count != defense.pitchers.len() { return Err("Invalid game matchup table".into()); }
         Ok(Self {
-            matchups, edge: 0.0, prepared, speeds: offense.hitters.iter().map(|profile| profile.speed).collect(), next: 0, bases: Bases::default(),
+            matchups, edge: 0.0, speed_scale: 1.0, prepared, speeds: offense.hitters.iter().map(|profile| profile.speed).collect(), next: 0, bases: Bases::default(),
             trace: FlightTrace::default(), candidates: FieldingCandidates::default(), plan: FieldingPlan::default(), outcomes: PhysicalOutcomes::default(),
             draw: ContactDraw { carry: 1.0, ..Default::default() }, uniforms: [0.0; CONTACT_UNIFORMS], decisions: Decisions::default(), reach_uniform: 0.0,
             reach: [0; 8], throwing: [0.0; 8], contact: ContactResult::default(), dp_participants: [0; 3], options: ContactOptions::default(),
@@ -242,7 +244,7 @@ fn sample_fair_contact(context: &mut InningContext, shared: &Shared, pair: usize
         for slot in [DECISION_THIRD_ATTEMPT, DECISION_THIRD_OUT, DECISION_SECOND_ATTEMPT, DECISION_SECOND_OUT, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT] {
             context.decisions.packet[slot] = streams.advancement.next();
         }
-        let sample = ContactSample { speed_mph: context.draw.speed_mph, launch_deg: context.draw.launch_deg, spray_deg: context.draw.spray_deg, carry: context.draw.carry };
+        let sample = ContactSample { speed_mph: context.draw.speed_mph * context.speed_scale, launch_deg: context.draw.launch_deg, spray_deg: context.draw.spray_deg, carry: context.draw.carry };
         trace_flight(&sample, shared.park, &mut context.trace)?;
         compute_candidates(&context.trace, &context.prepared.hit_prevention, &mut context.candidates);
         context.reach.fill(1);

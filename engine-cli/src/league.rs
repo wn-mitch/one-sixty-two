@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use std::io::Read;
 use std::path::Path;
 
-const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] [--trigger CLUB=trigger] < league-request.json";
+const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] [--trigger CLUB=trigger] [--familiarity F] < league-request.json";
 
 /// Home wins, games and runs over one season with every crowd at `crowd`, then winning margins 1..=10 (10 counts 10 or more),
 /// then games, runs and home wins at the home park of club `park` (by index), if any.
@@ -40,6 +40,7 @@ fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd,
 /// `engine league-crowd`: one `{edge, volatility, games, homeWinPct, standardError, homeRuns, awayRuns, margins, parkRuns}` line per edge;
 /// `margins[k]` is the share of games won by k + 1 runs, the last counting ten or more. `--park CLUB=package` plays club
 /// CLUB's home games under a park package (`none` for the real park), and `parkRuns` is total runs a game there.
+/// `--familiarity F` sets that club's home familiarity edge.
 pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut seasons = 40u32;
     let mut base_seed = 162u32;
@@ -47,6 +48,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut volatility = 0.0;
     let mut park: Option<(String, Option<ParkPackage>)> = None;
     let mut trigger: Option<(String, Option<CrowdTrigger>)> = None;
+    let mut familiarity: Option<f64> = None;
     let mut rest = arguments.iter();
     while let Some(flag) = rest.next() {
         let value = rest.next().ok_or(format!("{flag} requires a value"))?;
@@ -65,6 +67,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
                 let name = if name == "none" { None } else { Some(serde_json::from_value(serde_json::Value::String(name.into())).map_err(|_| USAGE.to_string())?) };
                 trigger = Some((club.to_string(), name));
             }
+            "--familiarity" => familiarity = Some(value.parse().map_err(|_| USAGE)?),
             _ => return Err(USAGE.into()),
         }
     }
@@ -76,6 +79,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut park_club = None;
     if let Some((id, package)) = &park { let index = index_of(&base.clubs, id)?; base.clubs[index].park_package = *package; park_club = Some(index); }
     if let Some((id, name)) = &trigger { let index = index_of(&base.clubs, id)?; base.clubs[index].crowd_trigger = *name; park_club = Some(index); }
+    if let Some(familiarity) = familiarity { base.clubs[park_club.ok_or("--familiarity needs --park or --trigger")?].familiarity = familiarity; }
     for edge in edges {
         let crowd = Crowd { edge, volatility };
         let tallies = (0..seasons).into_par_iter().map(|index| season(&engine, &base, season_seed(base_seed, index), crowd, park_club)).collect::<Result<Vec<_>, _>>()?;

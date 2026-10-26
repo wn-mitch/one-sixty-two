@@ -44,6 +44,9 @@ pub struct GameInput<'a, 'p> {
     pub home_edge: f64,
     /// Both clubs' crowd triggers and hype meters; the game moves the meters.
     pub crowd: &'a mut GameCrowd,
+    /// The home club's familiarity with its park: home batted balls leave `1 + familiarity` times as
+    /// fast, the visitors' `1 - familiarity` times.
+    pub familiarity: f64,
     pub rules: GameRules,
 }
 
@@ -73,6 +76,8 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
     // Top: away bats against the home defense; bottom: home bats against the away defense.
     let mut top = InningContext::new(input.away, input.home, input.away_matchups, input.home_defense)?;
     let mut bottom = InningContext::new(input.home, input.away, input.home_matchups, input.away_defense)?;
+    top.speed_scale = 1.0 - input.familiarity;
+    bottom.speed_scale = 1.0 + input.familiarity;
     let crowd = input.crowd;
     let mut highlight: Option<SeasonMoment> = None;
     let mut lowlight: Option<SeasonMoment> = None;

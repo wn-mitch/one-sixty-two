@@ -8,14 +8,14 @@ import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTota
 import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
-import { franchisePackage } from './packages.ts';
+import { familiarityFor, franchisePackage } from './packages.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v10' as const;
+export const LEAGUE_VERSION = 'league-v11' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -217,7 +217,8 @@ export const fieldedIds = (run: DraftRun, season: LeagueSeason): string[] =>
  * The engine input for the next segment. `profiles` must hold every fielded card's printed
  * profile (`fieldedIds`); each plays with the training in force, and at reduced strength when
  * playing through an injury. Pushes taken at this stop ride starters and rest-skipping relievers.
- * `names` labels each seat's club, and each club plays in its franchise's park before its own crowd.
+ * `names` labels each seat's club, and each club plays in its franchise's park before its own crowd,
+ * with a familiarity edge there from the printed cards that fit the park.
  */
 export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueSegmentInput {
  const segment = season.segments.length;
@@ -233,18 +234,21 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     .map(([, id]) => id).sort();
    const stadium = data.stadiums.find(item => item.franchiseId === franchiseId);
    if (!stadium) throw new Error(`No home park for ${franchiseId}`);
+   const printed = run.pool.rules.activeSlots.map(slot => {
+    const profile = profiles.get(lineup.active[slot]);
+    if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
+    return { profile, slot };
+   });
    return {
     id: franchiseId, name: names[seat], homeStadium: stadiumRef(stadium),
-    roster: run.pool.rules.activeSlots.map(slot => {
-     const profile = profiles.get(lineup.active[slot]);
-     if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
+    roster: printed.map(({ profile, slot }) => {
      const trained = developed(profile, season.upgrades, segment);
      return { profile: availability(season, profile.seasonId, segment) === 'hurt' ? hurt(trained) : trained, slot };
     }),
     battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })),
     quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort(),
     ridden: pushed('ride', slot => slot.startsWith('SP')), tireless: pushed('skipRest', slot => slot === 'CL' || slot.startsWith('RP')),
-    parkPackage: franchisePackage(franchiseId)?.park ?? null, crowdTrigger: franchisePackage(franchiseId)?.crowd ?? null
+    parkPackage: franchisePackage(franchiseId)?.park ?? null, familiarity: familiarityFor(franchiseId, printed), crowdTrigger: franchisePackage(franchiseId)?.crowd ?? null
    };
   })
  };

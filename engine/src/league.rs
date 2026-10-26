@@ -6,7 +6,7 @@ use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
 use crate::crowd::{ClubCrowd, CrowdTrigger, GameCrowd, HYPE_MAX};
-use crate::park_package::{apply, ParkPackage};
+use crate::park_package::{apply, ParkPackage, MAX_FAMILIARITY};
 use crate::flight::PreparedPark;
 use crate::rules::GameRules;
 use crate::season::{club_team, Engine};
@@ -50,6 +50,9 @@ pub struct LeagueClub {
     /// The franchise's exaggerated park condition at its home games, if it has one.
     #[serde(default)]
     pub park_package: Option<ParkPackage>,
+    /// The home club's familiarity edge at its home games (`GameInput::familiarity`), up to `MAX_FAMILIARITY`.
+    #[serde(default)]
+    pub familiarity: f64,
     /// The franchise's crowd trigger, which fills its hype meter, if it has one.
     #[serde(default)]
     pub crowd_trigger: Option<CrowdTrigger>,
@@ -211,6 +214,7 @@ impl Engine {
         if request.crowds.iter().any(|crowd| !(crowd.edge.abs() <= MAX_EDGE && (0.0..=MAX_EDGE).contains(&crowd.volatility))) { return Err("Crowd effects are out of bounds".into()); }
         if !request.carry.is_empty() && request.carry.len() != CLUBS { return Err("Carried rest must cover every club".into()); }
         if request.segment > 0 && request.carry.is_empty() { return Err("A later segment needs the previous segment's rest".into()); }
+        if request.clubs.iter().any(|club| !(0.0..=MAX_FAMILIARITY).contains(&club.familiarity)) { return Err("Park familiarity is out of bounds".into()); }
         if !request.hype.is_empty() && request.hype.len() != CLUBS { return Err("Crowd hype must cover every club".into()); }
         if request.hype.iter().any(|hype| !(0.0..=HYPE_MAX).contains(hype)) { return Err("Crowd hype is out of bounds".into()); }
         let mut crowds: Vec<ClubCrowd> = request.clubs.iter().enumerate()
@@ -260,7 +264,7 @@ impl Engine {
                     park: parks[home],
                     home_matchups: matchups[home * CLUBS + away].as_ref().unwrap(),
                     away_matchups: matchups[away * CLUBS + home].as_ref().unwrap(),
-                    home_edge, crowd: &mut crowd, rules: request.rules,
+                    home_edge, crowd: &mut crowd, familiarity: request.clubs[home].familiarity, rules: request.rules,
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
                 crowds[home] = crowd.home.after_game(game.home.runs > game.away.runs);
                 crowds[away] = crowd.away.after_game(game.away.runs > game.home.runs);

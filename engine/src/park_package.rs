@@ -1,7 +1,8 @@
 //! Draft Mode's exaggerated home parks: a franchise's real stadium with one physical identity
-//! pushed beyond any real park. Both clubs play under it. Coordinates put home plate at the origin
-//! with center field along +y and left field at negative x. Strengths are provisional, sized so a
-//! package moves scoring at its park by roughly 15-25% against the real park.
+//! pushed beyond any real park. Both clubs play under it, and the home club holds a familiarity edge
+//! there (`MAX_FAMILIARITY`). Coordinates put home plate at the origin with center field along +y
+//! and left field at negative x. Strengths are provisional, sized so a package moves scoring at its
+//! park by roughly 15-25% against the real park.
 use crate::math;
 use crate::types::StadiumConfig;
 use serde::Deserialize;
@@ -30,6 +31,10 @@ pub const WALL_SCALE: f64 = 2.5;
 pub const PORCH_PULL: f64 = 0.14;
 /// Wind speed toward right field, in meters per second.
 pub const WIND_MPS: f64 = 3.0;
+
+/// The largest familiarity edge a home club can hold: its batted balls leave this share faster at
+/// home, and the visitors' this share slower.
+pub const MAX_FAMILIARITY: f64 = 0.02;
 
 /// Spray angle in degrees from center field: negative toward left field, 45 down the right-field line.
 fn angle(point: [f64; 2]) -> f64 { math::atan2(point[0], point[1]).to_degrees() }

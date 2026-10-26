@@ -18,6 +18,8 @@ export const CHAPTER_MATCHDAYS = SEGMENT_MATCHDAYS * SEGMENTS_PER_CHAPTER;
 export const MAX_CROWD_EDGE = 0.4;
 /** The engine's cap on a club's crowd hype meter (`engine/src/crowd.rs`). */
 export const MAX_CROWD_HYPE = 0.15;
+/** The engine's cap on a club's park familiarity edge (`engine/src/park_package.rs`). */
+export const MAX_PARK_FAMILIARITY = 0.02;
 
 /** One club's active roster and lineup for a segment. */
 export interface LeagueClubInput {
@@ -33,6 +35,8 @@ export interface LeagueClubInput {
  tireless: string[];
  /** The franchise's exaggerated park condition at its home games, or null for the real park. */
  parkPackage: ParkPackage | null;
+ /** At home, the club's batted balls leave `1 + familiarity` times as fast and the visitors' `1 - familiarity` times. */
+ familiarity: number;
  /** The franchise's crowd trigger, which fills its season hype meter, or null. */
  crowdTrigger: CrowdTrigger | null;
 }

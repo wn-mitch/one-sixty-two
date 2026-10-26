@@ -1,11 +1,12 @@
 import { describe, expect, it, onTestFinished } from 'vitest';
 import type { Profile } from '../game/types.ts';
 import { simulateLeagueSegment } from '../engine/node.ts';
+import { MAX_PARK_FAMILIARITY } from '../sim/league-types.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
 import { recordSegment, segmentInput, startLeague, type LeagueSeason } from './league.ts';
-import { PACKAGES, type FranchisePackage } from './packages.ts';
+import { familiarCount, PACKAGES, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
 import { buyTraining, gainScale, offersFor, priceFor } from './shop.ts';
@@ -78,6 +79,31 @@ describe('franchise packages', () => {
   const changed = thin.games.filter((game, index) => game.homeRuns !== plain.games[index].homeRuns || game.awayRuns !== plain.games[index].awayRuns);
   expect(changed.length).toBeGreaterThan(0);
   expect(changed.every(game => input.clubs[game.home].parkPackage !== null)).toBe(true);
+ });
+
+ it('counts printed cards that know the park and gives the home side the familiarity edge in its home games only', () => {
+  install('NYY', { park: 'shortRightField', familiar: { rule: 'leftyHitter', perPlayer: .005 } });
+  const { run, season, profile } = seasonFor('NYY');
+  const human = run.seating.humanSeat;
+  const lineup = season.lineups[human];
+  // Lefty and switch hitters count; a left-handed pitcher does not.
+  const hand = (slot: DraftSlot) => slot === 'C' || slot === '1B' ? 'L' : slot === '2B' ? 'B' : 'R';
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  for (const [slot, id] of Object.entries(lineup.active)) profiles.set(id, { ...profiles.get(id)!, bats: hand(slot as DraftSlot) });
+  const roster = run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(lineup.active[slot])!, slot }));
+  expect(familiarCount('NYY', roster)).toBe(3);
+  expect(familiarCount('ARI', roster)).toBeNull();
+  const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
+  input.clubs.forEach((club, seat) => expect(club.familiarity).toBe(seat === human ? .015 : 0));
+  const known = { ...input, clubs: input.clubs.map((club, seat) => seat === human ? { ...club, familiarity: MAX_PARK_FAMILIARITY } : club) };
+  const plain = simulateLeagueSegment({ ...known, clubs: known.clubs.map(club => ({ ...club, familiarity: 0 })) });
+  const familiar = simulateLeagueSegment(known);
+  const changed = familiar.games.filter((game, index) => game.homeRuns !== plain.games[index].homeRuns || game.awayRuns !== plain.games[index].awayRuns);
+  expect(changed.length).toBeGreaterThan(0);
+  expect(changed.every(game => game.home === human)).toBe(true);
+  const home = (result: typeof plain) => result.games.filter(game => game.home === human).reduce((sum, game) => sum + game.homeRuns - game.awayRuns, 0);
+  expect(home(familiar)).toBeGreaterThan(home(plain));
+  expect(() => simulateLeagueSegment({ ...known, clubs: known.clubs.map(club => ({ ...club, familiarity: MAX_PARK_FAMILIARITY + .001 })) })).toThrow(/familiarity/);
  });
 
  it('moves each franchise\'s cap by its share of the table cap, always leaving room for a roster of commons', () => {

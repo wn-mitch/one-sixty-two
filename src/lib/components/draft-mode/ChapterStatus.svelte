@@ -2,18 +2,20 @@
  import Standings from './Standings.svelte';
  import DecreeMemo from './DecreeMemo.svelte';
  import { segmentDecree } from '../../draft/decrees.ts';
- import { franchisePackage } from '../../draft/packages.ts';
+ import { familiarCount, familiarityFor, franchisePackage } from '../../draft/packages.ts';
  import { fill, paydayTotal } from '../../draft/fans.ts';
  import { headToHead, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
+ import type { Profile } from '../../game/types.ts';
  import { LEAGUE_SEGMENTS, MAX_CROWD_HYPE, SEGMENT_MATCHDAYS, type LeagueGame } from '../../sim/league-types.ts';
 
  /**
   * A stop above the lineup: the club's record and rival series, the decree in force for the next
-  * games, its crowd and cash, the standings, and the last nine games.
+  * games, its crowd and cash, how many active players know the home park, the standings, and the
+  * last nine games.
   */
- let { run, season, revision, clubName }: {
-  run: DraftRun; season: LeagueSeason; revision: number; clubName: (seat: number) => string;
+ let { run, season, revision, profiles, clubName }: {
+  run: DraftRun; season: LeagueSeason; revision: number; profiles: ReadonlyMap<string, Profile>; clubName: (seat: number) => string;
  } = $props();
  const human = $derived(run.seating.humanSeat);
  const rival = $derived(season.rivals.find(pair => pair.includes(human))!.find(seat => seat !== human)!);
@@ -37,6 +39,17 @@
  const decree = $derived(segmentDecree(run.setup.seed, Math.min(played, LEAGUE_SEGMENTS - 1)));
  // A trigger that fills a meter shows how full it is; front-runners have no meter.
  const hype = $derived.by(() => { void revision; return pack?.crowd && pack.crowd !== 'frontRunners' ? Math.round((season.segments.at(-1)?.hype[human] ?? 0) / MAX_CROWD_HYPE * 100) : null; });
+ // Players in the next games' lineup who know a packaged park, once their printed cards have loaded.
+ const familiar = $derived.by(() => {
+  void revision;
+  const franchiseId = run.seating.seats[human];
+  if (!franchisePackage(franchiseId)?.familiar) return null;
+  const active = season.lineups[human].active;
+  const roster = run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(active[slot]), slot }));
+  if (roster.some(pick => !pick.profile)) return null;
+  const loaded = roster as { profile: Profile; slot: typeof roster[number]['slot'] }[];
+  return { count: familiarCount(franchiseId, loaded)!, edge: familiarityFor(franchiseId, loaded) };
+ });
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
 </script>
 
@@ -53,6 +66,7 @@
    <div><dt>Seats filled</dt><dd>{Math.round(share * 100)}%</dd></div>
    {#if payday}<div><dt>Payday</dt><dd>+{paydayTotal(payday)} <small>{payday.salary} salary + {payday.gate} gate{payday.homeGames ? '' : ' (all road)'} + {payday.winBonus} for {payday.wins} {payday.wins === 1 ? 'win' : 'wins'}{payday.franchise ? ` + ${payday.franchise} ${pack?.name ?? 'franchise'}` : ''}</small></dd></div>{/if}
    {#if hype !== null}<div><dt>Hype</dt><dd>{hype}% <small>of the most the crowd can lean</small></dd></div>{/if}
+   {#if familiar}<div><dt>Know the park</dt><dd>{familiar.count} active <small>home batted balls {(familiar.edge * 100).toFixed(1)}% harder, visitors' {(familiar.edge * 100).toFixed(1)}% softer</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>
   {#if pack}<p class="note"><strong>{pack.name}.</strong> {pack.summary}</p>{/if}
