@@ -2,22 +2,23 @@
 //! lean, natively and in parallel, so the crowd curve can be fitted to a target home record.
 use crate::spread::{season_seed, simulation_path};
 use engine::league::{Crowd, LeagueSegmentRequest, SEGMENTS};
+use engine::crowd::CrowdTrigger;
 use engine::park_package::ParkPackage;
 use engine::Engine;
 use rayon::prelude::*;
 use std::io::Read;
 use std::path::Path;
 
-const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] < league-request.json";
+const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] [--trigger CLUB=trigger] < league-request.json";
 
 /// Home wins, games and runs over one season with every crowd at `crowd`, then winning margins 1..=10 (10 counts 10 or more),
-/// then games and runs at the home park of club `park` (by index), if any.
-fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd, park: Option<usize>) -> Result<[u64; 16], String> {
+/// then games, runs and home wins at the home park of club `park` (by index), if any.
+fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd, park: Option<usize>) -> Result<[u64; 17], String> {
     let mut request = base.clone();
     request.seed = seed;
     request.crowds = vec![crowd; request.clubs.len()];
     request.carry = Vec::new();
-    let mut tally = [0u64; 16];
+    let mut tally = [0u64; 17];
     for segment in 0..SEGMENTS {
         request.segment = segment;
         let result = engine.simulate_league_segment(&request, &mut |_| {})?;
@@ -27,7 +28,7 @@ fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd,
             tally[2] += game.home_runs as u64;
             tally[3] += game.away_runs as u64;
             tally[3 + (game.home_runs - game.away_runs).unsigned_abs().min(10) as usize] += 1;
-            if Some(game.home) == park { tally[14] += 1; tally[15] += (game.home_runs + game.away_runs) as u64; }
+            if Some(game.home) == park { tally[14] += 1; tally[15] += (game.home_runs + game.away_runs) as u64; tally[16] += (game.home_runs > game.away_runs) as u64; }
         }
         request.carry = result.carry;
     }
@@ -43,6 +44,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut edges = vec![0.0];
     let mut volatility = 0.0;
     let mut park: Option<(String, Option<ParkPackage>)> = None;
+    let mut trigger: Option<(String, Option<CrowdTrigger>)> = None;
     let mut rest = arguments.iter();
     while let Some(flag) = rest.next() {
         let value = rest.next().ok_or(format!("{flag} requires a value"))?;
@@ -56,6 +58,11 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
                 let package = if package == "none" { None } else { Some(serde_json::from_value(serde_json::Value::String(package.into())).map_err(|_| USAGE.to_string())?) };
                 park = Some((club.to_string(), package));
             }
+            "--trigger" => {
+                let (club, name) = value.split_once('=').ok_or(USAGE)?;
+                let name = if name == "none" { None } else { Some(serde_json::from_value(serde_json::Value::String(name.into())).map_err(|_| USAGE.to_string())?) };
+                trigger = Some((club.to_string(), name));
+            }
             _ => return Err(USAGE.into()),
         }
     }
@@ -63,18 +70,14 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut text = String::new();
     std::io::stdin().read_to_string(&mut text).map_err(|error| error.to_string())?;
     let mut base: LeagueSegmentRequest = serde_json::from_str(&text).map_err(|error| format!("Invalid league request: {error}"))?;
-    let park_club = match &park {
-        Some((id, package)) => {
-            let index = base.clubs.iter().position(|club| &club.id == id).ok_or(format!("No club {id} in the request"))?;
-            base.clubs[index].park_package = *package;
-            Some(index)
-        }
-        None => None,
-    };
+    let index_of = |clubs: &[engine::league::LeagueClub], id: &str| clubs.iter().position(|club| club.id == id).ok_or(format!("No club {id} in the request"));
+    let mut park_club = None;
+    if let Some((id, package)) = &park { let index = index_of(&base.clubs, id)?; base.clubs[index].park_package = *package; park_club = Some(index); }
+    if let Some((id, name)) = &trigger { let index = index_of(&base.clubs, id)?; base.clubs[index].crowd_trigger = *name; park_club = Some(index); }
     for edge in edges {
         let crowd = Crowd { edge, volatility };
         let tallies = (0..seasons).into_par_iter().map(|index| season(&engine, &base, season_seed(base_seed, index), crowd, park_club)).collect::<Result<Vec<_>, _>>()?;
-        let sum = tallies.iter().fold([0u64; 16], |sum, tally| std::array::from_fn(|i| sum[i] + tally[i]));
+        let sum = tallies.iter().fold([0u64; 17], |sum, tally| std::array::from_fn(|i| sum[i] + tally[i]));
         let [wins, games, home_runs, away_runs] = [sum[0], sum[1], sum[2], sum[3]];
         let margins: Vec<f64> = sum[4..14].iter().map(|&count| count as f64 / games as f64).collect();
         let share = wins as f64 / games as f64;
@@ -83,6 +86,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
             "standardError": (share * (1.0 - share) / games as f64).sqrt(),
             "homeRuns": home_runs as f64 / games as f64, "awayRuns": away_runs as f64 / games as f64, "margins": margins,
             "parkRuns": if sum[14] > 0 { Some(sum[15] as f64 / sum[14] as f64) } else { None },
+            "parkHomeWinPct": if sum[14] > 0 { Some(sum[16] as f64 / sum[14] as f64) } else { None },
         }));
     }
     Ok(())

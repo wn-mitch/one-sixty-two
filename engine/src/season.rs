@@ -135,7 +135,7 @@ impl Engine {
                 home, away, home_defense, away_defense,
                 park: if scheduled.is_home { home_park } else { &self.parks[opponent.park] },
                 home_matchups: if scheduled.is_home { &pair.challenge_batting } else { &pair.opponent_batting },
-                away_matchups: if scheduled.is_home { &pair.opponent_batting } else { &pair.challenge_batting }, home_edge: 0.0, rules: Default::default(),
+                away_matchups: if scheduled.is_home { &pair.opponent_batting } else { &pair.challenge_batting }, home_edge: 0.0, home_trigger: None, rules: Default::default(),
             }, &models, &mut GameStreams::new(request.seed, number), Some(&mut trace))?;
             let (challenge_box, opponent_box) = if scheduled.is_home { (&game.home, &game.away) } else { (&game.away, &game.home) };
             challenge_usage.record(i64::from(number), &challenge_box.pitching);

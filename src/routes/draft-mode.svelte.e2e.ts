@@ -36,7 +36,7 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  // A franchise's package is explained before the run starts.
  await page.locator('label.franchise', { hasText: 'Atlanta Braves' }).click();
  await expect(page.locator('.package')).toContainText('The Cherokee Commute. A sweetheart stadium deal pays for a salary cap 15% above the table.');
- await page.locator('label.franchise', { hasText: 'Chicago White Sox' }).click();
+ await page.locator('label.franchise', { hasText: 'Arizona Diamondbacks' }).click();
  await expect(page.locator('.package')).toHaveText('An ordinary franchise: the table cap, standard training and its real park.');
  await page.locator('label.franchise', { hasText: 'Seattle Mariners' }).click();
  await expect(page.locator('.package')).toContainText('Marine Layer.');

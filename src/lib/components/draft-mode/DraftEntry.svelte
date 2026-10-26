@@ -26,7 +26,7 @@
 
  <fieldset>
   <legend>Your franchise</legend>
-  <p class="note">A franchise brings its home park and a guaranteed rival, and some bring a package of economic or training perks, or an exaggerated home park that both clubs play in. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
+  <p class="note">A franchise brings its home park and a guaranteed rival, and some bring a package of economic or training perks, an exaggerated home park that both clubs play in, or a home crowd that reacts during games. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
   <div class="franchises">
    {#each sorted as franchise (franchise.id)}
     <label class="franchise" class:selected={franchiseId === franchise.id}>

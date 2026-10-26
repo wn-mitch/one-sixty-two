@@ -6,6 +6,7 @@ pub mod advancement;
 pub mod contact;
 pub mod contact_basis;
 pub mod contact_profile;
+pub mod crowd;
 pub mod defense_rules;
 pub mod exhibition;
 pub mod fielding;

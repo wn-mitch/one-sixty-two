@@ -32,6 +32,20 @@ function seasonFor(franchiseId: string): { run: DraftRun; season: LeagueSeason; 
 }
 
 describe('franchise packages', () => {
+ it('sends each franchise\'s crowd trigger to the engine, which changes only its home games', () => {
+  const { run, season, profile } = seasonFor('CLE');
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
+  input.clubs.forEach((club, seat) => expect(club.crowdTrigger).toBe(PACKAGES[run.seating.seats[seat]]?.crowd ?? null));
+  const plain = { ...input, clubs: input.clubs.map(club => ({ ...club, parkPackage: null, crowdTrigger: null })) };
+  const cleveland = { ...plain, crowds: plain.crowds.map(() => ({ edge: .04, volatility: 0 })), clubs: plain.clubs.map((club, seat) => seat === run.seating.humanSeat ? { ...club, crowdTrigger: 'guardTheLead' as const } : club) };
+  const before = simulateLeagueSegment({ ...cleveland, clubs: plain.clubs });
+  const after = simulateLeagueSegment(cleveland);
+  const changed = after.games.filter((game, index) => game.homeRuns !== before.games[index].homeRuns || game.awayRuns !== before.games[index].awayRuns);
+  expect(changed.length).toBeGreaterThan(0);
+  expect(changed.every(game => game.home === run.seating.humanSeat)).toBe(true);
+ });
+
  it('sends each franchise\'s park condition to the engine for its home games', () => {
   const { run, season, profile } = seasonFor('COL');
   const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));

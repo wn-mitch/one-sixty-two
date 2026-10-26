@@ -5,6 +5,7 @@ use crate::game::{simulate_game, team_defense, GameInput, GameModels};
 use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
+use crate::crowd::CrowdTrigger;
 use crate::park_package::{apply, ParkPackage};
 use crate::flight::PreparedPark;
 use crate::rules::GameRules;
@@ -49,6 +50,9 @@ pub struct LeagueClub {
     /// The franchise's exaggerated park condition at its home games, if it has one.
     #[serde(default)]
     pub park_package: Option<ParkPackage>,
+    /// The franchise's in-game crowd trigger at its home games, if it has one.
+    #[serde(default)]
+    pub crowd_trigger: Option<CrowdTrigger>,
 }
 
 /// A club's home crowd for a segment: the strike zone's mean lean toward the home side, and the
@@ -245,7 +249,7 @@ impl Engine {
                     park: parks[home],
                     home_matchups: matchups[home * CLUBS + away].as_ref().unwrap(),
                     away_matchups: matchups[away * CLUBS + home].as_ref().unwrap(),
-                    home_edge, rules: request.rules,
+                    home_edge, home_trigger: request.clubs[home].crowd_trigger, rules: request.rules,
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
                 usage[home].record(matchday as i64, &game.home.pitching);
                 usage[away].record(matchday as i64, &game.away.pitching);

@@ -35,7 +35,7 @@ import {
 import { validateStadium } from './park.ts';
 import type { ParkRef, StadiumConfig } from './park-types.ts';
 import type { SeasonInput, TeamInput } from './types.ts';
-import { LEAGUE_CLUBS, LEAGUE_SEGMENTS, MAX_CROWD_EDGE, PARK_PACKAGES, type LeagueClubInput, type LeagueSegmentInput } from './league-types.ts';
+import { CROWD_TRIGGERS, LEAGUE_CLUBS, LEAGUE_SEGMENTS, MAX_CROWD_EDGE, PARK_PACKAGES, type LeagueClubInput, type LeagueSegmentInput } from './league-types.ts';
 import { DRAFT_BULLPEN_SLOTS, DRAFT_SLOTS } from '../draft/rules.ts';
 
 const hitterSlotSet: ReadonlySet<string> = new Set(HITTER_SLOTS);
@@ -390,6 +390,7 @@ function validateLeagueClub(club: LeagueClubInput, data: SimulationData): void {
   throw new Error(`${club.name}: quick recovery names a card outside the club`);
  }
  if (!Array.isArray(club.ridden) || club.ridden.some(id => !/^SP\d$/.test(slotOf(id) ?? ''))) throw new Error(`${club.name}: only an active starter can be ridden`);
+ if (club.crowdTrigger !== null && !(CROWD_TRIGGERS as readonly string[]).includes(club.crowdTrigger)) throw new Error(`${club.name}: unknown crowd trigger`);
  if (club.parkPackage !== null && !(PARK_PACKAGES as readonly string[]).includes(club.parkPackage)) throw new Error(`${club.name}: unknown park package`);
  if (!Array.isArray(club.tireless) || club.tireless.some(id => !/^(CL|RP\d)$/.test(slotOf(id) ?? ''))) throw new Error(`${club.name}: only a named reliever can skip rest`);
  for (const { profile, slot } of club.roster) {

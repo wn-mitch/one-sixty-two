@@ -31,11 +31,17 @@ export interface LeagueClubInput {
  tireless: string[];
  /** The franchise's exaggerated park condition at its home games, or null for the real park. */
  parkPackage: ParkPackage | null;
+ /** The franchise's in-game crowd trigger at its home games, or null. */
+ crowdTrigger: CrowdTrigger | null;
 }
 
 /** Draft Mode's exaggerated park conditions; both clubs play under them. */
 export const PARK_PACKAGES = ['thinAir', 'heavyAir', 'tallLeftWall', 'shortRightField', 'windToRight'] as const;
 export type ParkPackage = typeof PARK_PACKAGES[number];
+
+/** Franchise crowds that react during a home game; hype leans the strike zone further toward the home side. */
+export const CROWD_TRIGGERS = ['homeRunHappyHour', 'guardTheLead', 'winningUgly', 'beatTheTraffic', 'closingTime'] as const;
+export type CrowdTrigger = typeof CROWD_TRIGGERS[number];
 
 /** A named reliever's rest, carried from one segment into the next by season id. */
 export interface RestState { seasonId: string; last: number; previous: number; restThrough: number }

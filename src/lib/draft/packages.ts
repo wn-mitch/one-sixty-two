@@ -1,11 +1,11 @@
-import type { ParkPackage } from '../sim/league-types.ts';
+import type { CrowdTrigger, ParkPackage } from '../sim/league-types.ts';
 import type { TrainingKind } from './training.ts';
 
 /**
  * Franchise packages: economic, development or physical park perks a franchise brings to every
  * run, at any seat. A park condition applies to both clubs at the franchise's home games; its
- * strength lives in the engine (`engine/src/park_package.rs`). In-game crowd triggers are
- * separate. A franchise without an entry plays the ordinary rules. Every number is provisional; `design/draft-mode/catalog.md`
+ * strength lives in the engine (`engine/src/park_package.rs`), as does a crowd trigger's
+ * (`engine/src/crowd.rs`). A franchise without an entry plays the ordinary rules. Every number is provisional; `design/draft-mode/catalog.md`
  * tracks which premises are active.
  */
 export interface FranchisePackage {
@@ -27,6 +27,8 @@ export interface FranchisePackage {
  homeWinCash?: number;
  /** The exaggerated condition of the franchise's home park. */
  park?: ParkPackage;
+ /** How the franchise's home crowd reacts during a game. */
+ crowd?: CrowdTrigger;
 }
 
 export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
@@ -41,6 +43,11 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  BOS: { name: 'The Greenest Monster', summary: 'The left-field wall has grown two and a half times taller. Would-be homers become doubles and outs: about a sixth fewer runs, for both clubs.', park: 'tallLeftWall' },
  NYY: { name: 'The Shortest Porch', summary: 'Right field keeps creeping toward the plate. Pulled fly balls from left-handed hitters clear it: about a fifth more runs, for both clubs. Fans are fair-weather.', park: 'shortRightField' },
  SFG: { name: 'Splash Zone', summary: 'A steady wind blows out toward McCovey Cove, carrying balls hit to right: about a fifth more runs, for both clubs.', park: 'windToRight' },
+ CHC: { name: 'Home Run Happy Hour', summary: 'Every Cubs homer at Wrigley starts a happy hour: the crowd leans the strike zone further their way for the rest of the game.', crowd: 'homeRunHappyHour' },
+ CLE: { name: 'Guard the Lead', summary: 'The home crowd prizes pitching: each scoreless inning in the field builds hype that leans the strike zone their way, and a run against them drains it.', crowd: 'guardTheLead' },
+ CHW: { name: 'Winning Ugly', summary: 'Runs scored without a homer build the crowd\'s hype through the game: walks, singles and hustle lean the strike zone their way.', crowd: 'winningUgly' },
+ LAD: { name: 'Beat the Traffic', summary: 'A huge crowd that arrives late and leaves early: its lean peaks in the middle innings and fades from the 7th, faster when trailing. Fans are fair-weather.', crowd: 'beatTheTraffic' },
+ SDP: { name: 'Trevor Time', summary: 'When the closer comes in to protect a lead, the crowd surges and leans the strike zone his way.', crowd: 'closingTime' },
  DET: { name: 'The Assembly Line', summary: 'Every training gains 5% more for each common on the active roster, up to 40%.', commonBoost: .05, commonBoostMax: .4 }
 };
 

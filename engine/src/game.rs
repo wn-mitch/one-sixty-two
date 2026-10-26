@@ -1,6 +1,7 @@
 //! One game in the home club's venue (`src/lib/sim/game.ts`).
 use crate::contact::{prepared_defense, PreparedDefense};
 use crate::contact_profile::{PreparedMatchups, ShapeTables};
+use crate::crowd::{CrowdTrigger, GameCrowd};
 use crate::flight::PreparedPark;
 use crate::inning::{play_half, InningContext, InningEvent, Shared, Sides};
 use crate::random::GameStreams;
@@ -41,8 +42,13 @@ pub struct GameInput<'a, 'p> {
     pub away_matchups: &'a PreparedMatchups,
     /// The home crowd's lean on the strike zone: home batters get `+home_edge`, visitors `-home_edge`.
     pub home_edge: f64,
+    /// The home franchise's crowd trigger, which moves the lean during the game.
+    pub home_trigger: Option<CrowdTrigger>,
     pub rules: GameRules,
 }
+
+/// The home score minus the visitors' in a half where `offense` is batting.
+fn home_runs_lead(half: Half, offense: i32, defense: i32) -> i32 { if half == Half::Top { defense - offense } else { offense - defense } }
 
 /// Engine tables shared by every game.
 pub struct GameModels<'a> {
@@ -67,8 +73,7 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
     // Top: away bats against the home defense; bottom: home bats against the away defense.
     let mut top = InningContext::new(input.away, input.home, input.away_matchups, input.home_defense)?;
     let mut bottom = InningContext::new(input.home, input.away, input.home_matchups, input.away_defense)?;
-    top.edge = -input.home_edge;
-    bottom.edge = input.home_edge;
+    let mut crowd = GameCrowd::new(input.home_trigger);
     let mut highlight: Option<SeasonMoment> = None;
     let mut lowlight: Option<SeasonMoment> = None;
     let mut active_inning = 1u32;
@@ -91,6 +96,10 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
                 (input.home, input.away, &mut home, &mut away, &mut away_workload, &mut bottom)
             };
             workload.begin_half(defense, &defense_box.pitching, inning, defense_box.runs - offense_box.runs);
+            if half == Half::Top && workload.current == input.home.closer_index && defense_box.runs > offense_box.runs { crowd.closer_enters(); }
+            let edge = crowd.edge(input.home_edge, inning, regulation, home_runs_lead(half, offense_box.runs, defense_box.runs));
+            context.edge = if half == Half::Top { -edge } else { edge };
+            let homers_before: i32 = offense_box.batting.iter().map(|line| line.hr).sum();
             let before = offense_box.runs;
             let target = if half == Half::Bottom && inning >= regulation { f64::from(defense_box.runs) + 1.0 } else { f64::INFINITY };
             let mut observe = |event: &InningEvent| {
@@ -136,6 +145,7 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
             play_half(context, &shared, offense, defense, &mut sides, workload, target, streams, &mut observer)?;
             if let Some(message) = failure.take() { return Err(message); }
             offense_box.innings.push(Some(offense_box.runs - before));
+            crowd.after_half(half, offense_box.runs - before, offense_box.batting.iter().map(|line| line.hr).sum::<i32>() - homers_before);
             if half == Half::Top && inning >= regulation && home.runs > away.runs {
                 home.innings.push(None);
                 finished = true;
