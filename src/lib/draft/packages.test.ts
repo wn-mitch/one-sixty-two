@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import type { Profile } from '../game/types.ts';
 import { simulateLeagueSegment } from '../engine/node.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
 import { segmentInput, startLeague, type LeagueSeason } from './league.ts';
-import { PACKAGES } from './packages.ts';
+import { PACKAGES, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
 import { buyTraining, gainScale, offersFor, priceFor } from './shop.ts';
@@ -14,6 +14,14 @@ import { developed } from './training.ts';
 import type { DraftSlot } from './types.ts';
 
 const FRANCHISES = [...new Set([...Object.keys(RIVALS), ...Object.keys(PACKAGES)])];
+
+/** Gives `franchiseId` `pack` for one test: the cap, cash, price, park and crowd mechanisms have no live package while they are reworked. */
+function install(franchiseId: string, pack: Partial<FranchisePackage>): void {
+ const table = PACKAGES as Record<string, FranchisePackage>;
+ const before = table[franchiseId];
+ table[franchiseId] = { name: 'Test package', summary: '', ...pack };
+ onTestFinished(() => { if (before) table[franchiseId] = before; else delete table[franchiseId]; });
+}
 const DATA: RunData = { cards: testUniverse(160), franchiseIds: FRANCHISES, parkFit: () => 0 };
 
 function seasonFor(franchiseId: string): { run: DraftRun; season: LeagueSeason; profile: (id: string) => Profile } {
@@ -33,6 +41,7 @@ function seasonFor(franchiseId: string): { run: DraftRun; season: LeagueSeason; 
 
 describe('franchise packages', () => {
  it('sends each franchise\'s crowd trigger to the engine, which changes only its home games', () => {
+  install('CLE', { crowd: 'guardTheLead' });
   const { run, season, profile } = seasonFor('CLE');
   const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
@@ -47,6 +56,7 @@ describe('franchise packages', () => {
  });
 
  it('sends each franchise\'s park condition to the engine for its home games', () => {
+  install('COL', { park: 'thinAir' });
   const { run, season, profile } = seasonFor('COL');
   const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
@@ -61,7 +71,9 @@ describe('franchise packages', () => {
  });
 
  it('moves each franchise\'s cap by its share of the table cap, always leaving room for a roster of commons', () => {
-  for (const franchiseId of ['ATL', 'BAL', 'OAK', 'SEA']) {
+  install('ATL', { capShare: .15 });
+  install('OAK', { capShare: -.12 });
+  for (const franchiseId of ['ATL', 'OAK', 'SEA']) {
    const run = startRun(newRunSetup(29, franchiseId, 'test-data'), DATA);
    const seat = run.seating.humanSeat;
    const share = PACKAGES[franchiseId]?.capShare ?? 0;
@@ -70,7 +82,8 @@ describe('franchise packages', () => {
   }
  });
 
- it('prices training for the Athletics a quarter lower and charges that price', () => {
+ it('prices training for a discount package a quarter lower and charges that price', () => {
+  install('OAK', { capShare: -.12, trainingPrice: .75 });
   const { run, season, profile } = seasonFor('OAK');
   const human = run.seating.humanSeat;
   expect(priceFor(run, human, 'hitting')).toBe(8);
@@ -81,7 +94,8 @@ describe('franchise packages', () => {
   expect(season.upgrades[0].cost).toBe(8);
  });
 
- it('gives St. Louis half as much again from fielding, and the gain stays with the card', () => {
+ it('gives a fielding package half as much again from fielding, and the gain stays with the card', () => {
+  install('STL', { trainingGain: { fielding: 1.5, baserunning: 1.5 } });
   const { run, season, profile } = seasonFor('STL');
   const human = run.seating.humanSeat;
   const id = season.lineups[human].active.SS;
@@ -111,7 +125,8 @@ describe('franchise packages', () => {
   expect(gainScale(detroit.run, detroit.season, dt, 'hitting')).toBeCloseTo(1 + Math.min(.4, .05 * commons), 9);
  });
 
- it('pays Kansas City casino cash for home wins only', () => {
+ it('pays home-win cash for home wins only', () => {
+  install('KCR', { homeWinCash: 1.5 });
   const fans: FanState = { prior: .5, expectation: .5, sentiment: 0 };
   const seats = ['KCR', 'SEA'];
   const games = [
