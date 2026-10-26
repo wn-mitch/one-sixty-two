@@ -385,9 +385,12 @@ function validateLeagueClub(club: LeagueClubInput, data: SimulationData): void {
   new Set(club.roster.map(pick => pick.profile.seasonId)).size !== DRAFT_SLOTS.length) {
   throw new Error(`${club.name}: club requires one distinct card in every active slot`);
  }
- if (!Array.isArray(club.quickRecovery) || club.quickRecovery.some(id => !club.roster.some(pick => pick.profile.seasonId === id))) {
+ const slotOf = (id: string) => club.roster.find(pick => pick.profile.seasonId === id)?.slot;
+ if (!Array.isArray(club.quickRecovery) || club.quickRecovery.some(id => !slotOf(id))) {
   throw new Error(`${club.name}: quick recovery names a card outside the club`);
  }
+ if (!Array.isArray(club.ridden) || club.ridden.some(id => !/^SP\d$/.test(slotOf(id) ?? ''))) throw new Error(`${club.name}: only an active starter can be ridden`);
+ if (!Array.isArray(club.tireless) || club.tireless.some(id => !/^(CL|RP\d)$/.test(slotOf(id) ?? ''))) throw new Error(`${club.name}: only a named reliever can skip rest`);
  for (const { profile, slot } of club.roster) {
   const eligible = slot.startsWith('RP') ? profile.eligibleSlots.includes('CL') : profile.eligibleSlots.includes(slot as Slot);
   if (!eligible) throw new Error(`${club.name}: ${profile.seasonId} cannot play ${slot}`);

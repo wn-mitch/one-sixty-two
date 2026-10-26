@@ -50,18 +50,18 @@ pub fn default_assignments(named: usize) -> Vec<RoleAssignment> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Rest { last: i64, previous: i64, rest_through: i64, quick: bool }
+struct Rest { last: i64, previous: i64, rest_through: i64, quick: bool, tireless: bool }
 
 /// One named pitcher's rest, carried across simulation calls by season id (league segments).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestState { pub season_id: String, pub last: i64, pub previous: i64, pub rest_through: i64 }
 
-impl Default for Rest { fn default() -> Self { Self { last: -1, previous: -1, rest_through: -1, quick: false } } }
+impl Default for Rest { fn default() -> Self { Self { last: -1, previous: -1, rest_through: -1, quick: false, tireless: false } } }
 
 impl Rest {
-    /// A quick recoverer may pitch a third straight day.
-    fn ready(&self, game: i64) -> bool { game > self.rest_through && (self.quick || !(self.last == game - 1 && self.previous == game - 2)) }
+    /// A quick recoverer may pitch a third straight day; a tireless arm skips rest altogether.
+    fn ready(&self, game: i64) -> bool { self.tireless || (game > self.rest_through && (self.quick || !(self.last == game - 1 && self.previous == game - 2))) }
     /// Every inning beyond the first costs one more game of rest; a quick recoverer's first two innings are free.
     fn record(&mut self, game: i64, outs: i32, appeared: bool) {
         let free = if self.quick { 2 } else { 1 };
@@ -87,10 +87,17 @@ impl ReliefUsage {
         Self { pitchers: team.named_relief().map(|index| {
             let id = &team.pitchers[index].season_id;
             let mut rest = carried.iter().find(|state| &state.season_id == id)
-                .map_or_else(Rest::default, |state| Rest { last: state.last, previous: state.previous, rest_through: state.rest_through, quick: false });
+                .map_or_else(Rest::default, |state| Rest { last: state.last, previous: state.previous, rest_through: state.rest_through, ..Rest::default() });
             rest.quick = quick.contains(id);
             (index, rest)
         }).collect() }
+    }
+
+    /// The named pitchers in `tireless` (by season id) skip rest: always available, never tired for a backup role.
+    /// Their outings still count toward rest carried past this call.
+    pub fn with_tireless(mut self, team: &TeamInput, tireless: &[String]) -> Self {
+        for (index, rest) in self.pitchers.iter_mut() { rest.tireless = tireless.contains(&team.pitchers[*index].season_id); }
+        self
     }
 
     /// Each named pitcher's rest, to carry into the next call.
@@ -105,7 +112,7 @@ impl ReliefUsage {
         team.rested.iter_mut().for_each(|rested| *rested = true);
         for (index, rest) in &self.pitchers {
             team.available[*index] = rest.ready(game);
-            team.rested[*index] = rest.last != game - 1;
+            team.rested[*index] = rest.tireless || rest.last != game - 1;
         }
     }
 
@@ -130,6 +137,13 @@ mod tests {
         assert!(long.ready(2));
         long.record(2, 9, true);
         assert!(!long.ready(3) && long.ready(4));
+    }
+
+    #[test]
+    fn a_tireless_arm_pitches_every_day_and_counts_as_rested() {
+        let mut tireless = Rest { tireless: true, ..Rest::default() };
+        for game in 1..=4 { assert!(tireless.ready(game)); tireless.record(game, 6, true); }
+        assert_eq!(tireless.rest_through, 5);
     }
 
     #[test]

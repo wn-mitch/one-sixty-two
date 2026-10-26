@@ -214,7 +214,7 @@ pub fn club_team<'p>(roster: &'p [RosterPick], batting_order: &[String], starter
     roles[3..4 + named].copy_from_slice(&assigned);
     Ok(TeamInput {
         id: id.to_string(), name: name.to_string(), hitters, defense, pitchers,
-        starter_index: 0, closer_index: 3, relievers: (4..4 + named).collect(), bullpen_index: 4 + named, rested: available.clone(), available, roles,
+        starter_index: 0, starter_extra_outs: 0, closer_index: 3, relievers: (4..4 + named).collect(), bullpen_index: 4 + named, rested: available.clone(), available, roles,
     })
 }
 
@@ -237,7 +237,7 @@ pub fn opponent_team(opponent: &Opponent) -> Result<TeamInput<'_>, String> {
     for (offset, assigned) in default_roles(1 + named).into_iter().enumerate() { roles[5 + offset] = Some(assigned); }
     Ok(TeamInput {
         id: opponent.id.clone(), name: opponent.name.clone(), hitters: opponent.hitters.iter().collect(), defense, pitchers,
-        starter_index: 0, closer_index: 5, relievers: (6..6 + named).collect(), bullpen_index: 6 + named, rested: available.clone(), available, roles,
+        starter_index: 0, starter_extra_outs: 0, closer_index: 5, relievers: (6..6 + named).collect(), bullpen_index: 6 + named, rested: available.clone(), available, roles,
     })
 }
 

@@ -110,7 +110,7 @@ Shared contact/flight/fielding simulation is a prerequisite, first proven in Cla
 
 Owner: [Injuries and risk choices](season-and-economy.md#injuries-and-risk-choices). First relevant gate: [phase](phases/04-season-evolution.md).
 
-Decided: injuries are a formal system built on disclosed push-your-luck offers, bounded consequences and emergency call-ups from the club's own cleanup stack. Open: degraded performance versus absence (or both), absence lengths, probabilities and escalation, which pushes exist, call-up salary and retention rules, reserve count (two today; three to four covering a fourth starter, a utility infielder and a backup catcher is the candidate), and whether roster turnover is required.
+Decided and implemented: injuries come only from disclosed pushes (intensive training, riding a starter, skipping a reliever's rest, playing through), at 1 in 8 plus 1 in 16 per earlier push on the card that chapter; minor injuries sit a player or let him play hurt for nine games, major ones keep him out for nine; emergency call-ups fill only the absence and are never owned. Open: calibrating the numbers, chapter-long signposted gambles, keeping a call-up, reserve count (two today; three to four covering a fourth starter, a utility infielder and a backup catcher is the candidate), and whether roster turnover is required.
 
 ## 19. Season moments
 

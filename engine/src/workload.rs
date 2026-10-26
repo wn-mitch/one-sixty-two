@@ -52,7 +52,7 @@ impl Workload {
         if team.available.len() != team.pitchers.len() || team.rested.len() != team.pitchers.len() || team.roles.len() != team.pitchers.len() {
             return Err("Pitcher availability and roles must cover the staff".into());
         }
-        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])?, inning: 1, regulation: 9, entered: None, entries: vec![None; team.pitchers.len()] })
+        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])? + team.starter_extra_outs, inning: 1, regulation: 9, entered: None, entries: vec![None; team.pitchers.len()] })
     }
 
     /// Plays games of `innings` regulation innings, moving the late-inning roles with the last one.
@@ -207,7 +207,7 @@ mod tests {
         for (offset, assigned) in default_roles(4).into_iter().enumerate() { roles[1 + offset] = Some(assigned); }
         TeamInput {
             id: "t".into(), name: "t".into(), hitters: Vec::new(), defense: [0; 8], pitchers: staff.iter().collect(),
-            starter_index: 0, closer_index: 1, relievers: vec![2, 3, 4], bullpen_index: 5,
+            starter_index: 0, starter_extra_outs: 0, closer_index: 1, relievers: vec![2, 3, 4], bullpen_index: 5,
             available: vec![true; staff.len()], rested: vec![true; staff.len()], roles,
         }
     }

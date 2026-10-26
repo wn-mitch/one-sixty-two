@@ -1,7 +1,8 @@
 import { randomStream, shuffle } from '../game/random.ts';
 import { HITTER_SLOTS, STARTER_SLOTS, type Profile } from '../game/types.ts';
 import { LEAGUE_SEGMENTS } from '../sim/league-types.ts';
-import type { LeagueSeason } from './league.ts';
+import { BASE_RISK, pushRefusal, pushRisk, takePush, type Injury } from './injuries.ts';
+import { standings, type LeagueSeason } from './league.ts';
 import type { DraftRun } from './run.ts';
 import { BASIC_KINDS, canTrain, developed, SPECIAL_KINDS, train, TRAININGS, woba, type SpecialKind, type TrainingKind, type Upgrade } from './training.ts';
 
@@ -26,8 +27,8 @@ export const seasonRoster = (season: LeagueSeason, seat: number): string[] => [.
 /** Whether `cardId` has already been trained at this visit. */
 export const trainedThisVisit = (season: LeagueSeason, cardId: string): boolean => season.upgrades.some(upgrade => upgrade.cardId === cardId && upgrade.stop === season.segments.length);
 
-/** Why `seat` cannot buy `kind` for the card now, or null when it can. `profile` is the card's printed profile. */
-export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind): string | null {
+/** Why `seat` cannot buy `kind` for the card now, intensively or not, or null when it can. `profile` is the card's printed profile. */
+export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind, intensive = false): string | null {
  const stop = season.segments.length;
  if (stop >= LEAGUE_SEGMENTS) return 'The season is over';
  if (run.phase !== 'season') return 'Finish the chapter market first';
@@ -36,34 +37,48 @@ export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profi
  if (trainedThisVisit(season, profile.seasonId)) return `${profile.displayName} has already trained at this stop`;
  if (!canTrain(developed(profile, season.upgrades, stop), kind, season.upgrades)) return `${TRAININGS[kind].name} does not apply to ${profile.displayName}`;
  if (season.cash[seat] < TRAININGS[kind].price) return 'Not enough cash';
- return null;
+ if (intensive && kind === 'recovery') return 'Recovery cannot be trained intensively';
+ return intensive ? pushRefusal(run, season, seat, profile.seasonId, 'intensive') : null;
 }
 
-/** Buys `kind` for the card, paid by `seat`; throws `ShopError` with the reason when it cannot. */
-export function buyTraining(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind): Upgrade {
- const reason = refusal(run, season, seat, profile, kind);
+/**
+ * Buys `kind` for the card, paid by `seat`; intensive training gains more and rolls its injury at
+ * once. Throws `ShopError` with the reason when it cannot.
+ */
+export function buyTraining(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind, intensive = false): { upgrade: Upgrade; injury: Injury | null } {
+ const reason = refusal(run, season, seat, profile, kind, intensive);
  if (reason) throw new ShopError(reason);
- const upgrade: Upgrade = { cardId: profile.seasonId, kind, stop: season.segments.length, paidBy: seat, cost: TRAININGS[kind].price };
+ const upgrade: Upgrade = { cardId: profile.seasonId, kind, stop: season.segments.length, paidBy: seat, cost: TRAININGS[kind].price, ...(intensive ? { intensive } : {}) };
  season.upgrades.push(upgrade);
  season.cash[seat] -= upgrade.cost;
- return upgrade;
+ return { upgrade, injury: intensive ? takePush(run, season, seat, profile.seasonId, 'intensive') : null };
 }
 
 /** Plate appearances or batters faced a season, by role, so a gain in wOBA compares across roles. */
 const EXPOSURE = { hitter: 650, starter: 700, reliever: 280 } as const;
 
+/** An AI club within this many games of first place pushes its ace and closer. */
+export const CONTENDING_GAMES_BACK = 3;
+
 /**
  * AI clubs shop once a stop, before the next games: while cash allows, each buys the basic
  * hitting or pitching training with the largest expected gain over its active cards, one per
- * card. AI clubs ignore specials, fielding and baserunning.
+ * card. AI clubs ignore specials, fielding and baserunning. After opening day, a club out of
+ * contention trains its first purchase intensively; a contender rides its ace and skips its
+ * closer's rest. Neither pushes a card twice in a chapter, and neither plays through an injury.
  */
 export function aiShop(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>): void {
  const stop = season.segments.length;
  if (stop >= LEAGUE_SEGMENTS || season.aiShopped >= stop) return;
  season.aiShopped = stop;
+ const table = standings(season);
+ const fresh = (id: string) => pushRisk(season, id) === BASE_RISK;
  for (let seat = 0; seat < season.lineups.length; seat++) {
   if (seat === run.seating.humanSeat) continue;
-  const active = season.lineups[seat].active;
+  const lineup = season.lineups[seat];
+  const active = lineup.active;
+  const contending = stop > 0 && table.find(row => row.seat === seat)!.gamesBack <= CONTENDING_GAMES_BACK;
+  let first = true;
   for (;;) {
    let best: { profile: Profile; kind: TrainingKind; gain: number } | null = null;
    for (const [slot, id] of Object.entries(active)) {
@@ -79,7 +94,13 @@ export function aiShop(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMa
     if (!best || gain > best.gain || (gain === best.gain && id < best.profile.seasonId)) best = { profile, kind, gain };
    }
    if (!best || !(best.gain > 0)) break;
-   buyTraining(run, season, seat, best.profile, best.kind);
+   const intensive = first && stop > 0 && !contending && fresh(best.profile.seasonId) && !refusal(run, season, seat, best.profile, best.kind, true);
+   buyTraining(run, season, seat, best.profile, best.kind, intensive);
+   first = false;
+  }
+  if (!contending) continue;
+  for (const [id, kind] of [[lineup.starterOrder[0], 'ride'], [active.CL, 'skipRest']] as const) {
+   if (fresh(id) && !pushRefusal(run, season, seat, id, kind)) takePush(run, season, seat, id, kind);
   }
  }
 }

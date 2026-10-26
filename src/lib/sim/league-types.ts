@@ -25,6 +25,10 @@ export interface LeagueClubInput {
  reliefRoles: ReliefAssignment<DraftBullpenSlot>[];
  /** Named relievers, by season id, trained to recover quickly. */
  quickRecovery: string[];
+ /** Starters, by season id, ridden two innings past their usual workload this segment. */
+ ridden: string[];
+ /** Named relievers, by season id, who skip rest this segment. */
+ tireless: string[];
 }
 
 /** A named reliever's rest, carried from one segment into the next by season id. */

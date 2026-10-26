@@ -117,6 +117,13 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  await expect(shop.locator('.bank strong')).toHaveText(String(payday - 10));
  await expect(shop.getByRole('button', { name: `Train ${trainee}: Hitting` })).toHaveText('Trained');
  await expect(page.getByLabel('1 lasting training')).toHaveCount(1);
+ // A push states its risk and the backup before it is taken, and stays on through the reload below.
+ const pushes = page.getByRole('list', { name: 'Pushes' });
+ const ride = pushes.getByRole('button', { name: /^Take ride the starter for / }).first();
+ await expect(pushes.locator('li').first()).toContainText(/13% injury risk; if hurt, .+ would play SP/);
+ const ridden = (await ride.getAttribute('aria-label'))!.replace('Take ride the starter for ', '');
+ await ride.click();
+ await expect(pushes.getByRole('button', { name: `Call off ride the starter for ${ridden}` })).toBeVisible();
 
  // A reserve change is kept with the season and survives a reload.
  const reserves = page.getByRole('region', { name: 'Reserves' });
@@ -130,6 +137,7 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  await expect(firstReserve).toHaveAttribute('data-season-id', benched!);
  await expect(crowd.locator('dt:text-is("Bank") + dd')).toHaveText(String(payday - 10));
  await expect(page.getByLabel('1 lasting training')).toHaveCount(1);
+ await expect(pushes.getByRole('button', { name: `Call off ride the starter for ${ridden}` })).toBeVisible();
  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 
  // Completed reports stay in history; starting again from one clears its URL selection.

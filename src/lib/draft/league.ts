@@ -6,6 +6,7 @@ import type { ScheduledGame } from '../game/season-calendar.ts';
 import type { BatterLine, PitcherLine } from '../sim/types.ts';
 import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTotal, priors, type FanState, type Payday } from './fans.ts';
 import { segmentDecree } from './decrees.ts';
+import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
@@ -13,7 +14,7 @@ import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v5' as const;
+export const LEAGUE_VERSION = 'league-v6' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -54,6 +55,10 @@ export interface LeagueSeason {
  upgrades: Upgrade[];
  /** The last stop at which AI clubs shopped, so they shop once per stop; -1 before the first. */
  aiShopped: number;
+ /** Every push taken this season, in order. */
+ pushes: Push[];
+ /** Every injury, by the segment it affects. */
+ injuries: Injury[];
 }
 
 export class LineupError extends Error {}
@@ -105,7 +110,7 @@ export function startLeague(run: DraftRun): LeagueSeason {
  return {
   version: LEAGUE_VERSION, rivals: matchRivals(run), lineups, segments: [],
   fans: priors(run.seating.seats, payrolls).map(openingFans),
-  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1
+  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1, pushes: [], injuries: []
  };
 }
 
@@ -202,10 +207,15 @@ export function setLineup(run: DraftRun, season: LeagueSeason, lineup: ClubLineu
 /** Each club's home crowd for the next segment, from its fans now. */
 export const seasonCrowds = (run: DraftRun, season: LeagueSeason): Crowd[] => season.fans.map((fans, seat) => crowd(run.seating.seats[seat], fans));
 
+/** Every card the clubs field in the next segment: active cards, with reserves and call-ups in for the injured. */
+export const fieldedIds = (run: DraftRun, season: LeagueSeason): string[] =>
+ season.lineups.flatMap((_, seat) => Object.values(fieldedLineup(run, season, seat, season.segments.length).lineup.active));
+
 /**
- * The engine input for the next segment. `profiles` must hold every active card's printed
- * profile; each plays with the training in force. `names` labels each seat's club, and each club
- * plays in its franchise's park before its own crowd.
+ * The engine input for the next segment. `profiles` must hold every fielded card's printed
+ * profile (`fieldedIds`); each plays with the training in force, and at reduced strength when
+ * playing through an injury. Pushes taken at this stop ride starters and rest-skipping relievers.
+ * `names` labels each seat's club, and each club plays in its franchise's park before its own crowd.
  */
 export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueSegmentInput {
  const segment = season.segments.length;
@@ -213,8 +223,12 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
  return {
   modelVersion: MODEL_VERSION, rulesVersion: RULES_VERSION, seed: run.setup.seed, data, segment, crowds: seasonCrowds(run, season),
   rivals: season.rivals, carry: season.segments.at(-1)?.carry ?? [], detailClub: run.seating.humanSeat, rules: { ...segmentDecree(run.setup.seed, segment).rules },
-  clubs: season.lineups.map((lineup, seat) => {
+  clubs: season.lineups.map((_, seat) => {
+   const { lineup } = fieldedLineup(run, season, seat, segment);
    const franchiseId = run.seating.seats[seat];
+   const pushed = (kind: Push['kind'], slots: (slot: string) => boolean) => Object.entries(lineup.active)
+    .filter(([slot, id]) => slots(slot) && season.pushes.some(push => push.seat === seat && push.cardId === id && push.kind === kind && push.stop === segment))
+    .map(([, id]) => id).sort();
    const stadium = data.stadiums.find(item => item.franchiseId === franchiseId);
    if (!stadium) throw new Error(`No home park for ${franchiseId}`);
    return {
@@ -222,10 +236,12 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     roster: run.pool.rules.activeSlots.map(slot => {
      const profile = profiles.get(lineup.active[slot]);
      if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
-     return { profile: developed(profile, season.upgrades, segment), slot };
+     const trained = developed(profile, season.upgrades, segment);
+     return { profile: availability(season, profile.seasonId, segment) === 'hurt' ? hurt(trained) : trained, slot };
     }),
     battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })),
-    quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort()
+    quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort(),
+    ridden: pushed('ride', slot => slot.startsWith('SP')), tireless: pushed('skipRest', slot => slot === 'CL' || slot.startsWith('RP'))
    };
   })
  };
@@ -247,6 +263,7 @@ export function recordSegment(run: DraftRun, season: LeagueSeason, result: Leagu
   return afterSegment(seat, franchises, fans, result.games, { wins: row.wins, games: row.wins + row.losses });
  });
  season.cash = season.cash.map((cash, seat) => cash + paydayTotal(paydays[seat]));
+ resolvePushes(run, season, result.segment);
 }
 
 export interface Standing { seat: number; wins: number; losses: number; runsFor: number; runsAgainst: number; gamesBack: number }

@@ -11,6 +11,8 @@ pub struct TeamInput<'p> {
     pub defense: [usize; 8],
     pub pitchers: Vec<&'p Profile>,
     pub starter_index: usize,
+    /// Outs beyond his usual budget today's starter is ridden for.
+    pub starter_extra_outs: u32,
     pub closer_index: usize,
     /// Named relievers RP1 onward, in bullpen order.
     pub relievers: Vec<usize>,

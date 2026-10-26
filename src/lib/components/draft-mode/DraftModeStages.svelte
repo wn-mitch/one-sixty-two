@@ -9,6 +9,8 @@
  import LeagueReport from '#lib/components/draft-mode/LeagueReport.svelte';
  import ChapterStatus from '#lib/components/draft-mode/ChapterStatus.svelte';
 import TrainingShop from '#lib/components/draft-mode/TrainingShop.svelte';
+ import InjuryReport from '#lib/components/draft-mode/InjuryReport.svelte';
+ import { availability, pushBackups } from '#lib/draft/injuries.ts';
  import WindowPanel from '#lib/components/draft-mode/WindowPanel.svelte';
  import Lineup from '#lib/components/Lineup.svelte';
  import Progress from '#lib/components/Progress.svelte';
@@ -20,10 +22,10 @@ import TrainingShop from '#lib/components/draft-mode/TrainingShop.svelte';
  import { waiverCards } from '#lib/draft/market.ts';
  import { decreeAt } from '#lib/draft/decrees.ts';
  import { BENCH, placeFromKey, seasonForm, seasonLineupView, windowBlockers, windowLineupView } from '#lib/draft/lineup-view.ts';
- import { clubSchedule, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
+ import { clubSchedule, fieldedIds, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
 import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts';
  import type { DraftSlot } from '#lib/draft/types.ts';
- import { LEAGUE_CLUBS, SEGMENT_MATCHDAYS, SEGMENTS_PER_CHAPTER } from '#lib/sim/league-types.ts';
+ import { LEAGUE_CLUBS, LEAGUE_SEGMENTS, SEGMENT_MATCHDAYS, SEGMENTS_PER_CHAPTER } from '#lib/sim/league-types.ts';
  import type { DraftModeSession } from '#lib/draft/session.svelte.ts';
  import type { Profile, ReliefAssignment } from '#lib/game/types.ts';
  import type { DraftBullpenSlot } from '#lib/draft/rules.ts';
@@ -64,6 +66,9 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
   if (!run) return [];
   const ids = run.seating.seats.flatMap((_, seat) => ownedBy(run, seat).map(card => card.seasonId));
   if (run.phase === 'drafting') ids.push(...heldPile(run).map(card => card.seasonId));
+  const season = session.season;
+  // At a stop: who covers for the injured now, and who would if a push went wrong.
+  if (run.phase === 'season' && season && season.segments.length < LEAGUE_SEGMENTS) ids.push(...fieldedIds(run, season), ...[...pushBackups(run, season, run.seating.humanSeat).values()].map(sub => sub.in));
   if (run.phase === 'window') ids.push(...STACK_ROLES.flatMap(role => run.pool.cleanup.peek(run.seating.humanSeat, role)?.seasonId ?? []), ...waiverCards(run), ...run.packs.flat());
   return ids.filter(id => !profiles.has(id));
  });
@@ -233,10 +238,13 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
   >
    {#snippet intro()}
     <ChapterStatus run={current.run} season={current.season} revision={session.revision} {clubName} />
-    <TrainingShop run={current.run} season={current.season} revision={session.revision} {profiles} {working} onTrain={(id, kind) => session.train(id, kind)} />
+    <InjuryReport run={current.run} season={current.season} revision={session.revision} {profiles} {working} onPush={(id, kind, on) => void step(session.push(id, kind, on))} />
+    <TrainingShop run={current.run} season={current.season} revision={session.revision} {profiles} {working} onTrain={(id, kind, intensive) => session.train(id, kind, intensive)} />
    {/snippet}
    {#snippet rowControl(seasonId: string)}
     {@const count = lastingUpgrades(current.season.upgrades, seasonId)}
+    {@const health = availability(current.season, seasonId, current.played)}
+    {#if health !== 'fit'}<span class="injured" title={health === 'out' ? 'Injured: out for these games' : 'Playing through an injury'}>{health === 'out' ? 'Out' : 'Hurt'}</span>{/if}
     {#if count}<span class="trained" title={`${count} lasting ${count === 1 ? 'training' : 'trainings'}`} aria-label={`${count} lasting ${count === 1 ? 'training' : 'trainings'}`}>+{count}</span>{/if}
    {/snippet}
    {#snippet status()}
@@ -266,5 +274,6 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
  .ready { color: var(--success); }
  .cut { min-height: 2.25rem; padding-inline: var(--space-3); border: 1px solid var(--border); background: transparent; font-size: var(--text-xs); }
  .progress { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-sm); }
+ .injured { display: inline-grid; place-items: center; min-height: 1.5rem; padding-inline: var(--space-2); border-radius: .4rem; background: color-mix(in oklch, var(--error) 16%, transparent); color: var(--error); font-size: var(--text-xs); font-weight: 700; }
  .trained { display: inline-grid; place-items: center; min-width: 2rem; min-height: 1.5rem; padding-inline: var(--space-1); border-radius: .4rem; background: color-mix(in oklch, var(--success) 18%, transparent); color: var(--success); font-size: var(--text-xs); font-weight: 700; font-variant-numeric: tabular-nums; }
 </style>

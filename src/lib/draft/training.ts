@@ -18,8 +18,11 @@ export type BasicKind = typeof BASIC_KINDS[number];
 export type SpecialKind = typeof SPECIAL_KINDS[number];
 export type TrainingKind = BasicKind | SpecialKind;
 
-/** One bought training, kept with the card through trades; `stop` counts segments played when it was bought. */
-export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number }
+/**
+ * One bought training, kept with the card through trades; `stop` counts segments played when it was
+ * bought. An intensive training gains `INTENSIVE_SCALE` times as much, at a risk of injury.
+ */
+export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number; intensive?: boolean }
 
 export interface TrainingInfo { name: string; detail: string; price: number; temporary: boolean }
 
@@ -28,6 +31,7 @@ export const BASIC_GAIN = .15;
 export const TARGETED_GAIN = .3;
 export const HOT_GAIN = .4;
 export const BASIC_PRICE = 10;
+export const INTENSIVE_SCALE = 1.5;
 
 export const TRAININGS: Readonly<Record<TrainingKind, TrainingInfo>> = {
  hitting: { name: 'Hitting', detail: 'More walks and hits, fewer outs, in the hitter\'s own mix', price: BASIC_PRICE, temporary: false },
@@ -95,7 +99,7 @@ function shift(rates: Rates, from: readonly number[], to: readonly number[], mas
 }
 
 /** wOBA moves by `delta` when mass moves from outs to the on-base events in proportion: delta / the on-base events' mean weight. */
-function towardWoba(rates: Rates, target: number, better: 'up' | 'down'): Rates {
+export function towardWoba(rates: Rates, target: number, better: 'up' | 'down'): Rates {
  const onBase = sum(rates, ON_BASE);
  if (!(onBase > 0)) return rates;
  const weight = ON_BASE.reduce((total, event) => total + WOBA[event] * rates[event], 0) / onBase;
@@ -121,47 +125,48 @@ export function canTrain(profile: Profile, kind: TrainingKind, upgrades: readonl
  }
 }
 
-const withBatting = (profile: Profile, rates: Rates): Profile => ({ ...profile, battingRates: rates, contact: profile.contact && { ...profile.contact, batting: contactTargets(rates) } });
-const withPitching = (profile: Profile, rates: Rates): Profile => ({ ...profile, pitchingRates: rates, contact: profile.contact && { ...profile.contact, pitching: contactTargets(rates) } });
+export const withBatting = (profile: Profile, rates: Rates): Profile => ({ ...profile, battingRates: rates, contact: profile.contact && { ...profile.contact, batting: contactTargets(rates) } });
+export const withPitching = (profile: Profile, rates: Rates): Profile => ({ ...profile, pitchingRates: rates, contact: profile.contact && { ...profile.contact, pitching: contactTargets(rates) } });
 
-/** The card after one training. Kinds that do not apply leave it unchanged. */
-export function train(profile: Profile, kind: TrainingKind): Profile {
+/** The card after one training, its gain scaled by `scale`. Kinds that do not apply leave it unchanged. */
+export function train(profile: Profile, kind: TrainingKind, scale = 1): Profile {
+ const [basic, targeted, hot] = [BASIC_GAIN * scale, TARGETED_GAIN * scale, HOT_GAIN * scale];
  const bat = profile.battingRates;
  const pitch = profile.pitchingRates;
  switch (kind) {
   case 'hitting': case 'hotBat': {
    if (!bat) return profile;
-   const gain = kind === 'hitting' ? BASIC_GAIN : HOT_GAIN;
+   const gain = kind === 'hitting' ? basic : hot;
    return withBatting(profile, towardWoba(bat, woba(bat) + gain * (CEILINGS.battingWoba - woba(bat)), 'up'));
   }
   case 'pitching': case 'hotArm': {
    if (!pitch) return profile;
-   const gain = kind === 'pitching' ? BASIC_GAIN : HOT_GAIN;
+   const gain = kind === 'pitching' ? basic : hot;
    return withPitching(profile, towardWoba(pitch, woba(pitch) - gain * (woba(pitch) - CEILINGS.pitchingWoba), 'down'));
   }
   case 'power': {
    if (!bat || !(bat[HR] > 0)) return profile;
    const extra = bat[DOUBLE] + bat[TRIPLE] + bat[HR];
-   return withBatting(profile, shift(bat, [OUT], [DOUBLE, TRIPLE, HR], TARGETED_GAIN * (CEILINGS.battingHomeRun - bat[HR]) * extra / bat[HR]));
+   return withBatting(profile, shift(bat, [OUT], [DOUBLE, TRIPLE, HR], targeted * (CEILINGS.battingHomeRun - bat[HR]) * extra / bat[HR]));
   }
-  case 'eye': return bat ? withBatting(profile, shift(bat, [SO, OUT], [BB], TARGETED_GAIN * (CEILINGS.battingWalk - bat[BB]))) : profile;
-  case 'contact': return bat ? withBatting(profile, shift(bat, [SO], IN_PLAY, TARGETED_GAIN * (bat[SO] - CEILINGS.battingStrikeout))) : profile;
-  case 'strikeout': return pitch ? withPitching(profile, shift(pitch, IN_PLAY, [SO], TARGETED_GAIN * (CEILINGS.pitchingStrikeout - pitch[SO]))) : profile;
-  case 'control': return pitch ? withPitching(profile, shift(pitch, [BB], IN_PLAY, TARGETED_GAIN * (pitch[BB] - CEILINGS.pitchingWalk))) : profile;
-  case 'keepInPark': return pitch ? withPitching(profile, shift(pitch, [HR], [OUT], TARGETED_GAIN * (pitch[HR] - CEILINGS.pitchingHomeRun))) : profile;
+  case 'eye': return bat ? withBatting(profile, shift(bat, [SO, OUT], [BB], targeted * (CEILINGS.battingWalk - bat[BB]))) : profile;
+  case 'contact': return bat ? withBatting(profile, shift(bat, [SO], IN_PLAY, targeted * (bat[SO] - CEILINGS.battingStrikeout))) : profile;
+  case 'strikeout': return pitch ? withPitching(profile, shift(pitch, IN_PLAY, [SO], targeted * (CEILINGS.pitchingStrikeout - pitch[SO]))) : profile;
+  case 'control': return pitch ? withPitching(profile, shift(pitch, [BB], IN_PLAY, targeted * (pitch[BB] - CEILINGS.pitchingWalk))) : profile;
+  case 'keepInPark': return pitch ? withPitching(profile, shift(pitch, [HR], [OUT], targeted * (pitch[HR] - CEILINGS.pitchingHomeRun))) : profile;
   case 'fielding': {
    const positions = Object.fromEntries(Object.entries(profile.defense.positions).map(([position, skills]) => {
     const ceilings = FIELDING_CEILINGS[position as Position] ?? {};
     const next = { ...skills };
     for (const [skill, ceiling] of Object.entries(ceilings) as [DefensiveSkillName, number][]) {
-     if (next[skill] < ceiling) next[skill] += BASIC_GAIN * (ceiling - next[skill]);
+     if (next[skill] < ceiling) next[skill] += basic * (ceiling - next[skill]);
     }
     return [position, next];
    }));
    return { ...profile, defense: { ...profile.defense, positions } };
   }
   case 'baserunning': {
-   const toward = (value: number, ceiling: number) => value < ceiling ? value + BASIC_GAIN * (ceiling - value) : value;
+   const toward = (value: number, ceiling: number) => value < ceiling ? value + basic * (ceiling - value) : value;
    return { ...profile, speed: toward(profile.speed, CEILINGS.speed), stealSuccess: toward(profile.stealSuccess, CEILINGS.stealSuccess) };
   }
   case 'stamina': {
@@ -169,7 +174,7 @@ export function train(profile: Profile, kind: TrainingKind): Profile {
    if (!counts || !(counts.GS > 0)) return profile;
    const outs = counts.IPouts / counts.GS;
    if (outs >= CEILINGS.starterOuts) return profile;
-   return { ...profile, pitching: { ...counts, IPouts: counts.GS * (outs + TARGETED_GAIN * (CEILINGS.starterOuts - outs)) } };
+   return { ...profile, pitching: { ...counts, IPouts: counts.GS * (outs + targeted * (CEILINGS.starterOuts - outs)) } };
   }
   case 'recovery': return profile;
  }
@@ -180,7 +185,7 @@ export const inForce = (upgrade: Upgrade, segment: number): boolean => TRAININGS
 
 /** The card as it plays segment `segment`: its profile with every upgrade in force applied in purchase order. */
 export function developed(profile: Profile, upgrades: readonly Upgrade[], segment: number): Profile {
- return upgrades.filter(upgrade => upgrade.cardId === profile.seasonId && inForce(upgrade, segment)).reduce((card, upgrade) => train(card, upgrade.kind), profile);
+ return upgrades.filter(upgrade => upgrade.cardId === profile.seasonId && inForce(upgrade, segment)).reduce((card, upgrade) => train(card, upgrade.kind, upgrade.intensive ? INTENSIVE_SCALE : 1), profile);
 }
 
 /** Lasting upgrades on a card, for its badge. */

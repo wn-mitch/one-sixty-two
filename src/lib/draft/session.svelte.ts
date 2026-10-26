@@ -7,7 +7,8 @@ import type { Db } from '../storage/sql.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import type { StackRole } from './cleanup.ts';
 import { seatTable } from './franchises.ts';
-import { closeChapter, LEAGUE_VERSION, LineupError, recordSegment, seasonStop, segmentInput, setLineup, standings, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
+import { dropPush, PushError, takePush, type PushKind } from './injuries.ts';
+import { closeChapter, fieldedIds, LEAGUE_VERSION, LineupError, recordSegment, seasonStop, segmentInput, setLineup, standings, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
 import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
 import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
@@ -251,15 +252,29 @@ export class DraftModeSession {
   return null;
  }
 
- /** Buys a training for one of the player's cards at this stop; returns the refusal message, or null. */
- async train(cardId: string, kind: TrainingKind): Promise<string | null> {
+ /** Buys a training, intensive or not, for one of the player's cards at this stop; returns the refusal message, or null. */
+ async train(cardId: string, kind: TrainingKind, intensive = false): Promise<string | null> {
   const run = this.run;
   const season = this.season;
   if (!run || !season || !this.profiles || this.playing) return 'The season is not at a stop';
   const [profile] = (await this.profiles.load([cardId])).values();
   if (!profile) return 'That card could not be loaded';
-  try { buyTraining(run, season, run.seating.humanSeat, profile, kind); }
+  try { buyTraining(run, season, run.seating.humanSeat, profile, kind, intensive); }
   catch (error) { if (error instanceof ShopError) return error.message; throw error; }
+  await this.#save();
+  this.revision++;
+  return null;
+ }
+
+ /** Takes a push on one of the player's cards, or calls it off; returns the refusal message, or null. */
+ async push(cardId: string, kind: PushKind, on: boolean): Promise<string | null> {
+  const run = this.run;
+  const season = this.season;
+  if (!run || !season || this.playing) return 'The season is not at a stop';
+  try {
+   if (on) takePush(run, season, run.seating.humanSeat, cardId, kind);
+   else dropPush(season, run.seating.humanSeat, cardId, kind);
+  } catch (error) { if (error instanceof PushError) return error.message; throw error; }
   await this.#save();
   this.revision++;
   return null;
@@ -278,10 +293,12 @@ export class DraftModeSession {
   this.failure = '';
   try {
    this.#simulation ??= await loadSimulation(manifest);
-   const active = season.lineups.flatMap(lineup => Object.values(lineup.active));
-   const profiles: Map<string, Profile> = await this.profiles.load(active);
-   // AI clubs shop at this stop before its games; the player has shopped already.
+   const rostered = season.lineups.flatMap(lineup => [...Object.values(lineup.active), ...lineup.reserves]);
+   const profiles: Map<string, Profile> = await this.profiles.load(rostered);
+   // AI clubs shop and push at this stop before its games; the player has already.
    aiShop(run, season, profiles);
+   const missing = fieldedIds(run, season).filter(id => !profiles.has(id));
+   if (missing.length) for (const [id, profile] of await this.profiles.load(missing)) profiles.set(id, profile);
    const names = run.seating.seats.map((_, seat) => this.clubName(seat));
    const input = segmentInput(run, season, profiles, this.#simulation, names);
    const { result, schedule } = await this.#simulate(input);
