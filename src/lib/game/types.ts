@@ -52,8 +52,9 @@ export interface DefensiveSkills {
  errorAvoidance: number;
  catcherThrowing: number;
 }
+/** Where a defensive skill comes from; `trained` marks a Draft Mode development gain on a skill without historical evidence. */
 export interface DefensiveEvidence {
- status: 'exact' | 'genericOutfield' | 'neutralMissingEvidence' | 'notApplicable';
+ status: 'exact' | 'genericOutfield' | 'neutralMissingEvidence' | 'notApplicable' | 'trained';
  exposure: number;
  reason?: string;
 }

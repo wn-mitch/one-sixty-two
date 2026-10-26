@@ -5,13 +5,13 @@ import { MAX_PARK_FAMILIARITY } from '../sim/league-types.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
-import { recordSegment, segmentInput, startLeague, type LeagueSeason } from './league.ts';
-import { familiarCount, PACKAGES, type FranchisePackage } from './packages.ts';
+import { ironManUpgrades, recordSegment, segmentInput, startLeague, type LeagueSeason } from './league.ts';
+import { familiarCount, knowHowCount, MAX_KNOW_HOW, PACKAGES, withKnowHow, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
-import { buyTraining, gainScale, offersFor, priceFor } from './shop.ts';
+import { buyTraining, gainScale, offersFor, priceFor, trainedThisVisit } from './shop.ts';
 import { playDraft, submitAction, testUniverse } from './test-fixtures.ts';
-import { developed } from './training.ts';
+import { developed, train, withSkill } from './training.ts';
 import type { DraftSlot } from './types.ts';
 
 const FRANCHISES = [...new Set([...Object.keys(RIVALS), ...Object.keys(PACKAGES)])];
@@ -174,5 +174,75 @@ describe('franchise packages', () => {
   ];
   expect(payday(0, seats, fans, games).franchise).toBe(3);
   expect(payday(1, seats, fans, games).franchise).toBe(0);
+ });
+
+ it('gives a know-how club range at every fielder, home and away, from its printed elite gloves', () => {
+  install('STL', { knowHow: { minGrade: 60, perPlayer: .05 } });
+  const { run, season, profile } = seasonFor('STL');
+  const human = run.seating.humanSeat;
+  const lineup = season.lineups[human];
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  // Elite range lifts a median glove past the bar at C, SS and CF; the same glove at DH does not count.
+  const elite = (slot: DraftSlot, position: 'C' | 'SS' | 'CF' | '1B') => {
+   const card = profiles.get(lineup.active[slot])!;
+   const skills = card.defense.positions[position] ?? profile(lineup.active['1B']).defense.positions['1B']!;
+   profiles.set(card.seasonId, { ...card, defense: { ...card.defense, positions: { ...card.defense.positions, [position]: withSkill(skills, 'hitPrevention', .6) } } });
+  };
+  elite('C', 'C');
+  elite('SS', 'SS');
+  elite('CF', 'CF');
+  elite('DH', '1B');
+  const roster = run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(lineup.active[slot])!, slot }));
+  expect(knowHowCount('STL', roster)).toBe(3);
+  expect(knowHowCount('ARI', roster)).toBeNull();
+  const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
+  const range = (seat: number, slot: DraftSlot) => input.clubs[seat].roster.find(pick => pick.slot === slot)!.profile.defense.positions[slot as 'SS']!.hitPrevention;
+  const printedRange = (seat: number, slot: DraftSlot) => profiles.get(season.lineups[seat].active[slot])!.defense.positions[slot as 'SS']!.hitPrevention;
+  expect(range(human, '2B') - printedRange(human, '2B')).toBeCloseTo(.15, 9);
+  const other = (human + 1) % 8;
+  expect(range(other, '2B')).toBe(printedRange(other, '2B'));
+  // At full know-how the club allows fewer runs, at home and on the road.
+  // The fixture's gloves have no historical evidence; a gain marks them trained and keeps the club valid.
+  expect(profiles.get(lineup.active['2B'])!.defense.positions['2B']!.evidence.hitPrevention.status).toBe('neutralMissingEvidence');
+  expect(input.clubs[human].roster.find(pick => pick.slot === '2B')!.profile.defense.positions['2B']!.evidence.hitPrevention.status).toBe('trained');
+  expect(train(profiles.get(lineup.active['2B'])!, 'fielding').defense.positions['2B']!.evidence.hitPrevention.status).toBe('trained');
+  const withEdge = (edge: number) => ({ ...input, clubs: input.clubs.map((club, seat) => seat !== human ? club : { ...club, roster: club.roster.map(pick => ({ ...pick, profile: withKnowHow(profiles.get(pick.profile.seasonId)!, edge) })) }) });
+  // Same seeds: only the club's games change, road games included, and over six segments it allows fewer runs.
+  const plain = simulateLeagueSegment(withEdge(0));
+  const known = simulateLeagueSegment(withEdge(MAX_KNOW_HOW));
+  const changed = known.games.filter((game, index) => game.homeRuns !== plain.games[index].homeRuns || game.awayRuns !== plain.games[index].awayRuns);
+  expect(changed.every(game => game.home === human || game.away === human)).toBe(true);
+  expect(changed.some(game => game.away === human)).toBe(true);
+  const allowed = (edge: number) => Array.from({ length: 6 }, (_, segment) => simulateLeagueSegment({ ...withEdge(edge), seed: 100 + segment }))
+   .flatMap(result => result.games).reduce((sum, game) => sum + (game.home === human ? game.awayRuns : game.away === human ? game.homeRuns : 0), 0);
+  expect(allowed(MAX_KNOW_HOW)).toBeLessThan(allowed(0));
+ });
+
+ it('gives an Iron Man club a free hitting training per hitter each payday, growing with his streak', () => {
+  install('BAL', { ironMan: { step: .1, max: .25 } });
+  const { run, season, profile } = seasonFor('BAL');
+  const human = run.seating.humanSeat;
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  const data = testLeagueData(FRANCHISES);
+  recordSegment(run, season, simulateLeagueSegment(segmentInput(run, season, profiles, data, FRANCHISES.slice(0, 8))));
+  const hitters = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'].map(slot => season.lineups[human].active[slot as DraftSlot]);
+  const first = season.upgrades.filter(upgrade => upgrade.free);
+  expect(first.map(upgrade => upgrade.cardId).sort()).toEqual([...hitters].sort());
+  expect(first.every(upgrade => upgrade.paidBy === human && upgrade.kind === 'hitting' && upgrade.cost === 0 && upgrade.stop === 1 && upgrade.scale === .1)).toBe(true);
+  // A free training is not the stop's purchase, and it acts from the next segment.
+  expect(trainedThisVisit(season, hitters[0])).toBe(false);
+  buyTraining(run, season, human, profile(hitters[0]), 'hitting');
+  expect(developed(profile(hitters[1]), season.upgrades, 1).battingRates).not.toEqual(profile(hitters[1]).battingRates);
+  expect(developed(profile(hitters[1]), season.upgrades, 0).battingRates).toEqual(profile(hitters[1]).battingRates);
+  recordSegment(run, season, simulateLeagueSegment(segmentInput(run, season, profiles, data, FRANCHISES.slice(0, 8))));
+  expect(season.upgrades.filter(upgrade => upgrade.free && upgrade.stop === 2).every(upgrade => upgrade.scale === .2)).toBe(true);
+  // A hitter who sat out a stop starts his streak over; the scale stops growing at its cap.
+  season.segments[0].lines[human].batting = season.segments[0].lines[human].batting.filter(line => line.seasonId !== hitters[2]);
+  season.segments[1].lines[human].batting = season.segments[1].lines[human].batting.filter(line => line.seasonId !== hitters[2]);
+  recordSegment(run, season, simulateLeagueSegment(segmentInput(run, season, profiles, data, FRANCHISES.slice(0, 8))));
+  const third = ironManUpgrades(run, season, human, 2);
+  expect(third.find(upgrade => upgrade.cardId === hitters[2])!.scale).toBe(.1);
+  expect(third.find(upgrade => upgrade.cardId === hitters[3])!.scale).toBe(.25);
+  expect(season.upgrades.filter(upgrade => upgrade.free).every(upgrade => upgrade.paidBy === human)).toBe(true);
  });
 });

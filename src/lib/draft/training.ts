@@ -1,4 +1,4 @@
-import { HITTER_SLOTS, type DefensiveSkillName, type Position, type Profile, type Rates } from '../game/types.ts';
+import { HITTER_SLOTS, type DefensivePosition, type DefensiveSkillName, type Position, type Profile, type Rates } from '../game/types.ts';
 import { contactTargets } from '../sim/contact-profile.ts';
 
 /**
@@ -21,9 +21,10 @@ export type TrainingKind = BasicKind | SpecialKind;
 /**
  * One bought training, kept with the card through trades; `stop` counts segments played when it was
  * bought. `scale` multiplies its gain: `INTENSIVE_SCALE` for intensive training, at a risk of
- * injury, times the buyer's franchise perk, both fixed at purchase.
+ * injury, times the buyer's franchise perk, both fixed at purchase. A `free` upgrade is a franchise
+ * package's gift at a payday, not a purchase, and leaves the card free to train at that stop.
  */
-export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number; intensive?: boolean; scale?: number }
+export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number; intensive?: boolean; scale?: number; free?: true }
 
 export interface TrainingInfo { name: string; detail: string; price: number; temporary: boolean }
 
@@ -83,6 +84,21 @@ const FIELDING_MEDIANS: Readonly<Record<Position, Partial<Record<DefensiveSkillN
  CF: { hitPrevention: .0165, outfieldThrowing: -.0278, errorAvoidance: .0131 },
  RF: { hitPrevention: -.0046, outfieldThrowing: -.022, errorAvoidance: .0158 }
 };
+
+/** `skills` with `skill` set to `value`; a skill without historical evidence is marked as trained. */
+export function withSkill(skills: DefensivePosition, skill: DefensiveSkillName, value: number): DefensivePosition {
+ const evidence = skills.evidence[skill].status === 'neutralMissingEvidence' ? { ...skills.evidence, [skill]: { status: 'trained' as const, exposure: 0 } } : skills.evidence;
+ return { ...skills, [skill]: value, evidence };
+}
+
+/** The card's glove at `position` on the 0-100 scale (50 median, 100 elite), averaged over the skills the position uses; 0 where it has no defense there. */
+export function gloveGrade(profile: Profile, position: Position): number {
+ const skills = profile.defense.positions[position];
+ if (!skills) return 0;
+ const ceilings = Object.entries(FIELDING_CEILINGS[position]) as [DefensiveSkillName, number][];
+ const medians = FIELDING_MEDIANS[position];
+ return ceilings.reduce((total, [skill, ceiling]) => total + Math.min(100, Math.max(0, 50 + 50 * (skills[skill] - medians[skill]!) / (ceiling - medians[skill]!))), 0) / ceilings.length;
+}
 
 export const woba = (rates: readonly number[]): number => rates.reduce((sum, rate, index) => sum + rate * WOBA[index], 0);
 const sum = (rates: readonly number[], events: readonly number[]) => events.reduce((total, event) => total + rates[event], 0);
@@ -158,9 +174,9 @@ export function train(profile: Profile, kind: TrainingKind, scale = 1): Profile 
   case 'fielding': {
    const positions = Object.fromEntries(Object.entries(profile.defense.positions).map(([position, skills]) => {
     const ceilings = FIELDING_CEILINGS[position as Position] ?? {};
-    const next = { ...skills };
+    let next = skills;
     for (const [skill, ceiling] of Object.entries(ceilings) as [DefensiveSkillName, number][]) {
-     if (next[skill] < ceiling) next[skill] += basic * (ceiling - next[skill]);
+     if (next[skill] < ceiling) next = withSkill(next, skill, next[skill] + basic * (ceiling - next[skill]));
     }
     return [position, next];
    }));
@@ -212,15 +228,7 @@ export function statLine(profile: Profile, kind: TrainingKind): string {
   case 'keepInPark': return `HR ${percent(pitch[HR])}`;
   case 'stamina': return `${(profile.pitching!.IPouts / profile.pitching!.GS / 3).toFixed(1)} innings a start`;
   case 'baserunning': return `speed ${Math.round(profile.speed * 100)}, steals ${Math.round(profile.stealSuccess * 100)}%`;
-  case 'fielding': {
-   const gaps = Object.entries(profile.defense.positions).map(([position, skills]) => {
-    const ceilings = Object.entries(FIELDING_CEILINGS[position as Position] ?? {}) as [DefensiveSkillName, number][];
-    const medians = FIELDING_MEDIANS[position as Position] ?? {};
-    const score = ceilings.reduce((total, [skill, ceiling]) => total + Math.min(100, Math.max(0, 50 + 50 * (skills[skill] - medians[skill]!) / (ceiling - medians[skill]!))), 0) / Math.max(1, ceilings.length);
-    return `${position} ${Math.round(score)}`;
-   });
-   return `glove ${gaps.join(', ')}`;
-  }
+  case 'fielding': return `glove ${Object.keys(profile.defense.positions).map(position => `${position} ${Math.round(gloveGrade(profile, position as Position))}`).join(', ')}`;
   case 'recovery': return 'normal rest';
  }
 }

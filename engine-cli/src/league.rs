@@ -9,17 +9,17 @@ use rayon::prelude::*;
 use std::io::Read;
 use std::path::Path;
 
-const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] [--trigger CLUB=trigger] [--familiarity F] < league-request.json";
+const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] [--trigger CLUB=trigger] [--familiarity F] [--club CLUB] < league-request.json";
 
 /// Home wins, games and runs over one season with every crowd at `crowd`, then winning margins 1..=10 (10 counts 10 or more),
-/// then games, runs and home wins at the home park of club `park` (by index), if any.
-fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd, park: Option<usize>) -> Result<[u64; 17], String> {
+/// then games, runs and home wins at the home park of club `park` (by index), if any, then games and wins of club `club`, home and away.
+fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd, park: Option<usize>, club: Option<usize>) -> Result<[u64; 19], String> {
     let mut request = base.clone();
     request.seed = seed;
     request.crowds = vec![crowd; request.clubs.len()];
     request.carry = Vec::new();
     request.hype = Vec::new();
-    let mut tally = [0u64; 17];
+    let mut tally = [0u64; 19];
     for segment in 0..SEGMENTS {
         request.segment = segment;
         let result = engine.simulate_league_segment(&request, &mut |_| {})?;
@@ -30,6 +30,10 @@ fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd,
             tally[3] += game.away_runs as u64;
             tally[3 + (game.home_runs - game.away_runs).unsigned_abs().min(10) as usize] += 1;
             if Some(game.home) == park { tally[14] += 1; tally[15] += (game.home_runs + game.away_runs) as u64; tally[16] += (game.home_runs > game.away_runs) as u64; }
+            if let Some(club) = club.filter(|&club| game.home == club || game.away == club) {
+                tally[17] += 1;
+                tally[18] += ((game.home == club) == (game.home_runs > game.away_runs)) as u64;
+            }
         }
         request.carry = result.carry;
         request.hype = result.hype;
@@ -40,7 +44,8 @@ fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd,
 /// `engine league-crowd`: one `{edge, volatility, games, homeWinPct, standardError, homeRuns, awayRuns, margins, parkRuns}` line per edge;
 /// `margins[k]` is the share of games won by k + 1 runs, the last counting ten or more. `--park CLUB=package` plays club
 /// CLUB's home games under a park package (`none` for the real park), and `parkRuns` is total runs a game there.
-/// `--familiarity F` sets that club's home familiarity edge.
+/// `--familiarity F` sets that club's home familiarity edge. `clubWinPct` is the winning share of club `--club`, else of
+/// the `--park` or `--trigger` club, over all its games.
 pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut seasons = 40u32;
     let mut base_seed = 162u32;
@@ -49,6 +54,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut park: Option<(String, Option<ParkPackage>)> = None;
     let mut trigger: Option<(String, Option<CrowdTrigger>)> = None;
     let mut familiarity: Option<f64> = None;
+    let mut club: Option<String> = None;
     let mut rest = arguments.iter();
     while let Some(flag) = rest.next() {
         let value = rest.next().ok_or(format!("{flag} requires a value"))?;
@@ -68,6 +74,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
                 trigger = Some((club.to_string(), name));
             }
             "--familiarity" => familiarity = Some(value.parse().map_err(|_| USAGE)?),
+            "--club" => club = Some(value.clone()),
             _ => return Err(USAGE.into()),
         }
     }
@@ -80,10 +87,11 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     if let Some((id, package)) = &park { let index = index_of(&base.clubs, id)?; base.clubs[index].park_package = *package; park_club = Some(index); }
     if let Some((id, name)) = &trigger { let index = index_of(&base.clubs, id)?; base.clubs[index].crowd_trigger = *name; park_club = Some(index); }
     if let Some(familiarity) = familiarity { base.clubs[park_club.ok_or("--familiarity needs --park or --trigger")?].familiarity = familiarity; }
+    let club = match &club { Some(id) => Some(index_of(&base.clubs, id)?), None => park_club };
     for edge in edges {
         let crowd = Crowd { edge, volatility };
-        let tallies = (0..seasons).into_par_iter().map(|index| season(&engine, &base, season_seed(base_seed, index), crowd, park_club)).collect::<Result<Vec<_>, _>>()?;
-        let sum = tallies.iter().fold([0u64; 17], |sum, tally| std::array::from_fn(|i| sum[i] + tally[i]));
+        let tallies = (0..seasons).into_par_iter().map(|index| season(&engine, &base, season_seed(base_seed, index), crowd, park_club, club)).collect::<Result<Vec<_>, _>>()?;
+        let sum = tallies.iter().fold([0u64; 19], |sum, tally| std::array::from_fn(|i| sum[i] + tally[i]));
         let [wins, games, home_runs, away_runs] = [sum[0], sum[1], sum[2], sum[3]];
         let margins: Vec<f64> = sum[4..14].iter().map(|&count| count as f64 / games as f64).collect();
         let share = wins as f64 / games as f64;
@@ -93,6 +101,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
             "homeRuns": home_runs as f64 / games as f64, "awayRuns": away_runs as f64 / games as f64, "margins": margins,
             "parkRuns": if sum[14] > 0 { Some(sum[15] as f64 / sum[14] as f64) } else { None },
             "parkHomeWinPct": if sum[14] > 0 { Some(sum[16] as f64 / sum[14] as f64) } else { None },
+            "clubWinPct": if sum[17] > 0 { Some(sum[18] as f64 / sum[17] as f64) } else { None },
         }));
     }
     Ok(())

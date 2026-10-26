@@ -91,6 +91,7 @@ function validateEvidence(
   (skill !== 'outfieldThrowing' || !OUTFIELD_THROWING_APPLIES[position])) {
   throw new Error('Invalid generic outfield evidence');
  }
+ if (evidence.status === 'trained') return;
  if (evidence.status === 'neutralMissingEvidence') {
   if (value !== 0 || typeof evidence.reason !== 'string' || !evidence.reason.trim()) {
    throw new Error('Invalid neutral defensive evidence');

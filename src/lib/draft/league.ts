@@ -8,14 +8,14 @@ import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTota
 import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
-import { familiarityFor, franchisePackage } from './packages.ts';
+import { familiarityFor, franchisePackage, knowHowFor, withKnowHow } from './packages.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v11' as const;
+export const LEAGUE_VERSION = 'league-v12' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -218,7 +218,8 @@ export const fieldedIds = (run: DraftRun, season: LeagueSeason): string[] =>
  * profile (`fieldedIds`); each plays with the training in force, and at reduced strength when
  * playing through an injury. Pushes taken at this stop ride starters and rest-skipping relievers.
  * `names` labels each seat's club, and each club plays in its franchise's park before its own crowd,
- * with a familiarity edge there from the printed cards that fit the park.
+ * with a familiarity edge there from the printed cards that fit the park, and with its franchise's
+ * fielding know-how from the printed gloves on every fielder.
  */
 export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueSegmentInput {
  const segment = season.segments.length;
@@ -239,11 +240,12 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
     return { profile, slot };
    });
+   const knowHow = knowHowFor(franchiseId, printed);
    return {
     id: franchiseId, name: names[seat], homeStadium: stadiumRef(stadium),
     roster: printed.map(({ profile, slot }) => {
      const trained = developed(profile, season.upgrades, segment);
-     return { profile: availability(season, profile.seasonId, segment) === 'hurt' ? hurt(trained) : trained, slot };
+     return { profile: withKnowHow(availability(season, profile.seasonId, segment) === 'hurt' ? hurt(trained) : trained, knowHow), slot };
     }),
     battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })),
     quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort(),
@@ -255,8 +257,27 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
 }
 
 /**
+ * The free hitting trainings an Iron Man franchise's club earns for segment `segment`, already
+ * recorded: one for each of the club's own cards that batted in it, scaled by the stops in a row he
+ * has batted in.
+ */
+export function ironManUpgrades(run: DraftRun, season: LeagueSeason, seat: number, segment: number): Upgrade[] {
+ const ironMan = franchisePackage(run.seating.seats[seat])?.ironMan;
+ if (!ironMan) return [];
+ const lineup = season.lineups[seat];
+ const own = new Set([...Object.values(lineup.active), ...lineup.reserves]);
+ const batted = (id: string, at: number) => season.segments[at].lines[seat].batting.some(line => line.seasonId === id && line.PA > 0);
+ return [...own].filter(id => batted(id, segment)).sort(compareId).map(cardId => {
+  let streak = 0;
+  while (segment - streak >= 0 && batted(cardId, segment - streak)) streak++;
+  return { cardId, kind: 'hitting', stop: segment + 1, paidBy: seat, cost: 0, scale: Math.min(ironMan.max, ironMan.step * streak), free: true };
+ });
+}
+
+/**
  * Keeps a played segment, in segment order: credits each club's payday from the crowd that watched
- * it, then moves its fans on the results. Each payday is credited once, with the segment it pays for.
+ * it, adds any Iron Man trainings, then moves its fans on the results. Each payday is credited once,
+ * with the segment it pays for.
  */
 export function recordSegment(run: DraftRun, season: LeagueSeason, result: LeagueSegmentResult): void {
  if (result.segment !== season.segments.length) throw new Error(`Expected segment ${season.segments.length + 1}, got ${result.segment + 1}`);
@@ -270,6 +291,7 @@ export function recordSegment(run: DraftRun, season: LeagueSeason, result: Leagu
   return afterSegment(seat, franchises, fans, result.games, { wins: row.wins, games: row.wins + row.losses });
  });
  season.cash = season.cash.map((cash, seat) => cash + paydayTotal(paydays[seat]));
+ season.upgrades.push(...season.lineups.flatMap((_, seat) => ironManUpgrades(run, season, seat, result.segment)));
  resolvePushes(run, season, result.segment);
 }
 

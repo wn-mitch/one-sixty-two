@@ -44,7 +44,7 @@ export function gainScale(run: DraftRun, season: LeagueSeason, seat: number, kin
 export const seasonRoster = (season: LeagueSeason, seat: number): string[] => [...Object.values(season.lineups[seat].active), ...season.lineups[seat].reserves];
 
 /** Whether `cardId` has already been trained at this visit. */
-export const trainedThisVisit = (season: LeagueSeason, cardId: string): boolean => season.upgrades.some(upgrade => upgrade.cardId === cardId && upgrade.stop === season.segments.length);
+export const trainedThisVisit = (season: LeagueSeason, cardId: string): boolean => season.upgrades.some(upgrade => upgrade.cardId === cardId && upgrade.stop === season.segments.length && !upgrade.free);
 
 /** Why `seat` cannot buy `kind` for the card now, intensively or not, or null when it can. `profile` is the card's printed profile. */
 export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind, intensive = false): string | null {

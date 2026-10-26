@@ -2,7 +2,7 @@
  import Standings from './Standings.svelte';
  import DecreeMemo from './DecreeMemo.svelte';
  import { segmentDecree } from '../../draft/decrees.ts';
- import { familiarCount, familiarityFor, franchisePackage } from '../../draft/packages.ts';
+ import { familiarCount, familiarityFor, franchisePackage, knowHowCount, knowHowFor } from '../../draft/packages.ts';
  import { fill, paydayTotal } from '../../draft/fans.ts';
  import { headToHead, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
@@ -39,16 +39,23 @@
  const decree = $derived(segmentDecree(run.setup.seed, Math.min(played, LEAGUE_SEGMENTS - 1)));
  // A trigger that fills a meter shows how full it is; front-runners have no meter.
  const hype = $derived.by(() => { void revision; return pack?.crowd && pack.crowd !== 'frontRunners' ? Math.round((season.segments.at(-1)?.hype[human] ?? 0) / MAX_CROWD_HYPE * 100) : null; });
- // Players in the next games' lineup who know a packaged park, once their printed cards have loaded.
- const familiar = $derived.by(() => {
+ // The next games' lineup as printed, once every card has loaded.
+ const printed = $derived.by(() => {
   void revision;
-  const franchiseId = run.seating.seats[human];
-  if (!franchisePackage(franchiseId)?.familiar) return null;
   const active = season.lineups[human].active;
   const roster = run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(active[slot]), slot }));
-  if (roster.some(pick => !pick.profile)) return null;
-  const loaded = roster as { profile: Profile; slot: typeof roster[number]['slot'] }[];
-  return { count: familiarCount(franchiseId, loaded)!, edge: familiarityFor(franchiseId, loaded) };
+  return roster.some(pick => !pick.profile) ? null : roster as { profile: Profile; slot: typeof roster[number]['slot'] }[];
+ });
+ // Players in that lineup who know a packaged park.
+ const familiar = $derived(pack?.familiar && printed ? { count: familiarCount(run.seating.seats[human], printed)!, edge: familiarityFor(run.seating.seats[human], printed) } : null);
+ // Fielders in that lineup whose gloves give the club its know-how.
+ const knowHow = $derived(pack?.knowHow && printed ? { count: knowHowCount(run.seating.seats[human], printed)!, edge: knowHowFor(run.seating.seats[human], printed) } : null);
+ // The free hitting trainings the last payday brought, and the longest streak behind one.
+ const ironMan = $derived.by(() => {
+  void revision;
+  if (!pack?.ironMan || !played) return null;
+  const free = season.upgrades.filter(upgrade => upgrade.paidBy === human && upgrade.free && upgrade.stop === played);
+  return { count: free.length, longest: free.reduce((most, upgrade) => Math.max(most, Math.round((upgrade.scale ?? 0) / pack.ironMan!.step)), 0) };
  });
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
 </script>
@@ -66,6 +73,8 @@
    <div><dt>Seats filled</dt><dd>{Math.round(share * 100)}%</dd></div>
    {#if payday}<div><dt>Payday</dt><dd>+{paydayTotal(payday)} <small>{payday.salary} salary + {payday.gate} gate{payday.homeGames ? '' : ' (all road)'} + {payday.winBonus} for {payday.wins} {payday.wins === 1 ? 'win' : 'wins'}{payday.franchise ? ` + ${payday.franchise} ${pack?.name ?? 'franchise'}` : ''}</small></dd></div>{/if}
    {#if hype !== null}<div><dt>Hype</dt><dd>{hype}% <small>of the most the crowd can lean</small></dd></div>{/if}
+   {#if knowHow}<div><dt>Know-how</dt><dd>{knowHow.count} {knowHow.count === 1 ? 'glove' : 'gloves'} <small>every fielder {(knowHow.edge * 15).toFixed(1)}% quicker to the ball</small></dd></div>{/if}
+   {#if ironMan}<div><dt>Iron Man</dt><dd>{ironMan.count} free <small>hitting trainings at the last payday{ironMan.count ? `, longest streak ${ironMan.longest} ${ironMan.longest === 1 ? 'stop' : 'stops'}` : ''}</small></dd></div>{/if}
    {#if familiar}<div><dt>Know the park</dt><dd>{familiar.count} active <small>home batted balls {(familiar.edge * 100).toFixed(1)}% harder, visitors' {(familiar.edge * 100).toFixed(1)}% softer</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>

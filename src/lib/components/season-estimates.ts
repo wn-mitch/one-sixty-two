@@ -26,7 +26,9 @@ function evidenceText(evidence: DefensiveEvidence, unit: string): string {
   ? 'exact-position evidence'
   : evidence.status === 'genericOutfield'
    ? 'broad generic-outfield evidence at half strength'
-   : 'neutral because individual evidence is missing';
+   : evidence.status === 'trained'
+    ? 'trained without historical evidence'
+    : 'neutral because individual evidence is missing';
  const exposure = Number.isFinite(evidence.exposure) && evidence.exposure >= 0
   ? `; exposure ${evidence.exposure} ${unit}`
   : '';

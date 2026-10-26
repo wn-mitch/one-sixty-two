@@ -56,7 +56,7 @@ Define and calibrate estimated speed/angle/spray profiles, matchup contributions
 
 Owner: [Royal Flush accounting](catalog.md). First relevant gate: [phase](phases/04-season-evolution.md).
 
-Home-win development cash is credited every nine games before purchases: 1.5 per home win (provisional), bounded by the home games in a segment. Calibrate payout size. Payroll follows the general cap ramp; rewards do not add a separate cap-growth rule.
+Home-win development cash is credited every nine games before purchases: 8 per home win (provisional), bounded by the home games in a segment. Payroll follows the general cap ramp; rewards do not add a separate cap-growth rule.
 
 ## 10. Decree semantics
 

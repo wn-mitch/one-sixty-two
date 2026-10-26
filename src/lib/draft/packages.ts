@@ -1,7 +1,7 @@
-import { HITTER_SLOTS, type Profile } from '../game/types.ts';
+import { HITTER_SLOTS, POSITIONS, type Position, type Profile } from '../game/types.ts';
 import { MAX_PARK_FAMILIARITY, type CrowdTrigger, type ParkPackage } from '../sim/league-types.ts';
 import type { DraftSlot } from './types.ts';
-import type { TrainingKind } from './training.ts';
+import { gloveGrade, withSkill, type TrainingKind } from './training.ts';
 
 /**
  * Franchise packages: economic, development or physical park perks a franchise brings to every
@@ -9,8 +9,7 @@ import type { TrainingKind } from './training.ts';
  * strength lives in the engine (`engine/src/park_package.rs`), as does a crowd trigger's
  * (`engine/src/crowd.rs`). A franchise without an entry plays the ordinary rules. A package
  * earns an entry by being worth roughly five to ten wins a season to a roster built around it,
- * measured natively; the cap, cash and training-price fields stay supported for packages being
- * reworked to that size. A park package pairs its condition with a familiarity edge that grows
+ * measured natively. A park package pairs its condition with a familiarity edge that grows
  * with the active players who know the park. Every number is provisional; `design/draft-mode/catalog.md`
  * tracks which premises are active.
  */
@@ -37,7 +36,20 @@ export interface FranchisePackage {
  familiar?: { rule: FamiliarRule; perPlayer: number };
  /** How the franchise's home crowd reacts during a game. */
  crowd?: CrowdTrigger;
+ /**
+  * Fielding know-how: for each active fielder with a printed glove grade of at least `minGrade` at his slot,
+  * every fielder's hit prevention rises by `perPlayer` at every game, up to `MAX_KNOW_HOW`.
+  */
+ knowHow?: { minGrade: number; perPlayer: number };
+ /**
+  * A free hitting training at each payday for every hitter who batted in that stop, its gain scaled
+  * by `step` for each consecutive stop he has batted in, up to `max`.
+  */
+ ironMan?: { step: number; max: number };
 }
+
+/** The cap on a club's fielding know-how, in hit-prevention skill. */
+export const MAX_KNOW_HOW = .18;
 
 /**
  * Who knows a home park, read from the printed card: left-handed or switch hitters, right-handed
@@ -65,6 +77,11 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  BOS: { name: 'The Greenest Monster', summary: 'The left-field wall has grown two and a half times taller, turning homers into doubles for both clubs. Your right-handed hitters know every dent. For each one active, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'tallLeftWall', familiar: { rule: 'rightyHitter', perPlayer: .0022 } },
  NYY: { name: 'The Shortest Porch', summary: 'Right field keeps creeping toward the plate, for both clubs. Your left-handed and switch hitters know it. For each one active, your batted balls come off the bat harder at home and the visitors\' softer. Fans are fair-weather.', park: 'shortRightField', familiar: { rule: 'leftyHitter', perPlayer: .0015 } },
  SFG: { name: 'Splash Zone', summary: 'A steady wind blows out toward McCovey Cove, carrying balls hit to right for both clubs. Your left-handed and switch hitters know it. For each one active, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'windToRight', familiar: { rule: 'leftyHitter', perPlayer: .0015 } },
+ ATL: { name: 'The Cherokee Commute', summary: 'A sweetheart stadium deal raises the salary cap by half. The park is a long drive out, so fewer fans come and the crowd leans less.', capShare: .5 },
+ BAL: { name: 'Iron Man', summary: 'The cap is 10% tighter and the fans expect less. At every payday each hitter who batted in that stop gets a free hitting training, growing with each stop in a row he has played, up to ten stops.', capShare: -.1, ironMan: { step: .025, max: .25 } },
+ KCR: { name: 'Royal Flush', summary: 'Kauffman is a casino. The cap is 10% tighter, but every home win pays 8 cash with the payday.', capShare: -.1, homeWinCash: 8 },
+ OAK: { name: 'The House Always Wins', summary: 'The cap is 12% tighter, but every training costs 55% less.', capShare: -.12, trainingPrice: .45 },
+ STL: { name: 'The Cardinal Way', summary: 'Fundamentals. For each active fielder with a glove grade of 60 or better at his position on the card, every fielder reaches balls a little quicker, home and away.', knowHow: { minGrade: 60, perPlayer: .025 } },
  DET: { name: 'The Assembly Line', summary: 'Every training gains 5% more for each common on the active roster, up to 40%.', commonBoost: .05, commonBoostMax: .4 }
 };
 
@@ -77,6 +94,25 @@ export function familiarCount(franchiseId: string, roster: readonly { profile: P
 /** The franchise's familiarity edge at its home games with `roster` active, up to the engine's cap. */
 export const familiarityFor = (franchiseId: string, roster: readonly { profile: Profile; slot: DraftSlot }[]): number =>
  Math.min(MAX_PARK_FAMILIARITY, (familiarCount(franchiseId, roster) ?? 0) * (PACKAGES[franchiseId]?.familiar?.perPlayer ?? 0));
+
+const isFieldingSlot = (slot: DraftSlot): slot is Position => (POSITIONS as readonly string[]).includes(slot);
+
+/** How many of `roster`'s printed fielders grade at the franchise's know-how bar at their slots, or null when it has none. */
+export function knowHowCount(franchiseId: string, roster: readonly { profile: Profile; slot: DraftSlot }[]): number | null {
+ const knowHow = PACKAGES[franchiseId]?.knowHow;
+ return knowHow ? roster.filter(({ profile, slot }) => isFieldingSlot(slot) && gloveGrade(profile, slot) >= knowHow.minGrade).length : null;
+}
+
+/** The franchise's fielding know-how with `roster` active: hit prevention every fielder gains. */
+export const knowHowFor = (franchiseId: string, roster: readonly { profile: Profile; slot: DraftSlot }[]): number =>
+ Math.min(MAX_KNOW_HOW, (knowHowCount(franchiseId, roster) ?? 0) * (PACKAGES[franchiseId]?.knowHow?.perPlayer ?? 0));
+
+/** The card with `edge` more hit prevention at every position it fields. */
+export function withKnowHow(profile: Profile, edge: number): Profile {
+ if (!(edge > 0)) return profile;
+ const positions = Object.fromEntries(Object.entries(profile.defense.positions).map(([position, skills]) => [position, withSkill(skills, 'hitPrevention', Math.min(1, skills.hitPrevention + edge))]));
+ return { ...profile, defense: { ...profile.defense, positions } };
+}
 
 export const franchisePackage = (franchiseId: string): FranchisePackage | null => PACKAGES[franchiseId] ?? null;
 
