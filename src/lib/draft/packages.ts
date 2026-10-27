@@ -74,13 +74,19 @@ export const MAX_KNOW_HOW = .18;
 
 /**
  * Who knows a home park, read from the printed card: left-handed or switch hitters, right-handed
- * hitters, hitters with 20 or more home runs, or pitchers with at least a strikeout an inning.
+ * hitters, hitters with 20 or more home runs, pitchers with at least a strikeout an inning, starters
+ * with at least a strikeout an inning, infielders whose glove grades 60 or better at their slot, or
+ * hitters with a speed of 0.7 or more.
  */
-export type FamiliarRule = 'leftyHitter' | 'rightyHitter' | 'slugger' | 'strikeoutPitcher';
+export type FamiliarRule = 'leftyHitter' | 'rightyHitter' | 'slugger' | 'strikeoutPitcher' | 'strikeoutStarter' | 'infieldGlove' | 'fastRunner';
+
+/** The Deep Freeze's weather by chapter (`FREEZE_CALENDAR` in `engine/src/park_package.rs`). */
+export const FREEZE_CALENDAR = ['cold', 'thaw', 'warm', 'warm', 'cool', 'cold'] as const;
 
 /** Who knows a park, as each stop names them. */
 export const FAMILIAR_LABELS: Readonly<Record<FamiliarRule, string>> = {
- leftyHitter: 'left-handed and switch hitters', rightyHitter: 'right-handed hitters', slugger: '20-homer hitters', strikeoutPitcher: 'strikeout pitchers'
+ leftyHitter: 'left-handed and switch hitters', rightyHitter: 'right-handed hitters', slugger: '20-homer hitters', strikeoutPitcher: 'strikeout pitchers',
+ strikeoutStarter: 'strikeout starters', infieldGlove: 'infielders with a 60+ glove', fastRunner: 'fast runners'
 };
 
 const isHitterSlot = (slot: DraftSlot) => (HITTER_SLOTS as readonly string[]).includes(slot);
@@ -88,7 +94,10 @@ const FAMILIAR: Record<FamiliarRule, (profile: Profile, slot: DraftSlot) => bool
  leftyHitter: (profile, slot) => isHitterSlot(slot) && (profile.bats === 'L' || profile.bats === 'B'),
  rightyHitter: (profile, slot) => isHitterSlot(slot) && profile.bats === 'R',
  slugger: (profile, slot) => isHitterSlot(slot) && (profile.batting?.HR ?? 0) >= 20,
- strikeoutPitcher: (profile, slot) => !isHitterSlot(slot) && !!profile.pitching && profile.pitching.SO * 3 >= profile.pitching.IPouts
+ strikeoutPitcher: (profile, slot) => !isHitterSlot(slot) && !!profile.pitching && profile.pitching.SO * 3 >= profile.pitching.IPouts,
+ strikeoutStarter: (profile, slot) => slot.startsWith('SP') && !!profile.pitching && profile.pitching.SO * 3 >= profile.pitching.IPouts,
+ infieldGlove: (profile, slot) => (['1B', '2B', '3B', 'SS'] as DraftSlot[]).includes(slot) && gloveGrade(profile, slot as Position) >= 60,
+ fastRunner: (profile, slot) => isHitterSlot(slot) && profile.speed >= .7
 };
 
 export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
@@ -103,6 +112,11 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  BOS: { name: 'The Greenest Monster', summary: 'The left-field wall has grown two and a half times taller, turning homers into doubles for both clubs. Your right-handed hitters know every dent. For each one active, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'tallLeftWall', familiar: { rule: 'rightyHitter', perPlayer: .0022 } },
  NYY: { name: 'The Shortest Porch', summary: 'Right field keeps creeping toward the plate, for both clubs. Your left-handed and switch hitters know it. For each one active, your batted balls come off the bat harder at home and the visitors\' softer. Fans are fair-weather.', park: 'shortRightField', familiar: { rule: 'leftyHitter', perPlayer: .0015 } },
  SFG: { name: 'Splash Zone', summary: 'A steady wind blows out toward McCovey Cove, carrying balls hit to right for both clubs. Your left-handed and switch hitters know it. For each one active, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'windToRight', familiar: { rule: 'leftyHitter', perPlayer: .0015 } },
+ ARI: { name: 'The Hot Corner', summary: 'A baked, rock-hard infield sends ground balls through twice as fast, for both clubs. Your sure-handed infielders know the hops. For each active infielder with a glove grade of 60 or better at his position, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'hotCorner', familiar: { rule: 'infieldGlove', perPlayer: .005 } },
+ FLA: { name: 'Everglades', summary: 'The swamp has reclaimed the field: soggy turf slows ground balls and every runner, for both clubs. Your fast runners still find footing. For each active hitter with a speed of 0.7 or more on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'everglades', familiar: { rule: 'fastRunner', perPlayer: .0022 } },
+ TBD: { name: 'Catwalk Baseball', summary: 'The new roof\'s four catwalk rings hang low: a fly ball off the two upper rings stays live and can be caught; off the two lower rings it is a home run. Your sluggers know the angles. For each active hitter with 20 or more homers on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'catwalk', familiar: { rule: 'slugger', perPlayer: .0022 } },
+ MIL: { name: 'Seventh-Inning Fermentation', summary: 'From the seventh-inning stretch on, everyone at the ballpark has had a few: batted balls fly harder and fielders get sloppy, for both clubs. Your sluggers handle it best. For each active hitter with 20 or more homers on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'fermentation', familiar: { rule: 'slugger', perPlayer: .0022 } },
+ MIN: { name: 'The Deep Freeze', summary: 'The season runs cold, thaw, warm, warm, cool, cold. In the cold, starters tire far sooner and the ball dies in the heavy air, for both clubs. Your strikeout starters thrive in it. For each active starter with at least a strikeout an inning on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'deepFreeze', familiar: { rule: 'strikeoutStarter', perPlayer: .0065 } },
  ATL: { name: 'The Cherokee Commute', summary: 'A sweetheart stadium deal raises the salary cap by half. The park is a long drive out, so fewer fans come and the crowd leans less.', capShare: .5 },
  BAL: { name: 'Iron Man', summary: 'The cap is 10% tighter and the fans expect less. At every payday each hitter who batted in that stop gets a free hitting training, growing with each stop in a row he has played, up to ten stops.', capShare: -.1, ironMan: { step: .025, max: .25 } },
  KCR: { name: 'Royal Flush', summary: 'Kauffman is a casino. The cap is 10% tighter, but every home win pays 8 cash with the payday.', capShare: -.1, homeWinCash: 8 },

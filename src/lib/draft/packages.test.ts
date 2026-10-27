@@ -93,7 +93,7 @@ describe('franchise packages', () => {
   for (const [slot, id] of Object.entries(lineup.active)) profiles.set(id, { ...profiles.get(id)!, bats: hand(slot as DraftSlot) });
   const roster = run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(lineup.active[slot])!, slot }));
   expect(familiarCount('NYY', roster)).toBe(3);
-  expect(familiarCount('ARI', roster)).toBeNull();
+  expect(familiarCount('WSN', roster)).toBeNull();
   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
   const printed = (seat: number) => run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(season.lineups[seat].active[slot])!, slot }));
   input.clubs.forEach((club, seat) => expect(club.familiarity).toBe(seat === human ? .015 : familiarityFor(parkHost(run.seating.seats[seat], run.setup.seed, 0), printed(seat), PACKAGES[run.seating.seats[seat]]?.relocation?.familiarity)));
@@ -344,5 +344,27 @@ describe('franchise packages', () => {
   expect(changed.length).toBeGreaterThan(0);
   expect(changed.every(game => game.home === human)).toBe(true);
   expect(() => simulateLeagueSegment({ ...input, clubs: input.clubs.map((club, seat) => seat === human ? { ...club, information: .31 } : club) })).toThrow(/information is out of bounds/);
+ });
+
+ it('plays each surface, ring, inning and calendar park in its club\'s home games only, with its familiarity rule', () => {
+  for (const [franchiseId, park] of [['ARI', 'hotCorner'], ['FLA', 'everglades'], ['TBD', 'catwalk'], ['MIL', 'fermentation'], ['MIN', 'deepFreeze']] as const) {
+   expect(PACKAGES[franchiseId].park).toBe(park);
+   const { run, season, profile } = seasonFor(franchiseId);
+   const human = run.seating.humanSeat;
+   const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
+   expect(input.clubs[human].parkPackage).toBe(park);
+   const plain = simulateLeagueSegment({ ...input, clubs: input.clubs.map((club, seat) => seat === human ? { ...club, parkPackage: null } : club) });
+   const played = simulateLeagueSegment(input);
+   const changed = played.games.filter((game, index) => game.homeRuns !== plain.games[index].homeRuns || game.awayRuns !== plain.games[index].awayRuns);
+   expect(changed.length, franchiseId).toBeGreaterThan(0);
+   expect(changed.every(game => game.home === human), franchiseId).toBe(true);
+  }
+  // Infield gloves count only in the infield; fast runners only among hitters; strikeout arms only in the rotation.
+  const card = (overrides: Partial<Profile>) => ({ ...leagueProfile('x', 'SS', ['SS']), ...overrides }) as Profile;
+  const fast = card({ speed: .8 });
+  expect(familiarCount('FLA', [{ profile: fast, slot: 'SS' }, { profile: fast, slot: 'DH' }, { profile: card({ speed: .69 }), slot: 'CF' }])).toBe(2);
+  const ace = card({ pitching: { G: 30, GS: 30, IPouts: 600, H: 150, HR: 15, BB: 50, HBP: 5, SO: 200, BFP: 800, ER: 60, SV: 0 } });
+  expect(familiarCount('MIN', [{ profile: ace, slot: 'SP1' }, { profile: ace, slot: 'CL' }])).toBe(1);
  });
 });

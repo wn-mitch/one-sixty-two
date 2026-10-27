@@ -80,6 +80,8 @@ pub struct InningContext<'a> {
     pub edge: f64,
     /// Multiplier on this side's batted-ball exit speed, from the home park's familiarity edge; one is neutral.
     pub speed_scale: f64,
+    /// Further multiplier on the exit speed of ground balls (launched below `GROUNDER_DEG`), from the park's surface.
+    pub grounder_scale: f64,
     pub prepared: PreparedDefense,
     /// Offense speed skills by lineup index.
     speeds: Vec<f64>,
@@ -104,13 +106,30 @@ impl<'a> InningContext<'a> {
     pub fn new(offense: &TeamInput, defense: &TeamInput, matchups: &'a PreparedMatchups, prepared: PreparedDefense) -> Result<Self, String> {
         if matchups.batter_count != offense.hitters.len() || matchups.pitcher_count != defense.pitchers.len() { return Err("Invalid game matchup table".into()); }
         Ok(Self {
-            matchups, edge: 0.0, speed_scale: 1.0, prepared, speeds: offense.hitters.iter().map(|profile| profile.speed).collect(), next: 0, bases: Bases::default(),
+            matchups, edge: 0.0, speed_scale: 1.0, grounder_scale: 1.0, prepared, speeds: offense.hitters.iter().map(|profile| profile.speed).collect(), next: 0, bases: Bases::default(),
             trace: FlightTrace::default(), candidates: FieldingCandidates::default(), plan: FieldingPlan::default(), outcomes: PhysicalOutcomes::default(),
             draw: ContactDraw { carry: 1.0, ..Default::default() }, uniforms: [0.0; CONTACT_UNIFORMS], decisions: Decisions::default(), reach_uniform: 0.0,
             reach: [0; 8], throwing: [0.0; 8], contact: ContactResult::default(), dp_participants: [0; 3], options: ContactOptions::default(),
         })
     }
 }
+
+impl InningContext<'_> {
+    /// Takes `by` off every runner's speed skill, floored at zero.
+    pub fn slow_runners(&mut self, by: f64) {
+        if by == 0.0 { return; }
+        for speed in &mut self.speeds { *speed = crate::math::max(0.0, *speed - by); }
+    }
+
+    /// Takes `by` off every fielder's hit prevention, down to the skill floor of -1.
+    pub fn loosen_defense(&mut self, by: f64) {
+        if by == 0.0 { return; }
+        for skill in &mut self.prepared.hit_prevention { *skill = crate::math::max(-1.0, *skill - by); }
+    }
+}
+
+/// Launch angle below which a batted ball is a ground ball for the park's surface.
+pub const GROUNDER_DEG: f64 = 10.0;
 
 /// The two boxes a half inning writes: the batting club's and the fielding club's.
 pub struct Sides<'b> { pub batting: &'b mut TeamBox, pub pitching: &'b mut TeamBox }
@@ -244,7 +263,8 @@ fn sample_fair_contact(context: &mut InningContext, shared: &Shared, pair: usize
         for slot in [DECISION_THIRD_ATTEMPT, DECISION_THIRD_OUT, DECISION_SECOND_ATTEMPT, DECISION_SECOND_OUT, DECISION_FIRST_ATTEMPT, DECISION_FIRST_OUT] {
             context.decisions.packet[slot] = streams.advancement.next();
         }
-        let sample = ContactSample { speed_mph: context.draw.speed_mph * context.speed_scale, launch_deg: context.draw.launch_deg, spray_deg: context.draw.spray_deg, carry: context.draw.carry };
+        let surface = if context.draw.launch_deg < GROUNDER_DEG { context.grounder_scale } else { 1.0 };
+        let sample = ContactSample { speed_mph: context.draw.speed_mph * context.speed_scale * surface, launch_deg: context.draw.launch_deg, spray_deg: context.draw.spray_deg, carry: context.draw.carry };
         trace_flight(&sample, shared.park, &mut context.trace)?;
         compute_candidates(&context.trace, &context.prepared.hit_prevention, &mut context.candidates);
         context.reach.fill(1);

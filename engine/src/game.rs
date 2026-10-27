@@ -3,6 +3,7 @@ use crate::contact::{prepared_defense, PreparedDefense};
 use crate::contact_profile::{PreparedMatchups, ShapeTables};
 use crate::crowd::GameCrowd;
 use crate::flight::PreparedPark;
+use crate::park_package::Conditions;
 use crate::inning::{play_half, InningContext, InningEvent, Shared, Sides};
 use crate::random::GameStreams;
 use crate::rules::GameRules;
@@ -50,6 +51,8 @@ pub struct GameInput<'a, 'p> {
     /// The home club's pitch information this game: its batters alone get `information` more
     /// strike-zone lean and batted balls `1 + INFORMATION_SPEED * information` times as fast.
     pub information: f64,
+    /// The home park condition's effects during play, for both clubs.
+    pub conditions: Conditions,
     pub rules: GameRules,
 }
 
@@ -76,14 +79,19 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
     let regulation = input.rules.innings;
     let mut home = create_box(input.home);
     let mut away = create_box(input.away);
-    let mut home_workload = Workload::new(input.home)?.regulation(regulation);
-    let mut away_workload = Workload::new(input.away)?.regulation(regulation);
+    let conditions = input.conditions;
+    let mut home_workload = Workload::new(input.home)?.regulation(regulation).endurance(conditions.endurance);
+    let mut away_workload = Workload::new(input.away)?.regulation(regulation).endurance(conditions.endurance);
     let shared = Shared { values: models.values, park: input.park, tables: models.tables, max_pa: MAX_PA, rules: input.rules };
     // Top: away bats against the home defense; bottom: home bats against the away defense.
     let mut top = InningContext::new(input.away, input.home, input.away_matchups, input.home_defense)?;
     let mut bottom = InningContext::new(input.home, input.away, input.home_matchups, input.away_defense)?;
-    top.speed_scale = 1.0 - input.familiarity;
-    bottom.speed_scale = (1.0 + input.familiarity) * (1.0 + INFORMATION_SPEED * input.information);
+    let top_speed = 1.0 - input.familiarity;
+    let bottom_speed = (1.0 + input.familiarity) * (1.0 + INFORMATION_SPEED * input.information);
+    top.slow_runners(conditions.runner_slowdown);
+    bottom.slow_runners(conditions.runner_slowdown);
+    top.grounder_scale = conditions.grounder_speed;
+    bottom.grounder_scale = conditions.grounder_speed;
     let crowd = input.crowd;
     let mut highlight: Option<SeasonMoment> = None;
     let mut lowlight: Option<SeasonMoment> = None;
@@ -101,6 +109,11 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
         for half in [Half::Top, Half::Bottom] {
             active_inning = inning;
             active_half = half;
+            // The late condition loosens both defenses once, as its first half inning begins.
+            if conditions.late_inning > 0 && inning == conditions.late_inning && half == Half::Top {
+                top.loosen_defense(conditions.late_fielding);
+                bottom.loosen_defense(conditions.late_fielding);
+            }
             let (offense, defense, offense_box, defense_box, workload, context) = if half == Half::Top {
                 (input.away, input.home, &mut away, &mut home, &mut home_workload, &mut top)
             } else {
@@ -108,6 +121,8 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
             };
             workload.begin_half(defense, &defense_box.pitching, inning, defense_box.runs - offense_box.runs);
             if workload.current == defense.closer_index && defense_box.runs > offense_box.runs { crowd.closer_enters(half); }
+            let late = conditions.late_inning > 0 && inning >= conditions.late_inning;
+            context.speed_scale = (if half == Half::Top { top_speed } else { bottom_speed }) * if late { 1.0 + conditions.late_power } else { 1.0 };
             let edge = crowd.edge(input.home_edge, inning, regulation, home_runs_lead(half, offense_box.runs, defense_box.runs));
             context.edge = if half == Half::Top { -edge } else { edge + input.information };
             let homers_before: i32 = offense_box.batting.iter().map(|line| line.hr).sum();

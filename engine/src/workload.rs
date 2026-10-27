@@ -61,6 +61,12 @@ impl Workload {
         self
     }
 
+    /// Scales the starter's out budget by `factor`, rounded, keeping at least three outs.
+    pub fn endurance(mut self, factor: f64) -> Self {
+        if factor != 1.0 { self.budget = (crate::math::js_round(f64::from(self.budget) * factor) as u32).max(3); }
+        self
+    }
+
     fn late(&self) -> bool { self.inning + LATE_INNINGS_LEFT >= self.regulation }
 
     /// A named pitcher may enter once per game, and only when rested enough for today.
@@ -226,6 +232,22 @@ mod tests {
             lines[workload.current].bf += bf;
             workload.current
         }).collect()
+    }
+
+    #[test]
+    fn endurance_scales_the_starters_out_budget_and_keeps_an_inning() {
+        let staff = staff();
+        let team = team(&staff);
+        assert_eq!(Workload::new(&team).unwrap().budget, 18);
+        assert_eq!(Workload::new(&team).unwrap().endurance(1.0).budget, 18);
+        assert_eq!(Workload::new(&team).unwrap().endurance(0.7).budget, 13);
+        assert_eq!(Workload::new(&team).unwrap().endurance(0.1).budget, 3);
+        // The cold starter hands over once he reaches the smaller budget.
+        let mut workload = Workload::new(&team).unwrap().endurance(0.7);
+        let mut lines: Vec<PitcherLine> = create_box(&team).pitching;
+        lines[0].outs = 13;
+        workload.begin_half(&team, &lines, 6, 0);
+        assert_ne!(workload.current, 0);
     }
 
     #[test]

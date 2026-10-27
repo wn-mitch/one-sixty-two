@@ -7,7 +7,7 @@ use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
 use crate::crowd::{ClubCrowd, CrowdTrigger, GameCrowd, HYPE_MAX};
-use crate::park_package::{apply, ParkPackage, MAX_FAMILIARITY};
+use crate::park_package::{apply, conditions as park_conditions, Conditions, ParkPackage, MAX_FAMILIARITY};
 use crate::flight::PreparedPark;
 use crate::rules::GameRules;
 use crate::season::{club_team, Engine};
@@ -19,8 +19,9 @@ pub const CLUBS: usize = 8;
 pub const MATCHDAYS: usize = 162;
 pub const SEGMENTS: usize = 18;
 pub const SEGMENT_MATCHDAYS: usize = MATCHDAYS / SEGMENTS;
-/// Matchdays in a chapter: three segments.
-pub const CHAPTER_MATCHDAYS: usize = SEGMENT_MATCHDAYS * 3;
+/// Segments in a chapter, and its matchdays.
+pub const SEGMENTS_PER_CHAPTER: usize = 3;
+pub const CHAPTER_MATCHDAYS: usize = SEGMENT_MATCHDAYS * SEGMENTS_PER_CHAPTER;
 /// The largest pitch-information edge a club may hold.
 pub const MAX_INFORMATION: f64 = 0.3;
 /// Share of a club's pitch information left against a visitor for each game that visitor has
@@ -239,8 +240,9 @@ impl Engine {
             .map(|club| club_team(&club.roster, &club.batting_order, &club.starter_order, &club.relief_roles, remainder, &club.id, &club.name))
             .collect::<Result<_, _>>()?;
         // A club with a park package plays its home games in its park under that condition.
-        let variants = request.clubs.iter().map(|club| club.park_package.map(|package| PreparedPark::new(&apply(&self.park(&club.home_stadium)?.stadium, package))).transpose())
+        let variants = request.clubs.iter().map(|club| club.park_package.map(|package| PreparedPark::new(&apply(&self.park(&club.home_stadium)?.stadium, package, request.segment / SEGMENTS_PER_CHAPTER))).transpose())
             .collect::<Result<Vec<_>, _>>()?;
+        let conditions: Vec<Conditions> = request.clubs.iter().map(|club| park_conditions(club.park_package, request.segment / SEGMENTS_PER_CHAPTER)).collect();
         let parks = request.clubs.iter().zip(&variants).map(|(club, variant)| variant.as_ref().map_or_else(|| self.park(&club.home_stadium), Ok)).collect::<Result<Vec<_>, _>>()?;
         let defenses = clubs.iter().map(|club| team_defense(club, &self.data.environment.league_error_rates)).collect::<Result<Vec<_>, _>>()?;
         // Batting matchups for every ordered pair: club a's hitters against club b's staff.
@@ -278,7 +280,7 @@ impl Engine {
                     park: parks[home],
                     home_matchups: matchups[home * CLUBS + away].as_ref().unwrap(),
                     away_matchups: matchups[away * CLUBS + home].as_ref().unwrap(),
-                    home_edge, crowd: &mut crowd, familiarity: request.clubs[home].familiarity, information, rules: request.rules,
+                    home_edge, crowd: &mut crowd, familiarity: request.clubs[home].familiarity, information, conditions: conditions[home], rules: request.rules,
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
                 crowds[home] = crowd.home.after_game(game.home.runs > game.away.runs);
                 crowds[away] = crowd.away.after_game(game.away.runs > game.home.runs);

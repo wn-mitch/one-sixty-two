@@ -2,7 +2,7 @@
  import Standings from './Standings.svelte';
  import DecreeMemo from './DecreeMemo.svelte';
  import { segmentDecree } from '../../draft/decrees.ts';
- import { FAMILIAR_LABELS, familiarCount, familiarityFor, franchisePackage, knowHowCount, knowHowFor, parkHost, strongDollar } from '../../draft/packages.ts';
+ import { FAMILIAR_LABELS, FREEZE_CALENDAR, familiarCount, familiarityFor, franchisePackage, knowHowCount, knowHowFor, parkHost, strongDollar } from '../../draft/packages.ts';
  import { fill, paydayTotal } from '../../draft/fans.ts';
  import { headToHead, nextChapter, seasonExchange, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
@@ -74,6 +74,14 @@
   const chapter = nextChapter(season);
   return { strong: strongDollar(run.setup.seed, chapter), next: chapter + 1 < LEAGUE_CHAPTERS ? strongDollar(run.setup.seed, chapter + 1) : null };
  });
+ // The Deep Freeze's weather this chapter and, while there is one, the next.
+ const weather = $derived.by(() => {
+  void revision;
+  if (hostPack?.park !== 'deepFreeze') return null;
+  const chapter = nextChapter(season);
+  return { now: FREEZE_CALENDAR[chapter], next: FREEZE_CALENDAR[chapter + 1] ?? null };
+ });
+ const WEATHER = { cold: 'starters tire far sooner, the air is heavy', thaw: 'starters tire sooner, the air is a little heavy', cool: 'starters tire sooner, the air is a little heavy', warm: 'ordinary conditions' } as const;
  // Sale bonuses the club has banked this season.
  const sales = $derived.by(() => { void revision; return pack?.saleBonus ? season.sales.filter(sale => sale.seat === human) : null; });
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
@@ -97,6 +105,7 @@
    {#if venue}<div><dt>Home park</dt><dd>{venue.name} <small>{venue.fits} know it{venue.next ? `; next chapter ${venue.next}` : ''}</small></dd></div>{/if}
    {#if familiar}<div><dt>Know the park</dt><dd>{familiar.count} active <small>home batted balls {(familiar.edge * 100).toFixed(1)}% harder, visitors' {(familiar.edge * 100).toFixed(1)}% softer</small></dd></div>{/if}
    {#if dollar && pack?.exchangeRate}<div><dt>Dollar</dt><dd>{dollar.strong ? 'Strong' : 'Weak'} <small>training {Math.round(pack.exchangeRate.price * 100)}% {dollar.strong ? 'cheaper, stands thinner' : 'dearer, stands fuller'}{dollar.next === null ? '' : `; next chapter ${dollar.next ? 'strong' : 'weak'}`}</small></dd></div>{/if}
+   {#if weather}<div><dt>Weather</dt><dd>{weather.now[0].toUpperCase() + weather.now.slice(1)} <small>{WEATHER[weather.now]} at home{weather.next ? `; next chapter ${weather.next}` : ''}</small></dd></div>{/if}
    {#if sales}<div><dt>Sale bonuses</dt><dd>+{sales.reduce((sum, sale) => sum + sale.cash, 0)} <small>{sales.length} trained {sales.length === 1 ? 'card' : 'cards'} traded away</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>
