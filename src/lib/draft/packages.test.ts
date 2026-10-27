@@ -5,11 +5,11 @@ import { MAX_PARK_FAMILIARITY } from '../sim/league-types.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
-import { ironManUpgrades, recordSegment, segmentInput, startLeague, type LeagueSeason } from './league.ts';
+import { closeChapter, ironManUpgrades, recordSegment, saleBonusOf, segmentInput, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { familiarCount, knowHowCount, MAX_KNOW_HOW, PACKAGES, withKnowHow, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
-import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
-import { buyTraining, gainScale, offersFor, priceFor, trainedThisVisit } from './shop.ts';
+import { applyAction, newRunSetup, ownedBy, startRun, windowLineup, type DraftRun, type RunData } from './run.ts';
+import { buyTraining, gainScale, offersFor, priceFor, refusal, trainedThisVisit } from './shop.ts';
 import { playDraft, submitAction, testUniverse } from './test-fixtures.ts';
 import { developed, train, withSkill } from './training.ts';
 import type { DraftSlot } from './types.ts';
@@ -244,5 +244,37 @@ describe('franchise packages', () => {
   expect(third.find(upgrade => upgrade.cardId === hitters[2])!.scale).toBe(.1);
   expect(third.find(upgrade => upgrade.cardId === hitters[3])!.scale).toBe(.25);
   expect(season.upgrades.filter(upgrade => upgrade.free).every(upgrade => upgrade.paidBy === human)).toBe(true);
+ });
+
+ it('banks a Farm Team club twice its own training spend on each card it trades away, once per card', () => {
+  const { run, season, profile } = seasonFor('PIT');
+  const human = run.seating.humanSeat;
+  const mine = [...ownedBy(run, human)].sort((a, b) => b.valueRuns - a.valueRuns).map(card => card.seasonId);
+  const [sold, kept] = mine;
+  const basic = (id: string) => refusal(run, season, human, profile(id), 'hitting') ? 'pitching' : 'hitting';
+  buyTraining(run, season, human, profile(sold), basic(sold));
+  buyTraining(run, season, human, profile(kept), basic(kept));
+  // Gifts and other clubs' spending on the card do not count toward the bonus.
+  season.upgrades.push({ cardId: sold, kind: 'fielding', stop: 1, paidBy: human, cost: 0, free: true }, { cardId: sold, kind: 'baserunning', stop: 1, paidBy: (human + 1) % 8, cost: 10 });
+  expect(saleBonusOf(run, season, human, sold)).toBe(2 * priceFor(run, human, 'hitting'));
+  applyAction(run, { type: 'chapter', chapter: 1, order: run.seating.seats.map((_, seat) => seat).reverse(), lineup: structuredClone(run.lineup!) });
+  const partner = run.seating.seats.map((_, seat) => seat).find(seat => {
+   if (seat === human) return false;
+   const get = [...ownedBy(run, seat)].sort((a, b) => a.valueRuns - b.valueRuns)[0].seasonId;
+   applyAction(run, { type: 'propose', seat, give: [sold], get: [get] });
+   return run.market!.offers.at(-1)!.status === 'accepted';
+  });
+  expect(partner).toBeDefined();
+  const bank = season.cash[human];
+  applyAction(run, { type: 'waivers' });
+  applyAction(run, { type: 'autofix' });
+  applyAction(run, { type: 'submit', lineup: windowLineup(run) as ClubLineup });
+  closeChapter(run, season);
+  expect(season.sales).toEqual([{ cardId: sold, seat: human, cash: 20, chapter: 1 }]);
+  expect(season.cash[human]).toBe(bank + 20);
+  // The card has earned its bonus; trading it again would bank nothing, and the received card none either.
+  expect(saleBonusOf(run, season, human, sold)).toBe(0);
+  expect(saleBonusOf(run, season, human, kept)).toBe(20);
+  expect(saleBonusOf(run, season, partner!, sold)).toBe(0);
  });
 });

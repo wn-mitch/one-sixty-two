@@ -10,10 +10,12 @@
 
  /**
   * The window's trades: offers waiting for an answer, then a desk for proposing up to three cards each
-  * way to one AI club. A club answers at once: it accepts, counters or turns the offer down.
+  * way to one AI club. A club answers at once: it accepts, counters or turns the offer down. A
+  * franchise with a sale bonus sees what each of its cards would bank if traded away.
   */
- let { run, revision, profiles, clubName, working, onPropose, onRespond }: {
+ let { run, revision, profiles, clubName, working, saleBonus = () => 0, onPropose, onRespond }: {
   run: DraftRun; revision: number; profiles: ReadonlyMap<string, Profile>; clubName: (seat: number) => string; working: boolean;
+  saleBonus?: (cardId: string) => number;
   onPropose: (seat: number, give: string[], get: string[]) => Promise<boolean>;
   onRespond: (offer: number, accept: boolean) => void;
  } = $props();
@@ -34,6 +36,7 @@
  const payroll = $derived.by(() => { void revision; return sum(ownedBy(run, human).map(item => item.seasonId)); });
  const after = $derived(payroll - sum(give) + sum(get));
  const cap = $derived(effectiveCap(run.budgets[human]));
+ const bonus = (ids: Iterable<string>) => [...ids].reduce((total, id) => total + saleBonus(id), 0);
  const STATUS: Record<TradeOffer['status'], string> = { open: 'Waiting', accepted: 'Accepted', rejected: 'Turned down', countered: 'Countered', declined: 'Declined', void: 'Off the table' };
 
  function choose(seat: number) {
@@ -61,10 +64,11 @@
   <ul>
    {#each cardsOf(seat) as item (item.seasonId)}
     {@const locked = !tradeable(run, item.seasonId)}
+    {@const sale = seat === human ? saleBonus(item.seasonId) : 0}
     <li>
      <label class:locked>
       <input type="checkbox" checked={set.has(item.seasonId)} disabled={working || locked || (!set.has(item.seasonId) && set.size >= MAX_TRADE_CARDS)} onchange={() => toggle(set, item.seasonId)} />
-      <span class="who">{nameOf(item.seasonId)} <small>{item.year} · {rolesLabel(item)}{locked ? ' · traded recently' : ''}</small></span>
+      <span class="who">{nameOf(item.seasonId)} <small>{item.year} · {rolesLabel(item)}{locked ? ' · traded recently' : ''}{sale ? ` · sale bonus +${sale}` : ''}</small></span>
       <span class="money">{money(item.salary)}</span>
      </label>
     </li>
@@ -82,7 +86,7 @@
     <li class:counter={offer.counterTo !== null}>
      <p class="club"><TeamLogo franchiseId={run.seating.seats[offer.from]} label={clubName(offer.from)} size="small" /><strong>{clubName(offer.from)}</strong>{#if offer.note}<span class="note">{offer.note}</span>{/if}</p>
      <p class="terms"><span>You get</span> {@render names(offer.give)}</p>
-     <p class="terms"><span>You send</span> {@render names(offer.get)}</p>
+     <p class="terms"><span>You send</span> {@render names(offer.get)}{#if bonus(offer.get)}<span class="sale">{` · sale bonus +${bonus(offer.get)}`}</span>{/if}</p>
      <div class="answer">
       <button type="button" class="primary" disabled={working} onclick={() => onRespond(offer.id, true)}>Accept</button>
       <button type="button" class="secondary" disabled={working} onclick={() => onRespond(offer.id, false)}>Decline</button>
@@ -107,7 +111,7 @@
    {@render pickList(human, give, 'From your roster')}
   </div>
   <div class="send">
-   <p class:over={after > cap}>Your payroll after: <strong>{money(after)}</strong> of {money(cap)}</p>
+   <p class:over={after > cap}>Your payroll after: <strong>{money(after)}</strong> of {money(cap)}{#if bonus(give)}{' · sale bonus '}<strong>+{bonus(give)}</strong> when the market closes{/if}</p>
    <button type="button" class="primary" disabled={working || !give.size || !get.size} onclick={() => void send()}>Send offer</button>
   </div>
  {/if}
@@ -137,6 +141,7 @@
  .terms { font-size: var(--text-sm); overflow-wrap: anywhere; }
  .terms > span:first-child { display: inline-block; min-width: 4.5rem; color: var(--muted); font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
  .money { color: var(--muted); font-variant-numeric: tabular-nums; }
+ .sale { color: var(--success); font-size: var(--text-xs); font-weight: 700; }
  .answer { display: flex; gap: var(--space-2); }
  .clubs { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--space-1); }
  .clubs button { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding-inline: var(--space-2); font-size: var(--text-xs); text-align: left; }

@@ -22,7 +22,7 @@ import TrainingShop from '#lib/components/draft-mode/TrainingShop.svelte';
  import { waiverCards } from '#lib/draft/market.ts';
  import { decreeAt } from '#lib/draft/decrees.ts';
  import { BENCH, placeFromKey, seasonForm, seasonLineupView, windowBlockers, windowLineupView } from '#lib/draft/lineup-view.ts';
- import { clubSchedule, fieldedIds, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
+ import { clubSchedule, fieldedIds, saleBonusOf, seasonLines, swapPlaces, type ClubLineup, type Place } from '#lib/draft/league.ts';
 import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts';
  import type { DraftSlot } from '#lib/draft/types.ts';
  import { LEAGUE_CLUBS, LEAGUE_SEGMENTS, SEGMENT_MATCHDAYS, SEGMENTS_PER_CHAPTER } from '#lib/sim/league-types.ts';
@@ -204,6 +204,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
   >
    {#snippet intro()}
     <WindowPanel run={current.run} revision={session.revision} {profiles} manifest={session.manifest} {media} {mediaStatus} {rankings} {clubName} {working}
+     saleBonus={id => session.season ? saleBonusOf(current.run, session.season, current.run.seating.humanSeat, id) : 0}
      onCleanup={role => void step(session.cleanup(role))} onAutofix={() => void step(session.autofix())}
      onPropose={async (seat, give, get) => { working = true; try { const message = await session.propose(seat, give, get); if (message) toasts.show(message, { tone: 'error' }); return !message; } finally { working = false; } }}
      onRespond={(offer, accept) => void step(session.respond(offer, accept))}

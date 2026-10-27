@@ -8,14 +8,14 @@ import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTota
 import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
-import { familiarityFor, franchisePackage, knowHowFor, withKnowHow } from './packages.ts';
+import { familiarityFor, franchisePackage, knowHowFor, saleBonusFor, withKnowHow } from './packages.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v12' as const;
+export const LEAGUE_VERSION = 'league-v13' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -61,7 +61,12 @@ export interface LeagueSeason {
  pushes: Push[];
  /** Every injury, by the segment it affects. */
  injuries: Injury[];
+ /** Every sale bonus paid, in the order chapter markets closed; a card earns one at most once. */
+ sales: Sale[];
 }
+
+/** A sale bonus: `seat` traded `cardId` away at chapter `chapter`'s market and banked `cash`. */
+export interface Sale { cardId: string; seat: number; cash: number; chapter: number }
 
 export class LineupError extends Error {}
 
@@ -112,7 +117,7 @@ export function startLeague(run: DraftRun): LeagueSeason {
  return {
   version: LEAGUE_VERSION, rivals: matchRivals(run), lineups, segments: [],
   fans: priors(run.seating.seats, payrolls).map(openingFans),
-  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1, pushes: [], injuries: []
+  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1, pushes: [], injuries: [], sales: []
  };
 }
 
@@ -120,9 +125,31 @@ export function startLeague(run: DraftRun): LeagueSeason {
 const activePayroll = (run: DraftRun, lineup: ClubLineup): number => Object.values(lineup.active).reduce((sum, id) => sum + run.pool.ledger.instances.get(id)!.startingSalary, 0);
 
 /**
+ * The sale bonuses the chapter market's accepted trades earn: each card a club with a sale bonus
+ * traded away that it had paid to train and that has not earned one before.
+ */
+export function chapterSales(run: DraftRun, season: LeagueSeason): Sale[] {
+ const sales: Sale[] = [];
+ for (const offer of run.market?.offers ?? []) {
+  if (offer.status !== 'accepted') continue;
+  for (const [seat, ids] of [[offer.from, offer.give], [offer.to, offer.get]] as const) {
+   for (const cardId of ids) {
+    const cash = sales.some(sale => sale.cardId === cardId) ? 0 : saleBonusOf(run, season, seat, cardId);
+    if (cash > 0) sales.push({ cardId, seat, cash, chapter: run.chapter });
+   }
+  }
+ }
+ return sales;
+}
+
+/** What trading `cardId` away would bank `seat` now: its franchise's sale bonus, or 0 once the card has earned one. */
+export const saleBonusOf = (run: DraftRun, season: LeagueSeason, seat: number, cardId: string): number =>
+ season.sales.some(sale => sale.cardId === cardId) ? 0 : saleBonusFor(run.seating.seats[seat], season.upgrades, seat, cardId);
+
+/**
  * Carries a closed chapter market into the season: the player's submitted lineup, AI clubs'
- * default lineups for their new rosters, and each club's fan expectation moved by as much as its
- * payroll-based prior moved.
+ * default lineups for their new rosters, each club's fan expectation moved by as much as its
+ * payroll-based prior moved, and any sale bonuses banked.
  */
 export function closeChapter(run: DraftRun, season: LeagueSeason): void {
  if (run.phase !== 'season' || !run.lineup) throw new Error('A chapter closes when the player submits');
@@ -131,6 +158,9 @@ export function closeChapter(run: DraftRun, season: LeagueSeason): void {
  season.lineups = run.submissions.map((submission, seat) => seat === human ? structuredClone(run.lineup!) : defaultLineup(submission!, card));
  const next = priors(run.seating.seats, season.lineups.map(lineup => activePayroll(run, lineup)));
  season.fans = season.fans.map((fans, seat) => ({ ...fans, prior: next[seat], expectation: Math.min(EXPECTATION_RANGE[1], Math.max(EXPECTATION_RANGE[0], Math.round((fans.expectation + next[seat] - fans.prior) * 1e4) / 1e4)) }));
+ const sales = chapterSales(run, season);
+ season.cash = season.cash.map((cash, seat) => cash + sales.reduce((sum, sale) => sum + (sale.seat === seat ? sale.cash : 0), 0));
+ season.sales.push(...sales);
 }
 
 /** Where the season stands: segments played, and whether the stop after the last one closes a chapter. */

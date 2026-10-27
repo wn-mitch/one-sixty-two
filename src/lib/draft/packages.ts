@@ -1,7 +1,7 @@
 import { HITTER_SLOTS, POSITIONS, type Position, type Profile } from '../game/types.ts';
 import { MAX_PARK_FAMILIARITY, type CrowdTrigger, type ParkPackage } from '../sim/league-types.ts';
 import type { DraftSlot } from './types.ts';
-import { gloveGrade, withSkill, type TrainingKind } from './training.ts';
+import { gloveGrade, withSkill, type TrainingKind, type Upgrade } from './training.ts';
 
 /**
  * Franchise packages: economic, development or physical park perks a franchise brings to every
@@ -46,6 +46,8 @@ export interface FranchisePackage {
   * by `step` for each consecutive stop he has batted in, up to `max`.
   */
  ironMan?: { step: number; max: number };
+ /** Cash, as a multiple of the club's own training spend on a card, for trading that card away; once per card per run. */
+ saleBonus?: number;
 }
 
 /** The cap on a club's fielding know-how, in hit-prevention skill. */
@@ -82,6 +84,7 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  KCR: { name: 'Royal Flush', summary: 'Kauffman is a casino. The cap is 10% tighter, but every home win pays 8 cash with the payday.', capShare: -.1, homeWinCash: 8 },
  OAK: { name: 'The House Always Wins', summary: 'The cap is 12% tighter, but every training costs 55% less.', capShare: -.12, trainingPrice: .45 },
  STL: { name: 'The Cardinal Way', summary: 'Fundamentals. For each active fielder with a glove grade of 60 or better at his position on the card, every fielder reaches balls a little quicker, home and away.', knowHow: { minGrade: 60, perPlayer: .025 } },
+ PIT: { name: 'The Farm Team', summary: 'The cap is 10% tighter. Trade away a card you paid to train and you get back twice what you spent on him, once per card, when the chapter market closes.', capShare: -.1, saleBonus: 2 },
  DET: { name: 'The Assembly Line', summary: 'Every training gains 5% more for each common on the active roster, up to 40%.', commonBoost: .05, commonBoostMax: .4 }
 };
 
@@ -115,6 +118,12 @@ export function withKnowHow(profile: Profile, edge: number): Profile {
 }
 
 export const franchisePackage = (franchiseId: string): FranchisePackage | null => PACKAGES[franchiseId] ?? null;
+
+/** What trading `cardId` away pays seat `seat` under its franchise's sale bonus: a multiple of what the seat has paid to train it. */
+export function saleBonusFor(franchiseId: string, upgrades: readonly Upgrade[], seat: number, cardId: string): number {
+ const multiple = PACKAGES[franchiseId]?.saleBonus ?? 0;
+ return multiple * upgrades.reduce((sum, upgrade) => sum + (upgrade.cardId === cardId && upgrade.paidBy === seat && !upgrade.free ? upgrade.cost : 0), 0);
+}
 
 /** The franchise's price for a training listed at `price`. */
 export const trainingPriceFor = (franchiseId: string, price: number): number => Math.max(1, Math.round(price * (PACKAGES[franchiseId]?.trainingPrice ?? 1)));

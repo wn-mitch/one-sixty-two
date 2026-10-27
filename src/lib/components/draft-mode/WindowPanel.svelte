@@ -21,10 +21,12 @@
   * cap, then (at a chapter) the market condition and supplemental pack, trades and waivers until waivers close, then
   * the cleanup stacks and Auto-fix.
   */
- let { run, revision, profiles, manifest, media, mediaStatus, rankings, clubName, working, onCleanup, onAutofix, onPropose, onRespond, onClaim, onSign }: {
+ let { run, revision, profiles, manifest, media, mediaStatus, rankings, clubName, working, saleBonus, onCleanup, onAutofix, onPropose, onRespond, onClaim, onSign }: {
   run: DraftRun; revision: number; profiles: ReadonlyMap<string, Profile>; manifest: Manifest | null;
   media: MediaManifest | null; mediaStatus: CardMediaStatus; rankings: WarRankings | null;
   clubName: (seat: number) => string; working: boolean;
+  /** What trading one of the player's cards away would bank under a sale bonus. */
+  saleBonus?: (cardId: string) => number;
   onCleanup: (role: StackRole) => void; onAutofix: () => void;
   onPropose: (seat: number, give: string[], get: string[]) => Promise<boolean>;
   onRespond: (offer: number, accept: boolean) => void;
@@ -51,7 +53,7 @@
  </div>
  {#if step === 'market'}
  {#if run.chapter > 0}<SupplementalPack {run} {revision} {profiles} {working} {onSign} />{/if}
- <TradeDesk {run} {revision} {profiles} {clubName} {working} {onPropose} {onRespond} />
+ <TradeDesk {run} {revision} {profiles} {clubName} {working} {saleBonus} {onPropose} {onRespond} />
  <WaiverWire {run} {revision} {profiles} {clubName} {working} {onClaim} />
  {:else}
  <section aria-labelledby="cleanup-heading">

@@ -80,7 +80,7 @@ Decided: up to 3-for-3, player and AI offers, no AI-to-AI trades, accept/reject/
 
 Owner: [Pittsburgh and Detroit](catalog.md). First relevant gate: [phase](phases/04-season-evolution.md).
 
-Calibrate Pittsburgh-funded, once-per-player sale bonuses and the retained-core/sale balance. Paid reserve development is permitted generally; decide whether Pittsburgh's special payout requires active playing history. Define payout identity across different seasons of the same athlete. Detroit benefits every eligible recipient; the boost counts original-tier commons (base finish, at most the common salary) on the active roster when the training is bought, 5% each up to 40% (provisional). Middle-tier treatment and the curve remain open.
+Pittsburgh's sale bonus is twice its own training spend on a card traded away, once per card (one season of one athlete), for any rostered card; its value depends on how hard the player farms and is estimated, not simulated. The retained-core/sale balance remains open. Detroit benefits every eligible recipient; the boost counts original-tier commons (base finish, at most the common salary) on the active roster when the training is bought, 5% each up to 40% (provisional). Middle-tier treatment and the curve remain open.
 
 ## 14. Angels venues and payroll
 

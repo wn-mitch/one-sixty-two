@@ -57,6 +57,8 @@
   const free = season.upgrades.filter(upgrade => upgrade.paidBy === human && upgrade.free && upgrade.stop === played);
   return { count: free.length, longest: free.reduce((most, upgrade) => Math.max(most, Math.round((upgrade.scale ?? 0) / pack.ironMan!.step)), 0) };
  });
+ // Sale bonuses the club has banked this season.
+ const sales = $derived.by(() => { void revision; return pack?.saleBonus ? season.sales.filter(sale => sale.seat === human) : null; });
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
 </script>
 
@@ -76,6 +78,7 @@
    {#if knowHow}<div><dt>Know-how</dt><dd>{knowHow.count} {knowHow.count === 1 ? 'glove' : 'gloves'} <small>every fielder {(knowHow.edge * 15).toFixed(1)}% quicker to the ball</small></dd></div>{/if}
    {#if ironMan}<div><dt>Iron Man</dt><dd>{ironMan.count} free <small>hitting trainings at the last payday{ironMan.count ? `, longest streak ${ironMan.longest} ${ironMan.longest === 1 ? 'stop' : 'stops'}` : ''}</small></dd></div>{/if}
    {#if familiar}<div><dt>Know the park</dt><dd>{familiar.count} active <small>home batted balls {(familiar.edge * 100).toFixed(1)}% harder, visitors' {(familiar.edge * 100).toFixed(1)}% softer</small></dd></div>{/if}
+   {#if sales}<div><dt>Sale bonuses</dt><dd>+{sales.reduce((sum, sale) => sum + sale.cash, 0)} <small>{sales.length} trained {sales.length === 1 ? 'card' : 'cards'} traded away</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>
   {#if pack}<p class="note"><strong>{pack.name}.</strong> {pack.summary}</p>{/if}
