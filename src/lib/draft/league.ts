@@ -1,21 +1,21 @@
 import { compareId, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, STARTER_SLOTS, validateReliefRoles, type Profile, type ReliefAssignment, type SimulationData } from '../game/types.ts';
 import { randomStream, shuffle } from '../game/random.ts';
 import { stadiumRef } from '../sim/park.ts';
-import { LEAGUE_SEGMENTS, SEGMENTS_PER_CHAPTER, type Crowd, type Fixture, type LeagueGame, type LeagueSegmentInput, type LeagueSegmentResult, type RestState } from '../sim/league-types.ts';
+import { LEAGUE_CHAPTERS, LEAGUE_SEGMENTS, SEGMENTS_PER_CHAPTER, type Crowd, type Fixture, type LeagueGame, type LeagueSegmentInput, type LeagueSegmentResult, type RestState } from '../sim/league-types.ts';
 import type { ScheduledGame } from '../game/season-calendar.ts';
 import type { BatterLine, PitcherLine } from '../sim/types.ts';
 import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTotal, priors, type FanState, type Payday } from './fans.ts';
 import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
-import { familiarityFor, franchisePackage, knowHowFor, saleBonusFor, withKnowHow } from './packages.ts';
+import { exchangeFor, familiarityFor, franchisePackage, knowHowFor, saleBonusFor, withKnowHow, type Exchange } from './packages.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v13' as const;
+export const LEAGUE_VERSION = 'league-v14' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -237,7 +237,13 @@ export function setLineup(run: DraftRun, season: LeagueSeason, lineup: ClubLineu
 }
 
 /** Each club's home crowd for the next segment, from its fans now. */
-export const seasonCrowds = (run: DraftRun, season: LeagueSeason): Crowd[] => season.fans.map((fans, seat) => crowd(run.seating.seats[seat], fans));
+export const seasonCrowds = (run: DraftRun, season: LeagueSeason): Crowd[] => season.fans.map((fans, seat) => crowd(run.seating.seats[seat], fans, seasonExchange(run, season, seat)));
+
+/** The chapter the next segment plays in (the last one once the season is over). */
+export const nextChapter = (season: LeagueSeason): number => Math.min(LEAGUE_CHAPTERS - 1, Math.floor(season.segments.length / SEGMENTS_PER_CHAPTER));
+
+/** The exchange `seat`'s franchise works under for the next segment and at this stop's shop. */
+export const seasonExchange = (run: DraftRun, season: LeagueSeason, seat: number): Exchange => exchangeFor(run.seating.seats[seat], run.setup.seed, nextChapter(season));
 
 /** Every card the clubs field in the next segment: active cards, with reserves and call-ups in for the injured. */
 export const fieldedIds = (run: DraftRun, season: LeagueSeason): string[] =>
@@ -313,7 +319,7 @@ export function recordSegment(run: DraftRun, season: LeagueSeason, result: Leagu
  if (result.segment !== season.segments.length) throw new Error(`Expected segment ${season.segments.length + 1}, got ${result.segment + 1}`);
  const franchises = run.seating.seats;
  const crowds = seasonCrowds(run, season);
- const paydays = season.fans.map((fans, seat) => payday(seat, franchises, fans, result.games));
+ const paydays = season.fans.map((fans, seat) => payday(seat, franchises, fans, result.games, seasonExchange(run, season, seat)));
  season.segments.push({ games: result.games, lines: result.totals.map(box => ({ batting: box.batting, pitching: box.pitching })), carry: result.carry, crowds, paydays, hype: result.hype });
  const records = standings(season);
  season.fans = season.fans.map((fans, seat) => {

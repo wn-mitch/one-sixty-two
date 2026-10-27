@@ -3,10 +3,10 @@ import type { Profile } from '../game/types.ts';
 import { simulateLeagueSegment } from '../engine/node.ts';
 import { MAX_PARK_FAMILIARITY } from '../sim/league-types.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
-import { payday, type FanState } from './fans.ts';
+import { isRivalry, openingFans, payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
-import { closeChapter, ironManUpgrades, recordSegment, saleBonusOf, segmentInput, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
-import { familiarCount, knowHowCount, MAX_KNOW_HOW, PACKAGES, withKnowHow, type FranchisePackage } from './packages.ts';
+import { closeChapter, ironManUpgrades, recordSegment, saleBonusOf, seasonCrowds, segmentInput, startLeague, type ClubLineup, type LeagueSeason, type SegmentRecord } from './league.ts';
+import { exchangeFor, familiarCount, knowHowCount, MAX_KNOW_HOW, PACKAGES, strongDollar, withKnowHow, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, ownedBy, startRun, windowLineup, type DraftRun, type RunData } from './run.ts';
 import { buyTraining, gainScale, offersFor, priceFor, refusal, trainedThisVisit } from './shop.ts';
@@ -122,8 +122,8 @@ describe('franchise packages', () => {
   install('OAK', { capShare: -.12, trainingPrice: .75 });
   const { run, season, profile } = seasonFor('OAK');
   const human = run.seating.humanSeat;
-  expect(priceFor(run, human, 'hitting')).toBe(8);
-  expect(priceFor(run, human, 'power')).toBe(11);
+  expect(priceFor(run, season, human, 'hitting')).toBe(8);
+  expect(priceFor(run, season, human, 'power')).toBe(11);
   const ss = season.lineups[human].active.SS;
   buyTraining(run, season, human, profile(ss), 'hitting');
   expect(season.cash[human]).toBe(92);
@@ -256,7 +256,7 @@ describe('franchise packages', () => {
   buyTraining(run, season, human, profile(kept), basic(kept));
   // Gifts and other clubs' spending on the card do not count toward the bonus.
   season.upgrades.push({ cardId: sold, kind: 'fielding', stop: 1, paidBy: human, cost: 0, free: true }, { cardId: sold, kind: 'baserunning', stop: 1, paidBy: (human + 1) % 8, cost: 10 });
-  expect(saleBonusOf(run, season, human, sold)).toBe(2 * priceFor(run, human, 'hitting'));
+  expect(saleBonusOf(run, season, human, sold)).toBe(2 * priceFor(run, season, human, 'hitting'));
   applyAction(run, { type: 'chapter', chapter: 1, order: run.seating.seats.map((_, seat) => seat).reverse(), lineup: structuredClone(run.lineup!) });
   const partner = run.seating.seats.map((_, seat) => seat).find(seat => {
    if (seat === human) return false;
@@ -276,5 +276,29 @@ describe('franchise packages', () => {
   expect(saleBonusOf(run, season, human, sold)).toBe(0);
   expect(saleBonusOf(run, season, human, kept)).toBe(20);
   expect(saleBonusOf(run, season, partner!, sold)).toBe(0);
+ });
+
+ it('turns Toronto\'s dollar each chapter: cheap training and thin stands, or dear training and full ones', () => {
+  for (const seed of [1, 2, 3]) expect(Array.from({ length: 6 }, (_, chapter) => strongDollar(seed, chapter)).filter(Boolean)).toHaveLength(3);
+  expect(new Set([1, 2, 3, 4, 5].map(seed => Array.from({ length: 6 }, (_, chapter) => strongDollar(seed, chapter)).join()))).not.toHaveProperty('size', 1);
+  const { run, season } = seasonFor('TOR');
+  const human = run.seating.humanSeat;
+  const other = (human + 1) % 8;
+  const chapter = (index: number) => { season.segments = Array.from({ length: index * 3 }, () => ({}) as SegmentRecord); };
+  const strong = [0, 1, 2, 3, 4, 5].find(index => strongDollar(run.setup.seed, index))!;
+  const weak = [0, 1, 2, 3, 4, 5].find(index => !strongDollar(run.setup.seed, index))!;
+  chapter(strong);
+  const [cheap, thin, otherStrong] = [priceFor(run, season, human, 'hitting'), seasonCrowds(run, season)[human].edge, seasonCrowds(run, season)[other].edge];
+  chapter(weak);
+  const [dear, full, otherWeak] = [priceFor(run, season, human, 'hitting'), seasonCrowds(run, season)[human].edge, seasonCrowds(run, season)[other].edge];
+  expect([cheap, dear]).toEqual([6, 14]);
+  expect(full).toBeGreaterThan(thin);
+  expect(otherWeak).toBe(otherStrong);
+  expect(priceFor(run, season, other, 'hitting')).toBe(10);
+  // Ten home games against a non-rival: a strong dollar sells .55 of the seats at 1.3 times the price, a weak one .85 at 1 / 1.3.
+  const visitor = [0, 1, 2, 3, 4, 5, 6, 7].find(seat => seat !== human && !isRivalry('TOR', run.seating.seats[seat]))!;
+  const games = Array.from({ length: 10 }, (_, matchday) => ({ matchday, home: human, away: visitor, homeRuns: 1, awayRuns: 2 })) as SegmentRecord['games'];
+  const gate = (index: number) => payday(human, run.seating.seats, openingFans(.5), games, exchangeFor('TOR', run.setup.seed, index)).gate;
+  expect([gate(strong), gate(weak)]).toEqual([Math.round(1.6 * 1.3 * .55 * 10), Math.round(1.6 / 1.3 * .85 * 10)]);
  });
 });

@@ -98,7 +98,7 @@ Define Washington funding votes and groundskeeping, optional Arizona fatigue, Ho
 
 Owner: [Franchise and rivalry details](catalog.md). First relevant gate: [phase](phases/03-league-playable.md).
 
-Curate genuine rivalry shortlists and calibrate their shared hype response. The player alone guarantees a seeded rival, revealed before drafting; player Mets always include Yankees. Resolve AI Mets seeding explicitly. Define Mets transfer timing/ties, Dodgers departure curves, Toronto state selection, Reds terrain and the specialized training/closer triggers. Do not reopen these agreed premises as empty catalog slots.
+Curate genuine rivalry shortlists and calibrate their shared hype response. The player alone guarantees a seeded rival, revealed before drafting; player Mets always include Yankees. Resolve AI Mets seeding explicitly. Define Mets transfer timing/ties, Dodgers departure curves, Reds terrain and the specialized training/closer triggers. Do not reopen these agreed premises as empty catalog slots.
 
 ## 17. Delivery scope
 

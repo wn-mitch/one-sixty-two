@@ -1,4 +1,4 @@
-import { franchisePackage } from './packages.ts';
+import { franchisePackage, PAR, type Exchange } from './packages.ts';
 import type { Crowd, LeagueGame } from '../sim/league-types.ts';
 import { RIVALS } from './franchises.ts';
 
@@ -95,8 +95,8 @@ export function priors(franchiseIds: readonly string[], payrolls: readonly numbe
 
 export const openingFans = (prior: number): FanState => ({ prior, expectation: prior, sentiment: 0 });
 
-/** Share of seats filled at a club's ordinary home game. */
-export const fill = (franchiseId: string, fans: FanState): number => round(clamp(fanProfile(franchiseId).baseFill + FILL_PER_SENTIMENT * fans.sentiment, MIN_FILL, 1));
+/** Share of seats filled at a club's ordinary home game, under the chapter's exchange. */
+export const fill = (franchiseId: string, fans: FanState, exchange: Exchange = PAR): number => round(clamp(fanProfile(franchiseId).baseFill + FILL_PER_SENTIMENT * fans.sentiment + exchange.fill, MIN_FILL, 1));
 
 /** The crowd's lean grows with occupancy and flattens near a full house; scaled so a full house is 1. */
 const saturation = (share: number) => (1 - Math.exp(-share / SATURATION)) / (1 - Math.exp(-1 / SATURATION));
@@ -105,9 +105,9 @@ const saturation = (share: number) => (1 - Math.exp(-share / SATURATION)) / (1 -
  * The home crowd for the next segment. Neutral fans add their lean to the home side; euphoric fans
  * triple it; hostile fans turn it against the home side. Volatility grows with the crowd's size.
  */
-export function crowd(franchiseId: string, fans: FanState): Crowd {
+export function crowd(franchiseId: string, fans: FanState, exchange: Exchange = PAR): Crowd {
  const profile = fanProfile(franchiseId);
- const share = fill(franchiseId, fans);
+ const share = fill(franchiseId, fans, exchange);
  const mood = clamp(1 + 2 * fans.sentiment, -1, 3);
  return { edge: round(BASE_EDGE + CROWD_EDGE * profile.crowdScale * saturation(share) * mood), volatility: round(MAX_VOLATILITY * profile.crowdScale * share ** 3) };
 }
@@ -120,15 +120,18 @@ export const paydayTotal = (payday: Payday): number => payday.salary + payday.ga
 /** A win's bonus by its run margin. */
 export const winBonus = (margin: number): number => WIN_BASE + WIN_PER_RUN * Math.min(margin - 1, MARGIN_RUNS_PAID);
 
-/** A club's segment payday: its salary, the gate from each home game's filled seats, a bonus for each win by its margin, and its franchise's payout for home wins. */
-export function payday(seat: number, franchiseIds: readonly string[], fans: FanState, games: readonly LeagueGame[]): Payday {
+/**
+ * A club's segment payday: its salary, the gate from each home game's filled seats at the chapter's
+ * ticket price, a bonus for each win by its margin, and its franchise's payout for home wins.
+ */
+export function payday(seat: number, franchiseIds: readonly string[], fans: FanState, games: readonly LeagueGame[], exchange: Exchange = PAR): Payday {
  const franchiseId = franchiseIds[seat];
- const base = fill(franchiseId, fans);
+ const base = fill(franchiseId, fans, exchange);
  const shares = games.filter(game => game.home === seat).map(game => Math.min(1, base + (isRivalry(franchiseId, franchiseIds[game.away]) ? RIVAL_FILL : 0)));
  const seats = shares.reduce((sum, share) => sum + share, 0);
  const margins = games.flatMap(game => game.home === seat ? [game.homeRuns - game.awayRuns] : game.away === seat ? [game.awayRuns - game.homeRuns] : []).filter(margin => margin > 0);
  return {
-  salary: SALARY, gate: Math.round(GATE_PER_FULL_HOUSE * seats), winBonus: Math.round(margins.reduce((sum, margin) => sum + winBonus(margin), 0)),
+  salary: SALARY, gate: Math.round(GATE_PER_FULL_HOUSE * exchange.ticket * seats), winBonus: Math.round(margins.reduce((sum, margin) => sum + winBonus(margin), 0)),
   franchise: Math.round((franchisePackage(franchiseId)?.homeWinCash ?? 0) * games.filter(game => game.home === seat && game.homeRuns > game.awayRuns).length),
   homeGames: shares.length, wins: margins.length, attendance: shares.length ? round(seats / shares.length, 3) : 0
  };

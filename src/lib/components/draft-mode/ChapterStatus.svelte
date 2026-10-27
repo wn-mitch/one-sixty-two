@@ -2,12 +2,12 @@
  import Standings from './Standings.svelte';
  import DecreeMemo from './DecreeMemo.svelte';
  import { segmentDecree } from '../../draft/decrees.ts';
- import { familiarCount, familiarityFor, franchisePackage, knowHowCount, knowHowFor } from '../../draft/packages.ts';
+ import { familiarCount, familiarityFor, franchisePackage, knowHowCount, knowHowFor, strongDollar } from '../../draft/packages.ts';
  import { fill, paydayTotal } from '../../draft/fans.ts';
- import { headToHead, standings, type LeagueSeason } from '../../draft/league.ts';
+ import { headToHead, nextChapter, seasonExchange, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
  import type { Profile } from '../../game/types.ts';
- import { LEAGUE_SEGMENTS, MAX_CROWD_HYPE, SEGMENT_MATCHDAYS, type LeagueGame } from '../../sim/league-types.ts';
+ import { LEAGUE_CHAPTERS, LEAGUE_SEGMENTS, MAX_CROWD_HYPE, SEGMENT_MATCHDAYS, type LeagueGame } from '../../sim/league-types.ts';
 
  /**
   * A stop above the lineup: the club's record and rival series, the decree in force for the next
@@ -29,7 +29,7 @@
  const fans = $derived.by(() => { void revision; return season.fans[human]; });
  const cash = $derived.by(() => { void revision; return season.cash[human]; });
  const payday = $derived.by(() => { void revision; return season.segments.at(-1)?.paydays[human] ?? null; });
- const share = $derived(fill(run.seating.seats[human], fans));
+ const share = $derived.by(() => { void revision; return fill(run.seating.seats[human], fans, seasonExchange(run, season, human)); });
  const MOODS: [number, string][] = [[-.5, 'Hostile'], [-.15, 'Restless'], [.15, 'Steady'], [.5, 'Buzzing'], [Infinity, 'Euphoric']];
  const mood = $derived(MOODS.find(([bound]) => fans.sentiment < bound)![1]);
  const pct = (value: number) => value.toFixed(3).replace(/^0/, '');
@@ -57,6 +57,13 @@
   const free = season.upgrades.filter(upgrade => upgrade.paidBy === human && upgrade.free && upgrade.stop === played);
   return { count: free.length, longest: free.reduce((most, upgrade) => Math.max(most, Math.round((upgrade.scale ?? 0) / pack.ironMan!.step)), 0) };
  });
+ // The exchange rate this chapter and, while there is one, the next.
+ const dollar = $derived.by(() => {
+  void revision;
+  if (!pack?.exchangeRate) return null;
+  const chapter = nextChapter(season);
+  return { strong: strongDollar(run.setup.seed, chapter), next: chapter + 1 < LEAGUE_CHAPTERS ? strongDollar(run.setup.seed, chapter + 1) : null };
+ });
  // Sale bonuses the club has banked this season.
  const sales = $derived.by(() => { void revision; return pack?.saleBonus ? season.sales.filter(sale => sale.seat === human) : null; });
  const segmentRecord = $derived(`${recent.filter(won).length}–${recent.filter(game => !won(game)).length}`);
@@ -78,6 +85,7 @@
    {#if knowHow}<div><dt>Know-how</dt><dd>{knowHow.count} {knowHow.count === 1 ? 'glove' : 'gloves'} <small>every fielder {(knowHow.edge * 15).toFixed(1)}% quicker to the ball</small></dd></div>{/if}
    {#if ironMan}<div><dt>Iron Man</dt><dd>{ironMan.count} free <small>hitting trainings at the last payday{ironMan.count ? `, longest streak ${ironMan.longest} ${ironMan.longest === 1 ? 'stop' : 'stops'}` : ''}</small></dd></div>{/if}
    {#if familiar}<div><dt>Know the park</dt><dd>{familiar.count} active <small>home batted balls {(familiar.edge * 100).toFixed(1)}% harder, visitors' {(familiar.edge * 100).toFixed(1)}% softer</small></dd></div>{/if}
+   {#if dollar && pack?.exchangeRate}<div><dt>Dollar</dt><dd>{dollar.strong ? 'Strong' : 'Weak'} <small>training {Math.round(pack.exchangeRate.price * 100)}% {dollar.strong ? 'cheaper, stands thinner' : 'dearer, stands fuller'}{dollar.next === null ? '' : `; next chapter ${dollar.next ? 'strong' : 'weak'}`}</small></dd></div>{/if}
    {#if sales}<div><dt>Sale bonuses</dt><dd>+{sales.reduce((sum, sale) => sum + sale.cash, 0)} <small>{sales.length} trained {sales.length === 1 ? 'card' : 'cards'} traded away</small></dd></div>{/if}
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>

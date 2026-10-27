@@ -1,5 +1,6 @@
+import { randomStream, shuffle } from '../game/random.ts';
 import { HITTER_SLOTS, POSITIONS, type Position, type Profile } from '../game/types.ts';
-import { MAX_PARK_FAMILIARITY, type CrowdTrigger, type ParkPackage } from '../sim/league-types.ts';
+import { LEAGUE_CHAPTERS, MAX_PARK_FAMILIARITY, type CrowdTrigger, type ParkPackage } from '../sim/league-types.ts';
 import type { DraftSlot } from './types.ts';
 import { gloveGrade, withSkill, type TrainingKind, type Upgrade } from './training.ts';
 
@@ -48,7 +49,17 @@ export interface FranchisePackage {
  ironMan?: { step: number; max: number };
  /** Cash, as a multiple of the club's own training spend on a card, for trading that card away; once per card per run. */
  saleBonus?: number;
+ /**
+  * An exchange rate that turns each chapter: with a strong dollar training costs `price` less, home
+  * stands fill `fill` less and tickets cost `ticket` more; a weak dollar reverses each (tickets cost
+  * 1 / (1 + `ticket`)).
+  */
+ exchangeRate?: { price: number; fill: number; ticket: number };
 }
+
+/** What a chapter's conditions do to a club: its training price multiplier, the shift in its home stands' fill and its ticket price multiplier. */
+export interface Exchange { price: number; fill: number; ticket: number }
+export const PAR: Exchange = Object.freeze({ price: 1, fill: 0, ticket: 1 });
 
 /** The cap on a club's fielding know-how, in hit-prevention skill. */
 export const MAX_KNOW_HOW = .18;
@@ -84,6 +95,7 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  KCR: { name: 'Royal Flush', summary: 'Kauffman is a casino. The cap is 10% tighter, but every home win pays 8 cash with the payday.', capShare: -.1, homeWinCash: 8 },
  OAK: { name: 'The House Always Wins', summary: 'The cap is 12% tighter, but every training costs 55% less.', capShare: -.12, trainingPrice: .45 },
  STL: { name: 'The Cardinal Way', summary: 'Fundamentals. For each active fielder with a glove grade of 60 or better at his position on the card, every fielder reaches balls a little quicker, home and away.', knowHow: { minGrade: 60, perPlayer: .025 } },
+ TOR: { name: 'The Exchange Rate', summary: 'The dollar turns every chapter, half the season each way. A strong dollar makes training 40% cheaper but tickets dearer and the stands thinner; a weak one makes training 40% dearer and the stands fuller. Each stop shows this chapter\'s rate and the next.', exchangeRate: { price: .4, fill: .15, ticket: .3 } },
  PIT: { name: 'The Farm Team', summary: 'The cap is 10% tighter. Trade away a card you paid to train and you get back twice what you spent on him, once per card, when the chapter market closes.', capShare: -.1, saleBonus: 2 },
  DET: { name: 'The Assembly Line', summary: 'Every training gains 5% more for each common on the active roster, up to 40%.', commonBoost: .05, commonBoostMax: .4 }
 };
@@ -119,14 +131,25 @@ export function withKnowHow(profile: Profile, edge: number): Profile {
 
 export const franchisePackage = (franchiseId: string): FranchisePackage | null => PACKAGES[franchiseId] ?? null;
 
+/** Whether the dollar is strong in chapter `chapter` (0-5): seeded, three strong chapters and three weak in a shuffled order. */
+export const strongDollar = (seed: number, chapter: number): boolean =>
+ shuffle(Array.from({ length: LEAGUE_CHAPTERS }, (_, index) => index < LEAGUE_CHAPTERS / 2), randomStream(seed, 'draft:exchange'))[Math.min(chapter, LEAGUE_CHAPTERS - 1)];
+
+/** The franchise's exchange in chapter `chapter` of a run seeded `seed`; par for a franchise without an exchange rate. */
+export function exchangeFor(franchiseId: string, seed: number, chapter: number): Exchange {
+ const rate = PACKAGES[franchiseId]?.exchangeRate;
+ if (!rate) return PAR;
+ return strongDollar(seed, chapter) ? { price: 1 - rate.price, fill: -rate.fill, ticket: 1 + rate.ticket } : { price: 1 + rate.price, fill: rate.fill, ticket: 1 / (1 + rate.ticket) };
+}
+
 /** What trading `cardId` away pays seat `seat` under its franchise's sale bonus: a multiple of what the seat has paid to train it. */
 export function saleBonusFor(franchiseId: string, upgrades: readonly Upgrade[], seat: number, cardId: string): number {
  const multiple = PACKAGES[franchiseId]?.saleBonus ?? 0;
  return multiple * upgrades.reduce((sum, upgrade) => sum + (upgrade.cardId === cardId && upgrade.paidBy === seat && !upgrade.free ? upgrade.cost : 0), 0);
 }
 
-/** The franchise's price for a training listed at `price`. */
-export const trainingPriceFor = (franchiseId: string, price: number): number => Math.max(1, Math.round(price * (PACKAGES[franchiseId]?.trainingPrice ?? 1)));
+/** The franchise's price for a training listed at `price`, under the chapter's exchange. */
+export const trainingPriceFor = (franchiseId: string, price: number, exchange: Exchange = PAR): number => Math.max(1, Math.round(price * (PACKAGES[franchiseId]?.trainingPrice ?? 1) * exchange.price));
 
 /** The franchise's gain multiplier for `kind`, with `activeCommons` original-tier commons on its active roster. */
 export function trainingGainFor(franchiseId: string, kind: TrainingKind, activeCommons: number): number {

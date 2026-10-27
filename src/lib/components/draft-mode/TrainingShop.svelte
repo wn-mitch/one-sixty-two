@@ -19,7 +19,7 @@
  const human = $derived(run.seating.humanSeat);
  const stop = $derived.by(() => { void revision; return season.segments.length; });
  const offers = $derived(offersFor(run, human, stop));
- const price = (kind: TrainingKind) => priceFor(run, human, kind);
+ const price = (kind: TrainingKind) => { void revision; return priceFor(run, season, human, kind); };
  const cash = $derived.by(() => { void revision; return season.cash[human]; });
  let chosen = $state<TrainingKind>('hitting');
  let intensive = $state(false);

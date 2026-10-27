@@ -2,7 +2,7 @@ import { randomStream, shuffle } from '../game/random.ts';
 import { HITTER_SLOTS, STARTER_SLOTS, type Profile } from '../game/types.ts';
 import { LEAGUE_SEGMENTS } from '../sim/league-types.ts';
 import { BASE_RISK, pushRefusal, pushRisk, takePush, type Injury } from './injuries.ts';
-import { standings, type LeagueSeason } from './league.ts';
+import { seasonExchange, standings, type LeagueSeason } from './league.ts';
 import { isCommon } from './cleanup.ts';
 import { franchisePackage, trainingGainFor, trainingPriceFor } from './packages.ts';
 import type { DraftRun } from './run.ts';
@@ -31,8 +31,8 @@ export function offersFor(run: DraftRun, seat: number, stop: number): TrainingKi
  return [...offers, ...extra];
 }
 
-/** What `kind` costs `seat`. */
-export const priceFor = (run: DraftRun, seat: number, kind: TrainingKind): number => trainingPriceFor(run.seating.seats[seat], TRAININGS[kind].price);
+/** What `kind` costs `seat` at this stop. */
+export const priceFor = (run: DraftRun, season: LeagueSeason, seat: number, kind: TrainingKind): number => trainingPriceFor(run.seating.seats[seat], TRAININGS[kind].price, seasonExchange(run, season, seat));
 
 /** The gain multiplier `seat` gets on `kind` now: intensive training, times its franchise perk. */
 export function gainScale(run: DraftRun, season: LeagueSeason, seat: number, kind: TrainingKind, intensive = false): number {
@@ -55,7 +55,7 @@ export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profi
  if (!seasonRoster(season, seat).includes(profile.seasonId)) return `${profile.displayName} is not on this roster`;
  if (trainedThisVisit(season, profile.seasonId)) return `${profile.displayName} has already trained at this stop`;
  if (!canTrain(developed(profile, season.upgrades, stop), kind, season.upgrades)) return `${TRAININGS[kind].name} does not apply to ${profile.displayName}`;
- if (season.cash[seat] < priceFor(run, seat, kind)) return 'Not enough cash';
+ if (season.cash[seat] < priceFor(run, season, seat, kind)) return 'Not enough cash';
  if (intensive && kind === 'recovery') return 'Recovery cannot be trained intensively';
  return intensive ? pushRefusal(run, season, seat, profile.seasonId, 'intensive') : null;
 }
@@ -68,7 +68,7 @@ export function buyTraining(run: DraftRun, season: LeagueSeason, seat: number, p
  const reason = refusal(run, season, seat, profile, kind, intensive);
  if (reason) throw new ShopError(reason);
  const scale = gainScale(run, season, seat, kind, intensive);
- const upgrade: Upgrade = { cardId: profile.seasonId, kind, stop: season.segments.length, paidBy: seat, cost: priceFor(run, seat, kind), ...(intensive ? { intensive } : {}), ...(scale !== 1 ? { scale } : {}) };
+ const upgrade: Upgrade = { cardId: profile.seasonId, kind, stop: season.segments.length, paidBy: seat, cost: priceFor(run, season, seat, kind), ...(intensive ? { intensive } : {}), ...(scale !== 1 ? { scale } : {}) };
  season.upgrades.push(upgrade);
  season.cash[seat] -= upgrade.cost;
  return { upgrade, injury: intensive ? takePush(run, season, seat, profile.seasonId, 'intensive') : null };
