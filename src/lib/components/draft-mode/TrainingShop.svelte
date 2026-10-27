@@ -1,20 +1,21 @@
 <script lang="ts">
- import type { Profile } from '../../game/types.ts';
+ import type { Position, Profile } from '../../game/types.ts';
  import type { LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
  import { gainScale, offersFor, priceFor, refusal, seasonRoster, trainedThisVisit } from '../../draft/shop.ts';
- import { canTrain, developed, statLine, train, TRAININGS, woba, type TrainingKind } from '../../draft/training.ts';
+ import { canTrain, developed, learnable, statLine, train, TRAININGS, woba, type TrainingKind } from '../../draft/training.ts';
  import { injuryAt, pushChance, segmentGames } from '../../draft/injuries.ts';
 
  /**
   * The stop's training shop: pick a training, see which of the club's cards it fits and what it
   * would do to each, and buy one per card from the bank. Fielding shows a 0-100 glove scale: 50 is
   * a median fielder at the position, 100 elite. Intensive training gains half as much again at a
-  * disclosed risk of injury for the coming games.
+  * disclosed risk of injury for the coming games. Cross-training lists each position a player can
+  * learn as its own row.
   */
  let { run, season, revision, profiles, working, onTrain }: {
   run: DraftRun; season: LeagueSeason; revision: number; profiles: ReadonlyMap<string, Profile>; working: boolean;
-  onTrain: (cardId: string, kind: TrainingKind, intensive: boolean) => Promise<string | null>;
+  onTrain: (cardId: string, kind: TrainingKind, intensive: boolean, position?: Position) => Promise<string | null>;
  } = $props();
  const human = $derived(run.seating.humanSeat);
  const stop = $derived.by(() => { void revision; return season.segments.length; });
@@ -23,31 +24,41 @@
  const cash = $derived.by(() => { void revision; return season.cash[human]; });
  let chosen = $state<TrainingKind>('hitting');
  let intensive = $state(false);
- // Recovery has no gain to scale, so it is never intensive.
- const hard = $derived(intensive && chosen !== 'recovery');
+ // Recovery and cross-training have no gain to scale, so they are never intensive.
+ const steady = (kind: TrainingKind) => kind === 'recovery' || kind === 'crossTraining';
+ const hard = $derived(intensive && !steady(chosen));
  let notice = $state('');
  let hurtNotice = $state('');
  const [first, last] = $derived(segmentGames(stop));
+ interface Row { key: string; id: string; position?: Position; name: string; label: string; before: string; after: string; gain: number; done: boolean; reason: string | null; risk: number }
  // The season mutates in place, so the list re-reads it when `revision` moves.
  const rows = $derived.by(() => {
   void revision;
   const kind = chosen;
   const scale = gainScale(run, season, human, kind, hard);
-  return seasonRoster(season, human).flatMap(id => {
+  return seasonRoster(season, human).flatMap((id): Row[] => {
    const printed = profiles.get(id);
    if (!printed) return [];
    const now = developed(printed, season.upgrades, stop);
    if (!canTrain(now, kind, season.upgrades)) return [];
+   const done = trainedThisVisit(season, id);
+   const risk = pushChance(season, id, 'intensive');
+   if (kind === 'crossTraining') {
+    return learnable(now).map(position => {
+     const after = train(now, kind, 1, position);
+     return { key: `${id}:${position}`, id, position, name: printed.displayName, label: `${printed.displayName} at ${position}`, before: statLine(now, kind), after: statLine(after, kind, position), gain: 0, done, reason: refusal(run, season, human, printed, kind, false, position), risk };
+    });
+   }
    const after = train(now, kind, scale);
    const gain = kind === 'hitting' || kind === 'hotBat' ? woba(after.battingRates!) - woba(now.battingRates!)
     : kind === 'pitching' || kind === 'hotArm' ? woba(now.pitchingRates!) - woba(after.pitchingRates!) : 0;
-   return [{ id, name: printed.displayName, before: statLine(now, kind), after: kind === 'recovery' ? 'quick recovery' : statLine(after, kind), gain, done: trainedThisVisit(season, id), reason: refusal(run, season, human, printed, kind, hard), risk: pushChance(season, id, 'intensive') }];
-  }).sort((a, b) => b.gain - a.gain || a.name.localeCompare(b.name));
+   return [{ key: id, id, name: printed.displayName, label: printed.displayName, before: statLine(now, kind), after: kind === 'recovery' ? 'quick recovery' : statLine(after, kind), gain, done, reason: refusal(run, season, human, printed, kind, hard), risk }];
+  }).sort((a, b) => b.gain - a.gain || a.name.localeCompare(b.name) || (a.position ?? '').localeCompare(b.position ?? ''));
  });
 
- async function buy(id: string, name: string) {
+ async function buy(id: string, name: string, position?: Position) {
   const wasIntensive = hard;
-  notice = (await onTrain(id, chosen, wasIntensive)) ?? '';
+  notice = (await onTrain(id, chosen, wasIntensive, position)) ?? '';
   const injury = wasIntensive && !notice ? injuryAt(season, id, stop) : undefined;
   hurtNotice = injury ? `${name} was hurt in intensive training: a ${injury.severity} injury${injury.severity === 'major' ? `, out for games ${first}–${last}` : `. He sits games ${first}–${last} unless you play him through it`}.` : '';
  }
@@ -66,18 +77,19 @@
   {/each}
  </div>
  <p class="detail">{TRAININGS[chosen].detail}. One training per player per stop.</p>
- {#if chosen !== 'recovery'}
+ {#if !steady(chosen)}
   <label class="intensive"><input type="checkbox" bind:checked={intensive} onchange={() => { notice = ''; }} /> Intensive: gains half as much again, with the risk shown of an injury for games {first}–{last}</label>
  {/if}
  {#if hurtNotice}<p class="hurt" role="status">{hurtNotice}</p>{/if}
- {#if chosen === 'fielding'}<p class="detail">Glove: 50 is a median fielder at the position, 100 elite.</p>{/if}
+ {#if chosen === 'fielding' || chosen === 'crossTraining'}<p class="detail">Glove: 50 is a median fielder at the position, 100 elite.</p>{/if}
+ {#if chosen === 'crossTraining'}<p class="detail">A learned position fields 15 below his best glove that leads there (30 moving up to short or center) and shows with a + on his card.</p>{/if}
  {#if notice}<p class="notice" role="status">{notice}</p>{/if}
  {#if rows.length}
   <ul aria-label={`${TRAININGS[chosen].name} for your players`}>
-   {#each rows as row (row.id)}
+   {#each rows as row (row.key)}
     <li>
-     <span class="who">{row.name}<small>{row.before} → <strong>{row.after}</strong>{#if hard} · {Math.round(row.risk * 100)}% injury risk{/if}</small></span>
-     <button type="button" class="buy" disabled={working || !!row.reason} title={row.reason ?? ''} aria-label={`Train ${row.name}: ${hard ? 'intensive ' : ''}${TRAININGS[chosen].name}`} onclick={() => void buy(row.id, row.name)}>
+     <span class="who">{row.label}<small>{row.before} → <strong>{row.after}</strong>{#if hard} · {Math.round(row.risk * 100)}% injury risk{/if}</small></span>
+     <button type="button" class="buy" disabled={working || !!row.reason} title={row.reason ?? ''} aria-label={`Train ${row.label}: ${hard ? 'intensive ' : ''}${TRAININGS[chosen].name}`} onclick={() => void buy(row.id, row.name, row.position)}>
       {row.done ? 'Trained' : `Buy ${price(chosen)}`}
      </button>
     </li>

@@ -259,7 +259,7 @@ describe('franchise packages', () => {
   // Gifts and other clubs' spending on the card do not count toward the bonus.
   season.upgrades.push({ cardId: sold, kind: 'fielding', stop: 1, paidBy: human, cost: 0, free: true }, { cardId: sold, kind: 'baserunning', stop: 1, paidBy: (human + 1) % 8, cost: 10 });
   expect(saleBonusOf(run, season, human, sold)).toBe(2 * priceFor(run, season, human, 'hitting'));
-  applyAction(run, { type: 'chapter', chapter: 1, order: run.seating.seats.map((_, seat) => seat).reverse(), lineup: structuredClone(run.lineup!) });
+  applyAction(run, { type: 'chapter', chapter: 1, order: run.seating.seats.map((_, seat) => seat).reverse(), lineup: structuredClone(run.lineup!), learned: [] });
   const partner = run.seating.seats.map((_, seat) => seat).find(seat => {
    if (seat === human) return false;
    const get = [...ownedBy(run, seat)].sort((a, b) => a.valueRuns - b.valueRuns)[0].seasonId;

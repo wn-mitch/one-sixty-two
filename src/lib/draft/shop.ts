@@ -1,12 +1,14 @@
 import { randomStream, shuffle } from '../game/random.ts';
-import { HITTER_SLOTS, STARTER_SLOTS, type Profile } from '../game/types.ts';
+import { HITTER_SLOTS, STARTER_SLOTS, type Position, type Profile } from '../game/types.ts';
 import { LEAGUE_SEGMENTS } from '../sim/league-types.ts';
 import { BASE_RISK, pushRefusal, pushRisk, takePush, type Injury } from './injuries.ts';
 import { seasonExchange, standings, type LeagueSeason } from './league.ts';
 import { isCommon } from './cleanup.ts';
+import { learnPosition } from './ledger.ts';
 import { franchisePackage, trainingGainFor, trainingPriceFor } from './packages.ts';
 import type { DraftRun } from './run.ts';
-import { BASIC_KINDS, canTrain, developed, INTENSIVE_SCALE, SPECIAL_KINDS, train, TRAININGS, woba, type SpecialKind, type TrainingKind, type Upgrade } from './training.ts';
+import type { LearnedPosition } from './types.ts';
+import { BASIC_KINDS, canTrain, developed, INTENSIVE_SCALE, learnedGlove, SPECIAL_KINDS, train, TRAININGS, woba, type SpecialKind, type TrainingKind, type Upgrade } from './training.ts';
 
 /**
  * The training shop at every season stop: the four basics and two specials drawn for that stop,
@@ -46,30 +48,40 @@ export const seasonRoster = (season: LeagueSeason, seat: number): string[] => [.
 /** Whether `cardId` has already been trained at this visit. */
 export const trainedThisVisit = (season: LeagueSeason, cardId: string): boolean => season.upgrades.some(upgrade => upgrade.cardId === cardId && upgrade.stop === season.segments.length && !upgrade.free);
 
-/** Why `seat` cannot buy `kind` for the card now, intensively or not, or null when it can. `profile` is the card's printed profile. */
-export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind, intensive = false): string | null {
+/**
+ * Why `seat` cannot buy `kind` for the card now, intensively or not, or null when it can. `profile`
+ * is the card's printed profile; cross-training names the `position` to learn.
+ */
+export function refusal(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind, intensive = false, position?: Position): string | null {
  const stop = season.segments.length;
  if (stop >= LEAGUE_SEGMENTS) return 'The season is over';
  if (run.phase !== 'season') return 'Finish the chapter market first';
  if (!offersFor(run, seat, stop).includes(kind)) return `${TRAININGS[kind].name} is not on offer at this stop`;
  if (!seasonRoster(season, seat).includes(profile.seasonId)) return `${profile.displayName} is not on this roster`;
  if (trainedThisVisit(season, profile.seasonId)) return `${profile.displayName} has already trained at this stop`;
- if (!canTrain(developed(profile, season.upgrades, stop), kind, season.upgrades)) return `${TRAININGS[kind].name} does not apply to ${profile.displayName}`;
+ const now = developed(profile, season.upgrades, stop);
+ if (!canTrain(now, kind, season.upgrades)) return `${TRAININGS[kind].name} does not apply to ${profile.displayName}`;
+ if (kind === 'crossTraining' && (!position || learnedGlove(now, position) === null)) return `${profile.displayName} cannot learn ${position ?? 'a position this way'}`;
  if (season.cash[seat] < priceFor(run, season, seat, kind)) return 'Not enough cash';
- if (intensive && kind === 'recovery') return 'Recovery cannot be trained intensively';
+ if (intensive && (kind === 'recovery' || kind === 'crossTraining')) return `${TRAININGS[kind].name} cannot be trained intensively`;
  return intensive ? pushRefusal(run, season, seat, profile.seasonId, 'intensive') : null;
 }
 
 /**
  * Buys `kind` for the card, paid by `seat`; intensive training gains more and rolls its injury at
- * once. Throws `ShopError` with the reason when it cannot.
+ * once. Cross-training teaches `position` and makes the card eligible there at once, wherever it
+ * goes for the rest of the run. Throws `ShopError` with the reason when it cannot.
  */
-export function buyTraining(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind, intensive = false): { upgrade: Upgrade; injury: Injury | null } {
- const reason = refusal(run, season, seat, profile, kind, intensive);
+export function buyTraining(run: DraftRun, season: LeagueSeason, seat: number, profile: Profile, kind: TrainingKind, intensive = false, position?: Position): { upgrade: Upgrade; injury: Injury | null } {
+ const reason = refusal(run, season, seat, profile, kind, intensive, position);
  if (reason) throw new ShopError(reason);
- const scale = gainScale(run, season, seat, kind, intensive);
- const upgrade: Upgrade = { cardId: profile.seasonId, kind, stop: season.segments.length, paidBy: seat, cost: priceFor(run, season, seat, kind), ...(intensive ? { intensive } : {}), ...(scale !== 1 ? { scale } : {}) };
+ const scale = kind === 'crossTraining' ? 1 : gainScale(run, season, seat, kind, intensive);
+ const upgrade: Upgrade = {
+  cardId: profile.seasonId, kind, stop: season.segments.length, paidBy: seat, cost: priceFor(run, season, seat, kind),
+  ...(intensive ? { intensive } : {}), ...(scale !== 1 ? { scale } : {}), ...(kind === 'crossTraining' ? { position } : {})
+ };
  season.upgrades.push(upgrade);
+ if (upgrade.position) learnPosition(run.pool.ledger, upgrade.cardId, upgrade.position);
  season.cash[seat] -= upgrade.cost;
  return { upgrade, injury: intensive ? takePush(run, season, seat, profile.seasonId, 'intensive') : null };
 }
@@ -124,3 +136,7 @@ export function aiShop(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMa
   }
  }
 }
+
+/** Every position cross-trained this season, in purchase order, as the chapter action carries them. */
+export const learnedPositions = (season: LeagueSeason): LearnedPosition[] =>
+ season.upgrades.flatMap(upgrade => upgrade.kind === 'crossTraining' && upgrade.position ? [{ cardId: upgrade.cardId, position: upgrade.position }] : []);

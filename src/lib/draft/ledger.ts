@@ -1,4 +1,4 @@
-import { compareId } from '../game/types.ts';
+import { compareId, type Slot } from '../game/types.ts';
 import type { CardInstance, DraftCard, Ledger, LedgerOp, LegalityFailure, Owner } from './types.ts';
 
 export const UNOWNED: Owner = Object.freeze({ kind: 'unowned' });
@@ -85,4 +85,12 @@ export function auditView(ledger: Ledger, view: Iterable<{ cardId: string; owner
   if (!actual || !sameOwner(actual, owner)) failures.push({ code: 'bucket-mismatch', cardId, expected: owner, actual });
  }
  return failures;
+}
+
+/** Makes `position` playable for the card for the rest of the run; a position it already plays changes nothing. */
+export function learnPosition(ledger: Ledger, cardId: string, position: Slot): void {
+ const card = ledger.cards.get(cardId);
+ if (!card) throw new Error(`Unknown card ${cardId}`);
+ if (card.eligibleSlots.includes(position)) return;
+ ledger.cards.set(cardId, { ...card, eligibleSlots: [...card.eligibleSlots, position], learned: [...card.learned ?? [], position] });
 }

@@ -1,7 +1,7 @@
 import { chooseAiPick, judgeFor, personalityFor, scorePile, type Judgment, type Personality, type PickScore, type SeatView } from './ai.ts';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY, type Difficulty } from './scouting.ts';
 import { seatTable, type TableSeating } from './franchises.ts';
-import { heldBy, transfer, UNOWNED } from './ledger.ts';
+import { heldBy, learnPosition, transfer, UNOWNED } from './ledger.ts';
 import { STACK_ROLES, type StackRole } from './cleanup.ts';
 import { checkSubmission } from './legality.ts';
 import { checkLineup, LineupError, type ClubLineup } from './league.ts';
@@ -12,8 +12,8 @@ import { CHAPTER_MATCHDAYS, LEAGUE_CHAPTERS } from '../sim/league-types.ts';
 import { buildRunPool, pileHeldBy, type RunPool } from './pool.ts';
 import { budgetInChapter, franchiseBudget, canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, DRAFT_RULES, picksPerSeat, rosterSize, type DraftBullpenSlot } from './rules.ts';
 import { randomStream } from '../game/random.ts';
-import { HITTER_SLOTS, STARTER_SLOTS, validateReliefRoles, type ReliefAssignment } from '../game/types.ts';
-import type { DraftCard, DraftSlot, LegalityReport, PayrollBudget, Submission } from './types.ts';
+import { HITTER_SLOTS, POSITIONS, STARTER_SLOTS, validateReliefRoles, type ReliefAssignment } from '../game/types.ts';
+import type { DraftCard, DraftSlot, LearnedPosition, LegalityReport, PayrollBudget, Submission } from './types.ts';
 import { DRAFT_RULES_VERSION, RUN_VERSION, SALARY_VERSION } from './versions.ts';
 
 /** Everything a run is built from besides the player's actions. A seed alone cannot rebuild a run. */
@@ -57,8 +57,12 @@ export type RunAction =
  | { type: 'autofix' }
  | { type: 'order'; orders: WindowOrders }
  | { type: 'submit'; lineup: ClubLineup }
- /** Opens chapter `chapter`'s market with the player's season lineup and the seats in reverse standings order. */
- | { type: 'chapter'; chapter: number; order: number[]; lineup: ClubLineup }
+ /**
+  * Opens chapter `chapter`'s market with the player's season lineup and the seats in reverse
+  * standings order. `learned` lists every position cross-trained so far this season, so a replay
+  * knows where each card can play.
+  */
+ | { type: 'chapter'; chapter: number; order: number[]; lineup: ClubLineup; learned: LearnedPosition[] }
  | { type: 'sign'; cardId: string };
 
 /**
@@ -208,7 +212,7 @@ export function seatView(run: DraftRun, seat: number): SeatView {
 export function applyAction(run: DraftRun, action: RunAction): void {
  if (action.type === 'pick') applyPick(run, action.cardId, action.slot);
  else if (action.type === 'place') applyPlace(run, action.cardId, action.slot);
- else if (action.type === 'chapter') openChapter(run, action.chapter, action.order, action.lineup);
+ else if (action.type === 'chapter') openChapter(run, action.chapter, action.order, action.lineup, action.learned);
  else if (run.phase !== 'window') throw new RunActionError(run.phase === 'drafting' ? 'The draft is still on' : 'The window is closed');
  else applyWindowAction(run, action);
  run.actions.push(action);
@@ -405,11 +409,13 @@ export function windowReport(run: DraftRun, submission: Submission): LegalityRep
  * player places, fills and submits as in the opening window. `lineup` is the player's season
  * lineup, which seats the field and bench.
  */
-function openChapter(run: DraftRun, chapter: number, order: readonly number[], lineup: ClubLineup): void {
+function openChapter(run: DraftRun, chapter: number, order: readonly number[], lineup: ClubLineup, learned: readonly LearnedPosition[]): void {
  if (run.phase !== 'season') throw new RunActionError('A chapter market opens only between chapters');
  if (chapter !== run.chapter + 1 || chapter >= LEAGUE_CHAPTERS) throw new RunActionError(`Chapter ${run.chapter + 1} opens next`);
  const seats = run.seating.seats.map((_, seat) => seat);
  if (!Array.isArray(order) || order.length !== seats.length || [...order].sort((a, b) => a - b).join() !== seats.join()) throw new RunActionError('The standings order must list every club once');
+ if (!Array.isArray(learned) || learned.some(item => !run.pool.ledger.cards.has(item?.cardId) || !(POSITIONS as readonly unknown[]).includes(item.position))) throw new RunActionError('Learned positions must name real cards and positions');
+ for (const item of learned) learnPosition(run.pool.ledger, item.cardId, item.position);
  const human = run.seating.humanSeat;
  try { checkLineup(run.submissions[human]!, id => card(run, id), run.pool.rules.activeSlots, lineup); }
  catch (error) { if (error instanceof LineupError) throw new RunActionError(error.message); throw error; }

@@ -1,5 +1,5 @@
 import type { Finish } from '../cards/finish.ts';
-import type { FieldSlot, Slot } from '../game/types.ts';
+import type { FieldSlot, Position, Slot } from '../game/types.ts';
 
 /** A Draft Mode active roster slot: every Classic slot plus RP4 and RP5. */
 export type DraftSlot = FieldSlot;
@@ -14,12 +14,17 @@ export interface DraftCard {
  readonly franchiseId: string;
  readonly year: number;
  readonly eligibleSlots: readonly Slot[];
+ /** Positions in `eligibleSlots` the card learned by cross-training this run, in the order learned. */
+ readonly learned?: readonly Slot[];
  readonly finish: Finish;
  /** Season runs above the slot's replacement level at the card's best eligible slot. */
  readonly valueRuns: number;
  readonly pricedSlot: Slot;
  readonly salary: number;
 }
+
+/** A position a card learned by cross-training. */
+export interface LearnedPosition { cardId: string; position: Position }
 
 /** Where a run-owned card currently sits. Every card has exactly one owner at a time. */
 export type Owner =
@@ -47,7 +52,8 @@ export interface CardInstance {
 export interface LedgerEvent { seq: number; op: LedgerOp; cardId: string; from: Owner; to: Owner }
 
 export interface Ledger {
- readonly cards: ReadonlyMap<string, DraftCard>;
+ /** Every card in the run's universe; a card is replaced, never edited, when it learns a position. */
+ readonly cards: Map<string, DraftCard>;
  readonly instances: Map<string, CardInstance>;
  readonly events: LedgerEvent[];
 }

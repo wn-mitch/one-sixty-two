@@ -3,10 +3,13 @@ import type { Profile } from '../game/types.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { memoryDb } from '../storage/test-db.ts';
 import { RIVALS } from './franchises.ts';
-import { segmentInput, startLeague, type LeagueSeason } from './league.ts';
+import { canSwap, segmentInput, setLineup, startLeague, swapPlaces, type LeagueSeason } from './league.ts';
 import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
 import { getRun, resumeRun, saveRun } from './saves.ts';
-import { aiShop, buyTraining, offersAt, refusal, ShopError, specialsAt } from './shop.ts';
+import { aiShop, buyTraining, learnedPositions, offersAt, refusal, ShopError, specialsAt } from './shop.ts';
+import { validateLeagueSegment } from '../sim/validation.ts';
+import { canFill } from './rules.ts';
+import { rolesLabel } from '../components/draft-mode/format.ts';
 import { playDraft, submitAction, testUniverse } from './test-fixtures.ts';
 import { canTrain, train, TRAININGS } from './training.ts';
 import type { DraftSlot } from './types.ts';
@@ -15,8 +18,8 @@ const FRANCHISES = Object.keys(RIVALS);
 const DATA: RunData = { cards: testUniverse(120), franchiseIds: FRANCHISES, parkFit: () => 0 };
 const setup = newRunSetup(41, 'CHC', 'test-data');
 
-function seasonStart(): { run: DraftRun; season: LeagueSeason; profiles: Map<string, Profile> } {
- const run = startRun(setup, DATA);
+function seasonStart(runSetup = setup): { run: DraftRun; season: LeagueSeason; profiles: Map<string, Profile> } {
+ const run = startRun(runSetup, DATA);
  playDraft(run);
  applyAction(run, { type: 'waivers' });
  applyAction(run, { type: 'autofix' });
@@ -102,5 +105,45 @@ describe('training shop', () => {
   if (!resumed.ok) throw new Error(resumed.reason);
   expect(resumed.season!.upgrades).toEqual(season.upgrades);
   expect(resumed.season!.cash).toEqual(season.cash);
+ });
+ it('teaches a position the lineup, the engine, a chapter replay and a resume all honor', async () => {
+  const seed = Array.from({ length: 500 }, (_, index) => index).find(index => specialsAt(index, 0).includes('crossTraining'))!;
+  const { run, season, profiles } = seasonStart(newRunSetup(seed, 'CHC', 'test-data'));
+  const human = run.seating.humanSeat;
+  const card = (id: string) => run.pool.ledger.cards.get(id)!;
+  const lineup = season.lineups[human];
+  // Two hitters at easy spots that cannot play each other's: each learns the other's.
+  const easy = ['1B', 'LF', 'RF'] as const;
+  const [a, b] = easy.flatMap(x => easy.map(y => [x, y] as const)).find(([x, y]) => x !== y && !canFill(card(lineup.active[x]), y) && !canFill(card(lineup.active[y]), x))!;
+  expect(canSwap(run, lineup, a, b)).toBe(false);
+  season.cash[human] = 50;
+  expect(refusal(run, season, human, profiles.get(lineup.active[a])!, 'crossTraining', false, 'C')).toMatch(/cannot learn C/);
+  expect(refusal(run, season, human, profiles.get(lineup.active[a])!, 'crossTraining', true, b)).toMatch(/cannot be trained intensively/);
+  buyTraining(run, season, human, profiles.get(lineup.active[a])!, 'crossTraining', false, b);
+  buyTraining(run, season, human, profiles.get(lineup.active[b])!, 'crossTraining', false, a);
+  expect(season.upgrades.map(upgrade => upgrade.position)).toEqual([b, a]);
+  expect(rolesLabel(card(lineup.active[a]))).toContain(`${b}+`);
+  expect(canSwap(run, lineup, a, b)).toBe(true);
+  setLineup(run, season, swapPlaces(lineup, a, b));
+  // The engine fields each at his learned spot with a glove there.
+  const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
+  expect(() => validateLeagueSegment(input)).not.toThrow();
+  const fielded = input.clubs[human].roster.find(pick => pick.slot === b)!.profile;
+  expect(fielded.seasonId).toBe(lineup.active[a]);
+  expect(fielded.eligibleSlots).toContain(b);
+  expect(fielded.defense.positions[b]).toBeDefined();
+  // A resume mid-chapter learns the positions back from the season.
+  const { db } = await memoryDb();
+  await saveRun(db, 'run', run, season);
+  const resumed = resumeRun((await getRun(db, 'run'))!, DATA, 'test-data');
+  if (!resumed.ok) throw new Error(resumed.reason);
+  expect(canFill(resumed.run.pool.ledger.cards.get(lineup.active[a])!, b)).toBe(true);
+  // The chapter action carries them, so the market replays the swapped lineup.
+  applyAction(run, { type: 'chapter', chapter: 1, order: run.seating.seats.map((_, seat) => seat).reverse(), lineup: structuredClone(season.lineups[human]), learned: learnedPositions(season) });
+  await saveRun(db, 'run', run, season);
+  const saved = (await getRun(db, 'run'))!;
+  expect(resumeRun(saved, DATA, 'test-data').ok).toBe(true);
+  const forgetful = { ...saved, actions: saved.actions.map(action => action.type === 'chapter' ? { ...action, learned: [] } : action) };
+  expect(resumeRun(forgetful, DATA, 'test-data').ok).toBe(false);
  });
 });

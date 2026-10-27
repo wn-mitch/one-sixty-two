@@ -1,5 +1,5 @@
 import { loadManifest, loadSimulation } from '../game/data.ts';
-import type { Manifest, Profile, SimulationData } from '../game/types.ts';
+import type { Manifest, Position, Profile, SimulationData } from '../game/types.ts';
 import { LEAGUE_SEGMENTS, SEGMENT_MATCHDAYS, type Fixture, type LeagueSegmentResult, type LeagueWorkerResponse } from '../sim/league-types.ts';
 import { appSettings, PLAYBACK_DURATION_MS } from '../game/settings.svelte.ts';
 import { deviceDb } from '../storage/db.ts';
@@ -12,7 +12,7 @@ import { closeChapter, fieldedIds, LEAGUE_VERSION, LineupError, recordSegment, s
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
 import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
 import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
-import { aiShop, buyTraining, ShopError } from './shop.ts';
+import { aiShop, buyTraining, learnedPositions, ShopError } from './shop.ts';
 import type { TrainingKind } from './training.ts';
 import type { Difficulty } from './scouting.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
@@ -252,14 +252,14 @@ export class DraftModeSession {
   return null;
  }
 
- /** Buys a training, intensive or not, for one of the player's cards at this stop; returns the refusal message, or null. */
- async train(cardId: string, kind: TrainingKind, intensive = false): Promise<string | null> {
+ /** Buys a training, intensive or not, for one of the player's cards at this stop (cross-training teaches `position`); returns the refusal message, or null. */
+ async train(cardId: string, kind: TrainingKind, intensive = false, position?: Position): Promise<string | null> {
   const run = this.run;
   const season = this.season;
   if (!run || !season || !this.profiles || this.playing) return 'The season is not at a stop';
   const [profile] = (await this.profiles.load([cardId])).values();
   if (!profile) return 'That card could not be loaded';
-  try { buyTraining(run, season, run.seating.humanSeat, profile, kind, intensive); }
+  try { buyTraining(run, season, run.seating.humanSeat, profile, kind, intensive, position); }
   catch (error) { if (error instanceof ShopError) return error.message; throw error; }
   await this.#save();
   this.revision++;
@@ -309,7 +309,7 @@ export class DraftModeSession {
    if (stop.chapterStop && !stop.over) {
     // Payday is in; the chapter market opens next, the worst club first.
     const order = standings(season).map(row => row.seat).reverse();
-    applyAction(run, { type: 'chapter', chapter: stop.chapter, order, lineup: structuredClone(season.lineups[run.seating.humanSeat]) });
+    applyAction(run, { type: 'chapter', chapter: stop.chapter, order, lineup: structuredClone(season.lineups[run.seating.humanSeat]), learned: learnedPositions(season) });
    }
    const saved = await this.#save();
    if (saved && season.segments.length >= LEAGUE_SEGMENTS) void refreshShop();

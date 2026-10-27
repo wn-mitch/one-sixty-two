@@ -240,7 +240,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
    {#snippet intro()}
     <ChapterStatus run={current.run} season={current.season} revision={session.revision} {profiles} {clubName} />
     <InjuryReport run={current.run} season={current.season} revision={session.revision} {profiles} {working} onPush={(id, kind, on) => void step(session.push(id, kind, on))} />
-    <TrainingShop run={current.run} season={current.season} revision={session.revision} {profiles} {working} onTrain={(id, kind, intensive) => session.train(id, kind, intensive)} />
+    <TrainingShop run={current.run} season={current.season} revision={session.revision} {profiles} {working} onTrain={(id, kind, intensive, position) => session.train(id, kind, intensive, position)} />
    {/snippet}
    {#snippet rowControl(seasonId: string)}
     {@const count = lastingUpgrades(current.season.upgrades, seasonId)}

@@ -11,6 +11,9 @@ import { money } from '../components/draft-mode/format.ts';
 /** `onMove`'s key for the bench in the opening window. */
 export const BENCH = 'bench';
 
+/** A slot as a card's position menu shows it: a position it learned by cross-training with a +. */
+const slotFor = (run: DraftRun, seasonId: string, slot: DraftSlot): string => run.pool.ledger.cards.get(seasonId)?.learned?.some(learned => learned === slot) ? `${slot}+` : slot;
+
 /**
  * The opening window's lineup: the field as placed, the bench beneath it, and the saved orders.
  * It is complete once the roster is legal, full, and every card has loaded.
@@ -38,11 +41,11 @@ export function windowLineupView(run: DraftRun, profiles: ReadonlyMap<string, Pr
    const current = from ?? BENCH;
    const options: LineupMove[] = movesFor(run, seasonId).map(({ slot, swapWith }) => {
     if (slot === null) return { key: BENCH, label: 'Bench', available: true, announce: `${name(seasonId)} to the bench.` };
-    if (!swapWith) return { key: slot, label: `${slot} · open`, available: true, announce: `${name(seasonId)} to ${slot}.` };
+    if (!swapWith) return { key: slot, label: `${slotFor(run, seasonId, slot)} · open`, available: true, announce: `${name(seasonId)} to ${slot}.` };
     const back = from !== null && canFill(run.pool.ledger.cards.get(swapWith)!, from) ? from : 'the bench';
-    return { key: slot, label: `${slot} · ${name(swapWith)} to ${back === 'the bench' ? 'bench' : back}`, available: true, announce: `${name(seasonId)} to ${slot}; ${name(swapWith)} to ${back}.` };
+    return { key: slot, label: `${slotFor(run, seasonId, slot)} · ${name(swapWith)} to ${back === 'the bench' ? 'bench' : back}`, available: true, announce: `${name(seasonId)} to ${slot}; ${name(swapWith)} to ${back}.` };
    });
-   return { current, options: [{ key: current, label: from ?? 'Bench', available: false, announce: '' }, ...options] };
+   return { current, options: [{ key: current, label: from === null ? 'Bench' : slotFor(run, seasonId, from), available: false, announce: '' }, ...options] };
   }
  };
 }
@@ -75,10 +78,10 @@ export function seasonLineupView(run: DraftRun, season: LeagueSeason, profiles: 
    if (from === undefined) return null;
    // A reserve trades only with an active card; two reserves trading would change nothing.
    const options = all.filter(to => (typeof from !== 'number' || typeof to !== 'number') && canSwap(run, lineup, from, to)).map((to): LineupMove => ({
-    key: placeKey(to), label: `${placeLabel(to)} · swap with ${name(cardAt(to))}`, available: true,
+    key: placeKey(to), label: `${typeof to === 'number' ? placeLabel(to) : slotFor(run, seasonId, to)} · swap with ${name(cardAt(to))}`, available: true,
     announce: `${name(seasonId)} to ${placeLabel(to)}, ${name(cardAt(to))} to ${placeLabel(from)}.`
    }));
-   return { current: placeKey(from), options: [{ key: placeKey(from), label: placeLabel(from), available: false, announce: '' }, ...options] };
+   return { current: placeKey(from), options: [{ key: placeKey(from), label: typeof from === 'number' ? placeLabel(from) : slotFor(run, seasonId, from), available: false, announce: '' }, ...options] };
   }
  };
 }

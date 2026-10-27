@@ -6,10 +6,10 @@ import type { DraftCard } from '../../draft/types.ts';
 export const money = (salary: number): string => `$${(salary / 10).toFixed(1)}M`;
 
 
-/** The roles a card can fill, as the table names them: starters as SP, any closer-eligible arm as RP. */
+/** The roles a card can fill, as the table names them: starters as SP, any closer-eligible arm as RP, a cross-trained position with a +. */
 export function rolesLabel(card: DraftCard): string {
  const slots = card.eligibleSlots;
- const roles: string[] = slots.filter(slot => !slot.startsWith('SP') && !slot.startsWith('RP') && slot !== 'CL');
+ const roles: string[] = slots.filter(slot => !slot.startsWith('SP') && !slot.startsWith('RP') && slot !== 'CL').map(slot => card.learned?.includes(slot) ? `${slot}+` : slot);
  if (slots.some(slot => slot.startsWith('SP'))) roles.push('SP');
  if (slots.includes('CL')) roles.push('RP');
  return roles.join(' · ');

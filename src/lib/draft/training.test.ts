@@ -3,7 +3,7 @@ import type { Profile } from '../game/types.ts';
 import { contactTargets } from '../sim/contact-profile.ts';
 import { leagueProfile } from '../sim/test-fixtures.ts';
 import { validateProfile } from '../sim/validation.ts';
-import { BASIC_GAIN, canTrain, CEILINGS, developed, HOT_GAIN, train, woba, type TrainingKind, type Upgrade } from './training.ts';
+import { BASIC_GAIN, canTrain, CEILINGS, CROSS_PENALTY, DH_GLOVE, developed, gloveGrade, HOT_GAIN, learnable, learnedGlove, train, woba, type TrainingKind, type Upgrade } from './training.ts';
 
 const hitter = () => leagueProfile('hitter', 'SS', ['SS', '2B']);
 const starter = () => leagueProfile('starter', 'SP1', ['SP1', 'SP2', 'SP3']);
@@ -87,5 +87,33 @@ describe('training effects', () => {
   expect(developed(card, upgrades, 4)).toEqual(train(trained, 'hotBat'));
   expect(developed(card, upgrades, 5)).toEqual(trained);
   expect(woba(train(card, 'hotBat').battingRates!) - woba(card.battingRates!)).toBeCloseTo(HOT_GAIN * (CEILINGS.battingWoba - woba(card.battingRates!)), 6);
+ });
+ it('teaches a position at the best glove that leads there less the penalty, twice that moving up, and never catcher', () => {
+  const card = train(hitter(), 'fielding');
+  const best = Math.max(gloveGrade(card, 'SS'), gloveGrade(card, '2B'));
+  // A shortstop and second baseman learns first, third and the corners, but not center or catcher.
+  expect(learnable(card)).toEqual(['1B', '3B', 'LF', 'RF']);
+  expect(learnedGlove(card, 'C')).toBeNull();
+  expect(learnedGlove(card, 'CF')).toBeNull();
+  expect(learnedGlove(card, '3B')).toBeCloseTo(best - CROSS_PENALTY, 9);
+  const third = train(card, 'crossTraining', 1, '3B');
+  expect(third.eligibleSlots).toEqual([...card.eligibleSlots, '3B']);
+  expect(gloveGrade(third, '3B')).toBeCloseTo(best - CROSS_PENALTY, 6);
+  expect(() => validateProfile(third)).not.toThrow();
+  // A learned position trains like any other, and learning one he plays changes nothing.
+  expect(gloveGrade(train(third, 'fielding'), '3B')).toBeGreaterThan(gloveGrade(third, '3B'));
+  expect(train(third, 'crossTraining', 1, '3B')).toBe(third);
+  // Moving up the spectrum costs twice as much.
+  const second = leagueProfile('second', '2B', ['2B', 'DH']);
+  expect(learnedGlove(second, 'SS')).toBeCloseTo(Math.max(0, gloveGrade(second, '2B') - 2 * CROSS_PENALTY), 9);
+  const corner = leagueProfile('corner', 'LF', ['LF']);
+  expect(learnedGlove(corner, 'CF')).toBeCloseTo(Math.max(0, gloveGrade(corner, 'LF') - 2 * CROSS_PENALTY), 9);
+  // A designated hitter learns only the easy spots, from a below-average glove.
+  const dh = leagueProfile('dh', 'DH', ['DH']);
+  expect(learnable(dh)).toEqual(['1B', 'LF', 'RF']);
+  expect(gloveGrade(train(dh, 'crossTraining', 1, 'LF'), 'LF')).toBeCloseTo(DH_GLOVE - CROSS_PENALTY, 6);
+  expect(canTrain(dh, 'crossTraining')).toBe(true);
+  expect(canTrain(starter(), 'crossTraining')).toBe(false);
+  expect(canTrain(reliever(), 'crossTraining')).toBe(false);
  });
 });

@@ -28,7 +28,7 @@ function seasonRun(before: (run: DraftRun) => void = () => {}): DraftRun {
  return run;
 }
 const order = (run: DraftRun) => run.seating.seats.map((_, seat) => seat).reverse();
-const openChapter = (run: DraftRun, chapter = run.chapter + 1) => applyAction(run, { type: 'chapter', chapter, order: order(run), lineup: structuredClone(run.lineup!) });
+const openChapter = (run: DraftRun, chapter = run.chapter + 1) => applyAction(run, { type: 'chapter', chapter, order: order(run), lineup: structuredClone(run.lineup!), learned: [] });
 function closeAndSubmit(run: DraftRun) {
  applyAction(run, { type: 'waivers' });
  applyAction(run, { type: 'autofix' });

@@ -2,7 +2,9 @@ import { json, parseJson, type Db } from '../storage/sql.ts';
 import { completionReward } from '../cosmetics/ledger.ts';
 import { LEAGUE_CHAPTERS, LEAGUE_SEGMENTS } from '../sim/league-types.ts';
 import { STACK_ROLES } from './cleanup.ts';
+import { learnPosition } from './ledger.ts';
 import { DRAFT_SLOTS } from './rules.ts';
+import { learnedPositions } from './shop.ts';
 import { RUN_VERSION } from './versions.ts';
 import { LEAGUE_VERSION, LineupError, validateLineup, type LeagueSeason } from './league.ts';
 import { replayRun, RunActionError, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunPhase, type RunSetup } from './run.ts';
@@ -55,7 +57,8 @@ const isAction = (value: unknown): value is RunAction => {
   case 'autofix': return true;
   case 'order': return isOrders(action.orders);
   case 'submit': return isLineup(action.lineup);
-  case 'chapter': return Number.isInteger(action.chapter) && Array.isArray(action.order) && action.order.every(Number.isInteger) && isLineup(action.lineup);
+  case 'chapter': return Number.isInteger(action.chapter) && Array.isArray(action.order) && action.order.every(Number.isInteger) && isLineup(action.lineup)
+   && Array.isArray(action.learned) && action.learned.every(item => typeof item?.cardId === 'string' && typeof item.position === 'string');
   case 'sign': return typeof action.cardId === 'string';
   default: return false;
  }
@@ -156,6 +159,11 @@ export function resumeRun(saved: SavedRun, data: RunData, dataVersion: string): 
    // A season saved mid chapter market holds the lineups from before the market opened.
    const atMarket = run.phase === 'window' && run.chapter > 0;
    if ((run.phase !== 'season' && !atMarket) || saved.season.lineups.length !== run.seating.seats.length) throw new LineupError('Season does not match the run');
+   // Positions learned since the last chapter market opened.
+   for (const item of learnedPositions(saved.season)) {
+    if (!run.pool.ledger.cards.has(item.cardId)) throw new LineupError('Season does not match the run');
+    learnPosition(run.pool.ledger, item.cardId, item.position);
+   }
    if (!atMarket) saved.season.lineups.forEach((lineup, seat) => validateLineup(run, seat, lineup));
   }
   return { ok: true, run, season: saved.season };

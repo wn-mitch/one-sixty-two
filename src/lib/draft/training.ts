@@ -1,5 +1,6 @@
-import { HITTER_SLOTS, type DefensivePosition, type DefensiveSkillName, type Position, type Profile, type Rates } from '../game/types.ts';
+import { HITTER_SLOTS, POSITIONS, type DefensivePosition, type DefensiveSkillName, type Position, type Profile, type Rates } from '../game/types.ts';
 import { contactTargets } from '../sim/contact-profile.ts';
+import { neutralDefensivePosition } from '../sim/defense.ts';
 
 /**
  * Draft Mode development: what each training does to a card's profile. Every training moves one
@@ -13,7 +14,7 @@ import { contactTargets } from '../sim/contact-profile.ts';
 export const TRAINING_VERSION = 'training-v1' as const;
 
 export const BASIC_KINDS = ['hitting', 'pitching', 'fielding', 'baserunning'] as const;
-export const SPECIAL_KINDS = ['power', 'eye', 'contact', 'strikeout', 'control', 'keepInPark', 'stamina', 'recovery', 'hotBat', 'hotArm'] as const;
+export const SPECIAL_KINDS = ['power', 'eye', 'contact', 'strikeout', 'control', 'keepInPark', 'stamina', 'recovery', 'crossTraining', 'hotBat', 'hotArm'] as const;
 export type BasicKind = typeof BASIC_KINDS[number];
 export type SpecialKind = typeof SPECIAL_KINDS[number];
 export type TrainingKind = BasicKind | SpecialKind;
@@ -23,8 +24,9 @@ export type TrainingKind = BasicKind | SpecialKind;
  * bought. `scale` multiplies its gain: `INTENSIVE_SCALE` for intensive training, at a risk of
  * injury, times the buyer's franchise perk, both fixed at purchase. A `free` upgrade is a franchise
  * package's gift at a payday, not a purchase, and leaves the card free to train at that stop.
+ * Cross-training names the `position` it teaches.
  */
-export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number; intensive?: boolean; scale?: number; free?: true }
+export interface Upgrade { cardId: string; kind: TrainingKind; stop: number; paidBy: number; cost: number; intensive?: boolean; scale?: number; free?: true; position?: Position }
 
 export interface TrainingInfo { name: string; detail: string; price: number; temporary: boolean }
 
@@ -48,6 +50,7 @@ export const TRAININGS: Readonly<Record<TrainingKind, TrainingInfo>> = {
  keepInPark: { name: 'Keep it in the park', detail: 'Turns homers allowed into outs', price: 14, temporary: false },
  stamina: { name: 'Stamina', detail: 'A starter goes deeper into games', price: 12, temporary: false },
  recovery: { name: 'Recovery', detail: 'A reliever rests one game less after long outings and may pitch a third straight day', price: 12, temporary: false },
+ crossTraining: { name: 'Cross-training', detail: 'A hitter learns a new position, fielding it below his glove at the one he plays best', price: 12, temporary: false },
  hotBat: { name: 'Hot bat', detail: 'A big hitting jump for the next nine games only', price: 8, temporary: true },
  hotArm: { name: 'Hot arm', detail: 'A big pitching jump for the next nine games only', price: 8, temporary: true }
 };
@@ -100,6 +103,50 @@ export function gloveGrade(profile: Profile, position: Position): number {
  return ceilings.reduce((total, [skill, ceiling]) => total + Math.min(100, Math.max(0, 50 + 50 * (skills[skill] - medians[skill]!) / (ceiling - medians[skill]!))), 0) / ceilings.length;
 }
 
+/**
+ * Cross-training: where each learnable position is learned from. Anyone can learn first base or a
+ * corner outfield spot; second and third base come from the other middle-infield spots; moving up
+ * the defensive spectrum (second to short, a corner to center) costs twice the penalty. Nobody
+ * learns catcher.
+ */
+export const CROSS_TRAINING: Readonly<Partial<Record<Position, { from: readonly Position[] | 'any'; upward?: true }>>> = {
+ '1B': { from: 'any' }, LF: { from: 'any' }, RF: { from: 'any' },
+ '2B': { from: ['SS', '3B'] }, '3B': { from: ['SS', '2B'] },
+ SS: { from: ['2B'], upward: true }, CF: { from: ['LF', 'RF'], upward: true }
+};
+/** Glove points a learned position plays below the best glove it is learned from; twice this moving up. */
+export const CROSS_PENALTY = 15;
+/** The glove a hitter with no position learns from. */
+export const DH_GLOVE = 35;
+
+const fieldedPositions = (profile: Profile): Position[] => POSITIONS.filter(position => profile.eligibleSlots.includes(position) && !!profile.defense.positions[position]);
+
+/** The glove the card would field `position` with once learned, or null when it cannot learn it. */
+export function learnedGlove(profile: Profile, position: Position): number | null {
+ const rule = CROSS_TRAINING[position];
+ if (!rule || !isHitter(profile) || profile.eligibleSlots.includes(position)) return null;
+ const fielded = fieldedPositions(profile);
+ const sources = rule.from === 'any' ? fielded : fielded.filter(source => rule.from.includes(source));
+ if (!sources.length && rule.from !== 'any') return null;
+ const glove = sources.length ? Math.max(...sources.map(source => gloveGrade(profile, source))) : DH_GLOVE;
+ return Math.max(0, glove - CROSS_PENALTY * (rule.upward ? 2 : 1));
+}
+
+/** The positions the card can learn now. */
+export const learnable = (profile: Profile): Position[] => POSITIONS.filter(position => learnedGlove(profile, position) !== null);
+
+/** The card having learned `position`: eligible there, every skill at its learned glove on the shop's scale. */
+function crossTrain(profile: Profile, position: Position): Profile {
+ const glove = learnedGlove(profile, position);
+ if (glove === null) return profile;
+ let skills = neutralDefensivePosition(position);
+ for (const [skill, ceiling] of Object.entries(FIELDING_CEILINGS[position]) as [DefensiveSkillName, number][]) {
+  const median = FIELDING_MEDIANS[position][skill]!;
+  skills = withSkill(skills, skill, median + (glove - 50) / 50 * (ceiling - median));
+ }
+ return { ...profile, eligibleSlots: [...profile.eligibleSlots, position], defense: { ...profile.defense, positions: { ...profile.defense.positions, [position]: skills } } };
+}
+
 export const woba = (rates: readonly number[]): number => rates.reduce((sum, rate, index) => sum + rate * WOBA[index], 0);
 const sum = (rates: readonly number[], events: readonly number[]) => events.reduce((total, event) => total + rates[event], 0);
 
@@ -130,9 +177,10 @@ const isPitcher = (profile: Profile) => !!profile.pitchingRates && profile.eligi
 const isStarter = (profile: Profile) => isPitcher(profile) && profile.eligibleSlots.includes('SP1') && (profile.pitching?.GS ?? 0) > 0;
 const isReliever = (profile: Profile) => isPitcher(profile) && profile.eligibleSlots.includes('CL');
 
-/** Whether `kind` applies to the card; recovery applies once. */
+/** Whether `kind` applies to the card; recovery applies once, and cross-training needs a position left to learn. */
 export function canTrain(profile: Profile, kind: TrainingKind, upgrades: readonly Upgrade[] = []): boolean {
  switch (kind) {
+  case 'crossTraining': return isHitter(profile) && learnable(profile).length > 0;
   case 'hitting': case 'power': case 'eye': case 'contact': case 'hotBat': return isHitter(profile);
   case 'baserunning': return isHitter(profile);
   case 'fielding': return isHitter(profile) && Object.keys(profile.defense.positions).length > 0;
@@ -145,8 +193,8 @@ export function canTrain(profile: Profile, kind: TrainingKind, upgrades: readonl
 export const withBatting = (profile: Profile, rates: Rates): Profile => ({ ...profile, battingRates: rates, contact: profile.contact && { ...profile.contact, batting: contactTargets(rates) } });
 export const withPitching = (profile: Profile, rates: Rates): Profile => ({ ...profile, pitchingRates: rates, contact: profile.contact && { ...profile.contact, pitching: contactTargets(rates) } });
 
-/** The card after one training, its gain scaled by `scale`. Kinds that do not apply leave it unchanged. */
-export function train(profile: Profile, kind: TrainingKind, scale = 1): Profile {
+/** The card after one training, its gain scaled by `scale`; cross-training teaches `position`. Kinds that do not apply leave it unchanged. */
+export function train(profile: Profile, kind: TrainingKind, scale = 1, position?: Position): Profile {
  const [basic, targeted, hot] = [BASIC_GAIN * scale, TARGETED_GAIN * scale, HOT_GAIN * scale];
  const bat = profile.battingRates;
  const pitch = profile.pitchingRates;
@@ -194,6 +242,7 @@ export function train(profile: Profile, kind: TrainingKind, scale = 1): Profile 
    return { ...profile, pitching: { ...counts, IPouts: counts.GS * (outs + targeted * (CEILINGS.starterOuts - outs)) } };
   }
   case 'recovery': return profile;
+  case 'crossTraining': return position ? crossTrain(profile, position) : profile;
  }
 }
 
@@ -202,7 +251,7 @@ export const inForce = (upgrade: Upgrade, segment: number): boolean => TRAININGS
 
 /** The card as it plays segment `segment`: its profile with every upgrade in force applied in purchase order. */
 export function developed(profile: Profile, upgrades: readonly Upgrade[], segment: number): Profile {
- return upgrades.filter(upgrade => upgrade.cardId === profile.seasonId && inForce(upgrade, segment)).reduce((card, upgrade) => train(card, upgrade.kind, upgrade.scale ?? 1), profile);
+ return upgrades.filter(upgrade => upgrade.cardId === profile.seasonId && inForce(upgrade, segment)).reduce((card, upgrade) => train(card, upgrade.kind, upgrade.scale ?? 1, upgrade.position), profile);
 }
 
 /** Lasting upgrades on a card, for its badge. */
@@ -213,8 +262,8 @@ const ops = (rates: readonly number[]): number => sum(rates, ON_BASE) + (rates[S
 const three = (value: number) => value.toFixed(3).replace(/^(-?)0/, '$1');
 const percent = (value: number) => `${Math.round(value * 1000) / 10}%`;
 
-/** The one stat a training moves, as the shop shows it before and after. */
-export function statLine(profile: Profile, kind: TrainingKind): string {
+/** The one stat a training moves, as the shop shows it before and after; cross-training shows the glove at `position`. */
+export function statLine(profile: Profile, kind: TrainingKind, position?: Position): string {
  const bat = profile.battingRates!;
  const pitch = profile.pitchingRates!;
  switch (kind) {
@@ -230,6 +279,7 @@ export function statLine(profile: Profile, kind: TrainingKind): string {
   case 'baserunning': return `speed ${Math.round(profile.speed * 100)}, steals ${Math.round(profile.stealSuccess * 100)}%`;
   case 'fielding': return `glove ${Object.keys(profile.defense.positions).map(position => `${position} ${Math.round(gloveGrade(profile, position as Position))}`).join(', ')}`;
   case 'recovery': return 'normal rest';
+  case 'crossTraining': return position && profile.defense.positions[position] ? `${position} glove ${Math.round(gloveGrade(profile, position))}` : `plays ${fieldedPositions(profile).join(', ') || 'DH'}`;
  }
 }
 
