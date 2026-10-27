@@ -22,7 +22,7 @@ export * from './sticker-ladders.ts';
 export const STICKER_RULES_VERSION = 'stickers-v5';
 
 export type StickerFamily = 'grade' | 'team' | 'mvp' | 'war' | 'power' | 'contact' | 'production' | 'speed' | 'eye' | 'club' | 'cycle' | 'homerGame' | 'grandSlam' | 'walkOff'
- | 'strikeouts' | 'ace' | 'closer' | 'saves' | 'perfectCloser' | 'noHitter' | 'perfectGame' | 'shutout' | 'strikeoutGame' | 'loyalty';
+ | 'strikeouts' | 'ace' | 'closer' | 'saves' | 'perfectCloser' | 'noHitter' | 'perfectGame' | 'shutout' | 'strikeoutGame' | 'loyalty' | 'league';
 
 export interface StickerDefinition {
  kind: string;
@@ -67,12 +67,29 @@ export const STICKER_SPOTS: Readonly<Record<StickerFamily, { x: number; y: numbe
  perfectCloser: { x: 0.1, y: 0.8, tilt: 4 },
  walkOff: { x: 0.9, y: 0.8, tilt: -4 },
  // Any card can hold WAR beside every other family; it shows through its rank's face slot.
- war: { x: 0.9, y: 0.9, tilt: 5 }
+ war: { x: 0.9, y: 0.9, tilt: 5 },
+ // Draft Mode league results; a card shows them through its rank's face slot.
+ league: { x: 0.1, y: 0.9, tilt: -5 }
 };
 
 const define = (kind: string, family: StickerFamily, tier: number, label: [string, string], title: string): StickerDefinition => ({ kind, family, tier, label, title });
 const ladder = (steps: readonly LadderStep[], family: StickerFamily): StickerDefinition[] =>
  steps.map((step, index) => define(step.kind, family, index + 1, step.label, step.title));
+
+/**
+ * Draft Mode league stickers, one per finished season on every card of the final roster: a won rival
+ * series, the league title (one kind per franchise) or a 162-0 season, best first.
+ */
+export const DRAFT_FRANCHISES = ['ANA', 'ARI', 'ATL', 'BAL', 'BOS', 'CHC', 'CHW', 'CIN', 'CLE', 'COL', 'DET', 'FLA', 'HOU', 'KCR', 'LAD',
+ 'MIL', 'MIN', 'NYM', 'NYY', 'OAK', 'PHI', 'PIT', 'SDP', 'SEA', 'SFG', 'STL', 'TBD', 'TEX', 'TOR', 'WSN'] as const;
+export const DRAFT_STICKER_KIND = { rival: 'draft-rival', champions: (franchiseId: string) => `draft-champs-${franchiseId}`, perfect: 'draft-perfect' } as const;
+/** Share of Draft seasons each league sticker is expected in, for ranking the card face: about half win their rival series and one in eight the title. */
+const DRAFT_STICKER_RATE = { rival: 0.5, champions: 0.125, perfect: 0 } as const;
+const LEAGUE_STICKERS: readonly StickerDefinition[] = [
+ { ...define(DRAFT_STICKER_KIND.rival, 'league', 1, ['Rival', 'beaten'], 'Won the rival series in a Draft Mode season'), foil: 'bronze' },
+ ...DRAFT_FRANCHISES.map(franchiseId => ({ ...define(DRAFT_STICKER_KIND.champions(franchiseId), 'league', 2, [franchiseId, 'champs'], `Won a Draft Mode league with ${franchiseId}`), foil: 'gold' as const })),
+ { ...define(DRAFT_STICKER_KIND.perfect, 'league', 3, ['162', '–0'], 'Went 162–0 in a Draft Mode league'), foil: 'gem' }
+];
 
 const PLAIN_STICKERS: readonly StickerDefinition[] = [
  ...GRADE_STICKERS.map(({ grade, kind }, index) => define(kind, 'grade', GRADE_STICKERS.length - index,
@@ -103,12 +120,12 @@ const PLAIN_STICKERS: readonly StickerDefinition[] = [
  ...ladder(LOYALTY_STICKERS, 'loyalty')
 ];
 
-/** Every sticker; a family with more than one tier foils its top four. */
-export const STICKERS: readonly StickerDefinition[] = PLAIN_STICKERS.map(sticker => {
+/** Every sticker; a family with more than one tier foils its top four, and the league stickers carry their own foils. */
+export const STICKERS: readonly StickerDefinition[] = [...PLAIN_STICKERS.map(sticker => {
  const tiers = PLAIN_STICKERS.filter(item => item.family === sticker.family).length;
  const foil = tiers > 1 ? FOILS[tiers - sticker.tier] : undefined;
  return foil ? { ...sticker, foil } : sticker;
-});
+}), ...LEAGUE_STICKERS];
 
 export const STICKER_BY_KIND: ReadonlyMap<string, StickerDefinition> = new Map(STICKERS.map(sticker => [sticker.kind, sticker]));
 
@@ -215,12 +232,14 @@ export const LEGACY_FACE_SLOTS: readonly { x: number; y: number }[] = [{ x: 0.1,
 /**
  * Simulated card-seasons that reached each kind or a higher tier of its family, from `just sticker-rarity`.
  * A kind the sample never produced counts as rarer than any observed kind; loyalty stickers come from
- * the player's own drafting, not a season, and rank as the most common.
+ * the player's own drafting, not a season, and rank as the most common. Draft Mode league stickers
+ * are not simulated and rank by their expected share of Draft seasons.
  */
 export interface StickerRarity { cards: number; reached: Readonly<Record<string, number>> }
 export const RARITY: StickerRarity & { rulesVersion: string } = rarity;
 function earnRate(definition: StickerDefinition, table: StickerRarity): number {
  if (definition.family === 'loyalty') return Infinity;
+ if (definition.family === 'league') return DRAFT_STICKER_RATE[(['rival', 'champions', 'perfect'] as const)[definition.tier - 1]];
  return (table.reached[definition.kind] ?? 0) / table.cards;
 }
 

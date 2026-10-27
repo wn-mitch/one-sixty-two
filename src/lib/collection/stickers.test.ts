@@ -177,7 +177,7 @@ describe('sticker rules', () => {
 
  it('ranks the face from a rarity table that covers every season sticker under the current rules', () => {
   expect(RARITY.rulesVersion).toBe(STICKER_RULES_VERSION);
-  expect(Object.keys(RARITY.reached).sort()).toEqual(STICKERS.filter(sticker => sticker.family !== 'loyalty').map(sticker => sticker.kind).sort());
+  expect(Object.keys(RARITY.reached).sort()).toEqual(STICKERS.filter(sticker => sticker.family !== 'loyalty' && sticker.family !== 'league').map(sticker => sticker.kind).sort());
  });
 
  it('puts the grade and the three rarest families on the face, in fixed slots unless moved', () => {

@@ -61,7 +61,7 @@ test('a saved season fills the collection and its sticker album, with stickers t
  await expect(page.getByRole('meter', { name: 'Player-seasons' })).toHaveAttribute('value', '2');
  // Kinds reached across both cards (grade C, 20–120 wins, MVP, 20–60 HR, 150–175 hits, 100–145 RBI, .350–.400 OBP, 200–300 K) and one sticker per family per card.
  await expect(page.getByRole('meter', { name: 'Sticker kinds' })).toHaveAttribute('value', '23');
- await expect(page.getByRole('meter', { name: 'Sticker kinds' })).toHaveAttribute('max', '97');
+ await expect(page.getByRole('meter', { name: 'Sticker kinds' })).toHaveAttribute('max', '129');
  await index.locator('summary').click();
  const tile = grid.getByRole('button', { name: new RegExp(hitterLabel) });
  // The face shows the grade and the three rarest families by simulated earn rate: MVP, 60 HR, .400 OBP (120 wins, 175 hits and 145 RBI are more common).

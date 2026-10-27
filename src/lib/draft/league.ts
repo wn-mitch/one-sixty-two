@@ -9,13 +9,14 @@ import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
 import { conditionFamiliarity, exchangeFor, franchisePackage, homeCondition, knowHowFor, saleBonusFor, suitedFunding, withKnowHow, type Exchange, type Funding } from './packages.ts';
+import { updateMoments, type SeasonMoments } from './moments.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v18' as const;
+export const LEAGUE_VERSION = 'league-v19' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -65,6 +66,8 @@ export interface LeagueSeason {
  sales: Sale[];
  /** The home grounds of a franchise with funding votes, by chapter, locked when each chapter's first games are played. */
  funding: Funding[];
+ /** The player's best and worst game so far, with their full results. */
+ moments: SeasonMoments;
 }
 
 /** A sale bonus: `seat` traded `cardId` away at chapter `chapter`'s market and banked `cash`. */
@@ -119,7 +122,7 @@ export function startLeague(run: DraftRun): LeagueSeason {
  return {
   version: LEAGUE_VERSION, rivals: matchRivals(run), lineups, segments: [],
   fans: priors(run.seating.seats, payrolls).map(openingFans),
-  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1, pushes: [], injuries: [], sales: [], funding: []
+  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1, pushes: [], injuries: [], sales: [], funding: [], moments: { highlight: null, lowlight: null }
  };
 }
 
@@ -347,8 +350,8 @@ export function ironManUpgrades(run: DraftRun, season: LeagueSeason, seat: numbe
 
 /**
  * Keeps a played segment, in segment order: credits each club's payday from the crowd that watched
- * it, adds any Iron Man trainings, then moves its fans on the results. Each payday is credited once,
- * with the segment it pays for.
+ * it, keeps the player's best and worst game, adds any Iron Man trainings, then moves its fans on the
+ * results. Each payday is credited once, with the segment it pays for.
  */
 export function recordSegment(run: DraftRun, season: LeagueSeason, result: LeagueSegmentResult): void {
  if (result.segment !== season.segments.length) throw new Error(`Expected segment ${season.segments.length + 1}, got ${result.segment + 1}`);
@@ -356,6 +359,7 @@ export function recordSegment(run: DraftRun, season: LeagueSeason, result: Leagu
  const crowds = seasonCrowds(run, season);
  const paydays = season.fans.map((fans, seat) => payday(seat, franchises, fans, result.games, seasonExchange(run, season, seat)));
  season.segments.push({ games: result.games, lines: result.totals.map(box => ({ batting: box.batting, pitching: box.pitching })), carry: result.carry, crowds, paydays, hype: result.hype });
+ season.moments = updateMoments(season.moments, result.detailGames, result.segment);
  const records = standings(season);
  season.fans = season.fans.map((fans, seat) => {
   const row = records.find(item => item.seat === seat)!;

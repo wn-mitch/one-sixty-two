@@ -20,14 +20,18 @@ export const ALBUM_GROUPS: readonly { title: string; families: readonly { family
   { family: 'closer', name: 'Lights out' }, { family: 'perfectCloser', name: 'Perfect closer' }, { family: 'noHitter', name: 'No-hitters' },
   { family: 'perfectGame', name: 'Perfect games' }, { family: 'strikeoutGame', name: '20-strikeout game' }
  ] },
- { title: 'Drafting', families: [{ family: 'loyalty', name: 'Times drafted' }] }
+ { title: 'Drafting', families: [{ family: 'loyalty', name: 'Times drafted' }] },
+ { title: 'Draft Mode', families: [{ family: 'league', name: 'League results' }] }
 ];
 
 /** Single-game feats whose unearned tiers stay secret in the album. */
 export const SECRET_FAMILIES: ReadonlySet<StickerFamily> = new Set(['cycle', 'homerGame', 'noHitter', 'perfectGame', 'strikeoutGame']);
 
-/** A grade is earned exactly; every other family is a ladder, so a higher tier also reaches the lower ones. */
-const exact = (family: StickerFamily) => family === 'grade';
+/**
+ * A grade or a Draft league result is earned exactly (a title with one franchise is not a title with
+ * another); every other family is a ladder, so a higher tier also reaches the lower ones.
+ */
+const exact = (family: StickerFamily) => family === 'grade' || family === 'league';
 
 /** Whether a card holds `definition`, or a higher tier of a laddered family, hidden or not. */
 export function holds(card: Pick<CollectedCard, 'stickers'>, definition: StickerDefinition): boolean {

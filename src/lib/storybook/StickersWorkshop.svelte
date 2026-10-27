@@ -85,7 +85,7 @@
 		grade: 'Season grade', team: 'Team record', mvp: 'Team MVP', war: 'Season WAR', power: 'Power', contact: 'Contact', production: 'Production',
 		speed: 'Speed', eye: 'Eye', club: 'HR–SB club', cycle: 'Cycle', homerGame: 'Multi-homer game', grandSlam: 'Grand slam', walkOff: 'Walk-off home run',
 		strikeouts: 'Strikeouts', ace: 'Ace', closer: 'Lights out', saves: 'Saves', perfectCloser: 'Perfect closer', noHitter: 'No-hitter', perfectGame: 'Perfect game',
-		shutout: 'Shutout', strikeoutGame: '20-strikeout game', loyalty: 'Loyalty'
+		shutout: 'Shutout', strikeoutGame: '20-strikeout game', loyalty: 'Loyalty', league: 'Draft league'
 	};
 </script>
 

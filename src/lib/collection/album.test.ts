@@ -17,6 +17,14 @@ describe('sticker album', () => {
   expect(kinds.toSorted()).toEqual(STICKERS.map(item => item.kind).toSorted());
  });
 
+ it('counts Draft league results exactly: a 162-0 season is not a title with every franchise', () => {
+  const album = stickerAlbum([card(placed('draft-perfect')), card(placed('draft-champs-CIN')), card(placed('draft-champs-CIN'))]);
+  expect(slotOf(album, 'draft-perfect').held).toBe(1);
+  expect(slotOf(album, 'draft-champs-CIN').held).toBe(2);
+  expect(slotOf(album, 'draft-champs-WSN').held).toBe(0);
+  expect(slotOf(album, 'draft-rival').held).toBe(0);
+ });
+
  it('counts a higher tier toward the lower rungs of a ladder, but grades only exactly', () => {
   const album = stickerAlbum([card(placed('hr-30')), card(placed('hr-20', true)), card(placed('grade-a'))]);
   expect(slotOf(album, 'hr-20').held).toBe(2);

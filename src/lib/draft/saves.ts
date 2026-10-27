@@ -1,9 +1,9 @@
 import { json, parseJson, type Db } from '../storage/sql.ts';
-import { completionReward } from '../cosmetics/ledger.ts';
 import { LEAGUE_CHAPTERS, LEAGUE_SEGMENTS } from '../sim/league-types.ts';
 import { STACK_ROLES } from './cleanup.ts';
 import { learnPosition } from './ledger.ts';
 import { DRAFT_SLOTS } from './rules.ts';
+import { completionStatements } from './report.ts';
 import { learnedPositions } from './shop.ts';
 import { RUN_VERSION } from './versions.ts';
 import { LEAGUE_VERSION, LineupError, validateLineup, type LeagueSeason } from './league.ts';
@@ -92,15 +92,22 @@ function fromRow(row: RunRow): SavedRun | null {
  return { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, setup, actions, phase: row.phase as RunPhase, season, seasonJson: row.season_json };
 }
 
-/** Writes the run after an action. Returns a notice when storage refuses it; the run itself continues. */
-export async function saveRun(db: Db, id: string, run: DraftRun, season: LeagueSeason | null = null, now = new Date()): Promise<string | null> {
+/** The key a run's finished season files its tokens, binder rows and stickers under. */
+export const runSeasonKey = (id: string): string => `draft:${id}`;
+
+/**
+ * Writes the run after an action. Returns a notice when storage refuses it; the run itself continues.
+ * The save that finds the season finished also records what it earned (`completionStatements`),
+ * naming cards with `label`.
+ */
+export async function saveRun(db: Db, id: string, run: DraftRun, season: LeagueSeason | null = null, now = new Date(), label: (seasonId: string) => string = seasonId => seasonId): Promise<string | null> {
  const stamp = now.toISOString();
  try {
   await db.run([{
    sql: `INSERT INTO draft_runs (id, created_at, updated_at, setup_json, actions_json, phase, season_json, resume_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (id) DO UPDATE SET updated_at = excluded.updated_at, actions_json = excluded.actions_json, phase = excluded.phase, season_json = excluded.season_json, resume_state = excluded.resume_state`,
    bind: [id, stamp, stamp, json(run.setup), json(run.actions), run.phase, season === null ? null : json(season), seasonComplete(season) ? 'archived' : 'active']
-  }, ...(seasonComplete(season) ? completionReward('draft:' + id, stamp) : [])]);
+  }, ...(seasonComplete(season) ? completionStatements(run, season!, runSeasonKey(id), stamp, label) : [])]);
   return null;
  } catch { return 'Your draft could not be saved: browser storage is blocked or full. It continues in this tab.'; }
 }

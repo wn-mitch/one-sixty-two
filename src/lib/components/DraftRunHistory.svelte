@@ -9,7 +9,7 @@
  import { loadMedia } from '../media/client.ts';
  import { deviceDb } from '../storage/db.ts';
  import type { Manifest } from '../game/types.ts';
- import { seasonGrade } from '../game/grade.ts';
+ import { finishGrade } from '../draft/report.ts';
 
  let { manifest }: { manifest: Manifest } = $props();
  let runs = $state.raw<SavedRun[]>([]);
@@ -22,11 +22,12 @@
   const season = saved.season!;
   // The stored first rivalry pins the human seat, even when newer seating rules differ.
   const human = season.rivals[0]?.[0] ?? -1;
-  const record = standings(season).find(row => row.seat === human);
+  const table = standings(season);
+  const record = table.find(row => row.seat === human);
   const lineup = season.lineups[human];
   const retired = !!unsupportedVersion(saved.setup, manifest.dataVersion) || season.version !== LEAGUE_VERSION;
   return {
-   saved, record, retired,
+   saved, record, retired, grade: record ? finishGrade(table, human) : null,
    title: manifest.franchises.find(club => club.id === saved.setup.franchiseId)?.name ?? saved.setup.franchiseId,
    roster: Object.entries(lineup?.active ?? {}).map(([label, seasonId]) => ({ seasonId, label }))
   };
@@ -90,7 +91,7 @@
     <li>
      {#snippet club()}
       <ClubCard title={entry.title} parkName="Draft Mode" recordLabel={entry.record ? `${entry.record.wins} W · ${entry.record.losses} L` : 'Record unavailable'}
-       grade={entry.record ? seasonGrade(entry.record.wins, entry.record.losses) : null}
+       grade={entry.grade}
        stats={entry.record ? [{ label: 'Runs for', value: String(entry.record.runsFor) }, { label: 'Runs against', value: String(entry.record.runsAgainst) }] : []}
        footer={entry.retired ? 'Results unavailable in this version' : 'Full season results'} roster={entry.roster} stars={stars.get(entry.saved.id) ?? []} retired={entry.retired} />
      {/snippet}

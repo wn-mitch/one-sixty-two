@@ -5,13 +5,17 @@ import { appSettings, PLAYBACK_DURATION_MS } from '../game/settings.svelte.ts';
 import { deviceDb } from '../storage/db.ts';
 import type { Db } from '../storage/sql.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
+import type { SeasonReward } from '../cosmetics/ledger.ts';
+import { finishReward } from './report.ts';
+import { stickersFromSeason, type NewSticker } from '../collection/collection.ts';
+import { stickerDefinition } from '../collection/stickers.ts';
 import type { StackRole } from './cleanup.ts';
 import { seatTable } from './franchises.ts';
 import { dropPush, PushError, takePush, type PushKind } from './injuries.ts';
 import { closeChapter, fieldedIds, LEAGUE_VERSION, LineupError, lockFunding, recordSegment, voteFunding, seasonStop, segmentInput, setLineup, standings, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
 import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
-import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
+import { archiveRun, getRun, latestRun, resumeRun, runSeasonKey, saveRun, seasonComplete } from './saves.ts';
 import { aiShop, buyTraining, learnedPositions, ShopError } from './shop.ts';
 import type { Funding } from './packages.ts';
 import type { TrainingKind } from './training.ts';
@@ -47,6 +51,10 @@ export class DraftModeSession {
  revealed = $state(0);
  /** A played segment's games are being revealed before the next stop. */
  revealing = $state(false);
+ /** Tokens the finishing save granted, shown once on the report; null after a reload. */
+ reward = $state.raw<SeasonReward | null>(null);
+ /** Stickers the finished season put on its cards. */
+ earned = $state.raw<NewSticker[]>([]);
  #revealTimer: number | undefined;
  /** Skip was pressed while the segment simulated, so its games appear at once. */
  #skipReveal = false;
@@ -93,6 +101,8 @@ export class DraftModeSession {
   this.confirmNew = false;
   await this.abandon();
   if (this.run) return;
+  this.reward = null;
+  this.earned = [];
   const url = new URL(location.href);
   url.searchParams.delete('run');
   history.replaceState(history.state, '', url);
@@ -129,6 +139,7 @@ export class DraftModeSession {
       this.#runId = saved.id;
       this.run = resumed.run;
       this.season = resumed.season ?? (resumed.run.phase === 'season' ? startLeague(resumed.run) : null);
+      if (seasonComplete(this.season)) await this.#loadEarned();
      } else {
       this.refused = resumed.reason;
       if (!historyId) {
@@ -324,8 +335,13 @@ export class DraftModeSession {
     const order = standings(season).map(row => row.seat).reverse();
     applyAction(run, { type: 'chapter', chapter: stop.chapter, order, lineup: structuredClone(season.lineups[run.seating.humanSeat]), learned: learnedPositions(season) });
    }
-   const saved = await this.#save();
-   if (saved && season.segments.length >= LEAGUE_SEGMENTS) void refreshShop();
+   const now = new Date();
+   const saved = await this.#save(now, seasonId => { const profile = profiles.get(seasonId); return profile ? `${profile.displayName} ${profile.year}` : seasonId; });
+   if (saved && seasonComplete(season)) {
+    void refreshShop();
+    if (this.#db && this.#runId) this.reward = await finishReward(this.#db, runSeasonKey(this.#runId), now.toISOString());
+    await this.#loadEarned();
+   }
    this.revision++;
    this.#reveal(season.segments.length * SEGMENT_MATCHDAYS);
   } catch (error) {
@@ -388,12 +404,26 @@ export class DraftModeSession {
   this.#worker = null;
  }
 
- async #save(): Promise<boolean> {
+ /** The stickers the finished season's save recorded, named from the card profiles. */
+ async #loadEarned(): Promise<void> {
+  if (!this.#db || !this.#runId || !this.profiles) return;
+  try {
+   const rows = await stickersFromSeason(this.#db, runSeasonKey(this.#runId));
+   const profiles = await this.profiles.load(rows.map(row => row.seasonId));
+   this.earned = rows.flatMap(({ seasonId, sticker }) => {
+    const definition = stickerDefinition(sticker);
+    const profile = profiles.get(seasonId);
+    return definition ? [{ seasonId, kind: sticker.kind, title: definition.title, label: profile ? `${profile.displayName} ${profile.year}` : seasonId }] : [];
+   });
+  } catch { this.earned = []; }
+ }
+
+ async #save(now = new Date(), label?: (seasonId: string) => string): Promise<boolean> {
   if (!this.#db || !this.#runId || !this.run) {
    this.storageNotice = 'Your draft could not be saved. It continues in this tab.';
    return false;
   }
-  const notice = await saveRun(this.#db, this.#runId, this.run, this.season);
+  const notice = await saveRun(this.#db, this.#runId, this.run, this.season, now, label);
   if (notice) this.storageNotice = notice;
   return notice === null;
  }

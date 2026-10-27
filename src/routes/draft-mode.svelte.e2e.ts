@@ -170,9 +170,16 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
   await expect(page.getByRole('complementary', { name: /^Decree in force: / })).toBeVisible();
  }
  await expect(page.getByRole('heading', { name: 'Final standings' })).toBeVisible({ timeout: 120_000 });
- await expect(page.getByRole('link', { name: 'Shop, 1 token', exact: true })).toBeVisible();
+ // The report grades the finish, pays one to three tokens by it, and keeps the season's best and worst games.
+ await expect(page.locator('.season-ledger dt', { hasText: 'Grade' })).toBeVisible();
+ const tokens = Number((await page.getByRole('region', { name: 'Earned' }).locator('p').first().textContent())!.match(/^(\d) tokens?:/)![1]);
+ expect(tokens).toBeGreaterThanOrEqual(1);
+ const plural = tokens === 1 ? 'token' : 'tokens';
+ await expect(page.getByRole('article', { name: /^Highlight: / })).toBeVisible();
+ await expect(page.getByRole('article', { name: /^Lowlight: / })).toBeVisible();
+ await expect(page.getByRole('link', { name: `Shop, ${tokens} ${plural}`, exact: true })).toBeVisible();
  await page.goto('/shop');
- await expect(page.locator('.balance')).toHaveText('1 unlock token');
+ await expect(page.locator('.balance')).toHaveText(`${tokens} unlock ${plural}`);
  await page.goto('/draft');
  await expect(page.getByRole('button', { name: 'Start draft', exact: true })).toBeVisible();
  await page.goto('/seasons');
