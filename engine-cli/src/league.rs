@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use std::io::Read;
 use std::path::Path;
 
-const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] [--trigger CLUB=trigger] [--familiarity F] [--club CLUB] < league-request.json";
+const USAGE: &str = "Usage: engine league-crowd [--seasons N] [--seed N] [--edges a,b,...] [--volatility V] [--park CLUB=package] [--trigger CLUB=trigger] [--familiarity F] [--information CLUB=x] [--club CLUB] < league-request.json";
 
 /// Home wins, games and runs over one season with every crowd at `crowd`, then winning margins 1..=10 (10 counts 10 or more),
 /// then games, runs and home wins at the home park of club `park` (by index), if any, then games and wins of club `club`, home and away.
@@ -44,8 +44,8 @@ fn season(engine: &Engine, base: &LeagueSegmentRequest, seed: u32, crowd: Crowd,
 /// `engine league-crowd`: one `{edge, volatility, games, homeWinPct, standardError, homeRuns, awayRuns, margins, parkRuns}` line per edge;
 /// `margins[k]` is the share of games won by k + 1 runs, the last counting ten or more. `--park CLUB=package` plays club
 /// CLUB's home games under a park package (`none` for the real park), and `parkRuns` is total runs a game there.
-/// `--familiarity F` sets that club's home familiarity edge. `clubWinPct` is the winning share of club `--club`, else of
-/// the `--park` or `--trigger` club, over all its games.
+/// `--familiarity F` sets that club's home familiarity edge, and `--information CLUB=x` club CLUB's pitch information.
+/// `clubWinPct` is the winning share of club `--club`, else of the `--park`, `--trigger` or `--information` club, over all its games.
 pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut seasons = 40u32;
     let mut base_seed = 162u32;
@@ -55,6 +55,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut trigger: Option<(String, Option<CrowdTrigger>)> = None;
     let mut familiarity: Option<f64> = None;
     let mut club: Option<String> = None;
+    let mut information: Option<(String, f64)> = None;
     let mut rest = arguments.iter();
     while let Some(flag) = rest.next() {
         let value = rest.next().ok_or(format!("{flag} requires a value"))?;
@@ -75,6 +76,10 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
             }
             "--familiarity" => familiarity = Some(value.parse().map_err(|_| USAGE)?),
             "--club" => club = Some(value.clone()),
+            "--information" => {
+                let (club, edge) = value.split_once('=').ok_or(USAGE)?;
+                information = Some((club.to_string(), edge.parse().map_err(|_| USAGE)?));
+            }
             _ => return Err(USAGE.into()),
         }
     }
@@ -86,6 +91,7 @@ pub fn league_crowd(arguments: &[String]) -> Result<(), String> {
     let mut park_club = None;
     if let Some((id, package)) = &park { let index = index_of(&base.clubs, id)?; base.clubs[index].park_package = *package; park_club = Some(index); }
     if let Some((id, name)) = &trigger { let index = index_of(&base.clubs, id)?; base.clubs[index].crowd_trigger = *name; park_club = Some(index); }
+    if let Some((id, edge)) = &information { let index = index_of(&base.clubs, id)?; base.clubs[index].information = *edge; park_club = park_club.or(Some(index)); }
     if let Some(familiarity) = familiarity { base.clubs[park_club.ok_or("--familiarity needs --park or --trigger")?].familiarity = familiarity; }
     let club = match &club { Some(id) => Some(index_of(&base.clubs, id)?), None => park_club };
     for edge in edges {

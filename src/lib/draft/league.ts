@@ -8,14 +8,14 @@ import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTota
 import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
-import { exchangeFor, familiarityFor, franchisePackage, knowHowFor, saleBonusFor, withKnowHow, type Exchange } from './packages.ts';
+import { exchangeFor, familiarityFor, franchisePackage, knowHowFor, parkHost, saleBonusFor, withKnowHow, type Exchange } from './packages.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v14' as const;
+export const LEAGUE_VERSION = 'league-v15' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -254,8 +254,8 @@ export const fieldedIds = (run: DraftRun, season: LeagueSeason): string[] =>
  * profile (`fieldedIds`); each plays with the training in force, and at reduced strength when
  * playing through an injury. Pushes taken at this stop ride starters and rest-skipping relievers.
  * `names` labels each seat's club, and each club plays in its franchise's park before its own crowd,
- * with a familiarity edge there from the printed cards that fit the park, and with its franchise's
- * fielding know-how from the printed gloves on every fielder.
+ * under the chapter's park condition (`parkHost`), with a familiarity edge there from the printed
+ * cards that fit the park, and with its franchise's fielding know-how from the printed gloves on every fielder.
  */
 export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueSegmentInput {
  const segment = season.segments.length;
@@ -277,6 +277,7 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     return { profile, slot };
    });
    const knowHow = knowHowFor(franchiseId, printed);
+   const host = parkHost(franchiseId, run.setup.seed, nextChapter(season));
    return {
     id: franchiseId, name: names[seat], homeStadium: stadiumRef(stadium),
     roster: printed.map(({ profile, slot }) => {
@@ -286,7 +287,8 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })),
     quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort(),
     ridden: pushed('ride', slot => slot.startsWith('SP')), tireless: pushed('skipRest', slot => slot === 'CL' || slot.startsWith('RP')),
-    parkPackage: franchisePackage(franchiseId)?.park ?? null, familiarity: familiarityFor(franchiseId, printed), crowdTrigger: franchisePackage(franchiseId)?.crowd ?? null
+    parkPackage: franchisePackage(host)?.park ?? null, familiarity: familiarityFor(host, printed, franchisePackage(franchiseId)?.relocation?.familiarity), crowdTrigger: franchisePackage(franchiseId)?.crowd ?? null,
+    information: franchisePackage(franchiseId)?.information ?? 0
    };
   })
  };

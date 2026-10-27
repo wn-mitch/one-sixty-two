@@ -55,6 +55,14 @@ export interface FranchisePackage {
   * 1 / (1 + `ticket`)).
   */
  exchangeRate?: { price: number; fill: number; ticket: number };
+ /**
+  * Franchises whose park packages the club borrows at home, one each chapter in a seeded order with
+  * no repeat until every one has been used; their familiarity rules come with them, each player's
+  * edge multiplied by `familiarity` because no roster can be built for every park.
+  */
+ relocation?: { hosts: readonly string[]; familiarity: number };
+ /** Pitch information at home games (`LeagueClubInput.information`), which visitors wear down by changing signs. */
+ information?: number;
 }
 
 /** What a chapter's conditions do to a club: its training price multiplier, the shift in its home stands' fill and its ticket price multiplier. */
@@ -69,6 +77,11 @@ export const MAX_KNOW_HOW = .18;
  * hitters, hitters with 20 or more home runs, or pitchers with at least a strikeout an inning.
  */
 export type FamiliarRule = 'leftyHitter' | 'rightyHitter' | 'slugger' | 'strikeoutPitcher';
+
+/** Who knows a park, as each stop names them. */
+export const FAMILIAR_LABELS: Readonly<Record<FamiliarRule, string>> = {
+ leftyHitter: 'left-handed and switch hitters', rightyHitter: 'right-handed hitters', slugger: '20-homer hitters', strikeoutPitcher: 'strikeout pitchers'
+};
 
 const isHitterSlot = (slot: DraftSlot) => (HITTER_SLOTS as readonly string[]).includes(slot);
 const FAMILIAR: Record<FamiliarRule, (profile: Profile, slot: DraftSlot) => boolean> = {
@@ -95,6 +108,8 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  KCR: { name: 'Royal Flush', summary: 'Kauffman is a casino. The cap is 10% tighter, but every home win pays 8 cash with the payday.', capShare: -.1, homeWinCash: 8 },
  OAK: { name: 'The House Always Wins', summary: 'The cap is 12% tighter, but every training costs 55% less.', capShare: -.12, trainingPrice: .45 },
  STL: { name: 'The Cardinal Way', summary: 'Fundamentals. For each active fielder with a glove grade of 60 or better at his position on the card, every fielder reaches balls a little quicker, home and away.', knowHow: { minGrade: 60, perPlayer: .025 } },
+ HOU: { name: 'Trash Can Confidential', summary: 'Houston\'s hitters know what\'s coming at home: a strike zone that leans their way and harder contact. Each game a visitor plays at Houston in a chapter, it changes its signs and the edge against it halves; every visitor starts fresh the next chapter.', information: .25 },
+ ANA: { name: 'Relocation', summary: 'Ownership moves the club every chapter. Each chapter\'s home games are played under another club\'s park condition, thin air, heavy air, the giant wall, the short porch or the wind to right, with twice that park\'s familiarity edge for each active player who fits it. Each stop shows this chapter\'s park and the next.', relocation: { hosts: ['COL', 'SEA', 'BOS', 'NYY', 'SFG'], familiarity: 2 } },
  TOR: { name: 'The Exchange Rate', summary: 'The dollar turns every chapter, half the season each way. A strong dollar makes training 40% cheaper but tickets dearer and the stands thinner; a weak one makes training 40% dearer and the stands fuller. Each stop shows this chapter\'s rate and the next.', exchangeRate: { price: .4, fill: .15, ticket: .3 } },
  PIT: { name: 'The Farm Team', summary: 'The cap is 10% tighter. Trade away a card you paid to train and you get back twice what you spent on him, once per card, when the chapter market closes.', capShare: -.1, saleBonus: 2 },
  DET: { name: 'The Assembly Line', summary: 'Every training gains 5% more for each common on the active roster, up to 40%.', commonBoost: .05, commonBoostMax: .4 }
@@ -106,9 +121,12 @@ export function familiarCount(franchiseId: string, roster: readonly { profile: P
  return rule ? roster.filter(({ profile, slot }) => FAMILIAR[rule](profile, slot)).length : null;
 }
 
-/** The franchise's familiarity edge at its home games with `roster` active, up to the engine's cap. */
-export const familiarityFor = (franchiseId: string, roster: readonly { profile: Profile; slot: DraftSlot }[]): number =>
- Math.min(MAX_PARK_FAMILIARITY, (familiarCount(franchiseId, roster) ?? 0) * (PACKAGES[franchiseId]?.familiar?.perPlayer ?? 0));
+/**
+ * The familiarity edge at home games under `franchiseId`'s park with `roster` active, times `scale`
+ * (a relocating club's multiplier), up to the engine's cap.
+ */
+export const familiarityFor = (franchiseId: string, roster: readonly { profile: Profile; slot: DraftSlot }[], scale = 1): number =>
+ Math.min(MAX_PARK_FAMILIARITY, (familiarCount(franchiseId, roster) ?? 0) * (PACKAGES[franchiseId]?.familiar?.perPlayer ?? 0) * scale);
 
 const isFieldingSlot = (slot: DraftSlot): slot is Position => (POSITIONS as readonly string[]).includes(slot);
 
@@ -140,6 +158,24 @@ export function exchangeFor(franchiseId: string, seed: number, chapter: number):
  const rate = PACKAGES[franchiseId]?.exchangeRate;
  if (!rate) return PAR;
  return strongDollar(seed, chapter) ? { price: 1 - rate.price, fill: -rate.fill, ticket: 1 + rate.ticket } : { price: 1 + rate.price, fill: rate.fill, ticket: 1 / (1 + rate.ticket) };
+}
+
+/**
+ * The franchise whose park package plays at `franchiseId`'s home games in chapter `chapter` (0-5): a
+ * relocating club's seeded host, every one used before any repeats and never the same twice running,
+ * else the franchise itself.
+ */
+export function parkHost(franchiseId: string, seed: number, chapter: number): string {
+ const hosts = PACKAGES[franchiseId]?.relocation?.hosts;
+ if (!hosts?.length) return franchiseId;
+ const random = randomStream(seed, 'draft:relocation');
+ const venues: string[] = [];
+ while (venues.length < LEAGUE_CHAPTERS) {
+  const round = shuffle([...hosts], random);
+  if (round[0] === venues.at(-1)) round.push(round.shift()!);
+  venues.push(...round);
+ }
+ return venues[Math.min(chapter, LEAGUE_CHAPTERS - 1)];
 }
 
 /** What trading `cardId` away pays seat `seat` under its franchise's sale bonus: a multiple of what the seat has paid to train it. */

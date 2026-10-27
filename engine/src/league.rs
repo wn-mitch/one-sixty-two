@@ -2,6 +2,7 @@
 //! segments, with relief rest carried between segments and lineups free to change at each stop.
 //! Each club's home crowd leans the strike zone at its home games.
 use crate::game::{simulate_game, team_defense, GameInput, GameModels};
+use crate::math::pow;
 use crate::normal::normal_quantile;
 use crate::random::{random_stream, shuffle, GameStreams};
 use crate::relief::{ReliefUsage, RestState, RoleAssignment};
@@ -18,6 +19,13 @@ pub const CLUBS: usize = 8;
 pub const MATCHDAYS: usize = 162;
 pub const SEGMENTS: usize = 18;
 pub const SEGMENT_MATCHDAYS: usize = MATCHDAYS / SEGMENTS;
+/// Matchdays in a chapter: three segments.
+pub const CHAPTER_MATCHDAYS: usize = SEGMENT_MATCHDAYS * 3;
+/// The largest pitch-information edge a club may hold.
+pub const MAX_INFORMATION: f64 = 0.3;
+/// Share of a club's pitch information left against a visitor for each game that visitor has
+/// already played at its park this chapter: the visitors change their signs.
+pub const INFORMATION_DECAY: f64 = 0.5;
 /// The largest strike-zone lean a single game may carry, after volatility.
 pub const MAX_EDGE: f64 = 0.4;
 /// Extra outs a ridden starter may pitch before relief: two innings.
@@ -56,6 +64,10 @@ pub struct LeagueClub {
     /// The franchise's crowd trigger, which fills its hype meter, if it has one.
     #[serde(default)]
     pub crowd_trigger: Option<CrowdTrigger>,
+    /// The home club's pitch information at its home games, up to `MAX_INFORMATION`: full against a
+    /// visitor's first game there in a chapter, `INFORMATION_DECAY` times as much for each later one.
+    #[serde(default)]
+    pub information: f64,
 }
 
 /// A club's home crowd for a segment: the strike zone's mean lean toward the home side, and the
@@ -215,6 +227,7 @@ impl Engine {
         if !request.carry.is_empty() && request.carry.len() != CLUBS { return Err("Carried rest must cover every club".into()); }
         if request.segment > 0 && request.carry.is_empty() { return Err("A later segment needs the previous segment's rest".into()); }
         if request.clubs.iter().any(|club| !(0.0..=MAX_FAMILIARITY).contains(&club.familiarity)) { return Err("Park familiarity is out of bounds".into()); }
+        if request.clubs.iter().any(|club| !(0.0..=MAX_INFORMATION).contains(&club.information)) { return Err("Pitch information is out of bounds".into()); }
         if !request.hype.is_empty() && request.hype.len() != CLUBS { return Err("Crowd hype must cover every club".into()); }
         if request.hype.iter().any(|hype| !(0.0..=HYPE_MAX).contains(hype)) { return Err("Crowd hype is out of bounds".into()); }
         let mut crowds: Vec<ClubCrowd> = request.clubs.iter().enumerate()
@@ -258,13 +271,14 @@ impl Engine {
                 let number = (matchday * 4 + slot + 1) as u32;
                 let home_edge = crowd_edge(request.seed, number, request.crowds[home])?;
                 let mut crowd = GameCrowd::new(crowds[home], crowds[away]);
+                let information = game_information(&schedule, matchday, *fixture, request.clubs[home].information);
                 let game = simulate_game(GameInput {
                     number, opponent_id: &clubs[opponent].id, opponent_name: &clubs[opponent].name, challenge_is_home,
                     home: &clubs[home], away: &clubs[away], home_defense: defenses[home].clone(), away_defense: defenses[away].clone(),
                     park: parks[home],
                     home_matchups: matchups[home * CLUBS + away].as_ref().unwrap(),
                     away_matchups: matchups[away * CLUBS + home].as_ref().unwrap(),
-                    home_edge, crowd: &mut crowd, familiarity: request.clubs[home].familiarity, rules: request.rules,
+                    home_edge, crowd: &mut crowd, familiarity: request.clubs[home].familiarity, information, rules: request.rules,
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
                 crowds[home] = crowd.home.after_game(game.home.runs > game.away.runs);
                 crowds[away] = crowd.away.after_game(game.away.runs > game.home.runs);
@@ -282,6 +296,15 @@ impl Engine {
         result.hype = crowds.iter().map(|crowd| crowd.hype).collect();
         Ok(result)
     }
+}
+
+/// The home club's pitch information in the game at `matchday`: `full`, decayed once for each game
+/// the same visitor has already played at the same park since the chapter began.
+fn game_information(schedule: &[[Fixture; CLUBS / 2]], matchday: usize, fixture: Fixture, full: f64) -> f64 {
+    if full == 0.0 { return 0.0; }
+    let start = matchday / CHAPTER_MATCHDAYS * CHAPTER_MATCHDAYS;
+    let visits = schedule[start..matchday].iter().flatten().filter(|&&other| other == fixture).count();
+    full * pow(INFORMATION_DECAY, visits as f64)
 }
 
 /// One game's strike-zone lean: the crowd's edge plus its volatility times a seeded standard normal draw.
@@ -333,5 +356,25 @@ mod tests {
         }
         assert_ne!(build_league_schedule(1, &rivals).unwrap(), build_league_schedule(2, &rivals).unwrap());
         assert!(build_league_schedule(1, &[[0, 1], [1, 2], [3, 4], [5, 6]]).is_err());
+    }
+
+    #[test]
+    fn pitch_information_halves_with_each_game_a_visitor_has_played_there_this_chapter_and_returns_next_chapter() {
+        let schedule = build_league_schedule(7, &[[0, 5], [1, 2], [3, 7], [4, 6]]).unwrap();
+        let mut decayed = 0;
+        let mut renewed = 0;
+        for (matchday, day) in schedule.iter().enumerate() {
+            for &fixture in day {
+                let start = matchday / CHAPTER_MATCHDAYS * CHAPTER_MATCHDAYS;
+                let earlier = (start..matchday).filter(|&other| schedule[other].contains(&fixture)).count();
+                let information = game_information(&schedule, matchday, fixture, 0.2);
+                assert_eq!(information, 0.2 * pow(0.5, earlier as f64));
+                if earlier == 2 { decayed += 1; }
+                // A visitor back in a new chapter after games here in the last one starts over at full.
+                if earlier == 0 && (0..start).any(|other| schedule[other].contains(&fixture)) { renewed += 1; assert_eq!(information, 0.2); }
+                assert_eq!(game_information(&schedule, matchday, fixture, 0.0), 0.0);
+            }
+        }
+        assert!(decayed > 0 && renewed > 0);
     }
 }

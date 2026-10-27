@@ -2,7 +2,7 @@
  import Standings from './Standings.svelte';
  import DecreeMemo from './DecreeMemo.svelte';
  import { segmentDecree } from '../../draft/decrees.ts';
- import { familiarCount, familiarityFor, franchisePackage, knowHowCount, knowHowFor, strongDollar } from '../../draft/packages.ts';
+ import { FAMILIAR_LABELS, familiarCount, familiarityFor, franchisePackage, knowHowCount, knowHowFor, parkHost, strongDollar } from '../../draft/packages.ts';
  import { fill, paydayTotal } from '../../draft/fans.ts';
  import { headToHead, nextChapter, seasonExchange, standings, type LeagueSeason } from '../../draft/league.ts';
  import type { DraftRun } from '../../draft/run.ts';
@@ -46,8 +46,18 @@
   const roster = run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(active[slot]), slot }));
   return roster.some(pick => !pick.profile) ? null : roster as { profile: Profile; slot: typeof roster[number]['slot'] }[];
  });
- // Players in that lineup who know a packaged park.
- const familiar = $derived(pack?.familiar && printed ? { count: familiarCount(run.seating.seats[human], printed)!, edge: familiarityFor(run.seating.seats[human], printed) } : null);
+ // The franchise whose park condition plays at home this chapter: its own, or a relocating club's host.
+ const host = $derived.by(() => { void revision; return parkHost(run.seating.seats[human], run.setup.seed, nextChapter(season)); });
+ const hostPack = $derived(franchisePackage(host));
+ // A relocating club's park this chapter and, while there is one, the next.
+ const venue = $derived.by(() => {
+  void revision;
+  if (!pack?.relocation || !hostPack?.familiar) return null;
+  const chapter = nextChapter(season);
+  return { name: hostPack.name, fits: FAMILIAR_LABELS[hostPack.familiar.rule], next: chapter + 1 < LEAGUE_CHAPTERS ? franchisePackage(parkHost(run.seating.seats[human], run.setup.seed, chapter + 1))?.name ?? null : null };
+ });
+ // Players in that lineup who know the park.
+ const familiar = $derived(hostPack?.familiar && printed ? { count: familiarCount(host, printed)!, edge: familiarityFor(host, printed, pack?.relocation?.familiarity) } : null);
  // Fielders in that lineup whose gloves give the club its know-how.
  const knowHow = $derived(pack?.knowHow && printed ? { count: knowHowCount(run.seating.seats[human], printed)!, edge: knowHowFor(run.seating.seats[human], printed) } : null);
  // The free hitting trainings the last payday brought, and the longest streak behind one.
@@ -84,6 +94,7 @@
    {#if hype !== null}<div><dt>Hype</dt><dd>{hype}% <small>of the most the crowd can lean</small></dd></div>{/if}
    {#if knowHow}<div><dt>Know-how</dt><dd>{knowHow.count} {knowHow.count === 1 ? 'glove' : 'gloves'} <small>every fielder {(knowHow.edge * 15).toFixed(1)}% quicker to the ball</small></dd></div>{/if}
    {#if ironMan}<div><dt>Iron Man</dt><dd>{ironMan.count} free <small>hitting trainings at the last payday{ironMan.count ? `, longest streak ${ironMan.longest} ${ironMan.longest === 1 ? 'stop' : 'stops'}` : ''}</small></dd></div>{/if}
+   {#if venue}<div><dt>Home park</dt><dd>{venue.name} <small>{venue.fits} know it{venue.next ? `; next chapter ${venue.next}` : ''}</small></dd></div>{/if}
    {#if familiar}<div><dt>Know the park</dt><dd>{familiar.count} active <small>home batted balls {(familiar.edge * 100).toFixed(1)}% harder, visitors' {(familiar.edge * 100).toFixed(1)}% softer</small></dd></div>{/if}
    {#if dollar && pack?.exchangeRate}<div><dt>Dollar</dt><dd>{dollar.strong ? 'Strong' : 'Weak'} <small>training {Math.round(pack.exchangeRate.price * 100)}% {dollar.strong ? 'cheaper, stands thinner' : 'dearer, stands fuller'}{dollar.next === null ? '' : `; next chapter ${dollar.next ? 'strong' : 'weak'}`}</small></dd></div>{/if}
    {#if sales}<div><dt>Sale bonuses</dt><dd>+{sales.reduce((sum, sale) => sum + sale.cash, 0)} <small>{sales.length} trained {sales.length === 1 ? 'card' : 'cards'} traded away</small></dd></div>{/if}

@@ -47,8 +47,14 @@ pub struct GameInput<'a, 'p> {
     /// The home club's familiarity with its park: home batted balls leave `1 + familiarity` times as
     /// fast, the visitors' `1 - familiarity` times.
     pub familiarity: f64,
+    /// The home club's pitch information this game: its batters alone get `information` more
+    /// strike-zone lean and batted balls `1 + INFORMATION_SPEED * information` times as fast.
+    pub information: f64,
     pub rules: GameRules,
 }
+
+/// Exit-speed gain per unit of pitch information.
+pub const INFORMATION_SPEED: f64 = 0.1;
 
 /// The home score minus the visitors' in a half where `offense` is batting.
 fn home_runs_lead(half: Half, offense: i32, defense: i32) -> i32 { if half == Half::Top { defense - offense } else { offense - defense } }
@@ -77,7 +83,7 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
     let mut top = InningContext::new(input.away, input.home, input.away_matchups, input.home_defense)?;
     let mut bottom = InningContext::new(input.home, input.away, input.home_matchups, input.away_defense)?;
     top.speed_scale = 1.0 - input.familiarity;
-    bottom.speed_scale = 1.0 + input.familiarity;
+    bottom.speed_scale = (1.0 + input.familiarity) * (1.0 + INFORMATION_SPEED * input.information);
     let crowd = input.crowd;
     let mut highlight: Option<SeasonMoment> = None;
     let mut lowlight: Option<SeasonMoment> = None;
@@ -103,7 +109,7 @@ pub fn simulate_game(input: GameInput, models: &GameModels, streams: &mut GameSt
             workload.begin_half(defense, &defense_box.pitching, inning, defense_box.runs - offense_box.runs);
             if workload.current == defense.closer_index && defense_box.runs > offense_box.runs { crowd.closer_enters(half); }
             let edge = crowd.edge(input.home_edge, inning, regulation, home_runs_lead(half, offense_box.runs, defense_box.runs));
-            context.edge = if half == Half::Top { -edge } else { edge };
+            context.edge = if half == Half::Top { -edge } else { edge + input.information };
             let homers_before: i32 = offense_box.batting.iter().map(|line| line.hr).sum();
             let before = offense_box.runs;
             let target = if half == Half::Bottom && inning >= regulation { f64::from(defense_box.runs) + 1.0 } else { f64::INFINITY };

@@ -86,13 +86,13 @@ Pittsburgh's sale bonus is twice its own training spend on a card traded away, o
 
 Owner: [Angels venues and payroll](catalog.md). First relevant gate: [phase](phases/04-season-evolution.md).
 
-Design the small fictional park pool; define venue selection/repetition, starting park, return-visit attachment, and payroll timing alongside the cap ramp. Physical perks affect both clubs; local attachment resets on relocation.
+The venue pool is the five built park conditions (Colorado, Seattle, Boston, Yankees, San Francisco), one per chapter in a seeded order with no repeat until all five are used, at twice each park's familiarity edge. Local attachment on relocation and payroll commitments remain open.
 
 ## 15. Other franchise branches
 
 Owner: [Other franchise branches](catalog.md). First relevant gate: [phase](phases/05-catalog-and-metagame.md).
 
-Define Washington funding votes and groundskeeping, optional Arizona fatigue, Houston's automatic information/adaptation effect, Minnesota's visible seasonal strength, and Milwaukee's shortened-game interaction.
+Define Washington funding votes and groundskeeping, optional Arizona fatigue, Minnesota's visible seasonal strength, and Milwaukee's shortened-game interaction.
 
 ## 16. Franchise and rivalry details
 

@@ -20,6 +20,8 @@ export const MAX_CROWD_EDGE = 0.4;
 export const MAX_CROWD_HYPE = 0.15;
 /** The engine's cap on a club's park familiarity edge (`engine/src/park_package.rs`). */
 export const MAX_PARK_FAMILIARITY = 0.02;
+/** The engine's cap on a club's pitch information (`engine/src/league.rs`). */
+export const MAX_INFORMATION = 0.3;
 
 /** One club's active roster and lineup for a segment. */
 export interface LeagueClubInput {
@@ -39,6 +41,11 @@ export interface LeagueClubInput {
  familiarity: number;
  /** The franchise's crowd trigger, which fills its season hype meter, or null. */
  crowdTrigger: CrowdTrigger | null;
+ /**
+  * At home, the club's batters alone get this much more strike-zone lean and a tenth of it in exit
+  * speed: full against a visitor's first game there in a chapter, halved for each later one.
+  */
+ information: number;
 }
 
 /** Draft Mode's exaggerated park conditions; both clubs play under them. */

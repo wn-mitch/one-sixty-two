@@ -6,7 +6,7 @@ import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { isRivalry, openingFans, payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
 import { closeChapter, ironManUpgrades, recordSegment, saleBonusOf, seasonCrowds, segmentInput, startLeague, type ClubLineup, type LeagueSeason, type SegmentRecord } from './league.ts';
-import { exchangeFor, familiarCount, knowHowCount, MAX_KNOW_HOW, PACKAGES, strongDollar, withKnowHow, type FranchisePackage } from './packages.ts';
+import { exchangeFor, familiarCount, familiarityFor, knowHowCount, MAX_KNOW_HOW, PACKAGES, parkHost, strongDollar, withKnowHow, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, ownedBy, startRun, windowLineup, type DraftRun, type RunData } from './run.ts';
 import { buyTraining, gainScale, offersFor, priceFor, refusal, trainedThisVisit } from './shop.ts';
@@ -71,7 +71,8 @@ describe('franchise packages', () => {
   const { run, season, profile } = seasonFor('COL');
   const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
-  input.clubs.forEach((club, seat) => expect(club.parkPackage).toBe(PACKAGES[run.seating.seats[seat]]?.park ?? null));
+  // A relocating club plays under its first host's condition.
+  input.clubs.forEach((club, seat) => expect(club.parkPackage).toBe(PACKAGES[parkHost(run.seating.seats[seat], run.setup.seed, 0)]?.park ?? null));
   expect(input.clubs[run.seating.humanSeat].parkPackage).toBe('thinAir');
   const plain = simulateLeagueSegment({ ...input, clubs: input.clubs.map(club => ({ ...club, parkPackage: null })) });
   const thin = simulateLeagueSegment(input);
@@ -94,9 +95,10 @@ describe('franchise packages', () => {
   expect(familiarCount('NYY', roster)).toBe(3);
   expect(familiarCount('ARI', roster)).toBeNull();
   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
-  input.clubs.forEach((club, seat) => expect(club.familiarity).toBe(seat === human ? .015 : 0));
+  const printed = (seat: number) => run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(season.lineups[seat].active[slot])!, slot }));
+  input.clubs.forEach((club, seat) => expect(club.familiarity).toBe(seat === human ? .015 : familiarityFor(parkHost(run.seating.seats[seat], run.setup.seed, 0), printed(seat), PACKAGES[run.seating.seats[seat]]?.relocation?.familiarity)));
   const known = { ...input, clubs: input.clubs.map((club, seat) => seat === human ? { ...club, familiarity: MAX_PARK_FAMILIARITY } : club) };
-  const plain = simulateLeagueSegment({ ...known, clubs: known.clubs.map(club => ({ ...club, familiarity: 0 })) });
+  const plain = simulateLeagueSegment({ ...known, clubs: known.clubs.map((club, seat) => seat === human ? { ...club, familiarity: 0 } : club) });
   const familiar = simulateLeagueSegment(known);
   const changed = familiar.games.filter((game, index) => game.homeRuns !== plain.games[index].homeRuns || game.awayRuns !== plain.games[index].awayRuns);
   expect(changed.length).toBeGreaterThan(0);
@@ -207,13 +209,13 @@ describe('franchise packages', () => {
   expect(input.clubs[human].roster.find(pick => pick.slot === '2B')!.profile.defense.positions['2B']!.evidence.hitPrevention.status).toBe('trained');
   expect(train(profiles.get(lineup.active['2B'])!, 'fielding').defense.positions['2B']!.evidence.hitPrevention.status).toBe('trained');
   const withEdge = (edge: number) => ({ ...input, clubs: input.clubs.map((club, seat) => seat !== human ? club : { ...club, roster: club.roster.map(pick => ({ ...pick, profile: withKnowHow(profiles.get(pick.profile.seasonId)!, edge) })) }) });
-  // Same seeds: only the club's games change, road games included, and over six segments it allows fewer runs.
+  // Same seeds: only the club's games change, road games included, and over twelve segments it allows fewer runs.
   const plain = simulateLeagueSegment(withEdge(0));
   const known = simulateLeagueSegment(withEdge(MAX_KNOW_HOW));
   const changed = known.games.filter((game, index) => game.homeRuns !== plain.games[index].homeRuns || game.awayRuns !== plain.games[index].awayRuns);
   expect(changed.every(game => game.home === human || game.away === human)).toBe(true);
   expect(changed.some(game => game.away === human)).toBe(true);
-  const allowed = (edge: number) => Array.from({ length: 6 }, (_, segment) => simulateLeagueSegment({ ...withEdge(edge), seed: 100 + segment }))
+  const allowed = (edge: number) => Array.from({ length: 12 }, (_, segment) => simulateLeagueSegment({ ...withEdge(edge), seed: 100 + segment }))
    .flatMap(result => result.games).reduce((sum, game) => sum + (game.home === human ? game.awayRuns : game.away === human ? game.homeRuns : 0), 0);
   expect(allowed(MAX_KNOW_HOW)).toBeLessThan(allowed(0));
  });
@@ -300,5 +302,47 @@ describe('franchise packages', () => {
   const games = Array.from({ length: 10 }, (_, matchday) => ({ matchday, home: human, away: visitor, homeRuns: 1, awayRuns: 2 })) as SegmentRecord['games'];
   const gate = (index: number) => payday(human, run.seating.seats, openingFans(.5), games, exchangeFor('TOR', run.setup.seed, index)).gate;
   expect([gate(strong), gate(weak)]).toEqual([Math.round(1.6 * 1.3 * .55 * 10), Math.round(1.6 / 1.3 * .85 * 10)]);
+ });
+
+ it('moves the Angels\' home games through every borrowed park before any repeats, with that park\'s familiarity', () => {
+  const hosts = PACKAGES.ANA.relocation!.hosts;
+  for (const seed of [1, 2, 3, 4]) {
+   const venues = [0, 1, 2, 3, 4, 5].map(chapter => parkHost('ANA', seed, chapter));
+   expect([...venues.slice(0, 5)].sort()).toEqual([...hosts].sort());
+   expect(hosts).toContain(venues[5]);
+   expect(venues[5]).not.toBe(venues[4]);
+  }
+  expect(parkHost('BOS', 1, 3)).toBe('BOS');
+  const { run, season, profile } = seasonFor('ANA');
+  const human = run.seating.humanSeat;
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  const data = testLeagueData(FRANCHISES);
+  const printed = run.pool.rules.activeSlots.map(slot => ({ profile: profile(season.lineups[human].active[slot]), slot }));
+  const seen = new Set<string>();
+  for (const chapter of [0, 1, 2, 3, 4, 5]) {
+   season.segments = Array.from({ length: chapter * 3 }, () => ({ carry: [], hype: [] }) as unknown as SegmentRecord);
+   const host = parkHost('ANA', run.setup.seed, chapter);
+   const clubs = segmentInput(run, season, profiles, data, FRANCHISES.slice(0, 8)).clubs;
+   expect(clubs[human].parkPackage).toBe(PACKAGES[host].park);
+   expect(clubs[human].familiarity).toBe(Math.min(MAX_PARK_FAMILIARITY, 2 * familiarityFor(host, printed)));
+   expect(familiarityFor(host, printed, 2)).toBe(clubs[human].familiarity);
+   clubs.forEach((club, seat) => { if (seat !== human) expect(club.parkPackage).toBe(PACKAGES[run.seating.seats[seat]]?.park ?? null); });
+   seen.add(clubs[human].parkPackage!);
+  }
+  expect(seen.size).toBe(5);
+ });
+
+ it('sends Houston\'s pitch information to the engine, which changes only Houston\'s home games', () => {
+  const { run, season, profile } = seasonFor('HOU');
+  const human = run.seating.humanSeat;
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
+  input.clubs.forEach((club, seat) => expect(club.information).toBe(seat === human ? .25 : 0));
+  const blind = simulateLeagueSegment({ ...input, clubs: input.clubs.map(club => ({ ...club, information: 0 })) });
+  const informed = simulateLeagueSegment(input);
+  const changed = informed.games.filter((game, index) => game.homeRuns !== blind.games[index].homeRuns || game.awayRuns !== blind.games[index].awayRuns);
+  expect(changed.length).toBeGreaterThan(0);
+  expect(changed.every(game => game.home === human)).toBe(true);
+  expect(() => simulateLeagueSegment({ ...input, clubs: input.clubs.map((club, seat) => seat === human ? { ...club, information: .31 } : club) })).toThrow(/information is out of bounds/);
  });
 });
