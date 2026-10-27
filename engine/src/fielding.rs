@@ -1,6 +1,7 @@
 //! Fielder reach, the fielding plan, and physical outcome probabilities (`src/lib/sim/fielding.ts`).
 use crate::flight::{FlightTrace, TRACE_AUTOMATIC_DOUBLE, TRACE_DEAD_BALL, TRACE_HOME_RUN};
 use crate::math::{self, planar_distance};
+use crate::park_package::TERRACE_CLIMB;
 
 /// Fixed starting coordinates (meters) in POSITIONS order: C, 1B, 2B, 3B, SS, LF, CF, RF.
 pub const DEFENDER_START: [[f64; 2]; 8] = [[0.0, -1.5], [23.0, 26.0], [13.0, 38.0], [-23.0, 26.0], [-13.0, 38.0], [-55.0, 75.0], [0.0, 95.0], [55.0, 75.0]];
@@ -78,7 +79,8 @@ fn fill_candidates(trace: &FlightTrace, position: usize, settings: &[(f64, usize
         };
     }
     let [sx, sy] = DEFENDER_START[position];
-    let distance = |index: usize| planar_distance(trace.x[index] - sx, trace.y[index] - sy);
+    // Climbing the terrace costs `TERRACE_CLIMB` meters of running for every meter up it.
+    let distance = |index: usize| planar_distance(trace.x[index] - sx, trace.y[index] - sy) + if trace.terraced { TERRACE_CLIMB * trace.depth[index] } else { 0.0 };
     let airborne_end = if trace.landing < 0 { trace.count } else { trace.landing as usize };
     for index in 1..airborne_end {
         if trace.z[index] > CATCH_HEIGHT_M { continue; }

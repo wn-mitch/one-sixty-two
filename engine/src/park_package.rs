@@ -30,6 +30,12 @@ pub enum ParkPackage {
     Fermentation,
     /// Minnesota's Deep Freeze: a season calendar of cold, thaw, warm, warm, cool and cold chapters.
     DeepFreeze,
+    /// Cincinnati's Crosley Cliff: a steep terrace in front of the outfield fence.
+    Terrace,
+    /// Washington's grounds while funded: a freshly cut, fast field.
+    FundedGrounds,
+    /// Washington's grounds during a shutdown: long grass that slows every ball on the ground.
+    ShutdownGrounds,
 }
 
 /// What a park condition does during play, beyond the stadium itself. Both clubs play under it.
@@ -81,6 +87,18 @@ pub const RINGS: [(f64, f64, f64, OverheadRuling); 4] = [
     (78.0, 84.0, 16.0, OverheadRuling::HomeRun),
 ];
 const RING_SECTORS: usize = 36;
+/// Cincinnati's terrace: its depth in front of the fair fences, the pull of its slope on a rolling
+/// ball (m/s², above the outfield turf's deceleration so no ball rests on it), and the extra meters a
+/// fielder runs for every meter he climbs it.
+pub const TERRACE_M: f64 = 10.0;
+pub const TERRACE_PULL_MPS2: f64 = 4.0;
+pub const TERRACE_CLIMB: f64 = 3.0;
+/// Washington's grounds: ground-ball exit speed, and ground deceleration as a multiple of the real
+/// park's in the infield and outfield, funded and in a shutdown.
+pub const FUNDED_GROUNDERS: f64 = 1.1;
+pub const FUNDED_GROUND: (f64, f64) = (0.8, 0.7);
+pub const SHUTDOWN_GROUNDERS: f64 = 0.88;
+pub const SHUTDOWN_GROUND: (f64, f64) = (1.6, 1.8);
 
 /// The conditions `package` plays under in chapter `chapter` (0-5).
 pub fn conditions(package: Option<ParkPackage>, chapter: usize) -> Conditions {
@@ -89,6 +107,8 @@ pub fn conditions(package: Option<ParkPackage>, chapter: usize) -> Conditions {
         Some(ParkPackage::Everglades) => Conditions { runner_slowdown: SOGGY_RUNNERS, grounder_speed: SOGGY_GROUNDERS, ..Conditions::default() },
         Some(ParkPackage::Fermentation) => Conditions { late_inning: FERMENT_INNING, late_power: FERMENT_POWER, late_fielding: FERMENT_FIELDING, ..Conditions::default() },
         Some(ParkPackage::DeepFreeze) => Conditions { endurance: freeze(FREEZE_CALENDAR[chapter.min(5)]).0, ..Conditions::default() },
+        Some(ParkPackage::FundedGrounds) => Conditions { grounder_speed: FUNDED_GROUNDERS, ..Conditions::default() },
+        Some(ParkPackage::ShutdownGrounds) => Conditions { grounder_speed: SHUTDOWN_GROUNDERS, ..Conditions::default() },
         _ => Conditions::default(),
     }
 }
@@ -159,6 +179,12 @@ pub fn apply(stadium: &StadiumConfig, package: ParkPackage, chapter: usize) -> S
         ParkPackage::Catwalk => park.overhead.extend(catwalk_rings()),
         ParkPackage::Fermentation => {}
         ParkPackage::DeepFreeze => park.air_density_kg_m3 *= freeze(FREEZE_CALENDAR[chapter.min(5)]).1,
+        ParkPackage::Terrace => park.terrace_m = TERRACE_M,
+        ParkPackage::FundedGrounds | ParkPackage::ShutdownGrounds => {
+            let (infield, outfield) = if package == ParkPackage::FundedGrounds { FUNDED_GROUND } else { SHUTDOWN_GROUND };
+            park.infield_deceleration_mps2 *= infield;
+            park.outfield_deceleration_mps2 *= outfield;
+        }
     }
     park
 }
@@ -187,7 +213,7 @@ mod tests {
         }).collect();
         StadiumConfig {
             id: "ring".into(), version: "1".into(), franchise_id: "X".into(), name: "Ring".into(), fences, overhead: Vec::new(),
-            air_density_kg_m3: 1.2, wind_mps: [0.0; 3], infield_deceleration_mps2: 1.0, outfield_deceleration_mps2: 1.0, wall_restitution: 0.3,
+            air_density_kg_m3: 1.2, wind_mps: [0.0; 3], infield_deceleration_mps2: 1.0, outfield_deceleration_mps2: 1.0, wall_restitution: 0.3, terrace_m: 0.0,
         }
     }
 
@@ -236,7 +262,38 @@ mod tests {
         let freeze = |chapter| (conditions(Some(ParkPackage::DeepFreeze), chapter).endurance, apply(&park, ParkPackage::DeepFreeze, chapter).air_density_kg_m3);
         assert!(freeze(0).0 < freeze(1).0 && freeze(1).0 < freeze(2).0 && freeze(2) == (1.0, 1.2) && freeze(3) == freeze(2));
         assert!(freeze(0).1 > freeze(1).1 && freeze(5) == freeze(0) && freeze(4) == freeze(1));
+        // Washington's grounds: fast and long-rolling funded, slow in a shutdown.
+        let funded = apply(&park, ParkPackage::FundedGrounds, 0);
+        let shutdown = apply(&park, ParkPackage::ShutdownGrounds, 0);
+        assert_eq!([funded.infield_deceleration_mps2, funded.outfield_deceleration_mps2], [FUNDED_GROUND.0, FUNDED_GROUND.1]);
+        assert_eq!([shutdown.infield_deceleration_mps2, shutdown.outfield_deceleration_mps2], [SHUTDOWN_GROUND.0, SHUTDOWN_GROUND.1]);
+        assert!(conditions(Some(ParkPackage::FundedGrounds), 2).grounder_speed > 1.0 && conditions(Some(ParkPackage::ShutdownGrounds), 2).grounder_speed < 1.0);
+        assert_eq!(apply(&park, ParkPackage::Terrace, 0).terrace_m, TERRACE_M);
+        assert_eq!(conditions(Some(ParkPackage::Terrace), 0), Conditions::default());
         assert_eq!(conditions(None, 0), Conditions::default());
         assert_eq!(conditions(Some(ParkPackage::ThinAir), 0), Conditions::default());
+    }
+
+    #[test]
+    fn the_terrace_sends_a_rolling_ball_back_down_and_slows_fielders_on_it() {
+        use crate::flight::{trace_flight, ContactSample, FlightTrace, PreparedPark};
+        let plain = PreparedPark::new(&ring()).unwrap();
+        let cliff = PreparedPark::new(&apply(&ring(), ParkPackage::Terrace, 0)).unwrap();
+        // The fair fences stand 110 m out (their chords a little nearer), so the terrace starts inside 100 m.
+        assert!(cliff.terrace_at(0.0, 95.0).is_none() && plain.terrace_at(0.0, 107.0).is_none());
+        let (depth, down) = cliff.terrace_at(0.0, 106.0).unwrap();
+        assert!(depth > 3.0 && depth < TERRACE_M && down[1] < -0.99);
+        // A hard grounder up the middle reaches the fence on flat grass; on the terrace it never rests,
+        // ending back below it, with every sample on it marked for the fielders.
+        let sample = ContactSample { speed_mph: 105.0, launch_deg: 8.0, spray_deg: 0.0, carry: 1.0 };
+        let (mut flat, mut steep) = (FlightTrace::default(), FlightTrace::default());
+        trace_flight(&sample, &plain, &mut flat).unwrap();
+        trace_flight(&sample, &cliff, &mut steep).unwrap();
+        let end = |trace: &FlightTrace| [trace.x[trace.count - 1], trace.y[trace.count - 1]];
+        assert!(!flat.terraced && flat.rebounds > 0);
+        assert!(steep.terraced && cliff.terrace_at(end(&steep)[0], end(&steep)[1]).is_none());
+        assert!(math::planar_distance(end(&steep)[0], end(&steep)[1]) < math::planar_distance(end(&flat)[0], end(&flat)[1]));
+        assert!(steep.depth[..steep.count].iter().any(|&depth| depth > 0.0));
+        for index in 0..steep.count { assert_eq!(steep.depth[index], cliff.terrace_at(steep.x[index], steep.y[index]).map_or(0.0, |(depth, _)| depth)); }
     }
 }

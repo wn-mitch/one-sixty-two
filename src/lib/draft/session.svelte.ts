@@ -8,11 +8,12 @@ import { refreshShop } from '../cosmetics/store.svelte.ts';
 import type { StackRole } from './cleanup.ts';
 import { seatTable } from './franchises.ts';
 import { dropPush, PushError, takePush, type PushKind } from './injuries.ts';
-import { closeChapter, fieldedIds, LEAGUE_VERSION, LineupError, recordSegment, seasonStop, segmentInput, setLineup, standings, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
+import { closeChapter, fieldedIds, LEAGUE_VERSION, LineupError, lockFunding, recordSegment, voteFunding, seasonStop, segmentInput, setLineup, standings, startLeague, type ClubLineup, type LeagueSeason } from './league.ts';
 import { loadDraftCards, loadParkFits, ProfileStore } from './load.ts';
 import { applyAction, newRunSetup, RunActionError, startRun, unsupportedVersion, type DraftRun, type RunAction, type RunData, type RunSetup, type WindowOrders } from './run.ts';
 import { archiveRun, getRun, latestRun, resumeRun, saveRun } from './saves.ts';
 import { aiShop, buyTraining, learnedPositions, ShopError } from './shop.ts';
+import type { Funding } from './packages.ts';
 import type { TrainingKind } from './training.ts';
 import type { Difficulty } from './scouting.ts';
 import type { DraftCard, DraftSlot } from './types.ts';
@@ -280,6 +281,17 @@ export class DraftModeSession {
   return null;
  }
 
+ /** Casts the player's funding vote for the next chapter's home grounds; returns why it cannot. */
+ async voteFunding(funding: Funding): Promise<string | null> {
+  const run = this.run;
+  const season = this.season;
+  if (!run || !season || this.playing) return 'The season is not at a stop';
+  try { voteFunding(run, season, funding); } catch (error) { if (error instanceof LineupError) return error.message; throw error; }
+  await this.#save();
+  this.revision++;
+  return null;
+ }
+
  /** Plays the next nine-game segment in a worker; resolves once it is recorded or fails. */
  async playSegment(): Promise<void> {
   const run = this.run;
@@ -299,6 +311,7 @@ export class DraftModeSession {
    aiShop(run, season, profiles);
    const missing = fieldedIds(run, season).filter(id => !profiles.has(id));
    if (missing.length) for (const [id, profile] of await this.profiles.load(missing)) profiles.set(id, profile);
+   lockFunding(run, season, profiles);
    const names = run.seating.seats.map((_, seat) => this.clubName(seat));
    const input = segmentInput(run, season, profiles, this.#simulation, names);
    const { result, schedule } = await this.#simulate(input);

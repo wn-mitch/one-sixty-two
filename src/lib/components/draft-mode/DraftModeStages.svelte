@@ -238,7 +238,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
    onsimulate={() => void session.playSegment()}
   >
    {#snippet intro()}
-    <ChapterStatus run={current.run} season={current.season} revision={session.revision} {profiles} {clubName} />
+    <ChapterStatus run={current.run} season={current.season} revision={session.revision} {profiles} {clubName} {working} onVote={funding => void step(session.voteFunding(funding))} />
     <InjuryReport run={current.run} season={current.season} revision={session.revision} {profiles} {working} onPush={(id, kind, on) => void step(session.push(id, kind, on))} />
     <TrainingShop run={current.run} season={current.season} revision={session.revision} {profiles} {working} onTrain={(id, kind, intensive, position) => session.train(id, kind, intensive, position)} />
    {/snippet}

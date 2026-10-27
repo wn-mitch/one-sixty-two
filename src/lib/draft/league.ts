@@ -8,14 +8,14 @@ import { afterSegment, crowd, EXPECTATION_RANGE, openingFans, payday, paydayTota
 import { segmentDecree } from './decrees.ts';
 import { availability, fieldedLineup, hurt, resolvePushes, type Injury, type Push } from './injuries.ts';
 import { RIVALS } from './franchises.ts';
-import { exchangeFor, familiarityFor, franchisePackage, knowHowFor, parkHost, saleBonusFor, withKnowHow, type Exchange } from './packages.ts';
+import { conditionFamiliarity, exchangeFor, franchisePackage, homeCondition, knowHowFor, saleBonusFor, suitedFunding, withKnowHow, type Exchange, type Funding } from './packages.ts';
 import { developed, type Upgrade } from './training.ts';
 import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBullpenSlot } from './rules.ts';
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
 /** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v17' as const;
+export const LEAGUE_VERSION = 'league-v18' as const;
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop
@@ -63,6 +63,8 @@ export interface LeagueSeason {
  injuries: Injury[];
  /** Every sale bonus paid, in the order chapter markets closed; a card earns one at most once. */
  sales: Sale[];
+ /** The home grounds of a franchise with funding votes, by chapter, locked when each chapter's first games are played. */
+ funding: Funding[];
 }
 
 /** A sale bonus: `seat` traded `cardId` away at chapter `chapter`'s market and banked `cash`. */
@@ -117,7 +119,7 @@ export function startLeague(run: DraftRun): LeagueSeason {
  return {
   version: LEAGUE_VERSION, rivals: matchRivals(run), lineups, segments: [],
   fans: priors(run.seating.seats, payrolls).map(openingFans),
-  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1, pushes: [], injuries: [], sales: []
+  cash: lineups.map(() => 0), upgrades: [], aiShopped: -1, pushes: [], injuries: [], sales: [], funding: []
  };
 }
 
@@ -249,12 +251,47 @@ export const seasonExchange = (run: DraftRun, season: LeagueSeason, seat: number
 export const fieldedIds = (run: DraftRun, season: LeagueSeason): string[] =>
  season.lineups.flatMap((_, seat) => Object.values(fieldedLineup(run, season, seat, season.segments.length).lineup.active));
 
+/** `seat`'s active cards for the next segment as printed, in roster-slot order. */
+function printedLineup(run: DraftRun, season: LeagueSeason, seat: number, profiles: ReadonlyMap<string, Profile>): { profile: Profile; slot: DraftSlot }[] {
+ const { lineup } = fieldedLineup(run, season, seat, season.segments.length);
+ return run.pool.rules.activeSlots.map(slot => {
+  const profile = profiles.get(lineup.active[slot]);
+  if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
+  return { profile, slot };
+ });
+}
+
+/** `seat`'s funding state for the next chapter's home games: the vote cast, else the state its active roster knows better; null without funding votes. */
+const fundingFor = (run: DraftRun, season: LeagueSeason, seat: number, printed: readonly { profile: Profile; slot: DraftSlot }[]): Funding | null =>
+ franchisePackage(run.seating.seats[seat])?.funding ? season.funding[nextChapter(season)] ?? suitedFunding(run.seating.seats[seat], printed) : null;
+
+/** Whether the player may vote on the next chapter's grounds now: at a chapter stop, before its first games, under a franchise with funding votes. */
+export const canVoteFunding = (run: DraftRun, season: LeagueSeason): boolean =>
+ run.phase === 'season' && season.segments.length < LEAGUE_SEGMENTS && season.segments.length % SEGMENTS_PER_CHAPTER === 0 && !!franchisePackage(run.seating.seats[run.seating.humanSeat])?.funding;
+
+/** Casts the player's funding vote for the next chapter's home games; it stands until those games start. */
+export function voteFunding(run: DraftRun, season: LeagueSeason, funding: Funding): void {
+ if (!canVoteFunding(run, season)) throw new LineupError('No funding vote is open');
+ season.funding[nextChapter(season)] = funding;
+}
+
+/**
+ * Locks the next chapter's grounds before its first games: the player's vote, or for a club that
+ * did not vote the state its active roster knows better. `profiles` must hold that club's active cards.
+ */
+export function lockFunding(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>): void {
+ const chapter = nextChapter(season);
+ if (season.segments.length >= LEAGUE_SEGMENTS || season.funding[chapter]) return;
+ const seat = run.seating.seats.findIndex(franchiseId => franchisePackage(franchiseId)?.funding);
+ if (seat >= 0) season.funding[chapter] = fundingFor(run, season, seat, printedLineup(run, season, seat, profiles))!;
+}
+
 /**
  * The engine input for the next segment. `profiles` must hold every fielded card's printed
  * profile (`fieldedIds`); each plays with the training in force, and at reduced strength when
  * playing through an injury. Pushes taken at this stop ride starters and rest-skipping relievers.
  * `names` labels each seat's club, and each club plays in its franchise's park before its own crowd,
- * under the chapter's park condition (`parkHost`), with a familiarity edge there from the printed
+ * under the chapter's park condition (`homeCondition`), with a familiarity edge there from the printed
  * cards that fit the park, and with its franchise's fielding know-how from the printed gloves on every fielder.
  */
 export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: ReadonlyMap<string, Profile>, data: SimulationData, names: readonly string[]): LeagueSegmentInput {
@@ -271,13 +308,9 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     .map(([, id]) => id).sort();
    const stadium = data.stadiums.find(item => item.franchiseId === franchiseId);
    if (!stadium) throw new Error(`No home park for ${franchiseId}`);
-   const printed = run.pool.rules.activeSlots.map(slot => {
-    const profile = profiles.get(lineup.active[slot]);
-    if (!profile) throw new Error(`Missing profile ${lineup.active[slot]}`);
-    return { profile, slot };
-   });
+   const printed = printedLineup(run, season, seat, profiles);
    const knowHow = knowHowFor(franchiseId, printed);
-   const host = parkHost(franchiseId, run.setup.seed, nextChapter(season));
+   const home = homeCondition(franchiseId, run.setup.seed, nextChapter(season), fundingFor(run, season, seat, printed));
    return {
     id: franchiseId, name: names[seat], homeStadium: stadiumRef(stadium),
     roster: printed.map(({ profile, slot }) => {
@@ -287,7 +320,7 @@ export function segmentInput(run: DraftRun, season: LeagueSeason, profiles: Read
     battingOrder: [...lineup.battingOrder], starterOrder: [...lineup.starterOrder], reliefRoles: lineup.reliefRoles.map(role => ({ ...role })),
     quickRecovery: Object.values(lineup.active).filter(id => season.upgrades.some(upgrade => upgrade.cardId === id && upgrade.kind === 'recovery')).sort(),
     ridden: pushed('ride', slot => slot.startsWith('SP')), tireless: pushed('skipRest', slot => slot === 'CL' || slot.startsWith('RP')),
-    parkPackage: franchisePackage(host)?.park ?? null, familiarity: familiarityFor(host, printed, franchisePackage(franchiseId)?.relocation?.familiarity), crowdTrigger: franchisePackage(franchiseId)?.crowd ?? null,
+    parkPackage: home?.condition.park ?? null, familiarity: home ? conditionFamiliarity(home.condition, printed, home.scale) : 0, crowdTrigger: franchisePackage(franchiseId)?.crowd ?? null,
     information: franchisePackage(franchiseId)?.information ?? 0
    };
   })

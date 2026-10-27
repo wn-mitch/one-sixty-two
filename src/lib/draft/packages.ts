@@ -63,7 +63,20 @@ export interface FranchisePackage {
  relocation?: { hosts: readonly string[]; familiarity: number };
  /** Pitch information at home games (`LeagueClubInput.information`), which visitors wear down by changing signs. */
  information?: number;
+ /**
+  * Home grounds set by a funding vote for each chapter: each state's park condition and who knows
+  * it. The club votes at each chapter stop; an AI club, or a player who does not vote, takes the
+  * state its active roster knows better (`suitedFunding`).
+  */
+ funding?: Readonly<Record<Funding, ParkCondition>>;
 }
+
+/** A park condition and which active players know it, if any do. */
+export interface ParkCondition { park: ParkPackage; familiar?: { rule: FamiliarRule; perPlayer: number } }
+
+/** A funding vote's outcome for a chapter of home games. */
+export const FUNDINGS = ['funded', 'shutdown'] as const;
+export type Funding = typeof FUNDINGS[number];
 
 /** What a chapter's conditions do to a club: its training price multiplier, the shift in its home stands' fill and its ticket price multiplier. */
 export interface Exchange { price: number; fill: number; ticket: number }
@@ -75,10 +88,10 @@ export const MAX_KNOW_HOW = .18;
 /**
  * Who knows a home park, read from the printed card: left-handed or switch hitters, right-handed
  * hitters, hitters with 20 or more home runs, pitchers with at least a strikeout an inning, starters
- * with at least a strikeout an inning, infielders whose glove grades 60 or better at their slot, or
- * hitters with a speed of 0.7 or more.
+ * with at least a strikeout an inning, infielders whose glove grades 60 or better at their slot,
+ * hitters with a speed of 0.7 or more, or outfielders with a speed of 0.7 or more.
  */
-export type FamiliarRule = 'leftyHitter' | 'rightyHitter' | 'slugger' | 'strikeoutPitcher' | 'strikeoutStarter' | 'infieldGlove' | 'fastRunner';
+export type FamiliarRule = 'leftyHitter' | 'rightyHitter' | 'slugger' | 'strikeoutPitcher' | 'strikeoutStarter' | 'infieldGlove' | 'fastRunner' | 'fastOutfielder';
 
 /** The Deep Freeze's weather by chapter (`FREEZE_CALENDAR` in `engine/src/park_package.rs`). */
 export const FREEZE_CALENDAR = ['cold', 'thaw', 'warm', 'warm', 'cool', 'cold'] as const;
@@ -86,7 +99,7 @@ export const FREEZE_CALENDAR = ['cold', 'thaw', 'warm', 'warm', 'cool', 'cold'] 
 /** Who knows a park, as each stop names them. */
 export const FAMILIAR_LABELS: Readonly<Record<FamiliarRule, string>> = {
  leftyHitter: 'left-handed and switch hitters', rightyHitter: 'right-handed hitters', slugger: '20-homer hitters', strikeoutPitcher: 'strikeout pitchers',
- strikeoutStarter: 'strikeout starters', infieldGlove: 'infielders with a 60+ glove', fastRunner: 'fast runners'
+ strikeoutStarter: 'strikeout starters', infieldGlove: 'infielders with a 60+ glove', fastRunner: 'fast runners', fastOutfielder: 'fast outfielders'
 };
 
 const isHitterSlot = (slot: DraftSlot) => (HITTER_SLOTS as readonly string[]).includes(slot);
@@ -97,7 +110,8 @@ const FAMILIAR: Record<FamiliarRule, (profile: Profile, slot: DraftSlot) => bool
  strikeoutPitcher: (profile, slot) => !isHitterSlot(slot) && !!profile.pitching && profile.pitching.SO * 3 >= profile.pitching.IPouts,
  strikeoutStarter: (profile, slot) => slot.startsWith('SP') && !!profile.pitching && profile.pitching.SO * 3 >= profile.pitching.IPouts,
  infieldGlove: (profile, slot) => (['1B', '2B', '3B', 'SS'] as DraftSlot[]).includes(slot) && gloveGrade(profile, slot as Position) >= 60,
- fastRunner: (profile, slot) => isHitterSlot(slot) && profile.speed >= .7
+ fastRunner: (profile, slot) => isHitterSlot(slot) && profile.speed >= .7,
+ fastOutfielder: (profile, slot) => (['LF', 'CF', 'RF'] as DraftSlot[]).includes(slot) && profile.speed >= .7
 };
 
 export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
@@ -117,6 +131,11 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  TBD: { name: 'Catwalk Baseball', summary: 'The new roof\'s four catwalk rings hang low: a fly ball off the two upper rings stays live and can be caught; off the two lower rings it is a home run. Your sluggers know the angles. For each active hitter with 20 or more homers on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'catwalk', familiar: { rule: 'slugger', perPlayer: .0022 } },
  MIL: { name: 'Seventh-Inning Fermentation', summary: 'From the seventh-inning stretch on, everyone at the ballpark has had a few: batted balls fly harder and fielders get sloppy, for both clubs. Your sluggers handle it best. For each active hitter with 20 or more homers on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'fermentation', familiar: { rule: 'slugger', perPlayer: .0022 } },
  MIN: { name: 'The Deep Freeze', summary: 'The season runs cold, thaw, warm, warm, cool, cold. In the cold, starters tire far sooner and the ball dies in the heavy air, for both clubs. Your strikeout starters thrive in it. For each active starter with at least a strikeout an inning on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'deepFreeze', familiar: { rule: 'strikeoutStarter', perPlayer: .0065 } },
+ CIN: { name: 'The Crosley Cliff', summary: 'A steep terrace rises in front of the whole outfield fence, for both clubs: fielders climbing it reach balls late, and a ball rolling onto it runs back down at them. Your fast outfielders know the footing. For each active outfielder with a speed of 0.7 or more on the card, your batted balls come off the bat harder at home and the visitors\' softer.', park: 'terrace', familiar: { rule: 'fastOutfielder', perPlayer: .0065 } },
+ WSN: {
+  name: 'Government Shutdown', summary: 'At every chapter stop you vote on the groundskeeping budget for the chapter\'s home games, for both clubs. Funded, a freshly cut field sends ground balls through faster and lets balls roll to the wall; your infielders with a 60+ glove know it. Shut down, long grass slows every ball on the ground; your fast runners beat out the slow rollers. For each active player who knows the chapter\'s grounds, your batted balls come off the bat harder at home and the visitors\' softer.',
+  funding: { funded: { park: 'fundedGrounds', familiar: { rule: 'infieldGlove', perPlayer: .005 } }, shutdown: { park: 'shutdownGrounds', familiar: { rule: 'fastRunner', perPlayer: .0022 } } }
+ },
  ATL: { name: 'The Cherokee Commute', summary: 'A sweetheart stadium deal raises the salary cap by half. The park is a long drive out, so fewer fans come and the crowd leans less.', capShare: .5 },
  BAL: { name: 'Iron Man', summary: 'The cap is 10% tighter and the fans expect less. At every payday each hitter who batted in that stop gets a free hitting training, growing with each stop in a row he has played, up to ten stops.', capShare: -.1, ironMan: { step: .025, max: .25 } },
  KCR: { name: 'Royal Flush', summary: 'Kauffman is a casino. The cap is 10% tighter, but every home win pays 8 cash with the payday.', capShare: -.1, homeWinCash: 8 },
@@ -129,18 +148,53 @@ export const PACKAGES: Readonly<Record<string, FranchisePackage>> = {
  DET: { name: 'The Assembly Line', summary: 'Every training gains 5% more for each common on the active roster, up to 40%.', commonBoost: .05, commonBoostMax: .4 }
 };
 
+type Printed = readonly { profile: Profile; slot: DraftSlot }[];
+
+/** How many of `roster`'s printed cards fit `rule`. */
+export const familiarUnder = (rule: FamiliarRule, roster: Printed): number => roster.filter(({ profile, slot }) => FAMILIAR[rule](profile, slot)).length;
+
 /** How many of `roster`'s printed cards know the franchise's home park, or null when the franchise has no such rule. */
-export function familiarCount(franchiseId: string, roster: readonly { profile: Profile; slot: DraftSlot }[]): number | null {
+export function familiarCount(franchiseId: string, roster: Printed): number | null {
  const rule = PACKAGES[franchiseId]?.familiar?.rule;
- return rule ? roster.filter(({ profile, slot }) => FAMILIAR[rule](profile, slot)).length : null;
+ return rule ? familiarUnder(rule, roster) : null;
 }
+
+/** The familiarity edge under `condition` with `roster` active, times `scale` (a relocating club's multiplier), up to the engine's cap. */
+export const conditionFamiliarity = ({ familiar }: ParkCondition, roster: Printed, scale = 1): number =>
+ familiar ? Math.min(MAX_PARK_FAMILIARITY, familiarUnder(familiar.rule, roster) * familiar.perPlayer * scale) : 0;
 
 /**
  * The familiarity edge at home games under `franchiseId`'s park with `roster` active, times `scale`
  * (a relocating club's multiplier), up to the engine's cap.
  */
-export const familiarityFor = (franchiseId: string, roster: readonly { profile: Profile; slot: DraftSlot }[], scale = 1): number =>
- Math.min(MAX_PARK_FAMILIARITY, (familiarCount(franchiseId, roster) ?? 0) * (PACKAGES[franchiseId]?.familiar?.perPlayer ?? 0) * scale);
+export function familiarityFor(franchiseId: string, roster: Printed, scale = 1): number {
+ const pack = PACKAGES[franchiseId];
+ return pack?.park ? conditionFamiliarity({ park: pack.park, familiar: pack.familiar }, roster, scale) : 0;
+}
+
+/** The funding state a roster knows better, funded on a tie; null for a franchise without funding votes. */
+export function suitedFunding(franchiseId: string, roster: Printed): Funding | null {
+ const funding = PACKAGES[franchiseId]?.funding;
+ return funding ? (conditionFamiliarity(funding.shutdown, roster) > conditionFamiliarity(funding.funded, roster) ? 'shutdown' : 'funded') : null;
+}
+
+/** The park condition at a club's home games in a chapter and the multiplier on its familiarity edge. */
+export interface HomeCondition { condition: ParkCondition; scale: number }
+
+/**
+ * The park condition at `franchiseId`'s home games in chapter `chapter` (0-5) of a run seeded
+ * `seed`: the funded or shutdown grounds by the chapter's vote, a relocating club's host park, or
+ * the franchise's own; null for the real park.
+ */
+export function homeCondition(franchiseId: string, seed: number, chapter: number, funding: Funding | null): HomeCondition | null {
+ const pack = PACKAGES[franchiseId];
+ if (pack?.funding) {
+  if (!funding) throw new Error(`${franchiseId} plays chapter ${chapter} without a funding vote`);
+  return { condition: pack.funding[funding], scale: 1 };
+ }
+ const host = PACKAGES[parkHost(franchiseId, seed, chapter)];
+ return host?.park ? { condition: { park: host.park, familiar: host.familiar }, scale: pack?.relocation?.familiarity ?? 1 } : null;
+}
 
 const isFieldingSlot = (slot: DraftSlot): slot is Position => (POSITIONS as readonly string[]).includes(slot);
 

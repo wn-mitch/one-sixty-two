@@ -36,7 +36,7 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  // A franchise's package is explained before the run starts.
  await page.locator('label.franchise', { hasText: 'Detroit Tigers' }).click();
  await expect(page.locator('.package')).toContainText('The Assembly Line. Every training gains 5% more for each common on the active roster, up to 40%.');
- await page.locator('label.franchise', { hasText: 'Washington Nationals' }).click();
+ await page.locator('label.franchise', { hasText: 'Philadelphia Phillies' }).click();
  await expect(page.locator('.package')).toHaveText('An ordinary franchise: the table cap, standard training and its real park.');
  await page.locator('label.franchise', { hasText: 'Texas Rangers' }).click();
  await expect(page.locator('.package')).toContainText('The Ryan Express.');

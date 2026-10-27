@@ -5,8 +5,8 @@ import { MAX_PARK_FAMILIARITY } from '../sim/league-types.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { isRivalry, openingFans, payday, type FanState } from './fans.ts';
 import { RIVALS } from './franchises.ts';
-import { closeChapter, ironManUpgrades, recordSegment, saleBonusOf, seasonCrowds, segmentInput, startLeague, type ClubLineup, type LeagueSeason, type SegmentRecord } from './league.ts';
-import { exchangeFor, familiarCount, familiarityFor, knowHowCount, MAX_KNOW_HOW, PACKAGES, parkHost, strongDollar, withKnowHow, type FranchisePackage } from './packages.ts';
+import { canVoteFunding, closeChapter, ironManUpgrades, LineupError, lockFunding, recordSegment, voteFunding, saleBonusOf, seasonCrowds, segmentInput, startLeague, type ClubLineup, type LeagueSeason, type SegmentRecord } from './league.ts';
+import { conditionFamiliarity, exchangeFor, familiarCount, familiarityFor, suitedFunding, knowHowCount, MAX_KNOW_HOW, PACKAGES, parkHost, strongDollar, withKnowHow, type FranchisePackage } from './packages.ts';
 import { effectiveCap, validateBudget } from './rules.ts';
 import { applyAction, newRunSetup, ownedBy, startRun, windowLineup, type DraftRun, type RunData } from './run.ts';
 import { buyTraining, gainScale, offersFor, priceFor, refusal, trainedThisVisit } from './shop.ts';
@@ -22,6 +22,13 @@ function install(franchiseId: string, pack: Partial<FranchisePackage>): void {
  const before = table[franchiseId];
  table[franchiseId] = { name: 'Test package', summary: '', ...pack };
  onTestFinished(() => { if (before) table[franchiseId] = before; else delete table[franchiseId]; });
+}
+/** The park package `seat` plays at home in `chapter` with no funding vote cast: its grounds vote's suited state, a relocation host's, or its own. */
+function homePark(run: DraftRun, season: LeagueSeason, seat: number, chapter: number, profile: (id: string) => Profile) {
+ const franchiseId = run.seating.seats[seat];
+ const funding = PACKAGES[franchiseId]?.funding;
+ if (!funding) return PACKAGES[parkHost(franchiseId, run.setup.seed, chapter)]?.park ?? null;
+ return funding[suitedFunding(franchiseId, run.pool.rules.activeSlots.map(slot => ({ profile: profile(season.lineups[seat].active[slot]), slot })))!].park;
 }
 const DATA: RunData = { cards: testUniverse(160), franchiseIds: FRANCHISES, parkFit: () => 0 };
 
@@ -72,7 +79,7 @@ describe('franchise packages', () => {
   const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
   const input = segmentInput(run, season, profiles, testLeagueData(FRANCHISES), FRANCHISES.slice(0, 8));
   // A relocating club plays under its first host's condition.
-  input.clubs.forEach((club, seat) => expect(club.parkPackage).toBe(PACKAGES[parkHost(run.seating.seats[seat], run.setup.seed, 0)]?.park ?? null));
+  input.clubs.forEach((club, seat) => expect(club.parkPackage).toBe(homePark(run, season, seat, 0, profile)));
   expect(input.clubs[run.seating.humanSeat].parkPackage).toBe('thinAir');
   const plain = simulateLeagueSegment({ ...input, clubs: input.clubs.map(club => ({ ...club, parkPackage: null })) });
   const thin = simulateLeagueSegment(input);
@@ -326,7 +333,7 @@ describe('franchise packages', () => {
    expect(clubs[human].parkPackage).toBe(PACKAGES[host].park);
    expect(clubs[human].familiarity).toBe(Math.min(MAX_PARK_FAMILIARITY, 2 * familiarityFor(host, printed)));
    expect(familiarityFor(host, printed, 2)).toBe(clubs[human].familiarity);
-   clubs.forEach((club, seat) => { if (seat !== human) expect(club.parkPackage).toBe(PACKAGES[run.seating.seats[seat]]?.park ?? null); });
+   clubs.forEach((club, seat) => { if (seat !== human) expect(club.parkPackage).toBe(homePark(run, season, seat, chapter, profile)); });
    seen.add(clubs[human].parkPackage!);
   }
   expect(seen.size).toBe(5);
@@ -347,7 +354,7 @@ describe('franchise packages', () => {
  });
 
  it('plays each surface, ring, inning and calendar park in its club\'s home games only, with its familiarity rule', () => {
-  for (const [franchiseId, park] of [['ARI', 'hotCorner'], ['FLA', 'everglades'], ['TBD', 'catwalk'], ['MIL', 'fermentation'], ['MIN', 'deepFreeze']] as const) {
+  for (const [franchiseId, park] of [['ARI', 'hotCorner'], ['FLA', 'everglades'], ['TBD', 'catwalk'], ['MIL', 'fermentation'], ['MIN', 'deepFreeze'], ['CIN', 'terrace']] as const) {
    expect(PACKAGES[franchiseId].park).toBe(park);
    const { run, season, profile } = seasonFor(franchiseId);
    const human = run.seating.humanSeat;
@@ -366,5 +373,47 @@ describe('franchise packages', () => {
   expect(familiarCount('FLA', [{ profile: fast, slot: 'SS' }, { profile: fast, slot: 'DH' }, { profile: card({ speed: .69 }), slot: 'CF' }])).toBe(2);
   const ace = card({ pitching: { G: 30, GS: 30, IPouts: 600, H: 150, HR: 15, BB: 50, HBP: 5, SO: 200, BFP: 800, ER: 60, SV: 0 } });
   expect(familiarCount('MIN', [{ profile: ace, slot: 'SP1' }, { profile: ace, slot: 'CL' }])).toBe(1);
+  // Cincinnati's terrace: fast outfielders only, not a fast infielder or designated hitter.
+  expect(familiarCount('CIN', [{ profile: fast, slot: 'CF' }, { profile: fast, slot: 'LF' }, { profile: fast, slot: 'SS' }, { profile: fast, slot: 'DH' }, { profile: card({ speed: .69 }), slot: 'RF' }])).toBe(2);
+ });
+
+ it('plays Washington\'s home games on the grounds its chapter vote sets, locked when the chapter starts', () => {
+  const { run, season, profile } = seasonFor('WSN');
+  const human = run.seating.humanSeat;
+  const lineup = season.lineups[human];
+  const profiles = new Map(season.lineups.flatMap(lineup => Object.values(lineup.active)).map(id => [id, profile(id)]));
+  // Every hitter is fast, so the shutdown's long grass suits this lineup better than the funded infield.
+  for (const slot of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as DraftSlot[]) profiles.set(lineup.active[slot], { ...profiles.get(lineup.active[slot])!, speed: .8 });
+  const printed = run.pool.rules.activeSlots.map(slot => ({ profile: profiles.get(lineup.active[slot])!, slot }));
+  const data = testLeagueData(FRANCHISES);
+  const club = () => segmentInput(run, season, profiles, data, FRANCHISES.slice(0, 8)).clubs[human];
+  const funding = PACKAGES.WSN.funding!;
+  expect(suitedFunding('WSN', printed)).toBe('shutdown');
+  expect(suitedFunding('BOS', printed)).toBeNull();
+  // Before a vote the lineup's suited state plays; a vote replaces it until the chapter's games start.
+  expect(club().parkPackage).toBe('shutdownGrounds');
+  expect(club().familiarity).toBeCloseTo(Math.min(MAX_PARK_FAMILIARITY, 9 * funding.shutdown.familiar!.perPlayer), 12);
+  expect(canVoteFunding(run, season)).toBe(true);
+  voteFunding(run, season, 'funded');
+  expect(club()).toMatchObject({ parkPackage: 'fundedGrounds', familiarity: conditionFamiliarity(funding.funded, printed) });
+  expect(club().familiarity).toBeLessThan(conditionFamiliarity(funding.shutdown, printed));
+  const fundedInput = segmentInput(run, season, profiles, data, FRANCHISES.slice(0, 8));
+  lockFunding(run, season, profiles);
+  expect(season.funding).toEqual(['funded']);
+  // Mid chapter the vote is closed; the next chapter stop opens it, and a chapter nobody voted for locks the suited state.
+  season.segments = [{ carry: [], hype: [] } as unknown as SegmentRecord];
+  expect(canVoteFunding(run, season)).toBe(false);
+  expect(() => voteFunding(run, season, 'shutdown')).toThrow(LineupError);
+  expect(club().parkPackage).toBe('fundedGrounds');
+  season.segments = Array.from({ length: 3 }, () => ({ carry: [], hype: [] }) as unknown as SegmentRecord);
+  expect(canVoteFunding(run, season)).toBe(true);
+  lockFunding(run, season, profiles);
+  expect(season.funding).toEqual(['funded', 'shutdown']);
+  // The two grounds play differently only in Washington's home games.
+  const shutdownInput = { ...fundedInput, clubs: fundedInput.clubs.map((club, seat) => seat === human ? { ...club, parkPackage: 'shutdownGrounds' as const } : club) };
+  const [funded, shutdown] = [simulateLeagueSegment(fundedInput), simulateLeagueSegment(shutdownInput)];
+  const changed = funded.games.filter((game, index) => game.homeRuns !== shutdown.games[index].homeRuns || game.awayRuns !== shutdown.games[index].awayRuns);
+  expect(changed.length).toBeGreaterThan(0);
+  expect(changed.every(game => game.home === human)).toBe(true);
  });
 });

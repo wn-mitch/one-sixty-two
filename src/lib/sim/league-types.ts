@@ -49,7 +49,7 @@ export interface LeagueClubInput {
 }
 
 /** Draft Mode's exaggerated park conditions; both clubs play under them. */
-export const PARK_PACKAGES = ['thinAir', 'heavyAir', 'tallLeftWall', 'shortRightField', 'windToRight', 'hotCorner', 'everglades', 'catwalk', 'fermentation', 'deepFreeze'] as const;
+export const PARK_PACKAGES = ['thinAir', 'heavyAir', 'tallLeftWall', 'shortRightField', 'windToRight', 'hotCorner', 'everglades', 'catwalk', 'fermentation', 'deepFreeze', 'terrace', 'fundedGrounds', 'shutdownGrounds'] as const;
 export type ParkPackage = typeof PARK_PACKAGES[number];
 
 /**

@@ -104,6 +104,10 @@ pub struct StadiumConfig {
     pub infield_deceleration_mps2: f64,
     pub outfield_deceleration_mps2: f64,
     pub wall_restitution: f64,
+    /// Depth (meters) of a steep terrace rising in front of every fair fence; zero for none. Only
+    /// a park package sets it.
+    #[serde(default)]
+    pub terrace_m: f64,
 }
 
 #[derive(Clone, Debug, Deserialize)]

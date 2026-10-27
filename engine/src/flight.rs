@@ -1,5 +1,6 @@
 //! Ball flight, wall and roof collisions, and rolling (`src/lib/sim/flight.ts`).
 use crate::math::{self, planar_distance};
+use crate::park_package::TERRACE_PULL_MPS2;
 use crate::types::{OverheadRuling, StadiumConfig};
 
 pub const FLIGHT_DT: f64 = 1.0 / 60.0;
@@ -56,6 +57,10 @@ pub struct FlightTrace {
     pub end: u8,
     pub fair: bool,
     pub rebounds: u32,
+    /// Whether the park has a terrace, and so whether `depth` holds this trace's samples.
+    pub terraced: bool,
+    /// Per sample: how far into the terrace (meters) the point lies, zero off it.
+    pub depth: Vec<f64>,
     first_event: u8,
 }
 
@@ -63,7 +68,7 @@ impl Default for FlightTrace {
     fn default() -> Self {
         Self {
             count: 0, t: vec![0.0; TRACE_CAPACITY], x: vec![0.0; TRACE_CAPACITY], y: vec![0.0; TRACE_CAPACITY], z: vec![0.0; TRACE_CAPACITY],
-            landing: -1, end: TRACE_STOPPED, fair: true, rebounds: 0, first_event: EVENT_NONE,
+            landing: -1, end: TRACE_STOPPED, fair: true, rebounds: 0, terraced: false, depth: vec![0.0; TRACE_CAPACITY], first_event: EVENT_NONE,
         }
     }
 }
@@ -77,6 +82,8 @@ pub struct PreparedPark {
     /// Per fence: min x, max x, min y, max y, padded by BOUNDS_PAD_M.
     bounds: Vec<f64>,
     grid: FenceGrid,
+    /// Within this distance of home plate no point lies on the terrace; infinite without one.
+    terrace_clear_m: f64,
 }
 
 /// Fence lists per square cell. A fence is listed in every cell its padded box touches, in
@@ -159,7 +166,42 @@ impl PreparedPark {
             fences.extend_from_slice(&[fence.start[0], fence.start[1], fence.end[0], fence.end[1], fence.height_m, if fence.fair { 1.0 } else { 0.0 }, -dy / length, dx / length]);
         }
         let grid = FenceGrid::new(&bounds);
-        Ok(Self { stadium: stadium.clone(), fences, bounds, grid })
+        if !(stadium.terrace_m >= 0.0) { return Err(format!("Invalid terrace depth: {}", stadium.id)); }
+        let mut park = Self { stadium: stadium.clone(), fences, bounds, grid, terrace_clear_m: f64::INFINITY };
+        if stadium.terrace_m > 0.0 {
+            let nearest = (0..stadium.fences.len()).filter(|&fence| park.fair_fence(fence)).map(|fence| park.fence_distance(fence, 0.0, 0.0).0).fold(f64::INFINITY, f64::min);
+            park.terrace_clear_m = nearest - stadium.terrace_m;
+        }
+        Ok(park)
+    }
+
+    fn fair_fence(&self, index: usize) -> bool { self.fences[index * FENCE_STRIDE + 5] == 1.0 }
+
+    /// Distance from a point to fence `index`, and the fence's closest point.
+    fn fence_distance(&self, index: usize, x: f64, y: f64) -> (f64, [f64; 2]) {
+        let f = &self.fences[index * FENCE_STRIDE..index * FENCE_STRIDE + FENCE_STRIDE];
+        let (ex, ey) = (f[2] - f[0], f[3] - f[1]);
+        let along = math::max(0.0, math::min(1.0, ((x - f[0]) * ex + (y - f[1]) * ey) / (ex * ex + ey * ey)));
+        let closest = [f[0] + ex * along, f[1] + ey * along];
+        (planar_distance(x - closest[0], y - closest[1]), closest)
+    }
+
+    /// How far a point lies into the terrace in front of the fair fences, and the unit direction down
+    /// its slope (away from the nearest fair fence), or None off the terrace.
+    pub fn terrace_at(&self, x: f64, y: f64) -> Option<(f64, [f64; 2])> {
+        if planar_distance(x, y) <= self.terrace_clear_m { return None; }
+        let (mut nearest, mut fence, mut closest) = (f64::INFINITY, usize::MAX, [0.0; 2]);
+        for index in (0..self.stadium.fences.len()).filter(|&index| self.fair_fence(index)) {
+            let (distance, point) = self.fence_distance(index, x, y);
+            if distance < nearest { nearest = distance; fence = index; closest = point; }
+        }
+        if !(nearest < self.stadium.terrace_m) { return None; }
+        let down = if nearest > 0.0 { [(x - closest[0]) / nearest, (y - closest[1]) / nearest] } else {
+            // On the fence line itself: its normal, turned toward home plate.
+            let (nx, ny) = (self.fences[fence * FENCE_STRIDE + 6], self.fences[fence * FENCE_STRIDE + 7]);
+            if nx * (0.0 - x) + ny * (0.0 - y) >= 0.0 { [nx, ny] } else { [-nx, -ny] }
+        };
+        Some((self.stadium.terrace_m - nearest, down))
     }
     /// The first fence crossed by p->q (lowest parameter, lowest index on ties) and its parameter.
     /// A fence the step's box misses is never crossed, so only the fences listed in the step's cells
@@ -344,8 +386,45 @@ fn airborne_step(park: &PreparedPark, trace: &mut FlightTrace, ball: &mut Ball, 
     Ok(event_time)
 }
 
+/// Ends a rolling step that meets fence `index` at parameter `best`, at velocity `v` there.
+fn roll_into_fence(park: &PreparedPark, trace: &mut FlightTrace, ball: &mut Ball, event_time: f64, best: f64, q: [f64; 2], v: [f64; 2], index: usize) -> Result<f64, String> {
+    let (px, py) = (ball.position[0], ball.position[1]);
+    ball.position[0] = px + (q[0] - px) * best;
+    ball.position[1] = py + (q[1] - py) * best;
+    ball.velocity[0] = v[0]; ball.velocity[1] = v[1];
+    record_first(trace, EVENT_FENCE);
+    push(trace, event_time, ball.position[0], ball.position[1], 0.0)?;
+    trace.rebounds += 1;
+    if trace.rebounds > MAX_REBOUNDS { return Err(format!("Flight exceeded {MAX_REBOUNDS} rebounds")); }
+    reflect(&park.fences, index, park.stadium.wall_restitution, ball);
+    Ok(event_time)
+}
+
+/// A rolling step on the terrace: the slope pulls the ball back down toward the field while the
+/// outfield turf slows it, so a ball never rests there.
+fn terrace_step(park: &PreparedPark, trace: &mut FlightTrace, ball: &mut Ball, time: f64, down: [f64; 2]) -> Result<f64, String> {
+    let (vx, vy) = (ball.velocity[0], ball.velocity[1]);
+    let (mut nx, mut ny) = (vx + TERRACE_PULL_MPS2 * down[0] * FLIGHT_DT, vy + TERRACE_PULL_MPS2 * down[1] * FLIGHT_DT);
+    let pulled = planar_distance(nx, ny);
+    if pulled > 0.0 {
+        let slowed = math::max(0.0, pulled - park.stadium.outfield_deceleration_mps2 * FLIGHT_DT) / pulled;
+        nx *= slowed; ny *= slowed;
+    }
+    let (px, py) = (ball.position[0], ball.position[1]);
+    let (qx, qy) = (px + (vx + nx) / 2.0 * FLIGHT_DT, py + (vy + ny) / 2.0 * FLIGHT_DT);
+    let (best, index) = park.first_crossing(&mut ball.cell, px, py, qx, qy);
+    if index == usize::MAX {
+        ball.position[0] = qx; ball.position[1] = qy;
+        ball.velocity[0] = nx; ball.velocity[1] = ny;
+        push(trace, time + FLIGHT_DT, qx, qy, 0.0)?;
+        return Ok(time + FLIGHT_DT);
+    }
+    roll_into_fence(park, trace, ball, time + FLIGHT_DT * best, best, [qx, qy], [vx + (nx - vx) * best, vy + (ny - vy) * best], index)
+}
+
 fn rolling_step(park: &PreparedPark, trace: &mut FlightTrace, ball: &mut Ball, time: f64) -> Result<f64, String> {
     let stadium = &park.stadium;
+    if let Some((_, down)) = park.terrace_at(ball.position[0], ball.position[1]) { return terrace_step(park, trace, ball, time, down); }
     let speed = planar_distance(ball.velocity[0], ball.velocity[1]);
     if speed <= 0.0 { return Ok(-1.0); }
     let infield = planar_distance(ball.position[0] - INFIELD_CENTER[0], ball.position[1] - INFIELD_CENTER[1]) <= INFIELD_RADIUS_M;
@@ -364,17 +443,8 @@ fn rolling_step(park: &PreparedPark, trace: &mut FlightTrace, ball: &mut Ball, t
         return Ok(if next_speed == 0.0 { -1.0 } else { time + step });
     }
     // Within one short step, time is treated as proportional to distance travelled.
-    let event_time = time + step * best;
     let event_speed = speed - deceleration * step * best;
-    ball.position[0] = px + (qx - px) * best;
-    ball.position[1] = py + (qy - py) * best;
-    ball.velocity[0] = ux * event_speed; ball.velocity[1] = uy * event_speed;
-    record_first(trace, EVENT_FENCE);
-    push(trace, event_time, ball.position[0], ball.position[1], 0.0)?;
-    trace.rebounds += 1;
-    if trace.rebounds > MAX_REBOUNDS { return Err(format!("Flight exceeded {MAX_REBOUNDS} rebounds")); }
-    reflect(&park.fences, index, stadium.wall_restitution, ball);
-    Ok(event_time)
+    roll_into_fence(park, trace, ball, time + step * best, best, [qx, qy], [ux * event_speed, uy * event_speed], index)
 }
 
 /// Deterministically resolves one contact sample against the active park geometry into `trace`.
@@ -400,6 +470,10 @@ pub fn trace_flight(sample: &ContactSample, park: &PreparedPark, trace: &mut Fli
     while time >= 0.0 {
         if time > MAX_FLIGHT_SECONDS { return Err(format!("Flight exceeded {MAX_FLIGHT_SECONDS} seconds")); }
         time = if trace.landing < 0 { airborne_step(park, trace, &mut ball, time)? } else { rolling_step(park, trace, &mut ball, time)? };
+    }
+    trace.terraced = park.stadium.terrace_m > 0.0;
+    if trace.terraced {
+        for index in 0..trace.count { trace.depth[index] = park.terrace_at(trace.x[index], trace.y[index]).map_or(0.0, |(depth, _)| depth); }
     }
     Ok(())
 }
