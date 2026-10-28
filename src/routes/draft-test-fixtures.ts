@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { availableCandidates, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
-import { isJackpot, type Candidate, type Draft, type Manifest, type Profile, type Roll, type Slot } from '../lib/game/types.ts';
+import { SLOTS, isJackpot, type Candidate, type Draft, type Manifest, type Profile, type Roll, type Slot } from '../lib/game/types.ts';
 import type { MediaManifest, MediaPointer } from '../lib/media/types.ts';
 import type { WarRankings, WarRankingsPointer } from '../lib/rankings/types.ts';
 
@@ -217,4 +217,58 @@ export async function openPackThroughRetry(page: Page): Promise<unknown> {
  await expect(page.locator('dialog.error-dialog[open]')).toHaveCount(0);
  await page.getByRole('button', { name: /^Take / }).click();
  return committed;
+}
+
+export async function settlePool(page: Page) {
+ await expect(page.locator('.player-card').first()).toBeVisible();
+ // The grid re-sorts once composite WAR/162 arrives, so wait before targeting
+ // a card the browser might move.
+ await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
+}
+
+export async function firstLegalSeason(page: Page, request: APIRequestContext): Promise<{ seasonId: string; playerId: string; displayName: string; slot: Slot }> {
+ const manifest = await currentManifest(request);
+ const saved = await deviceDraft<Draft>(page);
+ const candidate = availableCandidates(saved, manifest).find(item => legalSlots(saved, item, manifest).length > 0);
+ if (!candidate) throw new Error('The roll had no legal candidate in the current live manifest');
+ const response = await request.get(manifest.chunks[`${candidate.franchiseId}-${candidate.decade}`]);
+ expect(response.ok()).toBe(true);
+ const profiles = await response.json() as Array<{ seasonId: string; playerId: string; displayName: string }>;
+ const profile = profiles.find(item => item.seasonId === candidate.seasonId);
+ if (!profile) throw new Error('The legal live candidate is absent from its current-roll chunk');
+ return { ...profile, slot: legalSlots(saved, candidate, manifest)[0] };
+}
+
+export async function selectExactSeason(page: Page, request: APIRequestContext) {
+ await settlePool(page);
+ const target = await firstLegalSeason(page, request);
+ const group = await revealCandidate(page, target.playerId);
+ await group.getByRole('button', { name: /^Select / }).first().click();
+ const sheet = page.locator('dialog.draft-sheet[open]');
+ await expect(sheet).toBeVisible();
+ await sheet.getByRole('combobox', { name: `Exact season for ${target.displayName}`, exact: true }).selectOption(target.seasonId);
+ return { target, sheet };
+}
+
+export async function pickFirstSeason(page: Page, request: APIRequestContext) {
+ const { target, sheet } = await selectExactSeason(page, request);
+ const destination = sheet.locator(`[data-slot="${target.slot}"]`);
+ await expect(destination).toBeEnabled();
+ await destination.click();
+ const confirmation = sheet.locator('.pick-confirmation');
+ await expect(confirmation).toHaveAttribute('data-selected-season', target.seasonId);
+ await expect(confirmation).toHaveAttribute('data-pending-slot', target.slot);
+ await sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${target.slot}$`) }).click();
+}
+
+/** Drafts a complete team from Home, taking the first legal season each pick. */
+export async function finishRoster(page: Page, request: APIRequestContext) {
+ await page.goto('/');
+ await page.getByRole('button', { name: /Play now: draft your team/ }).click();
+ await chooseStadium(page);
+ await expect(page.locator('.player-card').first()).toBeVisible();
+ for (let index = 0; index < SLOTS.length; index++) {
+  await pickFirstSeason(page, request);
+  if (index < SLOTS.length - 1) await openPack(page);
+ }
 }

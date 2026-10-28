@@ -10,6 +10,9 @@ export function appHost(): AppHost {
 	return document.documentElement.dataset.host === 'ios-app' ? 'ios-app' : 'web';
 }
 
+/** The website's support page. */
+export const SUPPORT_URL = 'https://ko-fi.com/thealpacalypse';
+
 /** External support links (Ko-fi) appear on the website only; the iOS app ships without them. */
 export function showsExternalSupport(): boolean {
 	return appHost() === 'web';

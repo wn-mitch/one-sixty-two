@@ -75,8 +75,8 @@
 
 <section bind:this={deck} class="stadium-deck" aria-labelledby="stadium-heading" inert={leaving}>
  <h2 id="stadium-heading" tabindex="-1">Choose your home stadium</h2>
- <p class="intro muted">You play 81 of your 162 games here; road games use each opponent's 2025 park. Fence distances, wall heights and elevation change how far batted balls carry, for both teams. No park has a rating or bonus; records under each card are other players' seasons there.</p>
- <GuideTip step="stadium" text="Pick any park to start. Your home park hosts half your season, so its shape affects every home game." />
+ <p class="intro muted">You play 81 of your 162 games here. Its fences and altitude change how far the ball carries, for both teams.</p>
+ <GuideTip step="stadium" anchor={() => deck?.querySelector<HTMLElement>('.choice-wrap')} text="Your goal: draft a team from baseball history that wins all 162 games. Start by tapping any park to make it your home." />
  <div class="deck-tools">
   <label class="search"><span class="sr-only">Find a stadium by park or team</span>
    <input type="search" placeholder="Find a park or team" autocomplete="off" bind:value={query} />

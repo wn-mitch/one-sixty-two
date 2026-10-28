@@ -26,6 +26,7 @@ import {
  supportsImageClipboard
 } from './share.ts';
 import { draftRules } from './rules.ts';
+import { guide } from './guide.svelte.ts';
 import { appSettings, PLAYBACK_DURATION_MS } from './settings.svelte.ts';
 import type { Draft, HitterSlot, Manifest, Profile, ReliefAssignment, Slot } from './types.ts';
 import { prepareSeasonInput } from './season-input.ts';
@@ -221,7 +222,7 @@ export class Session {
    buildRequested = classicPath && new URLSearchParams(location.search).get('build') === '1';
    if (forceNew) {
     this.shared = false;
-    this.draft = createDraft(manifest, newSeed());
+    this.draft = createDraft(manifest, newSeed(), guide.claimBonusPack());
     claimChallenge(this.draft.seed);
     this.savedDraft = null;
     this.phase = 'stadium';
@@ -490,7 +491,7 @@ export class Session {
    if (epoch !== this.epoch) return;
   }
   this.shared = false;
-  this.draft = createDraft(this.manifest, newSeed());
+  this.draft = createDraft(this.manifest, newSeed(), guide.claimBonusPack());
   claimChallenge(this.draft.seed);
   this.savedDraft = null;
   this.resetRun();

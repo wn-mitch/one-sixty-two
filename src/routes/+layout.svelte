@@ -6,7 +6,7 @@
 	import '../lib/cards/fonts.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import SiteMenu from '#lib/components/SiteMenu.svelte';
-	import { showsExternalSupport } from '#lib/app/host.ts';
+	import { showsExternalSupport, SUPPORT_URL } from '#lib/app/host.ts';
 	import Toaster from '#lib/components/Toaster.svelte';
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
 	import { refreshStickers } from '#lib/collection/store.svelte.ts';
@@ -142,7 +142,7 @@
 		<nav class="footer-links" aria-label="Footer">
 			<a class="footer-link" href="/privacy" aria-label="Privacy policy">Privacy</a>
 			{#if externalSupport}
-				<a class="footer-link" href="https://ko-fi.com/thealpacalypse" target="_blank" rel="noreferrer" aria-label="Support the developer">Support <span aria-hidden="true">↗</span></a>
+				<a class="footer-link" href={SUPPORT_URL} target="_blank" rel="noreferrer" aria-label="Support the developer">Support <span aria-hidden="true">↗</span></a>
 			{/if}
 			<a class="footer-link studio-link" href="https://alpacasoft.dev/" target="_blank" rel="noreferrer"><span>Made by</span> Alpacasoft <span aria-hidden="true">↗</span></a>
 		</nav>

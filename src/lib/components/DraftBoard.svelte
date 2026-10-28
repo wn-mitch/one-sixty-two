@@ -1,6 +1,6 @@
 <script lang="ts">
  import { onMount, tick, untrack, type Snippet } from 'svelte';
- import { extraPacksLeft, maxPacks, rollYears } from '../game/draft.ts';
+ import { extraPackAllowance, extraPacksLeft, maxPacks, rollYears } from '../game/draft.ts';
  import type { BoardSource } from '../game/board-source.ts';
  import { draftRules } from '../game/rules.ts';
  import { HITTER_SLOTS, compareId, isJackpot, type Draft, type FieldSlot, type HitterSlot, type Manifest, type Profile } from '../game/types.ts';
@@ -23,6 +23,8 @@
  import TokenAmount from './TokenAmount.svelte';
  import { BOARD_WIDE_QUERY } from './skeletons/board.ts';
  import { shopState } from '../cosmetics/store.svelte.ts';
+ import { supportAvailable } from '../cosmetics/support.ts';
+ import { showsExternalSupport, SUPPORT_URL } from '../app/host.ts';
  import PoolSkeleton from './skeletons/PoolSkeleton.svelte';
  import Skeleton from './skeletons/Skeleton.svelte';
  /** A place a selected card can be drafted into: an open slot, or the bench. */
@@ -79,6 +81,14 @@
  let returningSourceClick = false;
  let preserveSheetCancel = false;
  let draftBoard = $state<HTMLElement>();
+ /** The top-left element matching `selector` that is laid out, preferring one in the viewport, for a guide callout to point at. */
+ function visible(selector: string): HTMLElement | null {
+  const laid = [...document.querySelectorAll<HTMLElement>(selector)]
+   .map(element => ({ element, rect: element.getBoundingClientRect() }))
+   .filter(({ rect }) => rect.width > 0 || rect.height > 0);
+  const onScreen = laid.filter(({ rect }) => rect.bottom > 0 && rect.top < innerHeight);
+  return (onScreen.length ? onScreen : laid).sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left)[0]?.element ?? null;
+ }
  /** Two or three open packs, from the pool's toolbar or a reload, show as dealt cards until one is taken. */
  $effect(() => {
   if (!draft || draft.packs.length < 2 || untrack(() => dealing)) return;
@@ -751,13 +761,16 @@
 <div bind:this={draftBoard} class="draft-board" class:wide>
 {#snippet rerollControl()}
  {#if showingCandidates && draft}
-  {@const total = draftRules(draft.schemaVersion).extraPacks}
+  {@const total = extraPackAllowance(draft)}
   <button type="button" class="secondary reroll" disabled={busy || leaving || extraLeft <= 0} aria-label={`Extra pack: add another franchise pack to choose from, ${extraLeft} of ${total} left this draft`} onclick={addPackFromPool}>
    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9"></path></svg>
    <span class="reroll-word" aria-hidden="true">Extra pack</span>
    <span class="reroll-count" aria-hidden="true">· {extraLeft} left</span>
   </button>
  {/if}
+{/snippet}
+{#snippet freeExtra()}
+ {#if showsExternalSupport()}Want to help? <a href={SUPPORT_URL} target="_blank" rel="noreferrer">Buy me a pack ↗</a>{:else if supportAvailable()}Support 162-0 packs in the Shop are optional.{/if}
 {/snippet}
 {#snippet reveal()}
  {#if draft}
@@ -802,10 +815,21 @@
  </div>
  <div class="board-columns">
   <section class="draft-browser" aria-label="Make your next pick" inert={leaving}>
-   {#if draft && draft.picks.length === 0 && (phase === 'ready' || dealing)}
-    <GuideTip step="pack" text="Each pack is one franchise from one decade. Open it, then choose one exact player season from that pool." />
-   {:else if draft && showingCandidates && draft.picks.length >= 1 && extraLeft > 0}
-    <GuideTip step="extra" text={`Extra pack adds another franchise to choose from before you pick. You have ${extraLeft} for the whole draft and they don't refill, so save them for a pack that doesn't fit.`} />
+   {#if classic && draft && draft.picks.length === 0 && (phase === 'ready' || dealing)}
+    <GuideTip step="pack" anchor={() => visible('.foil-pack')} text={`You make ${pickTotal} picks to fill your team. Each pack is one franchise from one decade: tap it to open.`} />
+   {:else if classic && draft && showingCandidates && draft.picks.length === 0}
+    <GuideTip step="card" anchor={() => visible('.candidate-card')} text="Each card is one real player season. WAR/162 is how many wins that season adds over a full year: higher is better." />
+    <GuideTip step="slots" anchor={() => visible(wide ? '.candidate-card .placement:enabled' : '.candidate-card .compact-qualification')} text={wide
+     ? 'The buttons under each card are the empty spots on your team that season can fill. Choose one, then Draft.'
+     : '“Open” lists the empty spots on your team this player can fill. Tap a card, then a highlighted spot, to draft that season.'} />
+   {:else if classic && draft && showingCandidates && draft.picks.length >= 1}
+    <GuideTip step="field" anchor={() => visible(wide ? '.field-panel .panel-header' : '.open-field')} text="Your field: 9 hitters including a DH, 3 starting pitchers and 4 relievers. Every pick fills one spot." />
+    {#if extraLeft > 0}
+     <GuideTip step="extra" anchor={() => visible('.reroll')} text={draft.bonusPack && extraLeft === extraPackAllowance(draft)
+      ? `Here's a free bonus pack. Tap Extra pack to add another franchise to choose from before you pick. Every draft gets ${extraLeft - 1}; your first gets ${extraLeft}.`
+      : `Extra pack adds another franchise to choose from before you pick. You have ${extraLeft} for the whole draft and they don't refill, so save them for a pack that doesn't fit.`} />
+    {/if}
+    <GuideTip step="free" anchor={() => visible('a.shop-link')} text={`Everything in 162-0 is free, with no ads. Extra packs can't be bought: ${draft.bonusPack ? 'after this first draft, ' : ''}every draft gets ${draftRules(draft.schemaVersion).extraPacks}. Tokens come from finishing seasons and only change how your cards look in the Shop.`} extra={freeExtra} />
    {/if}
    {#if pile && phase === 'ready'}
     {@render pile.opening()}
@@ -816,7 +840,7 @@
      pickCount={pickTotal}
      marks={manifest.franchises.map(franchise => franchise.id)}
      disabled={busy && !dealing}
-     extraPacks={{ left: extraPacksLeft(draft), total: draftRules(draft.schemaVersion).extraPacks, max: maxPacks(draft) }}
+     extraPacks={{ left: extraPacksLeft(draft), total: extraPackAllowance(draft), max: maxPacks(draft) }}
      addDisabled={busy || phase !== 'choosing'}
      onAddPack={classic.onAddPack}
      {returning}

@@ -135,7 +135,8 @@ function canonicalReplay(value: unknown, dataVersion: string): { input: Replay; 
 		!Array.isArray(replay.battingOrder) || replay.battingOrder.length !== HITTER_SLOTS.length || !replay.battingOrder.every(isString) ||
 		!Array.isArray(replay.starterOrder) || replay.starterOrder.length !== 3 || !replay.starterOrder.every(isString) ||
 		!Array.isArray(replay.actions) || replay.actions.length > MAX_ACTIONS ||
-		(replay.daily !== undefined && !isDailyDate(replay.daily))) {
+		(replay.daily !== undefined && !isDailyDate(replay.daily)) ||
+		(replay.bonusPack !== undefined && (replay.bonusPack !== true || replay.daily !== undefined))) {
 		throw new ReplayInvalidError();
 	}
 	const input: Replay = {
@@ -152,7 +153,8 @@ function canonicalReplay(value: unknown, dataVersion: string): { input: Replay; 
 		starterOrder: [...replay.starterOrder as string[]],
 		reliefRoles: reliefRoles(replay.reliefRoles),
 		actions: replay.actions.map(action),
-		...(replay.daily === undefined ? {} : { daily: replay.daily as string })
+		...(replay.daily === undefined ? {} : { daily: replay.daily as string }),
+		...(replay.bonusPack === true ? { bonusPack: true as const } : {})
 	};
 	const bytes = new TextEncoder().encode(JSON.stringify(input));
 	if (bytes.byteLength > REPLAY_MAX_BYTES) throw new ReplayInvalidError();

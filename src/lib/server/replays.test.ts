@@ -124,7 +124,9 @@ describe('replay R2 storage', () => {
 			{ ...current, actions: [...current.actions, { type: 'trade' }] },
 			{ ...current, actions: Array.from({ length: 513 }, () => ({ type: 'roll' })) },
 			{ ...current, daily: '2026-02-30' },
-			{ ...current, daily: null }
+			{ ...current, daily: null },
+			{ ...current, bonusPack: false },
+			{ ...current, daily: '2026-10-17', bonusPack: true }
 		]) {
 			const bucket = new MemoryBucket();
 			await expect(storeReplay(bucket, malformed, dataVersion)).rejects.toThrow('invalid');
@@ -142,6 +144,12 @@ describe('replay R2 storage', () => {
 		const stored = await storeReplay(bucket, daily, dataVersion);
 		expect((await loadReplay(bucket, stored.id, dataVersion)).daily).toBe('2026-10-17');
 		expect(stored.id).not.toBe((await storeReplay(bucket, finish(), dataVersion)).id);
+	});
+
+	it('keeps a first draft’s bonus pack, which its history needs to replay', async () => {
+		const bucket = new MemoryBucket();
+		const stored = await storeReplay(bucket, { ...finish(), bonusPack: true }, dataVersion);
+		expect((await loadReplay(bucket, stored.id, dataVersion)).bonusPack).toBe(true);
 	});
 
 	it('reads only the small current-data pointer from the deployed asset binding', async () => {

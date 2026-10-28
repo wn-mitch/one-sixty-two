@@ -179,6 +179,29 @@ describe('extra packs', () => {
   expect(() => addPack(startDraft(manifest, 5), manifest)).toThrow('Roll before adding a pack');
  });
 
+ it('gives a first draft one bonus extra pack, never a fourth pack on one roll, and keeps the bonus through replays', () => {
+  const bonus = selectHomeStadium(createDraft(manifest, 5, true), manifest, manifest.stadiums[0].ref.id);
+  expect(bonus.bonusPack).toBe(true);
+  let draft = rollDraft(bonus, manifest);
+  expect(extraPacksLeft(draft)).toBe(3);
+  draft = addPack(addPack(draft, manifest), manifest);
+  // The bonus adds to the draft's total, not to one roll's table.
+  expect(() => addPack(draft, manifest)).toThrow('This roll holds no more packs');
+  draft = choosePack(draft, 0);
+  const pick = availableCandidates(draft, manifest)[0];
+  draft = commitPick(draft, manifest, pick.seasonId, legalSlots(draft, pick, manifest)[0]);
+  draft = addPack(rollDraft(draft, manifest), manifest);
+  expect(extraPacksLeft(draft)).toBe(0);
+  expect(() => addPack(draft, manifest)).toThrow('No extra packs left');
+  expect(replayInput(draft).bonusPack).toBe(true);
+  expect(validateDraft(draft, manifest)).toEqual(draft);
+  // The same history without the bonus spends one pack more than the rules allow.
+  const { bonusPack: _, ...plain } = draft;
+  expect(() => validateDraft(plain, manifest)).toThrow('No extra packs left');
+  expect(() => validateDraft({ ...draft, bonusPack: false as unknown as true }, manifest)).toThrow('Invalid bonus pack');
+  expect(createDraft(manifest, 5).bonusPack).toBeUndefined();
+ });
+
  it('replays added and chosen packs exactly from the seed, through saves and share links', async () => {
   let draft = addPack(rollDraft(startDraft(manifest, 21), manifest), manifest);
   // An undecided table survives a reload.

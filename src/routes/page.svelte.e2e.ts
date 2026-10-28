@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
-import { availableCandidates, legalSlots, replayInput } from '../lib/game/draft.ts';
-import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, SLOTS, type Draft, type Slot } from '../lib/game/types.ts';
+import { replayInput } from '../lib/game/draft.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, MODEL_VERSION, RULES_VERSION, SLOTS, type Draft } from '../lib/game/types.ts';
 import { PUBLISHED_FORMATS, SHARE_DIMENSIONS } from '../lib/share/types.ts';
 import type { SharePublication } from '../lib/share/types.ts';
-import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, deviceDraft, deviceDraftText, revealCandidate } from './draft-test-fixtures.ts';
+import { chooseStadium, currentManifest, openPack, openPackThroughRetry, selectStadium, currentMedia, deviceDraft, deviceDraftText, selectExactSeason, pickFirstSeason, finishRoster } from './draft-test-fixtures.ts';
 import { horizontalOverflow, verifyResultsInspection } from './results-test-assertions.ts';
 import { imagePixelDigest } from './image-test-helpers.ts';
 
@@ -96,60 +96,6 @@ async function verifyPublication(
 	expect(html).not.toContain(`${new URL(publication.replayUrl).origin}/og/daily.png`);
 	expect(html).toContain(firstLoss === null ? 'No losses.' : `First loss: Game ${firstLoss}.`);
 	expect(html).toContain(`Longest winning streak: ${longestWinningStreak} ${longestWinningStreak === 1 ? 'game' : 'games'}.`);
-}
-
-async function settlePool(page: Page) {
-	await expect(page.locator('.player-card').first()).toBeVisible();
-	// The grid re-sorts once composite WAR/162 arrives, so wait before targeting
-	// a card the browser might move.
-	await expect(page.getByText('Loading composite WAR/162')).toHaveCount(0);
-}
-
-async function firstLegalSeason(page: Page, request: APIRequestContext): Promise<{ seasonId: string; playerId: string; displayName: string; slot: Slot }> {
-	const manifest = await currentManifest(request);
-	const saved = await deviceDraft<Draft>(page);
-	const candidate = availableCandidates(saved, manifest).find(item => legalSlots(saved, item, manifest).length > 0);
-	if (!candidate) throw new Error('The roll had no legal candidate in the current live manifest');
-	const response = await request.get(manifest.chunks[`${candidate.franchiseId}-${candidate.decade}`]);
-	expect(response.ok()).toBe(true);
-	const profiles = await response.json() as Array<{ seasonId: string; playerId: string; displayName: string }>;
-	const profile = profiles.find(item => item.seasonId === candidate.seasonId);
-	if (!profile) throw new Error('The legal live candidate is absent from its current-roll chunk');
-	return { ...profile, slot: legalSlots(saved, candidate, manifest)[0] };
-}
-
-async function selectExactSeason(page: Page, request: APIRequestContext) {
-	await settlePool(page);
-	const target = await firstLegalSeason(page, request);
-	const group = await revealCandidate(page, target.playerId);
-	await group.getByRole('button', { name: /^Select / }).first().click();
-	const sheet = page.locator('dialog.draft-sheet[open]');
-	await expect(sheet).toBeVisible();
-	await sheet.getByRole('combobox', { name: `Exact season for ${target.displayName}`, exact: true }).selectOption(target.seasonId);
-	return { target, sheet };
-}
-
-async function pickFirstSeason(page: Page, request: APIRequestContext) {
-	const { target, sheet } = await selectExactSeason(page, request);
-	const destination = sheet.locator(`[data-slot="${target.slot}"]`);
-	await expect(destination).toBeEnabled();
-	await destination.click();
-	const confirmation = sheet.locator('.pick-confirmation');
-	await expect(confirmation).toHaveAttribute('data-selected-season', target.seasonId);
-	await expect(confirmation).toHaveAttribute('data-pending-slot', target.slot);
-	await sheet.getByRole('button', { name: new RegExp(`^Draft .+ at ${target.slot}$`) }).click();
-}
-
-
-async function finishRoster(page: Page, request: APIRequestContext) {
-	await page.goto('/');
-	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
-	await chooseStadium(page);
-	await expect(page.locator('.player-card').first()).toBeVisible();
-	for (let index = 0; index < SLOTS.length; index++) {
-		await pickFirstSeason(page, request);
-		if (index < SLOTS.length - 1) await openPack(page);
-	}
 }
 
 test('renders complete decodable franchise marks without substituting a wordmark', async ({ page, request }) => {
@@ -533,7 +479,8 @@ test('keeps completed seasons in history without reopening results or starting a
 	await expect(page.locator('.earned-receipt .reward-chip')).toHaveAccessibleName(/2 tokens earned: 1 season token \+ 1 first-season bonus/);
 	await expect(page.locator('.results-outcome [role="status"]')).toContainText('2 tokens earned');
 	await expect(page.locator('[data-reward-flight], .reward-splash')).toHaveCount(0);
-	await expect(page.locator('.guide-tip')).toHaveCount(0);
+	// The guided first draft ends with one callout on its own results, and none on a replay of them below.
+	await expect(page.locator('.guide-tip')).toHaveAttribute('data-guide-step', 'results');
 	await expect(page.getByText('About these results', { exact: true })).toHaveCount(0);
 	await page.getByRole('button', { name: 'About season awards', exact: true }).focus();
 	await expect(page.getByRole('tooltip')).toContainText('Card fronts show each player’s historical season');
@@ -557,7 +504,7 @@ test('keeps completed seasons in history without reopening results or starting a
 	await expect(page.locator('.balance')).toHaveText('2 unlock tokens');
 	await page.goto(`/#replay=${token}`);
 	await expect(page.locator('#results-heading')).toBeVisible({ timeout: 120_000 });
-	await expect(page.locator('.reward-chip, [data-reward-flight], .reward-splash')).toHaveCount(0);
+	await expect(page.locator('.reward-chip, [data-reward-flight], .reward-splash, .guide-tip')).toHaveCount(0);
 	await expect(page.getByText('About these results', { exact: true })).toHaveCount(0);
 	await expect(page.locator('.results-outcome [role="status"]')).toBeEmpty();
 	expect(await deviceDraftText(page)).toBeNull();

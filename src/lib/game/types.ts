@@ -156,6 +156,8 @@ export interface Replay {
  actions: DraftAction[];
  /** The day (`YYYY-MM-DD`) of a daily run, whose seed and home stadium follow from it; absent for any other draft. */
  daily?: string;
+ /** A device's first Classic draft carries one extra pack beyond the rules' allowance; absent for any other draft. */
+ bonusPack?: true;
 }
 /**
  * `packs` are the franchise packs open on the table for the pending roll, in the order they were dealt.

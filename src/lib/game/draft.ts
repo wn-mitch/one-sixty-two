@@ -30,7 +30,7 @@ function requireCurrentRules(draft: Draft): DraftRulePolicy {
  return draftRules(CURRENT_REPLAY_SCHEMA_VERSION);
 }
 
-function emptyDraft(manifest: Manifest, seed: number, daily?: string): Draft {
+function emptyDraft(manifest: Manifest, seed: number, daily?: string, bonusPack?: true): Draft {
  const policy = draftRules(CURRENT_REPLAY_SCHEMA_VERSION);
  return {
   schemaVersion: CURRENT_REPLAY_SCHEMA_VERSION,
@@ -46,13 +46,15 @@ function emptyDraft(manifest: Manifest, seed: number, daily?: string): Draft {
   starterOrder: [],
   reliefRoles: [],
   actions: [],
-  ...(daily === undefined ? {} : { daily })
+  ...(daily === undefined ? {} : { daily }),
+  ...(bonusPack ? { bonusPack } : {})
  };
 }
 
-export function createDraft(manifest: Manifest, seed: number): Draft {
+/** A Classic draft; `bonusPack` grants a device's first draft one extra pack beyond the rules' allowance. */
+export function createDraft(manifest: Manifest, seed: number, bonusPack = false): Draft {
  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Invalid draft seed');
- return emptyDraft(manifest, seed);
+ return emptyDraft(manifest, seed, undefined, bonusPack ? true : undefined);
 }
 
 /** The daily run for `date`: its seed and home stadium are the day's, already pinned. */
@@ -223,12 +225,17 @@ function applyRoll(draft: Draft, manifest: Manifest, random: () => number, recor
  return result;
 }
 
-/** Extra packs this draft may still add to a pending roll. */
-export function extraPacksLeft(draft: Draft): number {
- return draftRules(draft.schemaVersion).extraPacks - draft.actions.filter(action => action.type === 'add-pack').length;
+/** Extra packs the whole draft may add: the rules' allowance plus a first draft's bonus pack. */
+export function extraPackAllowance(draft: Draft): number {
+ return draftRules(draft.schemaVersion).extraPacks + (draft.bonusPack ? 1 : 0);
 }
 
-/** The most packs one roll can hold: its own plus every extra pack the draft allows. */
+/** Extra packs this draft may still add to a pending roll. */
+export function extraPacksLeft(draft: Draft): number {
+ return extraPackAllowance(draft) - draft.actions.filter(action => action.type === 'add-pack').length;
+}
+
+/** The most packs one roll can hold: its own plus the rules' extra packs. A bonus pack never widens one roll's table. */
 export function maxPacks(draft: Draft): number {
  return 1 + draftRules(draft.schemaVersion).extraPacks;
 }
@@ -236,6 +243,7 @@ export function maxPacks(draft: Draft): number {
 function applyAddPack(draft: Draft, manifest: Manifest, random: () => number, shown: ReadonlySet<string>): Draft {
  if (!draft.packs.length) throw new Error('Roll before adding a pack');
  if (extraPacksLeft(draft) <= 0) throw new Error('No extra packs left');
+ if (draft.packs.length >= maxPacks(draft)) throw new Error('This roll holds no more packs');
  const packs = [...draft.packs, nextRoll(draft, manifest, random, draft.packs, false, shown)];
  return { ...draft, currentRoll: null, packs, actions: appendAction(draft, { type: 'add-pack' }) } as Draft;
 }
@@ -406,7 +414,8 @@ type PickObserver = (draft: Draft, slot: Slot, table: readonly Roll[]) => void;
 function replayActions(input: Replay, manifest: Manifest, onPick?: PickObserver): { draft: Draft; random: () => number; shown: Set<string> } {
  if (!Array.isArray(input.actions)) throw new Error('Invalid draft actions');
  if (input.daily !== undefined && (!isDailyDate(input.daily) || input.seed !== dailySeed(input.daily))) throw new Error('Invalid daily run');
- let draft = emptyDraft(manifest, input.seed, input.daily);
+ if (input.bonusPack !== undefined && (input.bonusPack !== true || input.daily !== undefined)) throw new Error('Invalid bonus pack');
+ let draft = emptyDraft(manifest, input.seed, input.daily, input.bonusPack);
  const random = randomStream(input.seed, 'draft');
  const shown = new Set<string>();
  let table: readonly Roll[] = [];
@@ -564,6 +573,6 @@ export function validateReplay(value: unknown, manifest: Manifest): Draft {
 
 /** The replay contract in canonical key order; `daily` appears only on a daily run, so other drafts keep their keys. */
 export function replayInput(draft: Draft): Replay {
- const { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions, daily } = draft;
- return { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions, ...(daily === undefined ? {} : { daily }) };
+ const { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions, daily, bonusPack } = draft;
+ return { schemaVersion, dataVersion, modelVersion, rulesVersion, seed, homeStadium, picks, battingOrder, starterOrder, reliefRoles, actions, ...(daily === undefined ? {} : { daily }), ...(bonusPack ? { bonusPack } : {}) };
 }
