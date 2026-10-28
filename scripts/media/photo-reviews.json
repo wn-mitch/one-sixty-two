@@ -61898,6 +61898,20 @@
     "notes": "Card framing visually reviewed at 50% 22% cover: crop retains the player’s head and upper body instead of a headless torso or empty frame."
   },
   {
+    "playerId": "gallojo01",
+    "sourceId": "commons:148670554",
+    "status": "rejected",
+    "reason": "Identity mismatch: the back of the jersey reads GARCÍA JR. 2 (Nationals infielder Luis García Jr.), and the file is titled for him; it is not Joey Gallo.",
+    "evidenceUrl": "https://commons.wikimedia.org/w/index.php?oldid=1102584456"
+  },
+  {
+    "playerId": "gallojo01",
+    "sourceId": "commons:83878923",
+    "status": "rejected",
+    "reason": "Ambiguous subject: Gallo sits with his back to the camera, and the only visible face belongs to another person in the parade truck.",
+    "evidenceUrl": "https://commons.wikimedia.org/w/index.php?oldid=890749820"
+  },
+  {
     "playerId": "gantnji01",
     "sourceId": "commons:88435532",
     "status": "approved",
@@ -62678,60 +62692,9 @@
   {
     "playerId": "garcilu05",
     "sourceId": "commons:146512904",
-    "status": "approved",
-    "metadata": {
-      "categories": [
-        "CC-Zero",
-        "Luis García (infielder, born 2000)",
-        "Self-published work",
-        "Photographs by D. Benjamin Miller",
-        "Taken with Canon EOS R5 and Canon RF 100-500mm F4.5-7.1L IS USM",
-        "New York Mets vs. Washington Nationals (March 15, 2024)",
-        "Baseball swing (leg kick)"
-      ],
-      "credit": "D. Benjamin Miller",
-      "dateOriginal": "2024-03-15 18:12:09",
-      "description": "Luis García Jr. batting",
-      "downloadUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Luis_Garc%C3%ADa_Jr._batting%2C_March_15%2C_2024_-_01-00002.jpg/500px-Luis_Garc%C3%ADa_Jr._batting%2C_March_15%2C_2024_-_01-00002.jpg",
-      "height": 8192,
-      "license": "CC0",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en",
-      "mime": "image/jpeg",
-      "pageId": 146512904,
-      "rightsText": "Creative Commons Zero, Public Domain Dedication",
-      "sourceId": "commons:146512904",
-      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Luis_Garc%C3%ADa_Jr._batting%2C_March_15%2C_2024_-_01-00002.jpg",
-      "title": "Luis García Jr. batting, March 15, 2024 - 01-00002.jpg",
-      "width": 5465
-    },
-    "captureDate": {
-      "kind": "exact",
-      "year": 2024
-    },
-    "uniform": "mlb",
-    "context": "playing",
-    "franchiseId": "WSN",
-    "crop": {
-      "x": 0.07,
-      "y": 0.1,
-      "width": 0.87,
-      "height": 0.74
-    },
-    "captureEvidenceUrl": "https://commons.wikimedia.org/w/index.php?oldid=1234873247",
-    "evidence": {
-      "identityUrl": "https://commons.wikimedia.org/w/index.php?oldid=1234873247",
-      "uniformUrl": "https://commons.wikimedia.org/w/index.php?oldid=1234873247",
-      "contextUrl": "https://commons.wikimedia.org/w/index.php?oldid=1234873247",
-      "rightsUrl": "https://commons.wikimedia.org/w/index.php?oldid=1234873247",
-      "rightsBasis": "Source identifies the original photographer or rights-holding institution and documents CC0. The source revision preserves its release and attribution.",
-      "sourceChecksum": "ea25ad1dd6ab8aad9ac18d2cf1dbcffcce97f1cd3f0bfd32d1c03cb87eb18130",
-      "snapshotChecksum": "4042d18533851dc0549840d026cd61217bdce0118d77158e5430f78d063f6440"
-    },
-    "visualReview": true,
-    "rights": {
-      "kind": "original"
-    },
-    "notes": "Visually reviewed subject, uniform, identity caption and photographic content against the recorded player. Playing uniform context."
+    "status": "rejected",
+    "reason": "Identity mismatch: the photograph shows Nationals infielder Luis García Jr. batting, not Astros pitcher Luis Heibardo García in this player record.",
+    "evidenceUrl": "https://commons.wikimedia.org/w/index.php?oldid=1234873247"
   },
   {
     "playerId": "garcima01",

@@ -5,6 +5,7 @@ import type { Candidate, Draft, Manifest, Profile, Slot } from '../game/types.ts
 import type { MediaManifest } from '../media/types.ts';
 import { venuePhoto } from '../media/venue.ts';
 import type { WarRankings } from '../rankings/types.ts';
+import type { ScoutingLabel } from '../game/scouting.ts';
 import type { SeasonResult } from '../sim/types.ts';
 import { validateProfile } from '../sim/validation.ts';
 import type { ShareRecord, ShareRenderModel, ShareStadium } from './types.ts';
@@ -16,6 +17,8 @@ export interface CreateShareRenderModelInput {
 	manifest: Manifest;
 	media: MediaManifest | null;
 	rankings: WarRankings | null;
+	/** The draft's scouting label from `scoutingReport`, when card values and rankings have loaded. */
+	scouting?: ScoutingLabel | null;
 }
 
 
@@ -228,6 +231,7 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		cards,
 		battingOrder: [...draft.battingOrder],
 		starterOrder: [...draft.starterOrder],
-		...(draft.daily === undefined ? {} : { daily: draft.daily })
+		...(draft.daily === undefined ? {} : { daily: draft.daily }),
+		...(input.scouting ? { scouting: input.scouting } : {})
 	};
 }

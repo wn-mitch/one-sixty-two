@@ -158,65 +158,98 @@ interface Glyph {
 
 const OVERRIDES = 'position:absolute;left:0;top:0;margin:0;transform:none;translate:none;rotate:none;scale:none;animation:none;transition:none;';
 
-/** Copies every computed property, so the copy lays text out like the original without its ancestors' selectors. */
-function copyStyle(source: Element, target: HTMLElement): void {
+/**
+ * Copies every computed property, so the copy lays text out like the original without its ancestors' selectors.
+ * `extra` declarations follow the copied ones and win; one assignment parses them all once.
+ */
+function copyStyle(source: Element, target: HTMLElement, extra = ''): void {
 	const style = getComputedStyle(source);
 	let text = '';
 	for (let index = 0; index < style.length; index += 1) {
 		const name = style.item(index);
 		text += `${name}:${style.getPropertyValue(name)};`;
 	}
-	target.style.cssText = text;
+	target.style.cssText = text + extra;
 }
 
+/** Where the browser set one element's characters, with the font metrics its baselines were measured by. */
+interface Placement {
+	glyphs: Glyph[];
+	ascent: number;
+	descent: number;
+}
+
+/** The element's own text, which is what its lettering paints. */
+const ownText = (element: HTMLElement) => [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent ?? '').join('').trim();
+
 /**
- * Where the browser set each of `element`'s own characters. Canvas text cannot reproduce every
- * layout feature (tabular numerals, kerning, wrapping, balancing), so the element is copied into an
+ * Where the browser set each of `elements`' own characters. Canvas text cannot reproduce every
+ * layout feature (tabular numerals, kerning, wrapping, balancing), so each element is copied into an
  * untransformed host and each character's box is read back; a tilted card would skew live rects.
+ * Every style is read before the host mounts and every box after, so the page pays one style and
+ * layout pass for the whole card rather than one per element.
  */
-function glyphs(element: HTMLElement, style: CSSStyleDeclaration, ascent: number, descent: number): Glyph[] {
-	const host = element.ownerDocument.createElement('div');
-	host.style.cssText = `position:fixed;left:-100000px;top:0;width:${element.offsetWidth}px;visibility:hidden;pointer-events:none;contain:layout style;`;
-	const copy = element.cloneNode(true) as HTMLElement;
-	copyStyle(element, copy);
-	// The copy is mounted outside the card, so percentage widths would resolve against
-	// the fixed host instead of the element's original containing block. Preserve the
-	// laid-out border-box width or wrapped names become one glyph per line in the foil map.
-	copy.style.width = `${element.offsetWidth}px`;
-	copy.style.cssText += OVERRIDES;
-	const sources = [element, ...element.querySelectorAll('*')];
-	const copies = [copy, ...copy.querySelectorAll<HTMLElement>('*')];
-	for (let index = 1; index < copies.length; index += 1) copyStyle(sources[index]!, copies[index]!);
-	host.append(copy);
-	element.ownerDocument.body.append(host);
-	const origin = copy.getBoundingClientRect();
-	const spacing = Number.parseFloat(style.letterSpacing) || 0;
-	const range = element.ownerDocument.createRange();
-	const vertical = style.writingMode.startsWith('vertical') || style.writingMode.startsWith('sideways');
-	const result: Glyph[] = [];
-	for (const node of copy.childNodes) {
-		if (node.nodeType !== Node.TEXT_NODE) continue;
-		const source = node.textContent ?? '';
-		let offset = 0;
-		for (const character of source) {
-			const end = offset + character.length;
-			if (character.trim()) {
-				range.setStart(node, offset);
-				range.setEnd(node, end);
-				const rect = range.getClientRects()[0];
-				if (rect && rect.width > 0) {
-					const startsWord = offset === 0 || !source[offset - 1]!.trim();
-					const text = style.textTransform === 'capitalize' ? (startsWord ? character.toUpperCase() : character) : transformText(character, style.textTransform);
-					result.push(vertical
-						? { text, vertical, x: rect.left - origin.left + rect.width / 2, baseline: rect.top - origin.top + (rect.height - spacing) / 2 }
-						: { text, x: rect.left - origin.left + (rect.width - spacing) / 2, baseline: rect.top - origin.top + (rect.height - ascent - descent) / 2 + ascent });
+function placeGlyphs(elements: readonly HTMLElement[], probe: Context): Map<HTMLElement, Placement> {
+	const placements = new Map<HTMLElement, Placement>();
+	if (!elements.length) return placements;
+	const document = elements[0]!.ownerDocument;
+	const host = document.createElement('div');
+	host.style.cssText = 'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;contain:layout style;';
+	const staged: { element: HTMLElement; copy: HTMLElement; style: CSSStyleDeclaration; ascent: number; descent: number }[] = [];
+	for (const element of elements) {
+		const text = ownText(element);
+		if (!text) continue;
+		const style = getComputedStyle(element);
+		const fontSize = Number.parseFloat(style.fontSize);
+		probe.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+		const metrics = probe.measureText(text);
+		// Each copy sits in a frame as wide as the original, so percentages resolve as they did in place.
+		const frame = document.createElement('div');
+		frame.style.cssText = `position:absolute;left:0;top:0;width:${element.offsetWidth}px;`;
+		const copy = element.cloneNode(true) as HTMLElement;
+		// The copy is mounted outside the card, so percentage widths would resolve against
+		// the fixed host instead of the element's original containing block. Preserve the
+		// laid-out border-box width or wrapped names become one glyph per line in the foil map.
+		copyStyle(element, copy, `width:${element.offsetWidth}px;${OVERRIDES}`);
+		const sources = [element, ...element.querySelectorAll('*')];
+		const copies = [copy, ...copy.querySelectorAll<HTMLElement>('*')];
+		for (let index = 1; index < copies.length; index += 1) copyStyle(sources[index]!, copies[index]!);
+		frame.append(copy);
+		host.append(frame);
+		staged.push({ element, copy, style, ascent: metrics.fontBoundingBoxAscent ?? fontSize * 0.8, descent: metrics.fontBoundingBoxDescent ?? fontSize * 0.2 });
+	}
+	document.body.append(host);
+	const range = document.createRange();
+	for (const { element, copy, style, ascent, descent } of staged) {
+		const origin = copy.getBoundingClientRect();
+		const spacing = Number.parseFloat(style.letterSpacing) || 0;
+		const vertical = style.writingMode.startsWith('vertical') || style.writingMode.startsWith('sideways');
+		const glyphs: Glyph[] = [];
+		for (const node of copy.childNodes) {
+			if (node.nodeType !== Node.TEXT_NODE) continue;
+			const source = node.textContent ?? '';
+			let offset = 0;
+			for (const character of source) {
+				const end = offset + character.length;
+				if (character.trim()) {
+					range.setStart(node, offset);
+					range.setEnd(node, end);
+					const rect = range.getClientRects()[0];
+					if (rect && rect.width > 0) {
+						const startsWord = offset === 0 || !source[offset - 1]!.trim();
+						const text = style.textTransform === 'capitalize' ? (startsWord ? character.toUpperCase() : character) : transformText(character, style.textTransform);
+						glyphs.push(vertical
+							? { text, vertical, x: rect.left - origin.left + rect.width / 2, baseline: rect.top - origin.top + (rect.height - spacing) / 2 }
+							: { text, x: rect.left - origin.left + (rect.width - spacing) / 2, baseline: rect.top - origin.top + (rect.height - ascent - descent) / 2 + ascent });
+					}
 				}
+				offset = end;
 			}
-			offset = end;
 		}
+		placements.set(element, { glyphs, ascent, descent });
 	}
 	host.remove();
-	return result;
+	return placements;
 }
 
 interface Painter {
@@ -230,6 +263,8 @@ interface Painter {
 	scratch: { canvas: HTMLCanvasElement | OffscreenCanvas; ctx: Context };
 	scale: number;
 	root: HTMLElement;
+	/** Every lettered element's characters, placed before painting starts. */
+	placements: ReadonlyMap<HTMLElement, Placement>;
 }
 
 function withTransform(painter: Painter, matrix: DOMMatrix, draw: (ctx: Context, channel: Channel) => void): void {
@@ -285,21 +320,14 @@ function paintSvgText(painter: Painter, text: SVGTextContentElement, surface: Su
 }
 
 function paintText(painter: Painter, element: HTMLElement, surface: Surface, profile: ReliefProfile = 'pillow', softness = 0): void {
-	const text = [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent ?? '').join('').trim();
-	if (!text) return;
+	const placement = painter.placements.get(element);
+	if (!placement?.glyphs.length) return;
 	const matrix = elementToRoot(element, painter.root);
 	if (!matrix) return;
 	const style = getComputedStyle(element);
 	if (style.visibility === 'hidden' || Number(style.opacity) === 0) return;
-	const fontSize = Number.parseFloat(style.fontSize);
 	const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-	const probe = painter.contexts.height;
-	probe.font = font;
-	const metrics = probe.measureText(text);
-	const ascent = metrics.fontBoundingBoxAscent ?? fontSize * 0.8;
-	const descent = metrics.fontBoundingBoxDescent ?? fontSize * 0.2;
-	const placed = glyphs(element, style, ascent, descent);
-	if (!placed.length) return;
+	const { glyphs: placed, ascent, descent } = placement;
 	const typeset = (ctx: Context) => {
 		ctx.font = font;
 		ctx.textAlign = 'center';
@@ -578,7 +606,10 @@ export function buildSurfaceMap(root: HTMLElement, tier: Finish, era: CardEra, s
 	const scratchCanvas = canvas(width, height);
 	const inkCanvas = canvas(width, height);
 	const tintCanvas = canvas(64, 64);
-	const painter: Painter = { contexts, ink: context(inkCanvas), tint: { canvas: tintCanvas, ctx: context(tintCanvas) }, silhouette: { canvas: silhouetteCanvas, ctx: context(silhouetteCanvas) }, scratch: { canvas: scratchCanvas, ctx: context(scratchCanvas) }, scale, root };
+	// Text leaves under every surface, so all lettering is placed in one layout pass.
+	const lettered = [root, ...root.querySelectorAll<HTMLElement>('*')].filter((element): element is HTMLElement => element instanceof HTMLElement && ownText(element) !== '');
+	const placements = placeGlyphs(lettered, contexts.height);
+	const painter: Painter = { contexts, ink: context(inkCanvas), tint: { canvas: tintCanvas, ctx: context(tintCanvas) }, silhouette: { canvas: silhouetteCanvas, ctx: context(silhouetteCanvas) }, scratch: { canvas: scratchCanvas, ctx: context(scratchCanvas) }, scale, root, placements };
 	const stock = options.stock ? { ...STOCKS[options.stock] } : stockFor(era);
 	for (const channel of CHANNELS) {
 		const ctx = contexts[channel];

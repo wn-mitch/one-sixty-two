@@ -102,6 +102,12 @@ describe('share render model', () => {
 		expect(createShareRenderModel({ ...input, ...publishedAssets(input.manifest.dataVersion) })).toMatchObject({ mediaVersion: 'media-pin', rankingVersion: 'ranking-pin' });
 	});
 
+	it('carries the Results scouting label only when one was graded', () => {
+		const input = fixture();
+		expect(createShareRenderModel({ ...input, scouting: 'Sharp eye' }).scouting).toBe('Sharp eye');
+		expect(createShareRenderModel({ ...input, scouting: null })).not.toHaveProperty('scouting');
+	});
+
 	it('collages the roster\'s best cards by WAR/162 in each card\'s role and leaves out weak ones', () => {
 		const input = fixture();
 		const assets = publishedAssets(input.manifest.dataVersion);

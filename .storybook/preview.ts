@@ -2,11 +2,22 @@ import type { Preview } from '@storybook/sveltekit';
 import { mount, unmount } from 'svelte';
 import { loadEngine } from '../src/lib/engine/browser.ts';
 import { configureMediaLoader, type MediaFixtureMode } from '../src/lib/storybook/media-fixtures.ts';
+import { createExampleFixtures, exampleDraftCardTable } from '../src/lib/storybook/fixtures.ts';
 import FeedbackTools from '../src/lib/dev/FeedbackTools.svelte';
 import Toaster from '../src/lib/components/Toaster.svelte';
 import { toasts } from '../src/lib/toast.svelte.ts';
 import '../src/routes/layout.css';
 import '../src/lib/cards/fonts.css';
+
+// The example data version has no prepared files; its draft card table is built from the same fixtures on request.
+const fetchData = window.fetch.bind(window);
+let draftCards: string | null = null;
+window.fetch = (input, init) => {
+	const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+	if (url.origin !== location.origin || url.pathname !== '/data/synthetic/draft-cards.json') return fetchData(input, init);
+	draftCards ??= JSON.stringify(exampleDraftCardTable(createExampleFixtures()));
+	return Promise.resolve(new Response(draftCards, { headers: { 'content-type': 'application/json' } }));
+};
 
 const preview: Preview = {
 	// Example seasons and series run the wasm engine, which must be instantiated before any story renders.

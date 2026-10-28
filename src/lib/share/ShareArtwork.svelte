@@ -41,7 +41,7 @@
 	data-share-ready="false"
 	data-share-state="idle"
 	role="img"
-	aria-label={`${record.wins} wins, ${record.losses} losses${grade ? `, grade ${grade}` : ''} season share artwork`}
+	aria-label={`${record.wins} wins, ${record.losses} losses${grade ? `, grade ${grade}` : ''}${model.scouting ? `, scouting ${model.scouting}` : ''} season share artwork`}
 >
 	<div class="expected-images" aria-hidden="true">
 		{#each expectedImages as url}<img data-share-expected-image src={url} alt="" />{/each}
@@ -57,7 +57,7 @@
 			<div class="final"><small>Final record</small><div class="record" aria-label={`${record.wins} wins and ${record.losses} losses`}>
 				<b>{record.wins}</b><span>–</span><b class="losses">{record.losses}</b>
 			</div></div>
-			{#if grade}<span class="grade"><span class="badge"><GradeBadge {grade} /></span><small>{gradeRange(grade)}</small></span>{/if}
+			{#if grade}<span class="grade"><span class="badge"><GradeBadge {grade} /></span><small>{gradeRange(grade)}</small>{#if model.scouting}<small class="scouting">{model.scouting}</small>{/if}</span>{/if}
 		</div>
 	</header>
 	<dl class="facts">{#each facts as fact}<div><dd>{fact.value}</dd><dt>{fact.label}</dt></div>{/each}</dl>
@@ -94,6 +94,8 @@
 	.grade { display:grid; justify-items:center; gap:1.2cqw; }
 	.badge { font-size:10.5cqw; }
 	.grade small { color:oklch(82% .016 255); font:700 2.8cqw / 1 'Barlow Condensed', sans-serif; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+	/* The Results scouting label, stamped beneath the season grade as the draft's own grade. */
+	.grade .scouting { padding:.7cqw 1.4cqw; border:.3cqw solid oklch(76% .018 255); color:oklch(97% .006 255); font-style:italic; font-weight:800; font-size:3cqw; letter-spacing:.06em; }
 
 	.facts { flex:none; margin:0; display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); padding:1.8cqw 0; border-block:.19cqw solid oklch(37% .016 255); }
 	.facts div { display:flex; flex-direction:column-reverse; align-items:center; gap:1cqw; min-width:0; }

@@ -1,4 +1,5 @@
 import type { CardViewModel } from '../cards/view-model.ts';
+import type { ScoutingLabel } from '../game/scouting.ts';
 import type { DEFENSE_METHOD_VERSION, MODEL_VERSION, ReplaySchemaVersion, RULES_VERSION, Slot, VALUATION_VERSION } from '../game/types.ts';
 import type { ENVIRONMENT_VERSION, GEOMETRY_VERSION, Vec2 } from '../sim/park-types.ts';
 
@@ -80,6 +81,8 @@ export interface ShareRenderModel {
 	starterOrder: readonly string[];
 	/** The daily run's day, `YYYY-MM-DD`; absent for any other season. */
 	daily?: string;
+	/** The draft's scouting label as Results grades it; absent when card values or rankings were unavailable. */
+	scouting?: ScoutingLabel;
 }
 
 export interface SharePublicationImage {

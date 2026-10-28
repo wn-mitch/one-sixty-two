@@ -1,6 +1,6 @@
 import { goto } from '$app/navigation';
 import { loadRollProfiles, loadDraftProfiles, loadManifest, loadSimulation } from './data.ts';
-import { addPack, choosePack, commitPick, createDailyDraft, createDraft, reassignPick, rollDraft, rollLabel, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
+import { addPack, choosePack, commitPick, createDailyDraft, createDraft, reassignPick, replayInput, rollDraft, rollLabel, selectHomeStadium, validateDraft, validateReplay } from './draft.ts';
 import { dailyRewardKey, libraryKey, saveSeason } from './library.ts';
 import { newCards, newStickers, type NewCard, type NewSticker } from '../collection/collection.ts';
 import { refreshStickers } from '../collection/store.svelte.ts';
@@ -38,8 +38,15 @@ import { loadMedia } from '../media/client.ts';
 import type { MediaManifest } from '../media/types.ts';
 import { loadRankings } from '../rankings/client.ts';
 import type { WarRankings } from '../rankings/types.ts';
+import { loadCardValues, scoutingReport, type ScoutingLabel } from './scouting.ts';
 
 export type Phase = 'start' | 'stadium' | 'ready' | 'revealing' | 'choosing' | 'lineup' | 'simulating' | 'results';
+
+/** The label Results shows for the draft's scouting, or null when a value is missing so the image goes without it. */
+function scoutingLabelOf(draft: Draft, manifest: Manifest, values: ReadonlyMap<string, number>, rankings: WarRankings): ScoutingLabel | null {
+ try { return scoutingReport(replayInput(draft), manifest, values, rankings).label; }
+ catch { return null; }
+}
 
 export class Session {
  manifest = $state.raw<Manifest | null>(null);
@@ -95,7 +102,7 @@ export class Session {
  private publicationRequest: { epoch: number; promise: Promise<SharePublication> } | null = null;
  /** Releases the share renderer's drawing step once season playback stops animating. */
  private releaseRaster: (() => void) | null = null;
- private shareAssets: { epoch: number; assets: Promise<{ media: MediaManifest | null; rankings: WarRankings | null }> } | null = null;
+ private shareAssets: { epoch: number; assets: Promise<{ media: MediaManifest | null; rankings: WarRankings | null; scouting: ScoutingLabel | null }> } | null = null;
  private worker: Worker | null = null;
  private revealTimer: number | undefined;
  private simulationInput: SeasonInput | null = null;
@@ -180,8 +187,9 @@ export class Session {
   const profiles = this.profiles;
   const assets = Promise.all([
    loadMedia().catch(() => null),
-   loadRankings(draft.dataVersion).catch(() => null)
-  ]).then(([media, rankings]) => ({ media, rankings }));
+   loadRankings(draft.dataVersion).catch(() => null),
+   loadCardValues(manifest).catch(() => null)
+  ]).then(([media, rankings, values]) => ({ media, rankings, scouting: rankings && values ? scoutingLabelOf(draft, manifest, values, rankings) : null }));
   this.shareAssets = { epoch: this.epoch, assets };
   void assets.then(({ media, rankings }) => warmShareCapture(shareImageUrls({ draft, profiles, manifest, media, rankings }))).catch(() => undefined);
  }
@@ -197,9 +205,9 @@ export class Session {
   if (this.shareAssets?.epoch !== epoch) this.warmShare(draft, manifest);
   // A device too slow to prepare captures without dropping playback frames starts them after playback.
   const ready = slowCaptureDevice() ? Promise.all([this.shareAssets!.assets, untilRasterAllowed()]).then(([assets]) => assets) : this.shareAssets!.assets;
-  void ready.then(({ media, rankings }) => {
+  void ready.then(({ media, rankings, scouting }) => {
    if (epoch !== this.epoch) return;
-   return this.publishImages(draft, createShareRenderModel({ draft, result, profiles, manifest, media, rankings }));
+   return this.publishImages(draft, createShareRenderModel({ draft, result, profiles, manifest, media, rankings, scouting }));
   }).catch(() => undefined);
  }
 

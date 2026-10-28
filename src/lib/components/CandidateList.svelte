@@ -76,6 +76,9 @@
  let candidateMotionState: CandidateMotionState | null = null;
  let filter = $state<FilterSlot>('All');
  let visibleCount = $state(20);
+ /** Cards a fresh pool mounts per frame; one task for a whole batch of twenty held a frame for ~150 ms. */
+ const MOUNT_STEP = 4;
+ let mounted = $state(MOUNT_STEP);
  let sentinel = $state<HTMLDivElement>();
  let flippedPlayerId = $state<string | null>(null);
  const showBlocked = $derived(appSettings.showBlockedCards);
@@ -144,6 +147,7 @@
  const rankedGroups = $derived(roleSplit.shown);
  const collapsedGroups = $derived(roleSplit.collapsed);
  const shownGroups = $derived(rankedGroups.slice(0, visibleCount));
+ const mountedGroups = $derived(shownGroups.slice(0, mounted));
  const hasMore = $derived(shownGroups.length < rankedGroups.length);
  const collapsedLabel = $derived.by(() => {
   const kinds = new Set(collapsedGroups.map(group => group.kind));
@@ -208,7 +212,8 @@
   document.querySelector<HTMLButtonElement>(`[data-candidate-group="${CSS.escape(firstNew)}"] button.select-front, [data-candidate-group="${CSS.escape(firstNew)}"] button.art-trigger`)?.focus({ preventScroll: true });
  }
  $effect(() => {
-  if (!sentinel || busy || !hasMore || typeof IntersectionObserver === 'undefined') return;
+  // While a fresh pool deals in, the sentinel sits just under its first cards; wait for the whole batch.
+  if (!sentinel || busy || !hasMore || mounted < shownGroups.length || typeof IntersectionObserver === 'undefined') return;
   visibleCount;
   const observer = new IntersectionObserver(entries => {
    // Keyboard focus on the fallback owns this batch; never remove its button underneath Enter.
@@ -241,6 +246,21 @@
  });
  $effect(() => {
   if (!wide) flippedPlayerId = null;
+ });
+ // A new pool deals its cards in over a few frames, then stays whole so Load more and focus see every card at once.
+ $effect.pre(() => {
+  draftBrowseKey;
+  untrack(() => mounted = MOUNT_STEP);
+ });
+ $effect(() => {
+  // The pool may load after its key changes; keep the first step until its cards arrive.
+  if (!shownGroups.length) return;
+  if (mounted >= shownGroups.length) {
+   if (mounted !== Infinity) mounted = Infinity;
+   return;
+  }
+  const frame = requestAnimationFrame(() => mounted += MOUNT_STEP);
+  return () => cancelAnimationFrame(frame);
  });
  // Rankings may move a selected player beyond the revealed prefix; reveal through their new position.
  $effect(() => {
@@ -359,7 +379,7 @@
      <h3>Players</h3>
     </div>
     <div class="card-grid">
-     {#each shownGroups as group (`${browseRevision}:${group.key}`)}
+     {#each mountedGroups as group (`${browseRevision}:${group.key}`)}
       {@render candidateCard(group)}
      {/each}
     </div>

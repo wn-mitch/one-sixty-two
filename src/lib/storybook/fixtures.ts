@@ -1,7 +1,9 @@
 import { commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../game/draft.ts';
 import { stadiumSummary } from '../sim/park.ts';
-import { HITTER_SLOTS, POSITIONS, SLOTS, isJackpot, type Candidate, type Draft, type HitterSlot, type Manifest, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
+import { HITTER_SLOTS, POSITIONS, SLOTS, draftableCandidates, isJackpot, type Candidate, type Draft, type HitterSlot, type Manifest, type Position, type Profile, type SimulationData, type Slot } from '../game/types.ts';
 import type { WarSeasonRanking, WarRankings } from '../rankings/types.ts';
+import type { StoredDraftCardTable } from '../draft/card-table.ts';
+import { SALARY_VERSION } from '../draft/versions.ts';
 import { neutralDefensivePosition } from '../sim/defense.ts';
 import { testSeason } from '../sim/test-fixtures.ts';
 
@@ -316,4 +318,30 @@ export function createExampleFixtures(): ExampleFixtures {
  // The canonical F2 player's alternate season ranks last, so choosing it moves the player to a later ranking page.
  rankings.seasons[extraProfiles[0].seasonId] = { battingWAR162: 0, pitchingWAR162: null };
  return { manifest, profiles, rankings, simulationData, ...states };
+}
+
+/**
+ * The example data version's draft card table, so Results can grade scouting as it does on real data.
+ * Values follow the example WAR; salaries and the pricing method are placeholders no story reads.
+ */
+export function exampleDraftCardTable({ manifest, profiles, rankings }: Pick<ExampleFixtures, 'manifest' | 'profiles' | 'rankings'>): StoredDraftCardTable {
+ const candidates = draftableCandidates(manifest.candidates);
+ const year = new Map(profiles.map(profile => [profile.seasonId, profile.year]));
+ const war = (seasonId: string) => {
+  const ranked = rankings.seasons[seasonId];
+  return Math.max(ranked?.battingWAR162 ?? 0, ranked?.pitchingWAR162 ?? 0);
+ };
+ return {
+  schemaVersion: 1,
+  salaryVersion: SALARY_VERSION,
+  provisional: true,
+  method: {} as StoredDraftCardTable['method'],
+  dataVersion: manifest.dataVersion,
+  seasonId: candidates.map(candidate => candidate.seasonId),
+  year: candidates.map(candidate => year.get(candidate.seasonId) ?? candidate.decade),
+  salary: candidates.map(() => 5),
+  finish: candidates.map(() => 'base'),
+  valueRuns: candidates.map(candidate => Math.round(war(candidate.seasonId) * 100) / 10),
+  pricedSlot: candidates.map(candidate => candidate.eligibleSlots[0] as Slot)
+ };
 }

@@ -133,9 +133,13 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
 
  // A reserve change is kept with the season and survives a reload.
  const reserves = page.getByRole('region', { name: 'Reserves' });
- const firstReserve = reserves.locator('li[data-season-id]').first();
+ // The swap leaves the ridden starter active, so its push stays on.
+ const swap = await reserves.locator('li[data-season-id]').evaluateAll((rows, ridden) => rows.flatMap((row, index) =>
+  [...row.querySelectorAll('option')].filter(option => !option.disabled && !option.selected && !option.text.endsWith(`swap with ${ridden}`)).map(option => ({ index, value: option.value })))[0], ridden);
+ expect(swap).toBeDefined();
+ const firstReserve = reserves.locator('li[data-season-id]').nth(swap.index);
  const before = await firstReserve.getAttribute('data-season-id');
- await reserves.getByLabel(/^Position for /).first().selectOption({ index: 1 });
+ await firstReserve.getByLabel(/^Position for /).selectOption(swap.value);
  await expect(firstReserve).not.toHaveAttribute('data-season-id', before!);
  const benched = await firstReserve.getAttribute('data-season-id');
  await page.reload();

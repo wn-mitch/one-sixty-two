@@ -6,7 +6,7 @@
 <Skeleton label="Loading the results…">
  <div class="results-skeleton">
   <div class="scoreboard">
-   <div class="record-block"><span class="sk score"></span><span class="sk clipping"></span><span class="grades"><span class="sk"></span><span class="sk"></span></span><span class="ledger">{#each { length: 3 } as _}<span class="sk"></span>{/each}</span></div>
+   <div class="record-block"><span class="sk score"></span><span class="sk clipping"></span><span class="grades">{#each { length: 3 } as _}<span class="sk"></span>{/each}</span><span class="ledger">{#each { length: 3 } as _}<span class="sk"></span>{/each}</span></div>
    <div class="actions"><span class="sk"></span><span class="sk"></span></div>
   </div>
   <div class="awards-share">
@@ -37,7 +37,8 @@
  .score { width: 14.25rem; height: var(--text-score); }
  /* The headline takes one line beside the score from 30rem, two on phones. */
  .clipping { flex: 1 1 16rem; max-width: 32rem; height: 47px; }
- .grades { width: 31rem; max-width: 100%; height: 5.625rem; }
+ /* Three grade cards: season, draft and scouting; the ledger wraps beneath them. */
+ .grades { width: 48rem; max-width: 100%; height: 5.625rem; }
  .ledger { width: 18rem; max-width: 100%; height: 2.75rem; }
  .grades, .ledger { display: flex; gap: var(--space-3); }
  .grades .sk, .ledger .sk { flex: 1; }
@@ -79,7 +80,8 @@
  @media (max-width: 40rem) {
   .scoreboard { padding: var(--space-4); }
   .score { width: 12rem; height: var(--text-3xl); }
-  .grades { width: 17.5rem; height: 6.125rem; }
+  /* The grade table's rows; scouting's stacks its label over its detail. */
+  .grades { flex-direction: column; width: 100%; height: 8.85rem; }
   .ledger { height: 2.625rem; }
   /* The award rail runs to the screen edges on phones. */
   .rail { grid-auto-columns: minmax(13rem, calc(100% - 3rem)); margin-inline: calc(-1 * var(--space-4)); padding-inline: var(--space-4); }

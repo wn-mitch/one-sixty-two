@@ -11,15 +11,18 @@ test('shop swatches drift at rest and become still under reduced motion', async 
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	await page.goto('/shop');
 	const sample = page.locator('[data-finish-sample]').first();
-	await expect(sample).toBeVisible();
+	// Swatches wait for the manifest, rankings, photos and preview cards.
+	await expect(sample).toBeVisible({ timeout: 60_000 });
 	const pose = () => sample.evaluate(node => node.style.transform);
-	await expect.poll(pose).not.toBe('');
+	// The first lit frame waits on WebGL setup, which runs slowly beside other test browsers.
+	const lit = { timeout: 30_000 };
+	await expect.poll(pose, lit).not.toBe('');
 	const initial = await pose();
-	await expect.poll(pose).not.toBe(initial);
+	await expect.poll(pose, lit).not.toBe(initial);
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await expect.poll(pose).toBe('');
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
-	await expect.poll(pose).not.toBe('');
+	await expect.poll(pose, lit).not.toBe('');
 });
 
 test('shop unlocks a finish type once without equipping, then factory applies it free', async ({ page }) => {

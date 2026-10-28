@@ -7,7 +7,7 @@
  <div class="stadium-skeleton">
   <div class="heading"><span class="sk-line" style:--sk-width="24rem"></span><span class="sk-line extra" style:--sk-width="8rem"></span></div>
   <!-- Full lines, then the short last line; the middle lines appear as the column narrows. -->
-  <div class="intro">{#each [[100, ''], [96, ''], [98, 'below-35'], [94, 'below-27'], [97, 'below-23'], [40, '']] as [width, from]}<span class="sk-line {from}" style:--sk-width="{width}%"></span>{/each}</div>
+  <div class="intro">{#each [[100, ''], [98, 'below-28'], [45, '']] as [width, from]}<span class="sk-line {from}" style:--sk-width="{width}%"></span>{/each}</div>
   <div class="tools"><span class="sk search"></span><span class="sk toggle"></span><span class="sk-line hint" style:--sk-width="100%"></span></div>
   <div class="grid">{#each { length: 8 } as _}<span class="sk sk-card"></span>{/each}</div>
   <div class="commit"><span class="sk-line" style:--sk-width="9rem"></span><span class="sk button"></span></div>
@@ -19,10 +19,9 @@
  .heading { font-size: var(--text-2xl); line-height: 1.15; }
  .intro { max-width: 68ch; }
  .heading .extra { display: none; }
- .intro :is(.below-35, .below-27, .below-23) { display: none; }
- @media (max-width: 34.9rem) { .intro .below-35 { display: flex; } }
- @media (max-width: 27.5rem) { .intro .below-27 { display: flex; } }
- @media (max-width: 23rem) { .intro .below-23 { display: flex; } }
+ /* The intro takes two lines, three on phones. */
+ .intro .below-28 { display: none; }
+ @media (max-width: 27.75rem) { .intro .below-28 { display: flex; } }
  /* Wraps like StadiumDeck's tools: search, sort toggle, then the pin hint. */
  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); font-size: var(--text-sm); }
  .search { flex: 1 1 14rem; max-width: 22rem; height: 2.75rem; border-radius: var(--radius); }

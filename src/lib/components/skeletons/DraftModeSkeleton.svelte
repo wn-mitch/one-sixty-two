@@ -9,7 +9,7 @@
   <div class="lede">{#each [100, 45, 100, 30] as width, index}<span class="sk-line" class:narrow={index >= 2} style:--sk-width="{width}%"></span>{/each}</div>
   <div class="fieldset">
    <span class="sk-line legend" style:--sk-width="7.5rem"></span>
-   <div class="note">{#each [100, 70, 40] as width, index}<span class="sk-line" class:narrow={index === 2} style:--sk-width="{width}%"></span>{/each}</div>
+   <div class="note">{#each [[100, ''], [98, ''], [100, ''], [99, 'below-37'], [97, 'below-28'], [100, 'below-25'], [35, '']] as [width, from]}<span class="sk-line {from}" style:--sk-width="{width}%"></span>{/each}</div>
    <div class="franchises">{#each { length: 30 } as _}<span class="choice"><span class="sk logo"></span><span class="sk-line" style:--sk-width="70%"></span></span>{/each}</div>
   </div>
   <div class="fieldset">
@@ -27,14 +27,20 @@
  .narrow { display: none; }
  .legend { margin-bottom: var(--space-2); }
  .note { margin-bottom: var(--space-3); font-size: var(--text-sm); }
- .franchises { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-2); }
+ .franchises { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); grid-auto-rows: 1fr; gap: var(--space-2); }
+ /* A club name over its package line. */
+ .franchises .choice { min-height: 50.5px; }
  .choice { display: flex; align-items: center; gap: var(--space-2); box-sizing: border-box; min-height: 2.75rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: var(--text-sm); line-height: 1.25; }
  .franchises .sk-line { flex: 1; }
  .logo { flex: none; width: 2rem; height: 2rem; border-radius: 50%; }
- /* Longer club names wrap to two lines once the grid has columns, which sets each row's height. */
- @media (min-width: 30rem) { .franchises .choice { min-height: 53px; } }
+ /* Club names wrap beside their package once the grid has columns, which sets each row's height. */
+ @media (min-width: 30rem) { .franchises .choice { min-height: 68px; } }
  /* Phones wrap the lede and note onto more lines. */
  @media (max-width: 30rem) { .narrow { display: flex; } }
+ .note :is(.below-37, .below-28, .below-25) { display: none; }
+ @media (max-width: 37.5rem) { .note .below-37 { display: flex; } }
+ @media (max-width: 28rem) { .note .below-28 { display: flex; } }
+ @media (max-width: 25.5rem) { .note .below-25 { display: flex; } }
  .difficulties { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: var(--space-2); }
  .difficulty { flex-direction: column; align-items: stretch; gap: 0; font-size: var(--text-base); line-height: 1.5; }
  .difficulty .small { font-size: var(--text-xs); }

@@ -78,7 +78,8 @@
  fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
  legend { padding: 0; margin-bottom: var(--space-2); font-weight: 700; }
  input[type='radio'] { position: absolute; opacity: 0; pointer-events: none; }
- .franchises { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-2); }
+ /* Every row is as tall as the tallest, so clubs with and without a package line up. */
+ .franchises { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); grid-auto-rows: 1fr; gap: var(--space-2); }
  .franchise, .difficulty { display: flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
  .franchise span { font-size: var(--text-sm); line-height: 1.25; }
  .franchise small { display: block; color: var(--muted); font-size: var(--text-xs); }

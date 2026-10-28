@@ -135,7 +135,7 @@
 	const resultsReviewId = 'results-card-review';
 
 	let resultsModel = $derived(createResultsModel({ result, draft, profiles, manifest, rankings }));
-	let shareModel = $derived(createShareRenderModel({ result, draft, profiles, manifest, media, rankings }));
+	let shareModel = $derived(createShareRenderModel({ result, draft, profiles, manifest, media, rankings, scouting: scouting?.label }));
 	let cardViews = $derived<ReadonlyMap<string, CardViewModel>>(
 		new Map(shareModel.cards.map((entry) => [entry.seasonId, entry.card]))
 	);

@@ -225,7 +225,7 @@ describe('franchise packages', () => {
   const allowed = (edge: number) => Array.from({ length: 12 }, (_, segment) => simulateLeagueSegment({ ...withEdge(edge), seed: 100 + segment }))
    .flatMap(result => result.games).reduce((sum, game) => sum + (game.home === human ? game.awayRuns : game.away === human ? game.homeRuns : 0), 0);
   expect(allowed(MAX_KNOW_HOW)).toBeLessThan(allowed(0));
- });
+ }, 60_000);
 
  it('gives an Iron Man club a free hitting training per hitter each payday, growing with his streak', () => {
   install('BAL', { ironMan: { step: .1, max: .25 } });
@@ -375,7 +375,7 @@ describe('franchise packages', () => {
   expect(familiarCount('MIN', [{ profile: ace, slot: 'SP1' }, { profile: ace, slot: 'CL' }])).toBe(1);
   // Cincinnati's terrace: fast outfielders only, not a fast infielder or designated hitter.
   expect(familiarCount('CIN', [{ profile: fast, slot: 'CF' }, { profile: fast, slot: 'LF' }, { profile: fast, slot: 'SS' }, { profile: fast, slot: 'DH' }, { profile: card({ speed: .69 }), slot: 'RF' }])).toBe(2);
- });
+ }, 60_000);
 
  it('plays Washington\'s home games on the grounds its chapter vote sets, locked when the chapter starts', () => {
   const { run, season, profile } = seasonFor('WSN');

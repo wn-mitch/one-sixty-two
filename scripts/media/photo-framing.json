@@ -24298,38 +24298,6 @@
       "notes": "Source and actual production fronts independently reviewed at quiet400 and maximum standard stickers150/400. Era-specific fit preserves identity around printed masks and artwork."
     },
     {
-      "sourceId": "commons:148670554",
-      "derivativeChecksum": "f95824e729c44223d1872297b4be46e31737746dbfb6c8fbbe589e7e1d09384a",
-      "subtype": "full-body-action",
-      "subjectBounds": {
-        "x": 0.16,
-        "y": 0.01,
-        "width": 0.69,
-        "height": 0.98
-      },
-      "focalPoint": {
-        "x": 0.5,
-        "y": 0.1
-      },
-      "fit": {
-        "mode": "cover",
-        "position": {
-          "x": 0.5,
-          "y": 0.22
-        }
-      },
-      "eras": {
-        "2020s": {
-          "mode": "contain",
-          "position": {
-            "x": 0.5,
-            "y": 0.5
-          }
-        }
-      },
-      "notes": "Source and actual production fronts independently reviewed at quiet400 and maximum standard stickers150/400. Era-specific fit preserves identity around printed masks and artwork. Source jersey reads GARCIA JR rather than Gallo; identity mismatch unresolved."
-    },
-    {
       "sourceId": "commons:15406754",
       "derivativeChecksum": "da063237ca7c12a188cbd3653236469b2de8e82dce44ce392f1fc31dc373150e",
       "sourceChecksum": "2c710356f1744438631bf89c29cf73547285d02deb3aeaff614dca5daeb80c12",
