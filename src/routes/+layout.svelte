@@ -36,8 +36,8 @@
 		...destination,
 		current: destination.href === '/' ? playing : destination.href === '/seasons' ? ['/seasons', '/h2h'].includes(page.url.pathname) : page.url.pathname === destination.href
 	})));
-	// Roster links (/r, /c) set their own preview from the published season image.
-	const rosterLink = $derived(/^\/(r|c)\//.test(page.url.pathname));
+	// Roster links (/r, /c) and shared Draft seasons (/d) set their own preview from their published image.
+	const rosterLink = $derived(/^\/(r|c|d)\//.test(page.url.pathname));
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
 
 	onMount(() => {

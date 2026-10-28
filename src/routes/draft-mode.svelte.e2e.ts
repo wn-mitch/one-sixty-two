@@ -178,8 +178,24 @@ test('a Draft Mode run goes from franchise to played nine-game stops and resumes
  await expect(page.getByRole('article', { name: /^Highlight: / })).toBeVisible();
  await expect(page.getByRole('article', { name: /^Lowlight: / })).toBeVisible();
  await expect(page.getByRole('link', { name: `Shop, ${tokens} ${plural}`, exact: true })).toBeVisible();
+ // Sharing publishes a read-only page of the season with its card image, and the card downloads.
+ const sharing = page.getByRole('region', { name: 'Share' });
+ const [card] = await Promise.all([page.waitForEvent('download'), sharing.getByRole('button', { name: 'Download card' }).click()]);
+ expect(card.suggestedFilename()).toMatch(/^162-0-draft-\d+\.png$/);
+ await sharing.getByRole('button', { name: 'Copy link' }).click();
+ const shared = sharing.locator('.share-link');
+ await expect(shared).toHaveAttribute('href', /\/d\/[A-Za-z0-9_-]{22}$/, { timeout: 60_000 });
+ const sharedPath = new URL((await shared.getAttribute('href'))!).pathname;
+ const image = await page.request.get(`/api/draft-reports/${sharedPath.split('/').pop()}/card.png`);
+ expect(image.status()).toBe(200);
+ expect(image.headers()['content-type']).toBe('image/png');
  await page.goto('/shop');
  await expect(page.locator('.balance')).toHaveText(`${tokens} unlock ${plural}`);
+ await page.goto(sharedPath);
+ await expect(page.getByRole('heading', { name: 'Final standings' })).toBeVisible();
+ await expect(page.getByText(/A snapshot of a finished season, not a replay/)).toBeVisible();
+ await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /\/api\/draft-reports\/[A-Za-z0-9_-]{22}\/card\.png$/);
+ expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
  await page.goto('/draft');
  await expect(page.getByRole('button', { name: 'Start draft', exact: true })).toBeVisible();
  await page.goto('/seasons');

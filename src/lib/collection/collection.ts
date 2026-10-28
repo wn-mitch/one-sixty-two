@@ -21,15 +21,22 @@ export function collectionStatements(entry: LibraryEntry, earnedAt: string): Sta
   const spot = award(kind);
   statements.push({ sql: 'INSERT OR IGNORE INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)', bind: [seasonId, kind, earnedAt, entry.key, spot.x, spot.y] });
  }
- for (const { kind, at: times } of LOYALTY_STICKERS) {
-  const spot = award(kind);
-  statements.push({
+ return [...statements, ...loyaltyStatements(entry.key, earnedAt)];
+}
+
+/**
+ * Times-drafted stickers for the cards a season saved under `seasonKey` rostered, counted over every
+ * rostering on the device, Classic and Draft Mode alike. Runs after that season's rostering rows.
+ */
+export function loyaltyStatements(seasonKey: string, earnedAt: string): Statement[] {
+ return LOYALTY_STICKERS.map(({ kind, at: times }) => {
+  const spot = STICKER_SPOTS[STICKER_BY_KIND.get(kind)!.family];
+  return {
    sql: `INSERT OR IGNORE INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden)
     SELECT season_id, ?, ?, ?, ?, ?, 0 FROM rostered WHERE season_id IN (SELECT season_id FROM rostered WHERE season_key = ?) GROUP BY season_id HAVING count(*) >= ?`,
-   bind: [kind, earnedAt, entry.key, spot.x, spot.y, entry.key, times]
-  });
- }
- return statements;
+   bind: [kind, earnedAt, seasonKey, spot.x, spot.y, seasonKey, times]
+  };
+ });
 }
 
 interface StickerRow extends Row {

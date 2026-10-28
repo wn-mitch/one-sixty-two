@@ -14,7 +14,7 @@ export const PNG_MAX_BYTES = 8 * 1024 * 1024;
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
 const IMAGE_PREFIX = 'shares/v3/images/';
 const PUBLICATION_PREFIX = 'shares/v3/replays/';
-type OwnedBytes = Uint8Array<ArrayBuffer>;
+export type OwnedBytes = Uint8Array<ArrayBuffer>;
 
 export interface ShareServerBindings {
 	REPLAYS: ReplayBucket;
@@ -80,7 +80,7 @@ async function sha256(bytes: OwnedBytes): Promise<string> {
 	return hex;
 }
 
-async function readBoundedBody(body: ReplayObject['body'] | BodyInit | null, limit: number): Promise<OwnedBytes> {
+export async function readBoundedBody(body: ReplayObject['body'] | BodyInit | null, limit: number): Promise<OwnedBytes> {
 	if (body === null) throw new ShareUnavailableError();
 	const stream = new Response(body as BodyInit).body;
 	if (!stream) return new Uint8Array();
@@ -110,7 +110,7 @@ async function readBoundedBody(body: ReplayObject['body'] | BodyInit | null, lim
 	return bytes;
 }
 
-function decodeJson(bytes: Uint8Array, label: string): unknown {
+export function decodeJson(bytes: Uint8Array, label: string): unknown {
 	try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
 	catch { throw new ShareIncompatibleError(`${label} is invalid.`); }
 }
@@ -127,13 +127,13 @@ export function pngDimensions(bytes: Uint8Array): { width: number; height: numbe
 	return { width, height };
 }
 
-async function bucketGet(bucket: ReplayBucket | undefined, key: string): Promise<ReplayObject | null> {
+export async function bucketGet(bucket: ReplayBucket | undefined, key: string): Promise<ReplayObject | null> {
 	if (!bucket) throw new ShareUnavailableError();
 	try { return await bucket.get(key); }
 	catch { throw new ShareUnavailableError(); }
 }
 
-async function storeImmutable(
+export async function storeImmutable(
 	bucket: ReplayBucket,
 	key: string,
 	bytes: OwnedBytes,

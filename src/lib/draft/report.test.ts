@@ -9,6 +9,7 @@ import { RIVALS } from './franchises.ts';
 import { standings, startLeague, type LeagueSeason, type SegmentRecord, type Standing } from './league.ts';
 import { momentTitle, updateMoments, type SeasonMoments } from './moments.ts';
 import { finishGrade, finishReward, finishTokens, leagueSticker } from './report.ts';
+import { draftShareReport } from './share.ts';
 import { applyAction, newRunSetup, startRun, type DraftRun, type RunData } from './run.ts';
 import { runSeasonKey, saveRun } from './saves.ts';
 import { seasonRoster } from './shop.ts';
@@ -28,13 +29,19 @@ function finished(): { run: DraftRun; season: LeagueSeason; human: number; rival
  return { run, season, human, rival };
 }
 
-/** Eighteen segments in which `seat` plays every other seat once a segment and `wins(opponent)` decides each game. */
+/** Eighteen nine-game segments in which `seat` plays the other seats in turn and `wins(opponent)` decides each game. */
 function play(season: LeagueSeason, seat: number, wins: (opponent: number) => boolean): void {
+ const others = season.lineups.map((_, other) => other).filter(other => other !== seat);
  season.segments = Array.from({ length: LEAGUE_SEGMENTS }, (_, segment) => ({
-  games: season.lineups.map((_, other) => other).filter(other => other !== seat)
-   .map(other => ({ matchday: segment * 9, home: seat, away: other, homeRuns: wins(other) ? 5 : 1, awayRuns: wins(other) ? 1 : 5 })),
-  lines: [], carry: [], crowds: [], paydays: [], hype: []
+  games: Array.from({ length: 9 }, (_, index) => others[(segment * 9 + index) % others.length])
+   .map((other, index) => ({ matchday: segment * 9 + index, home: seat, away: other, homeRuns: wins(other) ? 5 : 1, awayRuns: wins(other) ? 1 : 5 })),
+  lines: season.lineups.map(() => ({ batting: [], pitching: [] })), carry: [], crowds: [], paydays: [], hype: []
  }) as unknown as SegmentRecord);
+}
+
+/** Turns the season's first game into a loss for the home side. */
+function loseFirst(season: LeagueSeason): void {
+ season.segments[0].games[0] = { ...season.segments[0].games[0], homeRuns: 1, awayRuns: 5 };
 }
 
 const row = (seat: number, wins: number, gamesBack: number): Standing => ({ seat, wins, losses: 162 - wins, runsFor: 0, runsAgainst: 0, gamesBack });
@@ -51,8 +58,12 @@ describe('Draft season report', () => {
 
  it('records a finished season once: finish-scaled tokens, the final roster in the binder and its league sticker', async () => {
   const { run, season, human } = finished();
+  // The title, short of 162-0: the player loses only its first game.
   play(season, human, () => true);
-  expect(standings(season)[0].seat).toBe(human);
+  loseFirst(season);
+  const row = standings(season)[0];
+  expect(row.seat).toBe(human);
+  expect(row.losses).toBeGreaterThan(0);
   const { db } = await memoryDb();
   const before = (await readShop(db)).balance;
   const stamp = new Date(Date.UTC(2026, 9, 1));
@@ -63,7 +74,7 @@ describe('Draft season report', () => {
   const roster = seasonRoster(season, human);
   const collection = await loadCollection(db);
   expect(collection.map(card => card.seasonId).sort()).toEqual([...roster].sort());
-  expect(collection.every(card => card.label === `Card ${card.seasonId}` && card.best.wins === 126 && card.best.losses === 0)).toBe(true);
+  expect(collection.every(card => card.label === `Card ${card.seasonId}` && card.best.wins === row.wins && card.best.losses === row.losses)).toBe(true);
   const stickers = await stickersFromSeason(db, key);
   expect(stickers.map(item => item.sticker.kind)).toEqual(roster.map(() => DRAFT_STICKER_KIND.champions('NYM')));
   // A later save of the same finished run (leaving the report, say) adds nothing and keeps the labels.
@@ -72,6 +83,37 @@ describe('Draft season report', () => {
   expect(await finishReward(db, key, new Date(Date.UTC(2026, 9, 2)).toISOString())).toEqual({ season: 0, bonus: 0, daily: 0 });
   expect((await loadCollection(db)).every(card => card.label === `Card ${card.seasonId}` && card.times === 1)).toBe(true);
   expect(await stickersFromSeason(db, key)).toHaveLength(roster.length);
+ });
+
+ it('counts a Draft rostering toward times drafted, awarding the sticker the finish completes', async () => {
+  const { run, season, human } = finished();
+  play(season, human, () => true);
+  loseFirst(season);
+  const { db } = await memoryDb();
+  const [veteran, rookie] = seasonRoster(season, human);
+  // Two earlier Classic seasons rostered the veteran.
+  await db.run(['classic:a', 'classic:b'].map(key => ({
+   sql: "INSERT INTO rostered (season_id, season_key, rostered_at, label, slot, wins, losses, line_json) VALUES (?, ?, '2026-01-01T00:00:00.000Z', 'Vet', 'C', 100, 62, NULL)", bind: [veteran, key]
+  })));
+  await saveRun(db, 'run', run, season, new Date(Date.UTC(2026, 9, 1)));
+  const kinds = (seasonId: string) => db.all<{ kind: string; season_id: string }>('SELECT kind, season_id FROM stickers WHERE season_id = ?', [seasonId]).then(rows => rows.map(row => row.kind).sort());
+  expect(await kinds(veteran)).toEqual([DRAFT_STICKER_KIND.champions('NYM'), 'drafted-3'].sort());
+  expect(await kinds(rookie)).toEqual([DRAFT_STICKER_KIND.champions('NYM')]);
+ });
+
+ it('shares a finished season as a snapshot within the published size, naming the player and rival once', () => {
+  const { run, season, human, rival } = finished();
+  play(season, human, () => true);
+  loseFirst(season);
+  const report = draftShareReport(run, season, seat => `Club ${seat}`, seasonId => `Card ${seasonId}`);
+  expect(report).toMatchObject({ club: `Club ${human}`, place: 1, grade: 'S+', franchiseId: 'NYM', seed: run.setup.seed, rival: { club: `Club ${rival}` } });
+  expect(report.rival.wins + report.rival.losses).toBeGreaterThan(20);
+  expect(report.standings.filter(row => row.you).map(row => row.club)).toEqual([`Club ${human}`]);
+  expect(report.standings.filter(row => row.rival).map(row => row.club)).toEqual([`Club ${rival}`]);
+  expect(report.roster).toHaveLength(seasonRoster(season, human).length);
+  expect(report.roster.filter(card => card.slot === 'Res')).toHaveLength(season.lineups[human].reserves.length);
+  expect(report.decrees).toHaveLength(6);
+  expect(new TextEncoder().encode(JSON.stringify(report)).byteLength).toBeLessThan(32 * 1024);
  });
 
  it('gives the rival sticker for a won rival series short of the title, and nothing for a lost one', async () => {

@@ -18,9 +18,39 @@
   * The finished league season in the Results layout: the record, grade and its facts, the tokens and
   * stickers it earned, the final standings, the season's best and worst games, then the club's totals.
   */
- let { run, season, clubName, onNew, reward = null, earned = [] }: {
+ let { run, season, clubName, onNew, reward = null, earned = [], onShare, onCard }: {
   run: DraftRun; season: LeagueSeason; clubName: (seat: number) => string; onNew: () => void; reward?: SeasonReward | null; earned?: readonly NewSticker[];
+  /** Publishes the season and resolves to its link. */
+  onShare?: () => Promise<string>;
+  /** Draws the season's card image. */
+  onCard?: () => Promise<Blob>;
  } = $props();
+ let link = $state<string | null>(null);
+ let shareStatus = $state('');
+ let working = $state(false);
+ async function share(): Promise<void> {
+  if (!onShare || working) return;
+  working = true;
+  shareStatus = 'Publishing…';
+  try {
+   link = await onShare();
+   try { await navigator.clipboard.writeText(link); shareStatus = 'Link copied.'; } catch { shareStatus = 'Copy the link below.'; }
+  } catch (error) { shareStatus = error instanceof Error ? error.message : 'The season could not be shared. Please retry.'; }
+  finally { working = false; }
+ }
+ async function download(): Promise<void> {
+  if (!onCard || working) return;
+  working = true;
+  shareStatus = 'Drawing the card…';
+  try {
+   const url = URL.createObjectURL(await onCard());
+   const anchor = Object.assign(document.createElement('a'), { href: url, download: `162-0-draft-${run.setup.seed}.png` });
+   anchor.click();
+   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+   shareStatus = 'Card downloaded.';
+  } catch (error) { shareStatus = error instanceof Error ? error.message : 'The card could not be drawn.'; }
+  finally { working = false; }
+ }
  const human = $derived(run.seating.humanSeat);
  const rival = $derived(season.rivals.find(pair => pair.includes(human))!.find(seat => seat !== human)!);
  const table = $derived(standings(season));
@@ -69,6 +99,19 @@
   {/if}
  </section>
 
+ {#if onShare || onCard}
+  <section class="block" aria-labelledby="share-heading">
+   <h3 id="share-heading">Share</h3>
+   <p class="muted">Publish a read-only page of this season: the standings, moments, final roster and the run's seed and versions. It is a snapshot, not a replay.</p>
+   <div class="share-actions">
+    {#if onShare}<button type="button" class="secondary" disabled={working} onclick={share}>Copy link</button>{/if}
+    {#if onCard}<button type="button" class="secondary" disabled={working} onclick={download}>Download card</button>{/if}
+   </div>
+   <p class="muted" role="status">{shareStatus}</p>
+   {#if link}<a class="share-link" href={link}>{link}</a>{/if}
+  </section>
+ {/if}
+
  <section class="block" aria-labelledby="final-heading">
   <h3 id="final-heading">Final standings</h3>
   <Standings rows={table} {human} {rival} {clubName} />
@@ -107,5 +150,7 @@
  .moment { display: grid; gap: var(--space-1); min-width: 0; padding-top: var(--space-4); border-top: 1px solid var(--border); }
  .stickers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
  .stickers li { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+ .share-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+ .share-link { overflow-wrap: anywhere; font-size: var(--text-sm); }
  .badge { flex: none; font-size: .08rem; padding: .15rem; line-height: 0; }
 </style>

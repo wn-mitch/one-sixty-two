@@ -6,3 +6,5 @@ export const SALARY_VERSION = 'salary-war-v1' as const;
 export const POOL_CONTRACT_VERSION = 'pool-v2' as const;
 /** Saved Draft Mode run: setup fields and the action vocabulary replayed to rebuild a run. */
 export const RUN_VERSION = 'draft-run-v9' as const;
+/** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
+export const LEAGUE_VERSION = 'league-v19' as const;

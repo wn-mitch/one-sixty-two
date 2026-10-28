@@ -7,6 +7,9 @@ import type { Db } from '../storage/sql.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import type { SeasonReward } from '../cosmetics/ledger.ts';
 import { finishReward } from './report.ts';
+import { draftShareReport } from './share.ts';
+import { renderDraftCard } from './share-card.ts';
+import type { DraftSharedReport } from './share-report.ts';
 import { stickersFromSeason, type NewSticker } from '../collection/collection.ts';
 import { stickerDefinition } from '../collection/stickers.ts';
 import type { StackRole } from './cleanup.ts';
@@ -55,6 +58,9 @@ export class DraftModeSession {
  reward = $state.raw<SeasonReward | null>(null);
  /** Stickers the finished season put on its cards. */
  earned = $state.raw<NewSticker[]>([]);
+ /** The finished season's published link, once shared from this tab. */
+ shareUrl = $state<string | null>(null);
+ sharing = $state(false);
  #revealTimer: number | undefined;
  /** Skip was pressed while the segment simulated, so its games appear at once. */
  #skipReveal = false;
@@ -103,6 +109,7 @@ export class DraftModeSession {
   if (this.run) return;
   this.reward = null;
   this.earned = [];
+  this.shareUrl = null;
   const url = new URL(location.href);
   url.searchParams.delete('run');
   history.replaceState(history.state, '', url);
@@ -402,6 +409,40 @@ export class DraftModeSession {
  #stopWorker(): void {
   this.#worker?.terminate();
   this.#worker = null;
+ }
+
+ /** The finished season as it is shared, with every card on the final roster named. */
+ async #shareReport(): Promise<DraftSharedReport> {
+  const run = this.run;
+  const season = this.season;
+  if (!run || !season || !this.profiles || !seasonComplete(season)) throw new Error('The season is not finished.');
+  const lineup = season.lineups[run.seating.humanSeat];
+  const profiles = await this.profiles.load([...Object.values(lineup.active), ...lineup.reserves]);
+  return draftShareReport(run, season, seat => this.clubName(seat), seasonId => { const profile = profiles.get(seasonId); return profile ? `${profile.displayName} ${profile.year}` : seasonId; });
+ }
+
+ /** The finished season's card image, for download. */
+ async shareCard(): Promise<Blob> {
+  return renderDraftCard(await this.#shareReport());
+ }
+
+ /**
+  * Publishes the finished season and returns its link; the same season always gets the same link.
+  * The card image goes with it when this browser can draw one. Throws with a message to show.
+  */
+ async publishShare(): Promise<string> {
+  if (this.shareUrl) return this.shareUrl;
+  this.sharing = true;
+  try {
+   const report = await this.#shareReport();
+   const form = new FormData();
+   form.set('report', JSON.stringify(report));
+   try { form.set('card', await renderDraftCard(report), 'card.png'); } catch { /* The link still works with the site's preview image. */ }
+   const response = await fetch('/api/draft-reports', { method: 'POST', body: form });
+   const body = await response.json().catch(() => null) as { url?: string; message?: string } | null;
+   if (!response.ok || !body?.url) throw new Error(body?.message ?? 'The season could not be shared. Please retry.');
+   return this.shareUrl = body.url;
+  } finally { this.sharing = false; }
  }
 
  /** The stickers the finished season's save recorded, named from the card profiles. */

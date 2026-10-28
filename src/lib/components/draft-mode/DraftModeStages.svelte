@@ -260,7 +260,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
    onskip={() => session.skip()}
   />
  {:else if session.screen === 'report' && session.run && session.season}
-  <LeagueReport run={session.run} season={session.season} {clubName} onNew={() => void session.startNew()} reward={session.reward} earned={session.earned} />
+  <LeagueReport run={session.run} season={session.season} {clubName} onNew={() => void session.startNew()} reward={session.reward} earned={session.earned} onShare={() => session.publishShare()} onCard={() => session.shareCard()} />
  {/if}
 </div>
 {/if}

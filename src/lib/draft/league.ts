@@ -15,8 +15,8 @@ import { canFill, DEFAULT_DRAFT_RELIEF_ROLES, DRAFT_BULLPEN_SLOTS, type DraftBul
 import type { DraftRun } from './run.ts';
 import type { DraftCard, DraftSlot, Submission } from './types.ts';
 
-/** League season format: rival matching, AI lineups, fans, cash and the stored segment record. */
-export const LEAGUE_VERSION = 'league-v19' as const;
+import { LEAGUE_VERSION } from './versions.ts';
+export { LEAGUE_VERSION };
 
 /**
  * A club's lineup for the next segment. The cards are the club's submitted roster; at each stop

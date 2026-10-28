@@ -1,6 +1,7 @@
 import type { SeasonGrade } from '../game/grade.ts';
 import type { RosterSlot } from '../game/types.ts';
 import { completionReward } from '../cosmetics/ledger.ts';
+import { loyaltyStatements } from '../collection/collection.ts';
 import { DRAFT_STICKER_KIND, STICKER_BY_KIND, STICKER_SPOTS } from '../collection/stickers.ts';
 import type { Db, Row, Statement } from '../storage/sql.ts';
 import type { SeasonReward } from '../cosmetics/ledger.ts';
@@ -60,7 +61,8 @@ const binderSlot = (slot: string): RosterSlot => slot === 'RP4' || slot === 'RP5
 /**
  * Statements that record a finished season under `key` ('draft:' and the run id), in the same
  * transaction as the save that finishes it: the token receipt, every card on the final roster in the
- * binder with the club's record, and the league sticker on each. Each is written once; later saves of
+ * binder with the club's record, the league sticker on each, and any times-drafted sticker the
+ * rostering completes. Each is written once; later saves of
  * the same finished run change nothing. `label` names a card ("Name Year").
  */
 export function completionStatements(run: DraftRun, season: LeagueSeason, key: string, stamp: string, label: (seasonId: string) => string): Statement[] {
@@ -82,5 +84,5 @@ export function completionStatements(run: DraftRun, season: LeagueSeason, key: s
   const spot = STICKER_SPOTS[STICKER_BY_KIND.get(kind)!.family];
   for (const seasonId of roster) statements.push({ sql: 'INSERT OR IGNORE INTO stickers (season_id, kind, earned_at, season_key, x, y, hidden) VALUES (?, ?, ?, ?, ?, ?, 0)', bind: [seasonId, kind, stamp, key, spot.x, spot.y] });
  }
- return statements;
+ return [...statements, ...loyaltyStatements(key, stamp)];
 }

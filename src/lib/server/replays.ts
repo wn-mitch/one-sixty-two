@@ -81,7 +81,7 @@ function encodeId(bytes: Uint8Array): string {
 	return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-async function contentId(bytes: Uint8Array): Promise<string> {
+export async function contentId(bytes: Uint8Array): Promise<string> {
 	// crypto.subtle.digest rejects a typed array backed by a shared buffer.
 	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)));
 	return encodeId(digest.slice(0, 16));
