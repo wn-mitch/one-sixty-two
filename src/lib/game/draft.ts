@@ -42,6 +42,7 @@ function emptyDraft(manifest: Manifest, seed: number, daily?: string, bonusPack?
   picks: [],
   currentRoll: null,
   packs: [],
+  passed: [],
   battingOrder: [],
   starterOrder: [],
   reliefRoles: [],
@@ -116,10 +117,13 @@ function legalCandidates(analysis: DraftAnalysis, roll: Roll | null): Candidate[
 }
 
 /**
- * A uniformly random franchise with legal seasons left, then one of its legal decades. An added pack
- * avoids the franchises already on the table, or failing that their exact decades, when anything else remains.
+ * A uniformly random franchise with legal seasons left, then one of its legal decades. A pack passed over
+ * for an added pack is not dealt again, and an added pack avoids the franchises already on the table, or
+ * failing that their exact decades, each while anything else remains.
  */
-function nextTeamRoll(legal: readonly Candidate[], random: () => number, table: readonly Roll[]): TeamRoll {
+function nextTeamRoll(all: readonly Candidate[], random: () => number, table: readonly Roll[], passed: readonly TeamRoll[]): TeamRoll {
+ const fresh = all.filter(candidate => !passed.some(roll => roll.franchiseId === candidate.franchiseId && roll.decade === candidate.decade));
+ const legal = fresh.length ? fresh : all;
  const teams = table.filter((roll): roll is TeamRoll => !isJackpot(roll));
  const newFranchises = legal.filter(candidate => !teams.some(roll => roll.franchiseId === candidate.franchiseId));
  const newDecades = legal.filter(candidate => !teams.some(roll => roll.franchiseId === candidate.franchiseId && roll.decade === candidate.decade));
@@ -192,7 +196,7 @@ function nextRoll(draft: Draft, manifest: Manifest, random: () => number, table:
  const legal = legalCandidates(analysis, null);
  const lucky = random() < policy.jackpots.chance;
  const jackpot = forced || lucky ? nextJackpot(analysis, legal, manifest, random, shown, policy.jackpots) : null;
- return jackpot ?? nextTeamRoll(legal, random, table);
+ return jackpot ?? nextTeamRoll(legal, random, table, draft.passed);
 }
 
 function applyStadium(draft: Draft, manifest: Manifest, stadiumId: string, stadiumVersion: string | null): Draft {
@@ -252,7 +256,8 @@ function applyChoosePack(draft: Draft, pack: number): Draft {
  if (draft.packs.length < 2) throw new Error('There is no pack to choose');
  const chosen = draft.packs[pack];
  if (!chosen) throw new Error('Choose one of the open packs');
- return { ...draft, currentRoll: chosen, packs: [chosen], actions: appendAction(draft, { type: 'choose-pack', pack }) } as Draft;
+ const passed = draft.packs.filter((roll, index): roll is TeamRoll => index !== pack && !isJackpot(roll));
+ return { ...draft, currentRoll: chosen, packs: [chosen], passed: [...draft.passed, ...passed], actions: appendAction(draft, { type: 'choose-pack', pack }) } as Draft;
 }
 
 function commitPickWithPolicy(

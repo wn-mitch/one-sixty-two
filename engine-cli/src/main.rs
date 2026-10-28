@@ -77,6 +77,7 @@ fn main() -> ExitCode {
         Some("league-crowd") => league::league_crowd(&arguments[1..]),
         Some("league-workload") => workload::league_workload(&arguments[1..]),
         Some("draft-spread") => draft::draft_spread(&arguments[1..]),
+        Some("season-anatomy") => draft::season_anatomy(&arguments[1..]),
         Some("sticker-sample") => draft::sample::sticker_sample(&arguments[1..]),
         Some("hill-climb") => climb::hill_climb(&arguments[1..]),
         Some("hill-climb-replay") => climb::replay(&arguments[1..]),

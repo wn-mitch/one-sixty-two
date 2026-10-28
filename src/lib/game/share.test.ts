@@ -67,7 +67,8 @@ function draft(): Draft {
 		reliefRoles: [],
 		actions: [],
 		currentRoll: null,
-		packs: []
+		packs: [],
+		passed: []
 	};
 }
 

@@ -50,6 +50,8 @@ pub struct Draft {
     pub open: u16,
     pub packs: Vec<Roll>,
     pub current: Option<Roll>,
+    /// Franchise packs set aside for an added pack; later rolls skip them while anything else remains.
+    passed: Vec<(u32, i32)>,
     extras_used: u32,
     used_players: HashSet<u32>,
     /// Players any jackpot in this draft has dealt; later jackpots skip them.
@@ -123,7 +125,7 @@ impl Draft {
         let mut order: Vec<usize> = (0..SLOTS.len()).collect();
         shuffle(&mut order, &mut random_stream(seed, "jackpot"));
         Self {
-            picks: Vec::new(), open: ALL_OPEN, packs: Vec::new(), current: None, extras_used: 0,
+            picks: Vec::new(), open: ALL_OPEN, packs: Vec::new(), current: None, passed: Vec::new(), extras_used: 0,
             used_players: HashSet::new(), shown: HashSet::new(), used_franchises: 0,
             guaranteed: order[..rules.guaranteed.min(SLOTS.len())].to_vec(),
             random: random_stream(seed, "draft"), analysis: None,
@@ -216,11 +218,13 @@ impl Draft {
     }
 
     fn next_roll(&mut self, pool: &Pool, rules: &Rules, forced: bool) -> Roll {
-        let legal = self.available(pool, None);
+        let all = self.available(pool, None);
         let lucky = self.random.next() < rules.chance;
         if forced || lucky {
             if let Some(jackpot) = self.next_jackpot(pool, rules) { return jackpot; }
         }
+        let fresh: Vec<usize> = all.iter().copied().filter(|card| !self.passed.contains(&(pool.cards[*card].franchise, pool.cards[*card].decade))).collect();
+        let legal = if fresh.is_empty() { all } else { fresh };
         let teams: Vec<(u32, i32)> = self.packs.iter().filter_map(|roll| match roll { Roll::Team { franchise, decade } => Some((*franchise, *decade)), _ => None }).collect();
         let new_franchises: Vec<usize> = legal.iter().copied().filter(|card| !teams.iter().any(|(f, _)| *f == pool.cards[*card].franchise)).collect();
         let new_decades: Vec<usize> = legal.iter().copied().filter(|card| !teams.contains(&(pool.cards[*card].franchise, pool.cards[*card].decade))).collect();
@@ -252,6 +256,9 @@ impl Draft {
 
     pub fn choose_pack(&mut self, pack: usize) {
         let chosen = self.packs[pack].clone();
+        for (index, roll) in self.packs.iter().enumerate() {
+            if let (true, Roll::Team { franchise, decade }) = (index != pack, roll) { self.passed.push((*franchise, *decade)); }
+        }
         self.packs = vec![chosen.clone()];
         self.current = Some(chosen);
     }

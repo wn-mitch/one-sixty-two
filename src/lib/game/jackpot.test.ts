@@ -171,7 +171,7 @@ describe('seeded jackpot action replay', () => {
   const { draft, dealt } = finish(5);
   const policy = draftRules(CURRENT_REPLAY_SCHEMA_VERSION).jackpots;
   expect(policy).toEqual({ guaranteed: 2, chance: .2, size: 6, shortlist: 8 });
-  expect(RULES_VERSION).toBe('classic-v8');
+  expect(RULES_VERSION).toBe('classic-v9');
   expect(draft.rulesVersion).toBe(RULES_VERSION);
   expect(dealt.length).toBeGreaterThanOrEqual(policy.guaranteed);
   for (const pack of dealt) expect(pack.length).toBeLessThanOrEqual(policy.size);

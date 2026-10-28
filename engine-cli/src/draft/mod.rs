@@ -1,5 +1,6 @@
 //! `draft-spread`: drafts Classic rosters natively with calibration policies and plays each over many
 //! seasons, all in parallel. Prints one `{label, valueRuns, jackpots, chalk, edge, wins}` line per roster.
+mod anatomy;
 mod policy;
 mod rules;
 pub mod sample;
@@ -7,6 +8,7 @@ pub mod sample;
 use crate::spread::{play, simulation_path};
 use engine::types::{ParkRef, Profile, RosterPick, SeasonRequest};
 use engine::Engine;
+pub use anatomy::season_anatomy;
 use policy::Policy;
 use rayon::prelude::*;
 use rules::{Card, Pool, Rules, SLOTS};
@@ -16,7 +18,7 @@ use std::io::Write;
 use std::path::Path;
 
 const USAGE: &str = "Usage: engine draft-spread --policy random,best,vorp,packs,chalk --from N --to N [--seasons N] [--seed N] [--jackpots guaranteed,chance] [--add-below Q]";
-const RULES_VERSION: &str = "classic-v8";
+const RULES_VERSION: &str = "classic-v9";
 
 fn read_json(path: &Path) -> Result<Value, String> {
     let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;

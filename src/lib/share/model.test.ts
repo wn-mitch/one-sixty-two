@@ -30,7 +30,8 @@ function fixture(): CreateShareRenderModelInput {
 		reliefRoles: season.reliefRoles,
 		actions: [],
 		currentRoll: null,
-		packs: []
+		packs: [],
+		passed: []
 	};
 	const manifest: Manifest = {
 		jackpot: [],

@@ -130,7 +130,7 @@ export interface Pick extends TeamRoll { seasonId: string; slot: Slot; jackpot?:
 export const CURRENT_REPLAY_SCHEMA_VERSION = 8 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
 export const MODEL_VERSION = 'contact-v3' as const;
-export const RULES_VERSION = 'classic-v8' as const;
+export const RULES_VERSION = 'classic-v9' as const;
 export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
 export const VALUATION_VERSION = 'sim-war-v2' as const;
 export type DraftAction =
@@ -163,7 +163,8 @@ export interface Replay {
  * `packs` are the franchise packs open on the table for the pending roll, in the order they were dealt.
  * With one pack it is `currentRoll`; with two or three, `currentRoll` is null until the player chooses one.
  */
-export interface Draft extends Replay { currentRoll: Roll | null; packs: Roll[] }
+/** `passed` holds the franchise packs set aside for an added pack; later rolls skip them while anything else remains. Rebuilt from `actions`. */
+export interface Draft extends Replay { currentRoll: Roll | null; packs: Roll[]; passed: TeamRoll[] }
 /**
  * Roles for every slot of `slots` in order once the roster is complete, none before; a secondary
  * role may not repeat the primary.

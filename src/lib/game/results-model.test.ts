@@ -43,7 +43,8 @@ function fixture(): Fixture {
 		reliefRoles: input.reliefRoles,
 		actions: [],
 		currentRoll: null,
-		packs: []
+		packs: [],
+		passed: []
 	};
 	const batting = input.roster.slice(0, 9).map(({ profile, slot }): BatterLine => ({
 		seasonId: profile.seasonId,

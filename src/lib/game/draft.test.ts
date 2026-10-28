@@ -179,6 +179,32 @@ describe('extra packs', () => {
   expect(() => addPack(startDraft(manifest, 5), manifest)).toThrow('Roll before adding a pack');
  });
 
+ it('never deals a pack passed over for an added pack again while others remain', () => {
+  // Seventeen franchises with a card for every slot in two decades: one franchise to spare, so the passed
+  // pack's franchise keeps coming up, while its other decade means another pack always remains.
+  const roomy = makeManifest(Array.from({ length: 17 }, (_, club) => [1980, 1990].flatMap(decade => SLOTS.map((slot, index) => ({
+   seasonId: `p${club}x${index}:${decade + 2}:AL:C${club}`, playerId: `p${club}x${index}x${decade}`,
+   franchiseId: `R${club.toString().padStart(2, '0')}`, decade, eligibleSlots: [slot]
+  })))).flat(), 'roomy-v1');
+  for (let seed = 1; seed <= 10; seed++) {
+   let draft = rollDraft(startDraft(roomy, seed), roomy);
+   draft = choosePack(addPack(draft, roomy), 1);
+   const passed = team(draft.passed[0]);
+   expect(draft.passed).toEqual([passed]);
+   const candidate = availableCandidates(draft, roomy)[0];
+   draft = commitPick(draft, roomy, candidate.seasonId, legalSlots(draft, candidate, roomy)[0]);
+   while (draft.picks.length < SLOTS.length) {
+    draft = rollDraft(draft, roomy);
+    const roll = draft.currentRoll!;
+    if (!isJackpot(roll)) expect(`${roll.franchiseId}:${roll.decade}`).not.toBe(`${passed.franchiseId}:${passed.decade}`);
+    const next = availableCandidates(draft, roomy)[0];
+    draft = commitPick(draft, roomy, next.seasonId, legalSlots(draft, next, roomy)[0]);
+   }
+   // A reload rebuilds the passed packs from the action history.
+   expect(validateDraft(draft, roomy, true).passed).toEqual(draft.passed);
+  }
+ }, 60_000);
+
  it('gives a first draft one bonus extra pack, never a fourth pack on one roll, and keeps the bonus through replays', () => {
   const bonus = selectHomeStadium(createDraft(manifest, 5, true), manifest, manifest.stadiums[0].ref.id);
   expect(bonus.bonusPack).toBe(true);
