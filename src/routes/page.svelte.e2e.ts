@@ -107,9 +107,10 @@ test('renders complete decodable franchise marks without substituting a wordmark
 		.locator('.logo-copy[data-marquee-copy] .team-mark img');
 	await expect(marks).toHaveCount(30);
 	for (const mark of await marks.all()) {
-		await mark.scrollIntoViewIfNeeded();
 		await expect.poll(() => mark.evaluate(async node => {
 			const image = node as HTMLImageElement;
+			// Lazy marks clipped by the strip wait for the marquee to drift them in; load each one now instead.
+			image.loading = 'eager';
 			await image.decode();
 			const tile = image.parentElement!;
 			const box = image.getBoundingClientRect();

@@ -378,8 +378,18 @@ test.describe('normal card motion', () => {
 		await page.mouse.move(1, 1);
 		const resting = await surface.evaluate(node => (node as HTMLElement).style.transform);
 		await expect.poll(() => surface.evaluate(node => (node as HTMLElement).style.transform)).not.toBe(resting);
+		// Focus fades the drift out over about a second, and the drifting card passes level on the way, so a
+		// single low reading is not rest; require the largest angle across a dozen frames to stay low.
+		const steadyTilt = () => surface.evaluate(async node => {
+			let largest = 0;
+			for (let frame = 0; frame < 12; frame++) {
+				await new Promise(requestAnimationFrame);
+				largest = Math.max(largest, Math.abs(Number((node as HTMLElement).style.transform.match(/rotate3d\([^)]*,\s*(-?[\d.]+)deg\)/)?.[1] ?? 0)));
+			}
+			return largest;
+		});
 		await art.focus();
-		await expect.poll(tiltAngle).toBeLessThan(.5);
+		await expect.poll(steadyTilt).toBeLessThan(.5);
 		await art.dispatchEvent('pointermove', { pointerType: 'touch', clientX: 1, clientY: 1 });
 		expect(await tiltAngle()).toBeLessThan(.5);
 		const bounds = await art.boundingBox();

@@ -13,6 +13,8 @@ export default defineConfig({
 		reuseExistingServer: false
 	},
 	use: { baseURL: `http://127.0.0.1:${port}`, headless: true },
+	// One local workerd serves every parallel browser; first loads outlast the 5 s default under a full run.
+	expect: { timeout: 15_000 },
 	testMatch: '**/*.e2e.{ts,js}',
 	// Agent worktrees under .claude/ hold their own copies of every test.
 	testIgnore: '**/.claude/**'
