@@ -61,7 +61,7 @@ export const CROWD_TRIGGERS = ['homeRunHappyHour', 'guardTheLead', 'winningUgly'
 export type CrowdTrigger = typeof CROWD_TRIGGERS[number];
 
 /** A named reliever's rest, carried from one segment into the next by season id. */
-export interface RestState { seasonId: string; last: number; previous: number; restThrough: number }
+export interface RestState { seasonId: string; last: number; previous: number; restThrough: number; owedOuts?: number }
 
 /**
  * A club's home crowd for a segment: the strike zone's mean lean toward the home side (home batters

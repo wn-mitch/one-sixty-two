@@ -57,7 +57,7 @@ impl ExhibitionTeam {
         for (index, assigned) in named.zip(default_roles(1 + self.relievers.len())) { roles[index] = Some(assigned); }
         Ok(TeamInput {
             id: self.id.clone(), name: self.name.clone(), hitters: self.hitters.iter().collect(), defense, pitchers: self.pitchers.iter().collect(),
-            starter_index: self.starter_index, starter_extra_outs: 0, closer_index: self.closer_index, relievers: self.relievers.clone(), bullpen_index: self.bullpen_index,
+            starter_index: self.starter_index, starter_extra_outs: 0, closer_index: self.closer_index, relievers: self.relievers.clone(), bullpen_index: self.bullpen_index, spare_index: None,
             available: self.available.clone(), rested: self.available.clone(), roles,
         })
     }

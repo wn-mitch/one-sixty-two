@@ -30,7 +30,7 @@ pub const INFORMATION_DECAY: f64 = 0.5;
 /// The largest strike-zone lean a single game may carry, after volatility.
 pub const MAX_EDGE: f64 = 0.4;
 /// Extra outs a ridden starter may pitch before relief: two innings.
-pub const RIDE_OUTS: u32 = 6;
+pub const RIDE_OUTS: i32 = 6;
 /// Series lengths for each pairing in every round-robin round: 23 games a pairing.
 const SERIES: [usize; 8] = [3, 3, 3, 3, 3, 3, 3, 2];
 /// The pairing's designated host takes this many of a round's series (twelve of 23 games).
@@ -253,7 +253,10 @@ impl Engine {
             }
         }
         let mut usage: Vec<ReliefUsage> = clubs.iter().enumerate()
-            .map(|(index, club)| ReliefUsage::with_recovery(club, request.carry.get(index).map_or(&[][..], Vec::as_slice), &request.clubs[index].quick_recovery).with_tireless(club, &request.clubs[index].tireless))
+            .map(|(index, club)| {
+                let carried = request.carry.get(index).map_or(&[][..], Vec::as_slice);
+                ReliefUsage::with_recovery(club, carried, &request.clubs[index].quick_recovery).with_tireless(club, &request.clubs[index].tireless).with_spares(club, 3, carried)
+            })
             .collect();
         let mut totals: Vec<TeamBox> = clubs.iter().map(create_totals_box).collect();
         let models = GameModels { values: &self.values, tables: &self.tables, win_expectancy: None };
@@ -262,8 +265,8 @@ impl Engine {
         for (matchday, fixtures) in schedule.iter().enumerate().skip(first).take(SEGMENT_MATCHDAYS) {
             for (index, club) in clubs.iter_mut().enumerate() {
                 club.starter_index = matchday % 3;
-                club.starter_extra_outs = if request.clubs[index].ridden.contains(&club.pitchers[club.starter_index].season_id) { RIDE_OUTS } else { 0 };
                 usage[index].prepare(club, matchday as i64);
+                if request.clubs[index].ridden.contains(&club.pitchers[club.starter_index].season_id) { club.starter_extra_outs += RIDE_OUTS; }
             }
             for (slot, fixture) in fixtures.iter().enumerate() {
                 let (home, away) = (fixture.home, fixture.away);
@@ -284,8 +287,8 @@ impl Engine {
                 }, &models, &mut GameStreams::new(request.seed, number), None)?;
                 crowds[home] = crowd.home.after_game(game.home.runs > game.away.runs);
                 crowds[away] = crowd.away.after_game(game.away.runs > game.home.runs);
-                usage[home].record(matchday as i64, &game.home.pitching);
-                usage[away].record(matchday as i64, &game.away.pitching);
+                usage[home].record(matchday as i64, &clubs[home], &game.home.pitching);
+                usage[away].record(matchday as i64, &clubs[away], &game.away.pitching);
                 accumulate_box(&mut totals[home], &game.home)?;
                 accumulate_box(&mut totals[away], &game.away)?;
                 result.games.push(LeagueGame { matchday, home, away, home_runs: game.home.runs, away_runs: game.away.runs });

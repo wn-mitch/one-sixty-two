@@ -246,7 +246,7 @@ impl Engine {
         let parks = request.teams.iter().map(|team| self.park(&team.season.home_stadium)).collect::<Result<Vec<_>, _>>()?;
         let defenses = clubs.iter().map(|club| team_defense(club, &self.data.environment.league_error_rates)).collect::<Result<Vec<_>, _>>()?;
         let batting = [self.matchups(&clubs[0].hitters, &clubs[1].pitchers)?, self.matchups(&clubs[1].hitters, &clubs[0].pitchers)?];
-        let mut usage = [ReliefUsage::new(&clubs[0]), ReliefUsage::new(&clubs[1])];
+        let mut usage = [ReliefUsage::new(&clubs[0]).with_spares(&clubs[0], 3, &[]), ReliefUsage::new(&clubs[1]).with_spares(&clubs[1], 3, &[])];
         let mut totals = [create_totals_box(&clubs[0]), create_totals_box(&clubs[1])];
         let keys = [first.key.as_str(), second.key.as_str()];
         let seed = series_seed(&first.key, &second.key);
@@ -274,7 +274,7 @@ impl Engine {
             }, &models, &mut GameStreams::new(seed, number), Some(&mut win_trace))?;
             let boxes = |id: TeamId| if id == home_id { &game.home } else { &game.away };
             for id in [TeamId::A, TeamId::B] {
-                usage[id.index()].record(i64::from(day), &boxes(id).pitching);
+                usage[id.index()].record(i64::from(day), &clubs[id.index()], &boxes(id).pitching);
                 accumulate_box(&mut totals[id.index()], boxes(id))?;
             }
             let winner_id = if game.win { TeamId::A } else { TeamId::B };

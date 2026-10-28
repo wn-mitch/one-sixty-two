@@ -93,7 +93,7 @@ impl Engine {
         let home_park = self.park(&request.home_stadium)?;
         let ids: Vec<&str> = data.opponents.iter().map(|opponent| opponent.id.as_str()).collect();
         let schedule = build_schedule(request.seed, &ids)?;
-        let mut challenge_usage = ReliefUsage::new(&challenge);
+        let mut challenge_usage = ReliefUsage::new(&challenge).with_spares(&challenge, 3, &[]);
         let challenge_defense = self.defense(&challenge)?;
         struct Prepared<'p> { team: TeamInput<'p>, park: usize, appearances: usize, usage: ReliefUsage, defense: PreparedDefense }
         let mut opponents = data.opponents.iter().map(|opponent| {
@@ -138,8 +138,8 @@ impl Engine {
                 away_matchups: if scheduled.is_home { &pair.opponent_batting } else { &pair.challenge_batting }, home_edge: 0.0, crowd: &mut Default::default(), familiarity: 0.0, information: 0.0, conditions: Default::default(), rules: Default::default(),
             }, &models, &mut GameStreams::new(request.seed, number), Some(&mut trace))?;
             let (challenge_box, opponent_box) = if scheduled.is_home { (&game.home, &game.away) } else { (&game.away, &game.home) };
-            challenge_usage.record(i64::from(number), &challenge_box.pitching);
-            opponent.usage.record(i64::from(number), &opponent_box.pitching);
+            challenge_usage.record(i64::from(number), &challenge, &challenge_box.pitching);
+            opponent.usage.record(i64::from(number), &opponent.team, &opponent_box.pitching);
             if let Some(moment) = &game.highlight {
                 if result.highlight.as_ref().is_none_or(|best| moment.swing > best.swing) {
                     result.highlight = Some(moment.clone());
@@ -214,7 +214,7 @@ pub fn club_team<'p>(roster: &'p [RosterPick], batting_order: &[String], starter
     roles[3..4 + named].copy_from_slice(&assigned);
     Ok(TeamInput {
         id: id.to_string(), name: name.to_string(), hitters, defense, pitchers,
-        starter_index: 0, starter_extra_outs: 0, closer_index: 3, relievers: (4..4 + named).collect(), bullpen_index: 4 + named, rested: available.clone(), available, roles,
+        starter_index: 0, starter_extra_outs: 0, closer_index: 3, relievers: (4..4 + named).collect(), bullpen_index: 4 + named, spare_index: None, rested: available.clone(), available, roles,
     })
 }
 
@@ -237,7 +237,7 @@ pub fn opponent_team(opponent: &Opponent) -> Result<TeamInput<'_>, String> {
     for (offset, assigned) in default_roles(1 + named).into_iter().enumerate() { roles[5 + offset] = Some(assigned); }
     Ok(TeamInput {
         id: opponent.id.clone(), name: opponent.name.clone(), hitters: opponent.hitters.iter().collect(), defense, pitchers,
-        starter_index: 0, starter_extra_outs: 0, closer_index: 5, relievers: (6..6 + named).collect(), bullpen_index: 6 + named, rested: available.clone(), available, roles,
+        starter_index: 0, starter_extra_outs: 0, closer_index: 5, relievers: (6..6 + named).collect(), bullpen_index: 6 + named, spare_index: None, rested: available.clone(), available, roles,
     })
 }
 

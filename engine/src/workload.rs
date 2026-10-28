@@ -18,6 +18,8 @@ const LATE_INNINGS_LEFT: u32 = 3;
 const EXTEND_BATTERS: i32 = 4;
 /// A long reliever stays until this many outs.
 const LONG_OUTS: i32 = 9;
+/// A spare starter in relief stays until this many outs.
+pub const SPARE_OUTS: i32 = 6;
 
 /// One game's pitching decisions for one club.
 #[derive(Clone, Debug)]
@@ -52,7 +54,7 @@ impl Workload {
         if team.available.len() != team.pitchers.len() || team.rested.len() != team.pitchers.len() || team.roles.len() != team.pitchers.len() {
             return Err("Pitcher availability and roles must cover the staff".into());
         }
-        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: starter_budget(team.pitchers[team.starter_index])? + team.starter_extra_outs, inning: 1, regulation: 9, entered: None, entries: vec![None; team.pitchers.len()] })
+        Ok(Self { current: team.starter_index, starter_done: false, used: vec![false; team.pitchers.len()], budget: (starter_budget(team.pitchers[team.starter_index])? as i32 + team.starter_extra_outs).max(3) as u32, inning: 1, regulation: 9, entered: None, entries: vec![None; team.pitchers.len()] })
     }
 
     /// Plays games of `innings` regulation innings, moving the late-inning roles with the last one.
@@ -89,8 +91,8 @@ impl Workload {
         true
     }
 
-    /// Prefer Long for early exits or a margin of 4+, otherwise Middle. Exhaust named arms
-    /// before the remainder, keeping a primary closer last in the emergency order.
+    /// Prefer Long for early exits or a margin of 4+, otherwise Middle. Exhaust named arms, then
+    /// the spare starter, before the remainder, keeping a primary closer last in the emergency order.
     fn relieve(&mut self, team: &TeamInput, lead: i32) {
         let long = !self.late() || lead <= -4 || lead >= 4;
         if long && self.call(team, ReliefRole::Long, false) { return; }
@@ -105,14 +107,21 @@ impl Workload {
             self.entered = team.roles[index].map(|roles| roles.primary);
             return;
         }
+        if let Some(spare) = team.spare_index.filter(|&spare| spare != team.starter_index && !self.used[spare]) {
+            self.used[spare] = true;
+            self.current = spare;
+            self.entered = None;
+            return;
+        }
         self.current = team.bullpen_index;
         self.entered = None;
     }
 
-    /// Whether the current reliever stays for another inning: a long reliever until nine outs, any
-    /// other named reliever but the closer after an efficient first inning.
-    fn extends(&self, lines: &[PitcherLine]) -> bool {
+    /// Whether the current reliever stays for another inning: a long reliever until nine outs, a
+    /// spare starter until six, any other named reliever but the closer after an efficient first inning.
+    fn extends(&self, team: &TeamInput, lines: &[PitcherLine]) -> bool {
         let line = &lines[self.current];
+        if team.spare_index == Some(self.current) && self.current != team.starter_index { return line.outs < SPARE_OUTS; }
         match self.entered {
             None | Some(ReliefRole::Closer) => false,
             Some(ReliefRole::Long) => line.outs < LONG_OUTS,
@@ -131,7 +140,7 @@ impl Workload {
         if inning >= last && leverage && self.call(team, ReliefRole::Closer, false) { self.starter_done = true; return; }
         if !self.starter_done { self.current = team.starter_index; return; }
         if leverage && inning + 2 >= last && inning < last && self.call(team, ReliefRole::Setup, inning + 2 == last) { return; }
-        if self.entered.is_some() && self.extends(lines) { return; }
+        if self.extends(team, lines) { return; }
         self.relieve(team, lead);
     }
 
@@ -213,7 +222,7 @@ mod tests {
         for (offset, assigned) in default_roles(4).into_iter().enumerate() { roles[1 + offset] = Some(assigned); }
         TeamInput {
             id: "t".into(), name: "t".into(), hitters: Vec::new(), defense: [0; 8], pitchers: staff.iter().collect(),
-            starter_index: 0, starter_extra_outs: 0, closer_index: 1, relievers: vec![2, 3, 4], bullpen_index: 5,
+            starter_index: 0, starter_extra_outs: 0, closer_index: 1, relievers: vec![2, 3, 4], bullpen_index: 5, spare_index: None,
             available: vec![true; staff.len()], rested: vec![true; staff.len()], roles,
         }
     }
@@ -308,6 +317,50 @@ mod tests {
         // Middle first; unused Long then covers three innings, even in a close game.
         // The unavailable setup arm is skipped and no pitcher re-enters.
         assert_eq!(relief_innings(&team, &[(6, -1), (7, -1), (8, -1), (9, -1), (10, -1), (11, -1)], 3, 5), [4, 2, 2, 2, 1, 5]);
+    }
+
+    #[test]
+    fn the_spare_starter_follows_spent_named_arms_for_six_outs_before_the_remainder() {
+        let mut staff = staff();
+        staff.push(pitcher("spare", 30.0, 540.0));
+        let mut team = team(&staff);
+        team.available.iter_mut().skip(1).take(4).for_each(|available| *available = false);
+        assert_eq!(relief_innings(&team, &[(6, -1), (7, -1), (8, -1)], 3, 3), [5, 5, 5]);
+        team.spare_index = Some(6);
+        assert_eq!(relief_innings(&team, &[(6, -1), (7, -1), (8, -1)], 3, 3), [6, 6, 5]);
+        // He never replaces an available named arm.
+        team.available[4] = true;
+        assert_eq!(relief_innings(&team, &[(6, -1), (7, -1)], 3, 5), [4, 6]);
+    }
+
+    #[test]
+    fn spare_relief_outs_come_off_his_next_start_and_carry_between_segments() {
+        use crate::relief::ReliefUsage;
+        let staff = [pitcher("sp1", 30.0, 540.0), pitcher("sp2", 30.0, 540.0), pitcher("sp3", 30.0, 540.0), pitcher("closer", 0.0, 195.0), pitcher("remainder", 0.0, 486.0)];
+        let mut team = team(&staff[..]);
+        (team.closer_index, team.relievers, team.bullpen_index) = (3, Vec::new(), 4);
+        team.roles = vec![None, None, None, default_roles(1).pop(), None];
+        let mut usage = ReliefUsage::new(&team).with_spares(&team, 3, &[]);
+        team.starter_index = 0;
+        usage.prepare(&mut team, 1);
+        assert_eq!((team.spare_index, team.starter_extra_outs), (Some(1), 0));
+        let mut lines = create_box(&team).pitching;
+        lines[1].outs = 5;
+        usage.record(1, &team, &lines);
+        // A segment boundary: the owed outs travel in the carry by season id.
+        let carried = usage.carry(&team);
+        let mut usage = ReliefUsage::new(&team).with_spares(&team, 3, &carried);
+        team.starter_index = 1;
+        usage.prepare(&mut team, 2);
+        assert_eq!((team.spare_index, team.starter_extra_outs), (Some(2), -5));
+        assert_eq!(Workload::new(&team).unwrap().budget, 13);
+        usage.record(2, &team, &create_box(&team).pitching);
+        // Paid once: his following start is full again, and a deep relief debt still leaves an inning.
+        team.starter_index = 1;
+        usage.prepare(&mut team, 5);
+        assert_eq!(team.starter_extra_outs, 0);
+        team.starter_extra_outs = -20;
+        assert_eq!(Workload::new(&team).unwrap().budget, 3);
     }
 
     #[test]

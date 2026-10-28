@@ -129,7 +129,7 @@ export const isJackpot = (roll: Roll): roll is JackpotRoll => 'jackpot' in roll;
 export interface Pick extends TeamRoll { seasonId: string; slot: Slot; jackpot?: true }
 export const CURRENT_REPLAY_SCHEMA_VERSION = 8 as const;
 export type ReplaySchemaVersion = typeof CURRENT_REPLAY_SCHEMA_VERSION;
-export const MODEL_VERSION = 'contact-v3' as const;
+export const MODEL_VERSION = 'contact-v4' as const;
 export const RULES_VERSION = 'classic-v9' as const;
 export const DEFENSE_METHOD_VERSION = 'defense-v2' as const;
 export const VALUATION_VERSION = 'sim-war-v2' as const;

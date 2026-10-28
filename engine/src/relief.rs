@@ -52,10 +52,17 @@ pub fn default_assignments(named: usize) -> Vec<RoleAssignment> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Rest { last: i64, previous: i64, rest_through: i64, quick: bool, tireless: bool }
 
-/// One named pitcher's rest, carried across simulation calls by season id (league segments).
+/// One pitcher's rest, carried across simulation calls by season id (league segments): a named
+/// pitcher's recent outings, or the relief outs a starter owes his next start.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RestState { pub season_id: String, pub last: i64, pub previous: i64, pub rest_through: i64 }
+pub struct RestState {
+    pub season_id: String, pub last: i64, pub previous: i64, pub rest_through: i64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub owed_outs: i32,
+}
+
+fn is_zero(outs: &i32) -> bool { *outs == 0 }
 
 impl Default for Rest { fn default() -> Self { Self { last: -1, previous: -1, rest_through: -1, quick: false, tireless: false } } }
 
@@ -74,8 +81,10 @@ impl Rest {
 
 /// Season availability for a club's named relievers: never a third consecutive day, and after an outing
 /// longer than an inning, a game of rest for it plus one per inning beyond the first. There is no season ceiling.
+/// A drafted rotation also has a spare: the next game's starter relieves once the named arms are spent,
+/// and each relief out he throws comes off his next start.
 #[derive(Clone, Debug)]
-pub struct ReliefUsage { pitchers: Vec<(usize, Rest)> }
+pub struct ReliefUsage { pitchers: Vec<(usize, Rest)>, spares: Option<Vec<i32>> }
 
 impl ReliefUsage {
     pub fn new(team: &TeamInput) -> Self { Self::resume(team, &[]) }
@@ -91,7 +100,16 @@ impl ReliefUsage {
                 .map_or_else(Rest::default, |state| Rest { last: state.last, previous: state.previous, rest_through: state.rest_through, ..Rest::default() });
             rest.quick = quick.contains(id);
             (index, rest)
-        }).collect() }
+        }).collect(), spares: None }
+    }
+
+    /// Gives the club's rotation, pitchers 0 to `rotation - 1` in order, a spare, resuming the relief
+    /// outs each starter owes from `carried`.
+    pub fn with_spares(mut self, team: &TeamInput, rotation: usize, carried: &[RestState]) -> Self {
+        self.spares = Some((0..rotation).map(|index| {
+            carried.iter().find(|state| state.season_id == team.pitchers[index].season_id).map_or(0, |state| state.owed_outs)
+        }).collect());
+        self
     }
 
     /// The named pitchers in `tireless` (by season id) skip rest: always available, never tired for a backup role.
@@ -101,25 +119,36 @@ impl ReliefUsage {
         self
     }
 
-    /// Each named pitcher's rest, to carry into the next call.
+    /// Each named pitcher's rest and each starter's owed relief outs, to carry into the next call.
     pub fn carry(&self, team: &TeamInput) -> Vec<RestState> {
-        self.pitchers.iter().map(|(index, rest)| RestState { season_id: team.pitchers[*index].season_id.clone(), last: rest.last, previous: rest.previous, rest_through: rest.rest_through }).collect()
+        let named = self.pitchers.iter().map(|(index, rest)| RestState { season_id: team.pitchers[*index].season_id.clone(), last: rest.last, previous: rest.previous, rest_through: rest.rest_through, owed_outs: 0 });
+        let owed = self.spares.iter().flatten().enumerate().filter(|(_, owed)| **owed > 0)
+            .map(|(index, owed)| RestState { season_id: team.pitchers[index].season_id.clone(), last: -1, previous: -1, rest_through: -1, owed_outs: *owed });
+        named.chain(owed).collect()
     }
 
     /// Marks who may enter `game` and who sat out the previous game; starters and the remainder arm
-    /// are always available.
-    pub fn prepare(&self, team: &mut TeamInput, game: i64) {
+    /// are always available. With a spare, names the next game's starter as the spare and sets today's
+    /// starter's budget short by the relief outs he owes; call after choosing `starter_index`.
+    pub fn prepare(&mut self, team: &mut TeamInput, game: i64) {
         team.available.iter_mut().for_each(|available| *available = true);
         team.rested.iter_mut().for_each(|rested| *rested = true);
         for (index, rest) in &self.pitchers {
             team.available[*index] = rest.ready(game);
             team.rested[*index] = rest.tireless || rest.last != game - 1;
         }
+        team.spare_index = None;
+        team.starter_extra_outs = 0;
+        if let Some(owed) = self.spares.as_mut() {
+            team.starter_extra_outs = -std::mem::take(&mut owed[team.starter_index]);
+            team.spare_index = Some((team.starter_index + 1) % owed.len());
+        }
     }
 
-    /// Records each named pitcher's outs and appearance from the club's game box.
-    pub fn record(&mut self, game: i64, pitching: &[PitcherLine]) {
+    /// Records each named pitcher's outs and appearance, and the spare's relief outs, from the club's game box.
+    pub fn record(&mut self, game: i64, team: &TeamInput, pitching: &[PitcherLine]) {
         for (index, rest) in self.pitchers.iter_mut() { rest.record(game, pitching[*index].outs, pitching[*index].appearances > 0); }
+        if let (Some(owed), Some(spare)) = (self.spares.as_mut(), team.spare_index) { owed[spare] += pitching[spare].outs; }
     }
 }
 

@@ -11,13 +11,15 @@ pub struct TeamInput<'p> {
     pub defense: [usize; 8],
     pub pitchers: Vec<&'p Profile>,
     pub starter_index: usize,
-    /// Outs beyond his usual budget today's starter is ridden for.
-    pub starter_extra_outs: u32,
+    /// Outs added to (ridden) or taken from (after relieving) today's starter's usual budget.
+    pub starter_extra_outs: i32,
     pub closer_index: usize,
     /// Named relievers RP1 onward, in bullpen order.
     pub relievers: Vec<usize>,
     /// The remainder arm for relief innings no available named pitcher takes.
     pub bullpen_index: usize,
+    /// A starter not pitching today who takes relief before the remainder arm once the named arms are spent.
+    pub spare_index: Option<usize>,
     /// Whether each pitcher may enter today, by pitcher index; read for the closer and named relievers.
     pub available: Vec<bool>,
     /// Whether each named pitcher sat out the previous game; secondary roles call only rested arms.
