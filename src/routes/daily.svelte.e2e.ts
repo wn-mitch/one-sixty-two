@@ -38,14 +38,19 @@ function completeDaily(manifest: Manifest, date: string): Draft {
  throw new Error('No strategy completed today’s daily');
 }
 
-test('the daily leads the home screen, skips the stadium choice, keeps its own slot and resumes at /daily', async ({ page, request }) => {
+test('a first visit leads with drafting a team; the daily skips the stadium choice, keeps its own slot and resumes at /daily', async ({ page, request }) => {
  const manifest = await currentManifest(request);
  const date = dailyDate();
  await page.goto('/');
  const panel = page.getByRole('region', { name: `Daily ${dailyLabel(date)}` });
  await expect(panel).toContainText(dailyStadium(date, manifest).name);
- await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toHaveClass(/secondary/);
- await expectAboveFold(page, [panel.getByRole('button', { name: 'Play today’s daily', exact: true }), page.getByRole('button', { name: 'Build my team', exact: true })]);
+ const playNow = page.getByRole('button', { name: 'Play now: draft your team', exact: true });
+ await expect(playNow).toHaveClass(/primary/);
+ await expect(panel.getByRole('button', { name: 'Play today’s daily', exact: true })).toHaveClass(/secondary/);
+ // The newcomer's call to action sits above the daily panel.
+ const [playTop, panelTop] = await Promise.all([playNow.boundingBox(), panel.boundingBox()]);
+ expect(playTop!.y).toBeLessThan(panelTop!.y);
+ await expectAboveFold(page, [panel.getByRole('button', { name: 'Play today’s daily', exact: true }), playNow]);
  await panel.getByRole('button', { name: 'Play today’s daily', exact: true }).click();
  await expect(page).toHaveURL(/\/daily$/);
  await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeFocused();
@@ -61,7 +66,7 @@ test('the daily leads the home screen, skips the stadium choice, keeps its own s
  await page.reload();
  await expect(panel.getByRole('button', { name: 'Resume today’s daily', exact: true })).toBeVisible();
  // A Classic team started beside the daily does not ask to replace it.
- await page.getByRole('button', { name: 'Build my team', exact: true }).click();
+ await page.getByRole('button', { name: 'Play now: draft your team', exact: true }).click();
  await expect(page).toHaveURL(/\/classic$/);
  await expect(page.getByRole('region', { name: 'Choose your home stadium' })).toBeVisible();
  await page.goto('/daily');
@@ -134,8 +139,8 @@ test('a finished daily pays two tokens, carries its stamp, joins the standings, 
  await expect(panel.getByRole('region', { name: 'Today’s daily standings' }).locator('.summary')).toHaveText(standing, { timeout: 15_000 });
  await expect(panel.getByRole('timer')).toHaveAccessibleName(/^Next daily in /);
  await expect(panel.getByRole('button')).toHaveText(['See results']);
- await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toHaveClass(/primary/);
- await expectAboveFold(page, [page.getByRole('button', { name: 'Build my team', exact: true }), panel.getByRole('button', { name: 'See results', exact: true })]);
+ await expect(page.getByRole('button', { name: 'Play now: draft your team', exact: true })).toHaveClass(/primary/);
+ await expectAboveFold(page, [page.getByRole('button', { name: 'Play now: draft your team', exact: true }), panel.getByRole('button', { name: 'See results', exact: true })]);
 
  // See results reopens the day's own Results without playing the season back, earning nothing new; Back returns home.
  await panel.getByRole('button', { name: 'See results', exact: true }).click();

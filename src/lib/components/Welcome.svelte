@@ -43,6 +43,9 @@
 
  // Until today's daily is finished it leads the screen and Classic play steps back to a secondary button.
  const dailyPending = $derived(daily?.run.kind === 'unplayed' || daily?.run.kind === 'active');
+ // A first visit, before any season or team: drafting a team leads, ahead of the daily.
+ const newcomer = $derived(firstSeasonBonus && !hasSavedDraft);
+ const dailyLeads = $derived(dailyPending && !newcomer);
  const dailyPark = $derived(daily && manifest?.stadiums.length ? dailyStadium(daily.date, manifest).name : null);
  let now = $state(new Date());
  const nextDaily = $derived(daily ? nextDailyAt(new Date(`${daily.date}T12:00:00Z`)) : null);
@@ -90,6 +93,7 @@
  <div class="welcome-copy">
   <h1 id="home-heading">Can you go <strong>162-0?</strong></h1>
   <p class="pitch">Build a team from baseball history and chase an undefeated season.</p>
+  {#if newcomer}{@render actions()}{/if}
   {#if daily}
    <section class="daily" class:done={!dailyPending} aria-labelledby="daily-heading">
     {#if daily.run.kind === 'complete'}
@@ -112,18 +116,21 @@
      <h2 id="daily-heading"><span>Daily</span> {dailyLabel(daily.date)}</h2>
      {#if dailyPark}<p class="daily-park">Home park: <strong>{dailyPark}</strong></p>{/if}
      <p class="daily-rules">Same park and first pack for everyone. One try. Earns 2 tokens.</p>
-     <button class="primary start daily-start" disabled={loading || !manifest} onclick={onDaily}>{daily.run.kind === 'active' ? 'Resume today’s daily' : 'Play today’s daily'} <span aria-hidden="true">↗</span></button>
+     <button class="start daily-start" class:primary={!newcomer} class:secondary={newcomer} disabled={loading || !manifest} onclick={onDaily}>{daily.run.kind === 'active' ? 'Resume today’s daily' : 'Play today’s daily'} <span aria-hidden="true">↗</span></button>
     {/if}
    </section>
   {/if}
-  <div class="actions" class:secondary-actions={dailyPending}>
-   {#if hasSavedDraft}
-    <button class="start resume" class:primary={!dailyPending} class:secondary={dailyPending} disabled={loading} onclick={onResume}>Resume my team <span aria-hidden="true">↗</span></button>
-    <button class="secondary new-team" disabled={loading || !manifest} onclick={onStart}>Build a new team</button>
-   {:else}
-    <button class="start" class:primary={!dailyPending} class:secondary={dailyPending} disabled={loading || !manifest} onclick={onStart}>Build my team <span aria-hidden="true">↗</span></button>
-   {/if}
-  </div>
+  {#if !newcomer}{@render actions()}{/if}
+  {#snippet actions()}
+   <div class="actions" class:secondary-actions={dailyLeads}>
+    {#if hasSavedDraft}
+     <button class="start resume" class:primary={!dailyLeads} class:secondary={dailyLeads} disabled={loading} onclick={onResume}>Resume my team <span aria-hidden="true">↗</span></button>
+     <button class="secondary new-team" disabled={loading || !manifest} onclick={onStart}>Build a new team</button>
+    {:else}
+     <button class="start" class:primary={!dailyLeads} class:secondary={dailyLeads} disabled={loading || !manifest} onclick={onStart}>Play now: draft your team <span aria-hidden="true">↗</span></button>
+    {/if}
+   </div>
+  {/snippet}
   {#if firstSeasonBonus}<p class="bonus-note">Your first season includes a bonus token.</p>{/if}
   {#if loading}
    <p class="start-status muted" role="status">Loading the historical player pool…</p>
@@ -179,6 +186,7 @@
  }
  .pitch { max-width: 36ch; margin: var(--space-5) 0; color: var(--muted); font-size: var(--text-lg); text-wrap: pretty; }
  .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+ .actions:has(+ .daily) { margin-bottom: var(--space-4); }
  .start {
   display: flex;
   width: 100%;
@@ -266,6 +274,7 @@
   .actions { align-items: stretch; }
   .start { max-width: none; }
   .daily { max-width: none; margin-bottom: var(--space-3); }
+  .actions:has(+ .daily) { margin-bottom: var(--space-3); }
   .daily.done { padding-inline: var(--space-4); }
   .new-team { width: 100%; }
   .era-strip { margin: 0 max(var(--space-4), env(safe-area-inset-right)) var(--space-6) max(var(--space-4), env(safe-area-inset-left)); }

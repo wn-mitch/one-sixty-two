@@ -143,7 +143,7 @@ async function pickFirstSeason(page: Page, request: APIRequestContext) {
 
 async function finishRoster(page: Page, request: APIRequestContext) {
 	await page.goto('/');
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	for (let index = 0; index < SLOTS.length; index++) {
@@ -177,7 +177,7 @@ test('renders complete decodable franchise marks without substituting a wordmark
 
 test('keeps the slot choice and draft action reachable after choosing a season', async ({ page, request }) => {
 	await page.goto('/');
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await chooseStadium(page);
 	const { target, sheet } = await selectExactSeason(page, request);
 	await sheet.locator(`[data-slot="${target.slot}"]`).click();
@@ -200,7 +200,7 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	const errors: string[] = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.goto('/');
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	await expect(page.locator('.candidates .content')).toBeFocused();
@@ -400,7 +400,7 @@ test('rejects invalid replay uploads and unknown replay ids', async ({ request }
 
 test('retries a failed chunk without rerolling the committed draft', async ({ page }) => {
 	await page.goto('/');
-	await expect(page.getByRole('button', { name: /Build my team/ })).toBeEnabled();
+	await expect(page.getByRole('button', { name: /Play now: draft your team/ })).toBeEnabled();
 	let aborted = false;
 	await page.route('**/data/**/*.json', route => {
 		const url = new URL(route.request().url());
@@ -408,7 +408,7 @@ test('retries a failed chunk without rerolling the committed draft', async ({ pa
 		if (isChunk && !aborted) { aborted = true; return route.abort(); }
 		return route.continue();
 	});
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await selectStadium(page);
 	const committed = await openPackThroughRetry(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
@@ -424,7 +424,7 @@ test('reports an incompatible active draft nonmodally and clears only its slot',
 	await expect(page.getByText('An older draft could not resume. Your saved seasons and collection are unchanged.')).toBeVisible();
 	await expect(page.getByRole('dialog')).not.toBeVisible();
 	expect(await deviceDraftText(page)).toBeNull();
-	await page.getByRole('button', { name: 'Build my team', exact: true }).click();
+	await page.getByRole('button', { name: 'Play now: draft your team', exact: true }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	expect((await deviceDraft(page)).schemaVersion).toBe(CURRENT_REPLAY_SCHEMA_VERSION);
@@ -443,7 +443,7 @@ test('imports an incompatible legacy draft once without repeating the notice aft
 	expect(await deviceDraftText(page)).toBeNull();
 	expect(await page.evaluate(() => localStorage.getItem('162-zero:v1'))).toBeNull();
 	await page.reload();
-	await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Play now: draft your team', exact: true })).toBeEnabled();
 	await expect(page.getByText('An older draft could not resume. Your saved seasons and collection are unchanged.')).toHaveCount(0);
 	expect(await deviceDraftText(page)).toBeNull();
 });
@@ -454,7 +454,7 @@ test('permits in-memory play when storage is blocked', async ({ page }) => {
 	await page.route('**/sqlite3-*.wasm', route => route.abort());
 	await page.goto('/');
 	await expect(page.getByText('Resume unavailable: browser storage is blocked. You can still play.')).toBeVisible();
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 });
@@ -472,7 +472,7 @@ test('still rejects a malformed historical fragment replay', async ({ page }) =>
 for (const invalid of ['empty', 'wrong-roll']) {
 	test(`recovers a ${invalid} chunk through Retry without changing the roll`, async ({ page }) => {
 		await page.goto('/');
-		await expect(page.getByRole('button', { name: /Build my team/ })).toBeEnabled();
+		await expect(page.getByRole('button', { name: /Play now: draft your team/ })).toBeEnabled();
 		// A jackpot roll loads several chunks; only the first one fails, and Retry fetches it once more.
 		const chunks: string[] = [];
 		await page.route('**/data/**/*.json', route => {
@@ -483,7 +483,7 @@ for (const invalid of ['empty', 'wrong-roll']) {
 			}
 			return route.continue();
 		});
-		await page.getByRole('button', { name: /Build my team/ }).click();
+		await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 		await selectStadium(page);
 		const committed = await openPackThroughRetry(page);
 		await expect(page.locator('.player-card').first()).toBeVisible({ timeout: 5000 });
@@ -494,7 +494,7 @@ for (const invalid of ['empty', 'wrong-roll']) {
 
 test('route teardown cancels resumed hydration without overwriting an unfinished save', async ({ page, request }) => {
 	await page.goto('/');
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await chooseStadium(page);
 	for (let index = 0; index < SLOTS.length; index++) {
 		await pickFirstSeason(page, request);
@@ -549,7 +549,7 @@ test('keeps completed seasons in history without reopening results or starting a
 	expect(token).toBeTruthy();
 	await page.goto('/classic');
 	await expect(page).toHaveURL(/\/$/);
-	await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Play now: draft your team', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Resume my team', exact: true })).toHaveCount(0);
 	await expect(page.locator('#results-heading')).toHaveCount(0);
 	expect(await deviceDraftText(page)).toBeNull();
@@ -569,7 +569,7 @@ test('keeps the Home copy width when centering on ultrawide screens', async ({ p
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.goto('/');
 	const intro = page.locator('.welcome-copy .pitch');
-	await expect(page.getByRole('button', { name: 'Build my team', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Play now: draft your team', exact: true })).toBeEnabled();
 	await expect(intro).toBeVisible();
 	await page.evaluate(() => document.fonts.ready.then(() => undefined));
 	const readableWidth = await intro.evaluate(node => node.getBoundingClientRect().width);
@@ -580,7 +580,7 @@ test('keeps the Home copy width when centering on ultrawide screens', async ({ p
 
 test('confirms a new draft in a modal without moving the page', async ({ page }) => {
 	await page.goto('/');
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();
 	const savedSeed = () => deviceDraft<Draft>(page).then(draft => draft.seed);
@@ -614,7 +614,7 @@ test('confirms a new draft in a modal without moving the page', async ({ page })
 
 test('keeps the draft at /classic so Back returns home and Forward resumes it', async ({ page }) => {
 	await page.goto('/');
-	await page.getByRole('button', { name: /Build my team/ }).click();
+	await page.getByRole('button', { name: /Play now: draft your team/ }).click();
 	await expect(page).toHaveURL(/\/classic$/);
 	await chooseStadium(page);
 	await expect(page.locator('.player-card').first()).toBeVisible();

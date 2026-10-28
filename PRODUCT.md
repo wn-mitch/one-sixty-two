@@ -39,7 +39,7 @@ Brown or sepia surfaces, generic SaaS cards, copied sports artwork, fabricated p
 
 ## Current Product Surfaces
 
-Home leads with a compact real-profile card wall, the question Can you go 162-0?, Build my team, and How to play, then an eight-era strip and all thirty franchise marks. Field, staff, and Results-hand cards use the canonical eight compact plates at a 72px minimum; full candidate and award cards keep the complete era artwork. Full fronts drift at rest; compacts, roster miniatures, thumbnails, backs and captures do not. Ambient motion pauses when hidden or offscreen and yields immediately to the operating system's reduced-motion preference.
+Home leads with a compact real-profile card wall, the question Can you go 162-0?, Play now: draft your team, and How to play, then an eight-era strip and all thirty franchise marks. Field, staff, and Results-hand cards use the canonical eight compact plates at a 72px minimum; full candidate and award cards keep the complete era artwork. Full fronts drift at rest; compacts, roster miniatures, thumbnails, backs and captures do not. Ambient motion pauses when hidden or offscreen and yields immediately to the operating system's reduced-motion preference.
 
 Hitter fronts show historical WAR/162, OPS, and a position-specific pre-season `DEF est.`; assigned DH keeps HR, and pitchers keep historical WAR/162, ERA, and SO. Historical WAR/162 controls list order and cosmetic finish, while separate defensive evidence can affect play. Results inspection clearly separates the actual historical season from the simulated 162-0 season and the app's realized `sim-war-v2` estimate.
 
