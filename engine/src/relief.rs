@@ -62,17 +62,18 @@ impl Default for Rest { fn default() -> Self { Self { last: -1, previous: -1, re
 impl Rest {
     /// A quick recoverer may pitch a third straight day; a tireless arm skips rest altogether.
     fn ready(&self, game: i64) -> bool { self.tireless || (game > self.rest_through && (self.quick || !(self.last == game - 1 && self.previous == game - 2))) }
-    /// Every inning beyond the first costs one more game of rest; a quick recoverer's first two innings are free.
+    /// An outing past the free innings (one, or two for a quick recoverer) costs a game of rest plus one for
+    /// each inning past them, so a two-inning outing rests two games and a three-inning one three.
     fn record(&mut self, game: i64, outs: i32, appeared: bool) {
         let free = if self.quick { 2 } else { 1 };
-        let innings = (outs + 2) / 3;
-        if innings > free { self.rest_through = game + i64::from(innings - free); }
+        let extra = (outs + 2) / 3 - free;
+        if extra > 0 { self.rest_through = game + i64::from(extra + 1); }
         if appeared { self.previous = self.last; self.last = game; }
     }
 }
 
-/// Season availability for a club's named relievers: never a third consecutive day, and one game
-/// of rest per inning pitched beyond the first. There is no season ceiling.
+/// Season availability for a club's named relievers: never a third consecutive day, and after an outing
+/// longer than an inning, a game of rest for it plus one per inning beyond the first. There is no season ceiling.
 #[derive(Clone, Debug)]
 pub struct ReliefUsage { pitchers: Vec<(usize, Rest)> }
 
@@ -136,14 +137,14 @@ mod tests {
         long.record(1, 6, true);
         assert!(long.ready(2));
         long.record(2, 9, true);
-        assert!(!long.ready(3) && long.ready(4));
+        assert!(!long.ready(3) && !long.ready(4) && long.ready(5));
     }
 
     #[test]
     fn a_tireless_arm_pitches_every_day_and_counts_as_rested() {
         let mut tireless = Rest { tireless: true, ..Rest::default() };
         for game in 1..=4 { assert!(tireless.ready(game)); tireless.record(game, 6, true); }
-        assert_eq!(tireless.rest_through, 5);
+        assert_eq!(tireless.rest_through, 6);
     }
 
     #[test]
@@ -153,11 +154,15 @@ mod tests {
         rest.record(2, 3, true);
         assert!(!rest.ready(3) && rest.ready(4));
         let mut long = Rest::default();
+        // A long outing rests a game more than its extra innings, which keeps long men near a hundred innings.
         long.record(10, 7, true);
-        assert!(!long.ready(11) && !long.ready(12) && long.ready(13));
+        assert!(!long.ready(11) && !long.ready(12) && !long.ready(13) && long.ready(14));
         let mut two = Rest::default();
         two.record(10, 4, true);
-        assert!(!two.ready(11) && two.ready(12));
+        assert!(!two.ready(11) && !two.ready(12) && two.ready(13));
+        let mut one = Rest::default();
+        one.record(10, 3, true);
+        assert!(one.ready(11));
     }
 
     #[test]

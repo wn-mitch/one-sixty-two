@@ -75,7 +75,7 @@ fn load(root: &Path) -> Result<(Pool, Vec<Profile>, ParkRef), String> {
 fn request(picks: &[(usize, usize, bool)], pool: &Pool, profiles: &[Profile], park: &ParkRef) -> SeasonRequest {
     let at = |slot: usize| pool.cards[picks.iter().find(|pick| pick.0 == slot).unwrap().1].season_id.clone();
     SeasonRequest {
-        model_version: "contact-v2".into(), rules_version: RULES_VERSION.into(), seed: 0, home_stadium: park.clone(),
+        model_version: "contact-v3".into(), rules_version: RULES_VERSION.into(), seed: 0, home_stadium: park.clone(),
         roster: picks.iter().map(|&(slot, card, _)| RosterPick { profile: profiles[card].clone(), slot: SLOTS[slot].into() }).collect(),
         batting_order: (0..9).map(at).collect(),
         starter_order: (9..12).map(at).collect(),

@@ -12,7 +12,7 @@ pub const SLOTS: [&str; 16] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "D
 pub const HITTERS: usize = 9;
 pub const STARTERS: std::ops::Range<usize> = 9..12;
 /// The app's current replay contract; the engine echoes these into results.
-pub const MODEL_VERSION: &str = "contact-v2";
+pub const MODEL_VERSION: &str = "contact-v3";
 pub const RULES_VERSION: &str = "classic-v4";
 
 // Draft pricing constant (`SALARY_METHOD` in `src/lib/draft/salary.ts`).

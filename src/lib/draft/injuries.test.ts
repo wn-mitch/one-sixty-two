@@ -161,14 +161,16 @@ describe('injured cards in play', () => {
    const lines = simulateLeagueSegment(input).totals[human].pitching.filter(line => line.seasonId === id);
    return { outs: lines.reduce((sum, line) => sum + line.outs, 0), appearances: lines.reduce((sum, line) => sum + line.appearances, 0) };
   };
+  // Each push is compared with the segment before it alone, so the other push cannot change the games it plays in.
   const plain = segmentInput(run, season, profiles, data, names);
-  takePush(run, season, human, active.SP1, 'ride');
   takePush(run, season, human, active.CL, 'skipRest');
+  const skipped = segmentInput(run, season, profiles, data, names);
+  expect(skipped.clubs[human].tireless).toEqual([active.CL]);
+  expect(pitched(skipped, active.CL).appearances).toBeGreaterThanOrEqual(pitched(plain, active.CL).appearances);
+  takePush(run, season, human, active.SP1, 'ride');
   const pushed = segmentInput(run, season, profiles, data, names);
   expect(pushed.clubs[human].ridden).toEqual([active.SP1]);
-  expect(pushed.clubs[human].tireless).toEqual([active.CL]);
-  expect(pitched(pushed, active.SP1).outs).toBeGreaterThan(pitched(plain, active.SP1).outs);
-  expect(pitched(pushed, active.CL).appearances).toBeGreaterThanOrEqual(pitched(plain, active.CL).appearances);
+  expect(pitched(pushed, active.SP1).outs).toBeGreaterThan(pitched(skipped, active.SP1).outs);
   // After a segment, contenders push their ace and closer and the rest train one card intensively.
   recordSegment(run, season, simulateLeagueSegment(pushed));
   expect(season.injuries.every(injury => injury.segment === 1)).toBe(true);

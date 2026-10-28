@@ -49,7 +49,7 @@ export const TRAININGS: Readonly<Record<TrainingKind, TrainingInfo>> = {
  control: { name: 'Control', detail: 'Turns walks into balls in play', price: 14, temporary: false },
  keepInPark: { name: 'Keep it in the park', detail: 'Turns homers allowed into outs', price: 14, temporary: false },
  stamina: { name: 'Stamina', detail: 'A starter goes deeper into games', price: 12, temporary: false },
- recovery: { name: 'Recovery', detail: 'A reliever rests one game less after long outings and may pitch a third straight day', price: 12, temporary: false },
+ recovery: { name: 'Recovery', detail: 'A reliever’s first two innings of an outing cost no rest, and it may pitch a third straight day', price: 12, temporary: false },
  crossTraining: { name: 'Cross-training', detail: 'A hitter learns a new position, fielding it below his glove at the one he plays best', price: 12, temporary: false },
  hotBat: { name: 'Hot bat', detail: 'A big hitting jump for the next nine games only', price: 8, temporary: true },
  hotArm: { name: 'Hot arm', detail: 'A big pitching jump for the next nine games only', price: 8, temporary: true }

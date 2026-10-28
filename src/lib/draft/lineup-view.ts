@@ -110,7 +110,8 @@ export function seasonForm(profile: Profile | undefined, lines: { batting: Reado
   const expected = era === null ? null : era * UNEARNED;
   return {
    card: era === null ? '' : `card ${era.toFixed(2)} ERA`,
-   now: !line || ra9 === null ? 'Not used yet' : `${ra9.toFixed(2)} RA9 · ${innings(line.outs)} IP · ${line.SO} SO`,
+   // A reliever's games beside its innings show how often it goes past one inning.
+   now: !line || ra9 === null ? 'Not used yet' : `${ra9.toFixed(2)} RA9 · ${innings(line.outs)} IP${line.starts ? '' : ` in ${line.appearances} G`} · ${line.SO} SO`,
    form: expected === null || ra9 === null || line!.outs < 45 ? null : expected - ra9 >= .75 ? 'hot' : ra9 - expected >= .75 ? 'cold' : null
   };
  }
