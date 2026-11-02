@@ -8,6 +8,13 @@ import {
 } from '#lib/server/share-images.ts';
 import { sitePreviewImage } from '#lib/share/site-preview.ts';
 import { article } from '#lib/article.ts';
+import { loadCurrentDataVersion, loadReplay } from '#lib/server/replays.ts';
+
+/** Whether the challenger's season was a daily run; a replay that no longer loads answers with Classic. */
+async function isDaily(replayId: string): Promise<boolean> {
+	try { return (await loadReplay(env.REPLAYS, replayId, await loadCurrentDataVersion(env.ASSETS))).daily !== undefined; }
+	catch { return false; }
+}
 
 export const load: PageServerLoad = async ({ params, setHeaders }) => {
 	setHeaders({ 'cache-control': 'no-store' });
@@ -16,6 +23,7 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 	const generic = {
 		replayId,
 		record: null,
+		daily: false,
 		title: 'Challenge | 162-0',
 		description: 'Draft a historical roster, play 162 games, then take on this club in a best-of-five.',
 		canonical,
@@ -30,6 +38,7 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 		return {
 			replayId: publication.replayId,
 			record: { wins, losses },
+			daily: await isDaily(publication.replayId),
 			title: `Beat ${wins}-${losses} | 162-0`,
 			description: `Draft your own club, play 162 games, then take on this ${wins}-${losses} club in a best-of-five.`,
 			canonical,

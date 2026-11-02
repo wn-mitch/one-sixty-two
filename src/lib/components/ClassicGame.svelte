@@ -97,13 +97,15 @@
  });
  $effect(() => {
   // Ordinary returns resume unfinished play, or today's finished daily on its results; other completed seasons belong in My teams.
+  // `/daily?play=1` (answering a daily challenge) also starts today's daily when it is unplayed.
   const current = session;
   const path = page.url.pathname;
   if ((path !== '/classic' && path !== '/daily') || !current || current.phase !== 'start') return;
   if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;
   untrack(() => {
    const daily = current.daily?.run;
-   if (path === '/daily' ? daily?.kind === 'active' || (daily?.kind === 'complete' && !!daily.draft) : current.canAutoResume) void (path === '/daily' ? current.playDaily() : current.resume());
+   const dailyReady = daily?.kind === 'active' || (daily?.kind === 'complete' && !!daily.draft) || (daily?.kind === 'unplayed' && page.url.searchParams.get('play') === '1');
+   if (path === '/daily' ? dailyReady : current.canAutoResume) void (path === '/daily' ? current.playDaily() : current.resume());
    else void goto('/', { replace: true, reset: false });
   });
  });

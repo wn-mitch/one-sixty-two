@@ -1,31 +1,44 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { smartBattingOrder, smartReliefRoles, smartRotation } from '../lib/game/smart-lineup.ts';
-import { availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
+import { dailyDate, dailySeed } from '../lib/game/daily.ts';
+import { availableCandidates, commitPick, createDailyDraft, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { publishShare, storeReplay } from '../lib/game/share.ts';
 import { SLOTS, type Draft, type Manifest, type Profile } from '../lib/game/types.ts';
 import { solidPng } from './image-test-helpers.ts';
-import { currentManifest, deviceDraft, expectPool, STORAGE_KEY, writeDeviceDraft } from './draft-test-fixtures.ts';
+import { currentManifest, deviceDraft, deviceRows, expectPool, STORAGE_KEY, writeDeviceDraft } from './draft-test-fixtures.ts';
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 test.setTimeout(300000);
 
 const CHALLENGE_KEY = '162-zero:challenge:v1';
 
+/** Fills a started draft, taking the first legal candidate each roll. */
+function fill(draft: Draft, manifest: Manifest): Draft {
+ while (draft.picks.length < SLOTS.length) {
+  draft = rollDraft(draft, manifest);
+  const candidate = availableCandidates(draft, manifest).find(item => legalSlots(draft, item, manifest).length);
+  if (!candidate) throw new Error('dead end');
+  draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
+ }
+ return draft;
+}
+
 /** A complete draft from the live manifest, taking the first legal candidate each roll. */
 function completeDraft(manifest: Manifest, seed: number, stadium: number): Draft {
  for (let attempt = seed; attempt < seed + 50; attempt++) {
-  try {
-   let draft = selectHomeStadium(createDraft(manifest, attempt), manifest, manifest.stadiums[stadium].ref.id);
-   while (draft.picks.length < SLOTS.length) {
-    draft = rollDraft(draft, manifest);
-    const candidate = availableCandidates(draft, manifest).find(item => legalSlots(draft, item, manifest).length);
-    if (!candidate) throw new Error('dead end');
-    draft = commitPick(draft, manifest, candidate.seasonId, legalSlots(draft, candidate, manifest)[0]);
-   }
-   return draft;
-  } catch { /* try the next seed */ }
+  try { return fill(selectHomeStadium(createDraft(manifest, attempt), manifest, manifest.stadiums[stadium].ref.id), manifest); }
+  catch { /* try the next seed */ }
  }
  throw new Error('No complete draft within 50 seeds');
+}
+
+/** A complete daily run of an earlier day whose first-legal picks finish a roster. */
+function completeDaily(manifest: Manifest): Draft {
+ for (let day = 1; day <= 28; day++) {
+  try { return fill(createDailyDraft(manifest, `2026-01-${String(day).padStart(2, '0')}`), manifest); }
+  catch { /* try the next day */ }
+ }
+ throw new Error('No complete daily run in January');
 }
 
 test('lineup help stays available without changing the batting order or relief roles', async ({ page, request }) => {
@@ -133,10 +146,10 @@ test('lineup uses the site menu and canceling New draft preserves the roster and
 });
 
 /** Stores and publishes a complete challenger season, as Challenge a friend would. */
-async function publishChallenger(manifest: Manifest, origin: string) {
+async function publishChallenger(manifest: Manifest, origin: string, draft = completeDraft(manifest, 7, 0)) {
  // Browsers send Origin on these POSTs; Node's fetch does not, and the site rejects cross-site posts.
  const sameOrigin: typeof fetch = (input, init) => fetch(input, { ...init, headers: { ...init?.headers, origin } });
- const { id } = await storeReplay(completeDraft(manifest, 7, 0), origin, sameOrigin);
+ const { id } = await storeReplay(draft, origin, sameOrigin);
  // The record and artwork come from the challenger's browser; any 162-game record is publishable.
  const record = { wins: 101, losses: 61, firstLoss: 2, longestWinningStreak: 11, runsFor: 812, runsAgainst: 640 };
  const png = (width = 1080, height = 1920) => new Blob([new Uint8Array(solidPng(width, height))], { type: 'image/png' });
@@ -209,6 +222,31 @@ test('a draft in progress can answer the challenge instead of being replaced', a
  expect(stored.draft.seed).toBe(current.seed);
  expect(stored.draft.currentRoll).toEqual(current.currentRoll);
  expect(stored.challenge).toEqual({ replayId: id, wins: publication.record.wins, losses: publication.record.losses, seed: current.seed });
+});
+
+test('a daily challenge starts today’s daily and leaves a Classic draft in progress alone', async ({ page, request, baseURL }) => {
+ const manifest = await currentManifest(request);
+ // The challenger played an earlier day's daily; it is answered with today's.
+ const { id, publication } = await publishChallenger(manifest, baseURL!, completeDaily(manifest));
+ const classic = rollDraft(selectHomeStadium(createDraft(manifest, 41), manifest, manifest.stadiums[2].ref.id), manifest);
+ await page.addInitScript(({ key, value }) => {
+  if (!localStorage.getItem(key)) localStorage.setItem(key, value);
+ }, { key: STORAGE_KEY, value: JSON.stringify({ ...classic, phase: 'draft' }) });
+ await page.goto(`/c/${id}`);
+ await expect(page.getByRole('heading', { level: 1, name: `Beat ${publication.record.wins}–${publication.record.losses}` })).toBeVisible({ timeout: 30_000 });
+ await expect(page.getByText('They played the daily.')).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Answer with my current draft', exact: true })).toHaveCount(0);
+ await expect(page.getByRole('button', { name: 'Draft your team', exact: true })).toHaveCount(0);
+ await page.getByRole('button', { name: 'Play today’s daily', exact: true }).click();
+ await expect(page).toHaveURL(/\/daily(\?|$)/);
+ await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeFocused();
+
+ const date = dailyDate();
+ const [run] = await deviceRows(page, 'SELECT json FROM daily_runs WHERE date = ?', [date]);
+ expect(JSON.parse(run.json as string)).toMatchObject({ daily: date, seed: dailySeed(date) });
+ expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CHALLENGE_KEY))
+  .toEqual({ replayId: id, wins: publication.record.wins, losses: publication.record.losses, seed: dailySeed(date) });
+ expect((await deviceDraft(page)).seed).toBe(classic.seed);
 });
 
 test('a challenge link without a published season says so and still starts a draft', async ({ page }) => {

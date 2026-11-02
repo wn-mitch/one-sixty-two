@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { acceptChallenge, claimChallenge } from '#lib/game/challenge.ts';
+	import { dailyDate, dailySeed } from '#lib/game/daily.ts';
 	import { loadManifest } from '#lib/game/data.ts';
 	import { restoreDraft } from '#lib/game/persistence.ts';
 	import { deviceDb } from '#lib/storage/db.ts';
@@ -14,6 +15,8 @@
 	let inProgress = $state<{ seed: number; label: string } | null>(null);
 
 	onMount(() => {
+		// A daily challenge is answered with today's daily, never with a Classic draft in progress.
+		if (data.daily) return;
 		let live = true;
 		void loadManifest().then(async manifest => {
 			let saved;
@@ -26,14 +29,20 @@
 		return () => { live = false; };
 	});
 
-	/** Accepting stores the challenge, then either resumes the draft in progress for it or opens a fresh stadium deck. */
+	/**
+	 * Accepting stores the challenge, then either resumes the draft in progress for it or opens a fresh stadium deck.
+	 * A daily challenge binds to today's daily, whose seed the date fixes, and starts, resumes or reopens that run.
+	 */
 	async function accept(useCurrent: boolean): Promise<void> {
 		if (!data.record) return;
 		if (!acceptChallenge({ replayId: data.replayId, ...data.record })) {
 			notice = 'This browser blocked storage, so the series offer will not appear after your season. You can still draft and use their replay link in My teams.';
 			return;
 		}
-		if (useCurrent && inProgress) {
+		if (data.daily) {
+			claimChallenge(dailySeed(dailyDate()));
+			await goto('/daily?play=1');
+		} else if (useCurrent && inProgress) {
 			claimChallenge(inProgress.seed);
 			await goto('/classic?resume=1');
 		} else {
@@ -68,10 +77,12 @@
 	{#if data.record}
 		<p class="eyebrow">You've been challenged</p>
 		<h1>Beat {data.record.wins}–{data.record.losses}</h1>
-		<p class="lede muted">Draft your own club from baseball history and play its 162 games. Then take this club on in a best-of-five.</p>
+		<p class="lede muted">{data.daily ? 'They played the daily. Draft today’s daily and play its 162 games.' : 'Draft your own club from baseball history and play its 162 games.'} Then take this club on in a best-of-five.</p>
 		{#if data.poster}<img src={data.poster.url} width={data.poster.width} height={data.poster.height} alt={data.poster.alt} />{/if}
 		<div class="actions">
-			{#if inProgress}
+			{#if data.daily}
+				<button class="primary" type="button" onclick={() => void accept(false)}>Play today’s daily</button>
+			{:else if inProgress}
 				<p class="in-progress">You have a draft in progress · {inProgress.label}</p>
 				<button class="primary" type="button" onclick={() => void accept(true)}>Answer with my current draft</button>
 				<button class="secondary" type="button" onclick={() => void accept(false)}>Start a fresh draft</button>
