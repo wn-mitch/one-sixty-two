@@ -21,7 +21,9 @@
  import SiteMenu from './SiteMenu.svelte';
  import GuideTip from './GuideTip.svelte';
  import TokenAmount from './TokenAmount.svelte';
- import { BOARD_WIDE_QUERY } from './skeletons/board.ts';
+ import { boardWide } from './skeletons/board.ts';
+ import { hostFold } from '../app/regions.svelte.ts';
+ import { fitField } from './fit-field.ts';
  import { shopState } from '../cosmetics/store.svelte.ts';
  import { supportAvailable } from '../cosmetics/support.ts';
  import { showsExternalSupport, SUPPORT_URL } from '../app/host.ts';
@@ -51,6 +53,23 @@
  const draft = $derived(classic?.draft);
  const uid = $props.id();
  let wide = $state(false);
+ // An iPhone Duo fold splits the board: cards and header on the left pane, the field on the right.
+ const fold = $derived(hostFold.current);
+ // The left pane is phone-sized: compact cards that place by tapping the always-visible field.
+ const cardsWide = $derived(wide && !fold);
+ let headerHeight = $state(0);
+ /** Beside the fold the whole field shows at once, like the phone sheet; desktop's panel scrolls instead. */
+ function fitPanelField(content: HTMLElement, enabled: boolean) {
+  const limit = () => parseFloat(getComputedStyle(content.parentElement!).maxHeight) || innerHeight;
+  let fit = enabled ? fitField(content, limit) : null;
+  return {
+   update(next: boolean) {
+    if (next && !fit) fit = fitField(content, limit);
+    else if (!next && fit) { fit.destroy(); fit = null; content.style.removeProperty('--sheet-field-height'); }
+   },
+   destroy() { fit?.destroy(); }
+  };
+ }
  let selectedSeasonId = $state<string | null>(null);
  let selectedSeasons = $state(new Map<string, string>());
  let selectionChoices = $state<Profile[]>([]);
@@ -605,28 +624,31 @@
     ?.scrollIntoView({ block: 'nearest', behavior: appSettings.effectiveEnabled ? 'smooth' : 'auto' });
   });
  });
+ // Resizing, rotating or unfolding moves the field between the panel and the sheet.
+ function adapt(next: boolean) {
+  const focusedInPanel = document.activeElement instanceof HTMLElement && !!document.activeElement.closest('.field-panel, .draft-sheet');
+  const inspected = inspectedSeasonId;
+  if (inspected) inspectionSourceElement = null;
+  wide = next;
+  if (wide) {
+   sheetOpen = false;
+   if (focusedInPanel && !inspected) void tick().then(() => fieldHeading?.focus({ preventScroll: true }));
+  } else if (selectedSeasonId || movingSeasonId || inspected) {
+   sheetOpen = true;
+  }
+  if (inspected) void refreshInspectionAfterLayout(inspected);
+ }
+ $effect(() => {
+  const next = boardWide.current;
+  untrack(() => { if (next !== wide) adapt(next); });
+ });
  onMount(() => {
   let disposed = false;
   const releaseSettings = appSettings.retain();
   void loadMedia().then(value => {
    if (!disposed) { media = value; mediaStatus = 'ready'; }
   }).catch(() => { if (!disposed) mediaStatus = 'unavailable'; });
-  const query = window.matchMedia(BOARD_WIDE_QUERY);
-  wide = query.matches;
-  const adapt = () => {
-   const focusedInPanel = document.activeElement instanceof HTMLElement && !!document.activeElement.closest('.field-panel, .draft-sheet');
-   const inspected = inspectedSeasonId;
-   if (inspected) inspectionSourceElement = null;
-   wide = query.matches;
-   if (wide) {
-    sheetOpen = false;
-    if (focusedInPanel && !inspected) void tick().then(() => fieldHeading?.focus({ preventScroll: true }));
-   } else if (selectedSeasonId || movingSeasonId || inspected) {
-    sheetOpen = true;
-   }
-   if (inspected) void refreshInspectionAfterLayout(inspected);
-  };
-  query.addEventListener('change', adapt);
+  wide = boardWide.current;
   window.addEventListener('cancel', guardInspectionCancel, true);
   const arrival = take('stadium');
   if (arrival) void tick().then(() => {
@@ -643,7 +665,6 @@
   return () => {
    disposed = true;
    releaseSettings();
-   query.removeEventListener('change', adapt);
    window.removeEventListener('cancel', guardInspectionCancel, true);
   };
  });
@@ -652,11 +673,11 @@
 <svelte:window onpointerdowncapture={trackInspectionPointer} onkeydowncapture={closeInspectionOnEscape} onkeyup={clearInspectionEscape} onclick={deselectOutsideCard} />
 
 {#snippet fieldHeader()}
- {@const sheetTabs = (!wide && !!selectedProfile) || !!pile}
+ {@const sheetTabs = (!cardsWide && !!selectedProfile) || !!pile}
  <div class="field-header" class:sheet-tabs={sheetTabs}>
   <div class:sr-only={sheetTabs}>
    <div class="field-title"><h2 bind:this={fieldHeading} tabindex="-1">Your field <span class="sr-only">{picked} of {pickTotal} picked</span></h2>
-    {#if wide}<div class="pick-track" aria-hidden="true">{#each rosterSlots as slot}<span class:locked={occupiedSlots.has(slot)}></span>{/each}</div>{/if}
+    {#if cardsWide}<div class="pick-track" aria-hidden="true">{#each rosterSlots as slot}<span class:locked={occupiedSlots.has(slot)}></span>{/each}</div>{/if}
     <span class="picked-count" aria-hidden="true">{picked} / {pickTotal}</span>
    </div>
   </div>
@@ -669,7 +690,7 @@
   {/if}
   {#if !wide}<button type="button" class="quiet close-field" aria-label="Close field" onclick={dismissSheet}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>{/if}
  </div>
- {#if !wide && selectedProfile && source.groupSeasons}
+ {#if !cardsWide && selectedProfile && source.groupSeasons}
   <label class="sheet-season"><span class="sr-only">Exact season for {selectedProfile.displayName}</span>
    <select aria-label="Exact season for {selectedProfile.displayName}" value={selectedSeasonId ?? ''} disabled={busy} onchange={event => changeSeason(selectedProfile!.playerId, event.currentTarget.value)}>
     {#each seasonChoices as season (season.seasonId)}<option value={season.seasonId}>{season.year} · {season.historicalTeam}</option>{/each}
@@ -679,7 +700,7 @@
 {/snippet}
 
 {#snippet fieldContent()}
- {#if !wide && selectedCard && sheetTab === 'back' && !inspectedCard}
+ {#if !cardsWide && selectedCard && sheetTab === 'back' && !inspectedCard}
   <div role="tabpanel" id="{uid}-panel-back" aria-labelledby={`${uid}-tab-back`}>
    <CardReview
     bind:this={candidateReview}
@@ -690,7 +711,7 @@
    />
   </div>
  {/if}
- <div hidden={(!wide && !!selectedCard && sheetTab !== 'field') || sheetTab === 'league'} role={(selectedProfile && !wide) || pile ? 'tabpanel' : undefined} id="{uid}-panel-field" aria-labelledby={(selectedProfile && !wide) || pile ? `${uid}-tab-field` : undefined}>
+ <div hidden={(!cardsWide && !!selectedCard && sheetTab !== 'field') || sheetTab === 'league'} role={(selectedProfile && !cardsWide) || pile ? 'tabpanel' : undefined} id="{uid}-panel-field" aria-labelledby={(selectedProfile && !cardsWide) || pile ? `${uid}-tab-field` : undefined}>
   <Roster
    roster={source.roster}
    {manifest}
@@ -702,7 +723,7 @@
    {media}
    {mediaStatus}
    {preview}
-   compact={wide}
+   compact={cardsWide}
    stadium={homeStadium}
    stadiumFranchise={homeStadium ? manifest.franchises.find(franchise => franchise.id === homeStadium.franchiseId)?.name : undefined}
    stadiumColor={homeStadium ? media?.teams[homeStadium.franchiseId]?.color : undefined}
@@ -743,7 +764,7 @@
 {#snippet fieldFooter()}
  {#if movingSeasonId}
   <div class="move-controls">
-   {#if wide && movingProfile}<p><strong>Moving {movingProfile.displayName} · {movingProfile.year}</strong></p>{/if}
+   {#if cardsWide && movingProfile}<p><strong>Moving {movingProfile.displayName} · {movingProfile.year}</strong></p>{/if}
    <button type="button" class="secondary" onclick={cancelMove}>Cancel move</button>
   </div>
  {:else if selectedProfile}
@@ -758,7 +779,7 @@
  {/if}
 {/snippet}
 
-<div bind:this={draftBoard} class="draft-board" class:wide>
+<div bind:this={draftBoard} class="draft-board" class:wide class:split={!!fold} style:--fold-start={fold ? `${fold.start}px` : undefined} style:--fold-end={fold ? `${fold.end}px` : undefined} style:--board-header={fold ? `${headerHeight}px` : undefined}>
 {#snippet rerollControl()}
  {#if showingCandidates && draft}
   {@const total = extraPackAllowance(draft)}
@@ -780,15 +801,19 @@
  {/if}
 {/snippet}
  {#if wide}
-  <header class="draft-header">
+  <header class="draft-header" bind:offsetHeight={headerHeight}>
+   <div class="header-lead">
    <a class="wordmark" href="/" aria-label="162-0 home"><span class="mark" aria-hidden="true"></span>162-0</a>
    {@render reveal()}
    {@render rerollControl()}
    {#if (roll && !(dealing && !dealtArrived)) || (pile && phase === 'choosing')}<p class="eyebrow header-pick">Pick {source.pickNumber} of {pickTotal}</p>{/if}
+   </div>
+   <div class="header-actions">
    <a class="shop-link" href="/shop" aria-label={shopState.snapshot ? `Shop, ${shopState.snapshot.balance} ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop'}>
     <span>Shop</span><span class="shop-balance" aria-hidden="true"><TokenAmount amount={shopState.snapshot?.balance ?? null} /></span>
    </a>
    <SiteMenu onNew={onNew} />
+   </div>
   </header>
  {/if}
  <!-- Phones keep the roll and the field together in one sticky bar above the pool. -->
@@ -819,7 +844,7 @@
     <GuideTip step="pack" anchor={() => visible('.foil-pack')} text={`You make ${pickTotal} picks to fill your team. Each pack is one franchise from one decade: tap it to open.`} />
    {:else if classic && draft && showingCandidates && draft.picks.length === 0}
     <GuideTip step="card" anchor={() => visible('.candidate-card')} text="Each card is one real player season. WAR/162 is how many wins that season adds over a full year: higher is better." />
-    <GuideTip step="slots" anchor={() => visible(wide ? '.candidate-card .placement:enabled' : '.candidate-card .compact-qualification')} text={wide
+    <GuideTip step="slots" anchor={() => visible(cardsWide ? '.candidate-card .placement:enabled' : '.candidate-card .compact-qualification')} text={cardsWide
      ? 'The buttons under each card are the empty spots on your team that season can fill. Choose one, then Draft.'
      : '“Open” lists the empty spots on your team this player can fill. Tap a card, then a highlighted spot, to draft that season.'} />
    {:else if classic && draft && showingCandidates && draft.picks.length >= 1}
@@ -851,15 +876,15 @@
      onDealt={() => { dealing = false; dealOutPending = true; }}
     />
    {:else if loading || phase === 'revealing'}
-    <Skeleton label="Finding eligible seasons…"><PoolSkeleton {wide} /></Skeleton>
+    <Skeleton label="Finding eligible seasons…"><PoolSkeleton wide={cardsWide} /></Skeleton>
    {:else if showingCandidates}
-    <CandidateList profiles={source.offer} {source} {caption} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} {wide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
+    <CandidateList profiles={source.offer} {source} {caption} {manifest} {rankings} {rankingLoading} {rankingError} {onRetryRankings} {busy} {selectedSeasonId} {selectedSeasons} previewing={!!preview} wide={cardsWide} onSelect={selectCandidate} onPlace={placeCandidate} onSeasonChange={changeSeason} onResetBrowse={resetBrowse} />
    {/if}
   </section>
   {#if wide}
    <aside class="field-panel" aria-label="Your field">
     <div class="panel-header">{@render fieldHeader()}</div>
-    <div class="field-scroll">{@render fieldContent()}</div>
+    <div class="field-scroll" use:fitPanelField={!!fold}>{@render fieldContent()}</div>
     {#if movingSeasonId || selectedProfile}<div class="field-footer">{@render fieldFooter()}</div>{/if}
    </aside>
   {/if}
@@ -944,5 +969,18 @@
  .shop-link { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; padding-inline: .75rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: 650 .875rem/1 var(--font-control); text-decoration: none; }
  .shop-link:hover { border-color: var(--accent); background: var(--surface); }
  .shop-balance { color: var(--accent); font-weight: 750; }
+ /* Desktop lays the header out as one row; the groups only exist for the fold split. */
+ .header-lead, .header-actions { display: contents; }
+ /* iPhone Duo: the fold band (--fold-start to --fold-end, in viewport pixels) separates two panes. The header
+    spans both with its groups on either side of the fold; the cards fill the left pane and the field the right. */
+ .split { display: grid; grid-template-columns: var(--fold-start) minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: calc(var(--fold-end) - var(--fold-start)); align-items: start; }
+ .split .board-columns { display: contents; }
+ .split > .draft-header { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: subgrid; padding-inline: 0; }
+ .split .header-lead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; padding-left: 16px; }
+ .split .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-right: 16px; }
+ .split .shop-link { margin-left: 0; }
+ .split .draft-browser { grid-column: 1; grid-row: 2; padding: 16px 0 16px 16px; overflow-x: clip; }
+ .split :global(.candidates .card-grid) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+ .split .field-panel { grid-column: 2; grid-row: 2; top: calc(var(--board-header) + 8px); max-height: calc(100dvh - var(--board-header) - 16px); margin: 8px 16px 8px 0; }
  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 </style>

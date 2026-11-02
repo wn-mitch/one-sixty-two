@@ -170,6 +170,8 @@
 	.site:has(:global(:is(.draft-board, .draft-skeleton))) { max-width: 90rem; }
 	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) { padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
 	.site:has(:global(:is(.draft-board, .draft-skeleton).wide)) .site-header { display: none; }
+	/* A fold-split board places its panes in viewport coordinates (DraftBoard). */
+	.site:has(:global(.draft-board.split)) { max-width: none; padding-inline: 0; }
 	/* A phone-sized draft keeps the next pick in view: the main navigation folds into Menu and the footer waits for the lineup. */
 	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) .primary-nav,
 	.site:has(:global(:is(.draft-board, .draft-skeleton):not(.wide))) footer { display: none; }

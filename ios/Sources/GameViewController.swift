@@ -12,6 +12,7 @@ final class GameViewController: UIViewController {
     private lazy var storeBridge = StoreBridge { [weak self] url in
         self?.urlPolicy?.isAppURL(url) ?? false
     }
+    private let regionBridge = ReservedRegionBridge()
 
     private let loadingView = UIView()
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
@@ -81,6 +82,7 @@ final class GameViewController: UIViewController {
         // WKDownload.delegate is assigned when WebKit hands us a download.
         gameWebView = webView
         storeBridge.attach(to: webView)
+        regionBridge.attach(to: webView)
 
         view.addSubview(webView)
         NSLayoutConstraint.activate([
@@ -89,6 +91,12 @@ final class GameViewController: UIViewController {
             webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
         ])
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // Folding, unfolding and rotating relayout the web view; the fold moves with it.
+        regionBridge.update()
     }
 
     private func configureStatusViews() {

@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { addPack, availableCandidates, commitPick, createDraft, legalSlots, rollDraft, selectHomeStadium } from '../lib/game/draft.ts';
 import { HITTER_SLOTS, SLOTS, isJackpot, type Draft, type HitterSlot, type Manifest, type Profile, type Slot } from '../lib/game/types.ts';
+import type { HostRegions } from '../lib/app/regions.svelte.ts';
 import { deviceDraft, cardScenario, currentManifest, expectAbsentFromPool, expectPool, openSavedDraft, revealCandidate, rollProfiles, STORAGE_KEY, type CardScenario } from './draft-test-fixtures.ts';
 
 test.setTimeout(180000);
@@ -399,4 +400,64 @@ test('a reload with packs still on the table deals them face up, and the taken o
 	await expect(page.locator('.reveal h2')).toHaveText(name);
 	await expect.poll(async () => (await savedDraft(page)).currentRoll).toEqual(chosen);
 	expect((await savedDraft(page)).actions.at(-1)).toEqual({ type: 'choose-pack', pack: 1 });
+});
+
+test.describe('iPhone Duo fold split', () => {
+	// The open inner display as the iOS host reports it: the fold band, margins included, at x 455.5–495.5.
+	const fold = { start: 455.5, end: 495.5 };
+	const regions = (active: boolean): HostRegions => ({
+		width: 867,
+		height: 635,
+		regions: [{ kind: 'division', active, x: fold.start, y: 0, width: fold.end - fold.start, height: 669, margins: [0, 20, 0, 20] }]
+	});
+	test.use({ viewport: { width: 867, height: 635 }, reducedMotion: 'reduce' });
+
+	test('drafts with the cards left of the fold and the field right of it, then returns to the sheet without a fold', async ({ page, request }) => {
+		const manifest = await currentManifest(request);
+		const scenario = await cardScenario(request, manifest, () => true);
+		await page.addInitScript(payload => { window.__hostRegions = payload; }, regions(false));
+		await openSavedDraft(page, scenario.draft);
+		const before = await savedDraft(page);
+
+		const panel = page.locator('.field-panel');
+		await expect(panel).toBeVisible();
+		const browser = (await page.locator('.draft-browser').boundingBox())!;
+		const field = (await panel.boundingBox())!;
+		expect(browser.x + browser.width).toBeLessThanOrEqual(fold.start);
+		expect(field.x).toBeGreaterThanOrEqual(fold.end);
+		expect(field.x + field.width).toBeLessThanOrEqual(867);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+		// Nothing but the board's own header, cards and field: no site header, no sheet.
+		await expect(page.locator('.site-header')).toBeHidden();
+		// The header spans both panes: Shop and Menu sit over the field, clear of the fold.
+		expect((await page.locator('.draft-header a.shop-link').boundingBox())!.x).toBeGreaterThanOrEqual(fold.end);
+		// The whole field, bullpen included, fits beside the fold without scrolling the panel.
+		const scroll = panel.locator('.field-scroll');
+		expect(await scroll.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
+		// Turning the park card over hides the field face outright, not only through its backface.
+		await panel.getByRole('button', { name: /Turn over for stadium details/ }).click();
+		await expect(panel.locator('.face.front')).toHaveCSS('visibility', 'hidden');
+		await expect(panel.locator('.face.back')).toHaveCSS('visibility', 'visible');
+		await panel.getByRole('button', { name: 'Show field', exact: true }).click();
+		await expect(panel.locator('.face.back')).toHaveCSS('visibility', 'hidden');
+		await expect(panel.locator('.face.front')).toHaveCSS('visibility', 'visible');
+
+		const group = await revealCandidate(page, scenario.profile.playerId);
+		await group.locator('button.art-trigger').click();
+		await expect(page.locator('dialog.draft-sheet[open]')).toHaveCount(0);
+		await panel.getByRole('combobox', { name: /^Exact season for / }).selectOption(scenario.profile.seasonId);
+		await placeAt(page, scenario.slot, panel);
+		const confirmation = panel.locator('.pick-confirmation');
+		await expect(confirmation).toHaveAttribute('data-pending-slot', scenario.slot);
+		await expectNoPersistenceChange(page, before);
+		await confirmation.getByRole('button', { name: new RegExp(`^Draft .+ at ${scenario.slot}$`) }).click();
+		await expect.poll(async () => (await savedDraft(page)).picks.length).toBe(before.picks.length + 1);
+
+		// Partly folding keeps the split; closing onto a display without a fold restores the phone layout.
+		await page.evaluate(payload => { window.__hostRegions = payload; dispatchEvent(new Event('162-host-regions')); }, regions(true));
+		await expect(panel).toBeVisible();
+		await page.evaluate(() => { window.__hostRegions = { width: 867, height: 635, regions: [] }; dispatchEvent(new Event('162-host-regions')); });
+		await expect(panel).toHaveCount(0);
+		await expect(page.locator('.draft-toolbar .open-field')).toBeVisible();
+	});
 });

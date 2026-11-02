@@ -322,6 +322,10 @@
  .flipper { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform var(--motion-field-flip) var(--ease-out); }
  .turned .flipper { transform: rotateY(180deg); }
  .face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: calc(100cqi * 14 / 424); }
+ /* WebKit draws the slots' own transforms through a hidden backface, so each face also hides outright once
+    the card is edge-on: 10% of the flip on the --ease-out curve. */
+ .face { transition: visibility 0s linear calc(var(--motion-field-flip) * .1); }
+ .turned .front, .field-card:not(.turned) .back { visibility: hidden; }
  .front { box-shadow: 0 1rem 2rem oklch(8% .01 255 / .35); }
  .back {
   display: grid;
@@ -490,6 +494,8 @@
  .mini-caption span { color: var(--muted); }
  @media (prefers-reduced-motion: reduce) { .stadium-mini, .mini-card { transition: none; } }
  .slot-placeholder b { font-size: calc(100cqi * 15 / 424); }
+ /* Small fields (beside the iPhone Duo fold) shrink the state line with the card; phone sheets keep 12px. */
+ .slot-placeholder span { font-size: max(.5rem, min(.75rem, calc(100cqi * 16 / 424))); }
  @media (prefers-reduced-motion: reduce) { .flipper { transition: none; } }
  :global([data-motion='off']) .flipper { transition: none; }
 </style>
