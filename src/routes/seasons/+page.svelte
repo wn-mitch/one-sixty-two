@@ -206,7 +206,7 @@
 		<div class="replay-heading">
 			<button class="secondary" onclick={backToGallery}>Back to My teams</button>
 			<h2 id="replay-heading" tabindex="-1">Head-to-head</h2>
-			<p class="muted">{carried ? 'Your team is in. Choose an opponent: one of your saved teams or another replay link.' : 'Choose two teams by replay link. Both seasons replay for seeding.'}</p>
+			<p class="muted">{carried ? 'Your team is locked in. Pick one of your saved teams or paste another team’s replay link to play a best-of-five.' : 'Paste two team replay links to play a best-of-five. Both seasons are checked to set home-field advantage.'}</p>
 		</div>
 		<SeriesSetup
 			fields={challenge.fields}

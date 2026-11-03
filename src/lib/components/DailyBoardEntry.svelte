@@ -33,9 +33,9 @@
 <section class="board-entry" aria-label="Today’s daily board">
 	<!-- The board link shares the placement line, so the section stays short on a phone. -->
 	<p class="placement">
-		{#if place}<span><strong>#{place} on the {standings.final ? '' : 'day’s '}board</strong>{#if standings.name}{' '}as {standings.name}{/if}</span>
-		{:else if waiting}<span>In today’s top {BOARD_SIZE}. It joins the board once it is checked.</span>{/if}
-		<a class="board-link" href={`/daily/${standings.date}`}>See the {standings.final ? '' : 'day’s '}board</a>
+		{#if place}<span><strong>#{place} on the {standings.final ? '' : 'day’s '}leaderboard</strong>{#if standings.name}{' '}as {standings.name}{/if}</span>
+		{:else if waiting}<span>In today’s top {BOARD_SIZE} — verifying your run for the leaderboard.</span>{/if}
+		<a class="board-link" href={`/daily/${standings.date}`}>See the {standings.final ? '' : 'day’s '}leaderboard</a>
 	</p>
 	{#if standings.name}
 		{#if !place}<p class="muted">Board name: {standings.name}</p>{/if}

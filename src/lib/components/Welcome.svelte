@@ -92,7 +92,7 @@
 <section class="welcome" aria-labelledby="home-heading">
  <div class="welcome-copy">
   <h1 id="home-heading">Can you go <strong>162-0?</strong></h1>
-  <p class="pitch">Build a team from baseball history and chase an undefeated season.</p>
+  <p class="pitch">Open 16 packs from baseball history, draft a team, and chase an undefeated season.</p>
   {#if newcomer}{@render actions()}{/if}
   {#if daily}
    <section class="daily" class:done={!dailyPending} aria-labelledby="daily-heading">
@@ -107,15 +107,15 @@
      </div>
      <div class="daily-links">
       {#if daily.run.draft}<button class="secondary" disabled={loading || !manifest} onclick={onDaily}>See results</button>{/if}
-      <a class="button secondary" href={`/daily/${daily.date}`} aria-label="See the day’s board">Board <span aria-hidden="true">›</span></a>
+      <a class="button secondary" href={`/daily/${daily.date}`} aria-label="See today’s leaderboard">Leaderboard <span aria-hidden="true">›</span></a>
      </div>
     {:else if daily.run.kind === 'unavailable'}
      <h2 id="daily-heading"><span>Daily</span> {dailyLabel(daily.date)}</h2>
      <p class="daily-rules">{daily.run.message}</p>
     {:else}
      <h2 id="daily-heading"><span>Daily</span> {dailyLabel(daily.date)}</h2>
-     {#if dailyPark}<p class="daily-park">Home park: <strong>{dailyPark}</strong></p>{/if}
-     <p class="daily-rules">Same park and first pack for everyone. One try. Earns 2 tokens.</p>
+     {#if dailyPark}<p class="daily-park">Home ballpark: <strong>{dailyPark}</strong></p>{/if}
+     <p class="daily-rules">Same ballpark and opening pack for everyone today. One attempt. Earns 2 tokens.</p>
      <button class="start daily-start" class:primary={!newcomer} class:secondary={newcomer} disabled={loading || !manifest} onclick={onDaily}>{daily.run.kind === 'active' ? 'Resume today’s daily' : 'Play today’s daily'} <span aria-hidden="true">↗</span></button>
     {/if}
    </section>
@@ -131,15 +131,18 @@
     {/if}
    </div>
   {/snippet}
-  {#if firstSeasonBonus}<p class="bonus-note">Your first season includes a bonus token.</p>{/if}
+  <p class="home-meta">
+   <a class="how-link" href="/how-to-play">How to play</a>
+   {#if firstSeasonBonus}<span class="bonus-note">Your first finished season earns a bonus token.</span>{/if}
+  </p>
   {#if loading}
-   <p class="start-status muted" role="status">Loading the historical player pool…</p>
+   <p class="start-status muted" role="status">Loading historical players…</p>
   {:else if showcaseStatus === 'loading'}
-   <p class="start-status muted" role="status">Loading the historical card showcase…</p>
+   <p class="start-status muted" role="status">Loading preview cards…</p>
   {:else if showcaseStatus === 'unavailable'}
-   <p class="start-status muted" role="status">The card showcase is unavailable. The draft is still ready.</p>
+   <p class="start-status muted" role="status">Preview cards couldn’t load, but you can still start a draft.</p>
   {:else if mediaStatus === 'unavailable'}
-   <p class="start-status muted" role="status">Verified photos are unavailable. Cards use their canonical missing-image treatment.</p>
+   <p class="start-status muted" role="status">Player photos couldn’t load right now. Cards still show their stats and team colors.</p>
   {/if}
  </div>
  {#if eraCards.length}
@@ -226,7 +229,10 @@
  .daily-links > * { gap: var(--space-1); min-height: 2.75rem; font-size: var(--text-sm); }
  /* A finished daily steps aside for Classic play, whose first button takes the card's width so their edges align. */
  .welcome-copy:has(.daily.done) .start { max-width: 26rem; }
- .bonus-note { margin: var(--space-3) 0 0; color: var(--accent); font-size: var(--text-sm); font-weight: 650; }
+ .home-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); margin: var(--space-3) 0 0; font-size: var(--text-sm); }
+ .how-link { display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--text); font-weight: 650; text-underline-offset: .2em; }
+ .how-link:hover { color: var(--accent); }
+ .bonus-note { color: var(--accent); font-size: var(--text-sm); font-weight: 650; }
  .start-status { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); }
  /* Always two even rows of four, oldest to newest. */
  .era-strip {

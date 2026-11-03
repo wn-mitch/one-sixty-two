@@ -480,3 +480,48 @@ test.describe('iPhone Duo fold split', () => {
 		await expect(page.locator('.draft-toolbar .open-field')).toBeVisible();
 	});
 });
+
+test.describe('iPhone Duo outer display status column', () => {
+	// The closed outer display as the iOS host reports it: the web view runs under the right status column, and
+	// the time and Wi-Fi block (with the camera inside it) is the only part the page must keep clear.
+	const block = { x: 382, y: 0, width: 84, height: 174 };
+	const regions: HostRegions = {
+		width: 466,
+		height: 644,
+		regions: [
+			{ kind: 'occlusion', active: true, x: 399.67, y: 29.33, width: 37, height: 37, margins: [0, 0, 0, 0] },
+			{ kind: 'occlusion', active: true, ...block, margins: [0, 0, 0, 0] }
+		]
+	};
+	test.use({ viewport: { width: 466, height: 644 }, reducedMotion: 'reduce' });
+
+	test('runs the board into the column below the status block and keeps the top bars clear of it', async ({ page, request }) => {
+		const manifest = await currentManifest(request);
+		const scenario = await cardScenario(request, manifest, () => true);
+		await page.addInitScript(payload => { window.__hostRegions = payload; }, regions);
+		await openSavedDraft(page, scenario.draft);
+
+		const backdrop = page.locator('.status-backdrop');
+		await expect(backdrop).toHaveCount(1);
+		expect(await backdrop.boundingBox()).toEqual(block);
+		// The site Menu sits left of the block; the cards below it use the full width.
+		const menu = (await page.locator('.site-header .menu-trigger').boundingBox())!;
+		expect(menu.x + menu.width).toBeLessThanOrEqual(block.x);
+		const browser = (await page.locator('.draft-browser').boundingBox())!;
+		expect(browser.x + browser.width).toBeGreaterThan(block.x + block.width / 2);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+		// Scrolled, the sticky toolbar's controls stay left of the block.
+		await page.evaluate(() => scrollTo(0, 600));
+		const toolbar = page.locator('.draft-toolbar');
+		await expect.poll(async () => (await toolbar.boundingBox())!.y).toBe(0);
+		const last = (await toolbar.locator(':scope > :last-child').boundingBox())!;
+		expect(last.x + last.width).toBeLessThanOrEqual(block.x);
+
+		// Without the block, as on every other device, nothing is drawn and nothing is reserved.
+		await page.evaluate(() => { window.__hostRegions = { width: 466, height: 644, regions: [] }; dispatchEvent(new Event('162-host-regions')); });
+		await expect(backdrop).toHaveCount(0);
+		const unclear = (await toolbar.locator(':scope > :last-child').boundingBox())!;
+		expect(unclear.x + unclear.width).toBeGreaterThan(block.x);
+	});
+});

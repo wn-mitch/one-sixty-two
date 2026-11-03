@@ -152,7 +152,7 @@
 						<input id={`${team.id}-name`} maxlength="40" placeholder={team.label} bind:value={fields[team.id].name} />
 						{#if fieldErrors[team.id]}<p id={`${team.id}-error`} class="field-error">{fieldErrors[team.id]}</p>{/if}
 						{#if clubStatus[team.id] === 'pending'}
-							<p class="pending" role="status">Checking replay and loading exact seasons…</p>
+							<p class="pending" role="status">Checking link and loading roster…</p>
 						{:else}
 							<button type="button" class="secondary use-replay" aria-label={`Use ${team.label} replay`} disabled={!fields[team.id].link.trim()} onclick={() => void onValidate(team.id)}>{clubStatus[team.id] === 'error' ? 'Retry replay' : 'Use replay'}</button>
 						{/if}

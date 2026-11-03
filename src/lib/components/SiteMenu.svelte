@@ -2,12 +2,14 @@
  import { onMount, tick } from 'svelte';
  import { afterNavigate } from '$app/navigation';
  import Settings from './Settings.svelte';
+ import BaseballGuide from './BaseballGuide.svelte';
  import { draftModeEnabled } from '#lib/app/features.ts';
 
  let { onNew, navigation = [] }: { onNew?: () => void; navigation?: { href: string; label: string; current: boolean }[] } = $props();
  let open = $state(false);
  let developerDraft = $state(false);
  let settings = $state<ReturnType<typeof Settings>>();
+ let guideDialog = $state<ReturnType<typeof BaseballGuide>>();
  let trigger = $state<HTMLButtonElement>();
  let panel = $state<HTMLElement>();
  const uid = $props.id();
@@ -39,6 +41,10 @@
 		open = false;
 		settings?.open(trigger);
 	}
+	function openGuide(): void {
+		open = false;
+		guideDialog?.open(trigger);
+	}
 	function onWindowClick(event: MouseEvent): void {
 		if (!open) return;
 		const target = event.target as Node;
@@ -61,12 +67,14 @@
 		{#if onNew}<button type="button" onclick={() => { close(); onNew?.(); }}>New draft</button>{/if}
 		<button type="button" onclick={openSettings}>Settings</button>
 		<a href="/how-to-play">How to play</a>
+		<button type="button" onclick={openGuide}>Baseball guide</button>
 		<a href="/factory">Card factory</a>
 		<a href="/about#simulation">Rules &amp; model</a>
 		<a href="/credits">Data &amp; image credits</a>
 		{#if developerDraft}<a class="developer" href="/draft">Draft Mode <span>developer</span></a>{/if}
 	</nav>
 	<Settings bind:this={settings} showTrigger={false} />
+	<BaseballGuide bind:this={guideDialog} showTrigger={false} showLineupStats />
 </div>
 
 <style>

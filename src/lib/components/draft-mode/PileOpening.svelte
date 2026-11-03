@@ -56,7 +56,7 @@
    </div>
   {/each}
  </div>
- <p class="caption">Open your packs. Each pick, the pile you hold passes left; {pickCount} picks in all.</p>
+ <p class="caption">Tap a pack to open both. After each pick, the remaining cards pass to the left — {pickCount} picks total.</p>
  <div class="decree"><DecreeMemo {decree} label="Opening decree" /></div>
 </div>
 

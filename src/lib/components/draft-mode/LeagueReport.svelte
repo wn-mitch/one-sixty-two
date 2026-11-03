@@ -102,7 +102,7 @@
  {#if onShare || onCard}
   <section class="block" aria-labelledby="share-heading">
    <h3 id="share-heading">Share</h3>
-   <p class="muted">Publish a read-only page of this season: the standings, moments, final roster and the run's seed and versions. It is a snapshot, not a replay.</p>
+   <p class="muted">Share a read-only summary page of this season — final standings, top moments, and your closing roster.</p>
    <div class="share-actions">
     {#if onShare}<button type="button" class="secondary" disabled={working} onclick={share}>Copy link</button>{/if}
     {#if onCard}<button type="button" class="secondary" disabled={working} onclick={download}>Download card</button>{/if}

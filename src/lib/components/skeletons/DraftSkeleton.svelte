@@ -80,7 +80,7 @@
 <style>
  .draft-skeleton { min-width: 0; }
  /* Phones: the roll bar, Field and New draft share one sticky row above the pack or pool. */
- .draft-toolbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .5rem; padding-block: .5rem; background: var(--background); }
+ .draft-toolbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .5rem; padding-block: .5rem; padding-inline: var(--clear-top-left, 0px) var(--clear-top-right, 0px); background: var(--background); }
  .reveal { flex: 1; height: 48px; }
  /* With a roll showing, the pool gives its identity a row and the reroll, field and menu controls share the next. */
  .pool .draft-toolbar { flex-wrap: wrap; }

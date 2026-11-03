@@ -219,7 +219,8 @@
 		background: var(--surface-raised);
 	}
 	.sheet-header {
-		padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) var(--space-3) max(var(--space-4), env(safe-area-inset-left));
+		/* A tall sheet reaches the host's status block (--clear-top-right, set by the root layout). */
+		padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right), var(--clear-top-right, 0px) + var(--space-2)) var(--space-3) max(var(--space-4), env(safe-area-inset-left));
 		border-bottom: 1px solid var(--border);
 	}
 	.sheet-content {

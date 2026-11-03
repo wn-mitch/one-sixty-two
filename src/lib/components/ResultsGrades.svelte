@@ -39,7 +39,7 @@
 			</p>
 		{/if}
 		{#if rosterGrade && expected !== null}
-			<p class="grade draft-grade" title="The roster's average over many seasons, before this season's luck">
+			<p class="grade draft-grade" title="How many wins this roster averages over many seasons, before this season’s luck">
 				<span class="badge" aria-hidden="true" in:stamp|global={{ order: 1 }}><GradeBadge grade={rosterGrade} /></span>
 				<span class="label" aria-hidden="true">Draft</span>
 				<span class="detail" aria-hidden="true">Built for {Math.round(expected)}{#if luck}<span class="sep">{' · '}</span><span class="luck" class:up={luck > 0}>{luck > 0 ? '+' : '−'}{Math.abs(luck)} luck</span>{/if}</span>
@@ -47,7 +47,7 @@
 			</p>
 		{/if}
 		{#if scouting}
-			<p class="grade scouting" title={`Picks compared with the card the list showed first by WAR/162. ${scouting.chalk} of 16 picks took it.`}>
+			<p class="grade scouting" title={`Compares your picks with the top-ranked card by WAR/162 in each pack. You took the top-ranked card ${scouting.chalk} of 16 times.`}>
 				<span class="badge scout-name" in:stamp|global={{ order: 2, swell: .3 }}>{scouting.label}</span>
 				<span class="label" aria-hidden="true">Scouting</span>
 				<span class="detail">{scoutEdgeText(scouting.edge)}</span>

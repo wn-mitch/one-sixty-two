@@ -18,10 +18,13 @@ pub struct GameRules {
     pub double_play_ends: bool,
     /// Every runner advances one base on a caught outfield fly that is not the last out.
     pub everybody_tags: bool,
+    /// The Open Road: the lead runner with an open base ahead steals it (second or third), a
+    /// successful steal moves every runner up one base, and a caught stealing ends the half inning.
+    pub open_road: bool,
 }
 
 impl Default for GameRules {
-    fn default() -> Self { Self { innings: 9, outs: 3, singles_only: false, free_pass_two: false, double_play_ends: false, everybody_tags: false } }
+    fn default() -> Self { Self { innings: 9, outs: 3, singles_only: false, free_pass_two: false, double_play_ends: false, everybody_tags: false, open_road: false } }
 }
 
 impl GameRules {

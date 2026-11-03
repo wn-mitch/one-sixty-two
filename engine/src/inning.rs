@@ -347,36 +347,101 @@ fn award_two_bases(context: &mut InningContext, sides: &mut Sides, hitter: usize
     bases.pitchers[1] = pitcher as i16;
 }
 
-fn record_steal(context: &mut InningContext, shared: &Shared, sides: &mut Sides, offense: &TeamInput, mut outs: u32, runner_index: usize, pitcher_index: usize, success_uniform: f64) -> Result<u32, String> {
+/// How much more often than his card's rate a runner attempts under The Open Road, once the steal pays.
+const OPEN_ROAD_AGGRESSION: f64 = 2.0;
+
+/// The base a runner steals from this state: second from first under standard rules; under The Open
+/// Road, the lead runner with an open base ahead (third from second before second from first).
+fn steal_from(rules: &GameRules, runners: &[i16; 3]) -> Option<usize> {
+    if rules.open_road {
+        if runners[1] != -1 && runners[2] == -1 { return Some(1); }
+        if runners[0] != -1 && runners[1] == -1 { return Some(0); }
+        return None;
+    }
+    (!rules.singles_only && runners[0] != -1 && runners[1] == -1).then_some(0)
+}
+
+/// The outs, bases and runs after a steal from `from` succeeds or fails. A caught stealing costs one
+/// out, or the rest of the half under The Open Road, where a success moves every runner up a base.
+fn steal_result(rules: &GameRules, outs: u32, bases: u32, from: usize, success: bool) -> (u32, u32, u32) {
+    if !success { return (if rules.open_road { rules.outs } else { outs + 1 }, bases & !(1 << from), 0); }
+    if rules.open_road { (outs, (bases << 1) & 7, (bases >> 2) & 1) } else { (outs, (bases & !(1 << from)) | (1 << (from + 1)), 0) }
+}
+
+/// The chance a runner on `from` attempts to steal. Standard rules use the card's rate. Under The
+/// Open Road a caught stealing ends the half, so the runner goes only when his success chance against
+/// this catcher beats the run-expectancy break-even, and then at `OPEN_ROAD_AGGRESSION` times his rate.
+fn steal_attempt(context: &InningContext, shared: &Shared, offense: &TeamInput, outs: u32, from: usize) -> f64 {
+    let runner = offense.hitters[context.bases.runners[from] as usize];
+    if !shared.rules.open_road { return runner.steal_attempt; }
+    let bases = bases_mask(&context.bases.runners);
+    let value_outs = shared.rules.value_outs(outs);
+    let stay = shared.values.remaining(value_outs, bases, false);
+    let (_, stolen_bases, stolen_runs) = steal_result(&shared.rules, outs, bases, from, true);
+    let stolen = f64::from(stolen_runs) + shared.values.remaining(value_outs, stolen_bases, false);
+    let success = steal_success_probability(runner.steal_success, context.prepared.catcher_throwing[0]);
+    if success * stolen > stay { (OPEN_ROAD_AGGRESSION * runner.steal_attempt).min(1.0) } else { 0.0 }
+}
+
+/// Moves every runner up one base after a steal under The Open Road; a runner on third scores, and a
+/// run that wins the game ends it there.
+fn advance_on_steal(context: &mut InningContext, sides: &mut Sides) {
+    let bases = &mut context.bases;
+    if bases.runners[2] != -1 {
+        let (runner, responsible) = (bases.runners[2] as usize, bases.pitchers[2] as usize);
+        sides.batting.runs += 1;
+        sides.batting.batting[runner].r += 1;
+        sides.pitching.pitching[responsible].r += 1;
+        if f64::from(sides.batting.runs) >= bases.target {
+            bases.ended = true;
+            bases.winning_advance = 1;
+        }
+    }
+    bases.runners = [-1, bases.runners[0], bases.runners[1]];
+    bases.pitchers = [-1, bases.pitchers[0], bases.pitchers[1]];
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_steal(context: &mut InningContext, shared: &Shared, sides: &mut Sides, offense: &TeamInput, mut outs: u32, from: usize, pitcher_index: usize, success_uniform: f64) -> Result<u32, String> {
+    let open_road = shared.rules.open_road;
+    let runner_index = context.bases.runners[from] as usize;
+    let outs_before = outs;
+    let runs_before = sides.batting.runs;
     let bases_before = bases_mask(&context.bases.runners);
     let catcher_skill = context.prepared.catcher_throwing[0];
     let runner_success = offense.hitters[runner_index].steal_success;
     let neutral_success = success_uniform < steal_success_probability(runner_success, 0.0);
     let actual_success = success_uniform < steal_success_probability(runner_success, catcher_skill);
-    let neutral_outs = outs + if neutral_success { 0 } else { 1 };
-    let neutral_bases = if neutral_success { (bases_before & !1) | 2 } else { bases_before & !1 };
+    let (neutral_outs, neutral_bases, neutral_runs) = steal_result(&shared.rules, outs, bases_before, from, neutral_success);
+    let (caught_outs, _, _) = steal_result(&shared.rules, outs, bases_before, from, false);
     if actual_success {
-        context.bases.runners[1] = runner_index as i16;
-        context.bases.pitchers[1] = context.bases.pitchers[0];
+        if open_road { advance_on_steal(context, sides); } else {
+            context.bases.runners[1] = runner_index as i16;
+            context.bases.pitchers[1] = context.bases.pitchers[0];
+        }
         sides.batting.batting[runner_index].sb += 1;
     } else {
         sides.batting.batting[runner_index].cs += 1;
-        sides.pitching.pitching[pitcher_index].outs += 1;
-        outs += 1;
+        sides.pitching.pitching[pitcher_index].outs += (caught_outs - outs) as i32;
+        outs = caught_outs;
     }
-    context.bases.runners[0] = -1;
-    context.bases.pitchers[0] = -1;
+    if !open_road || !actual_success {
+        context.bases.runners[from] = -1;
+        context.bases.pitchers[from] = -1;
+    }
     let actual_bases = bases_mask(&context.bases.runners);
+    let actual_runs = sides.batting.runs - runs_before;
+    debug_assert!(context.bases.ended || steal_result(&shared.rules, outs_before, bases_before, from, actual_success) == (outs, actual_bases, actual_runs as u32));
     let value_outs = |outs| shared.rules.value_outs(outs);
-    let neutral_value = shared.values.remaining(value_outs(neutral_outs), neutral_bases, false);
-    let actual_value = shared.values.remaining(value_outs(outs), actual_bases, false);
+    let neutral_value = f64::from(neutral_runs) + shared.values.remaining(value_outs(neutral_outs), neutral_bases, false);
+    let actual_value = f64::from(actual_runs) + shared.values.remaining(value_outs(outs), actual_bases, context.bases.ended);
     let defensive_runs = neutral_value - actual_value;
     add_defense(context, sides, 0, DefenseComponent::CatcherThrowing, defensive_runs);
-    let offensive_runs = shared.values.centered_steal(value_outs(outs - if actual_success { 0 } else { 1 }), bases_before, value_outs(outs), actual_bases);
+    let offensive_runs = f64::from(actual_runs) + shared.values.centered_steal(value_outs(outs_before), bases_before, value_outs(outs), actual_bases);
     sides.batting.batting[runner_index].steal_runs += offensive_runs;
     sides.batting.steal_runs += offensive_runs;
     record_pitching_value(sides, pitcher_index, offensive_runs, defensive_runs)?;
-    if !actual_success { add_fielding_workload(context, sides, 1); }
+    if !actual_success { add_fielding_workload(context, sides, outs - outs_before); }
     Ok(outs)
 }
 
@@ -430,22 +495,22 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         workload.before_plate_appearance(defense, &sides.pitching.pitching, sides.pitching.runs - sides.batting.runs, context.bases.runners[1] != -1 || context.bases.runners[2] != -1);
         let steal_pitcher_index = workload.current;
         sides.pitching.pitching[steal_pitcher_index].appearances = 1;
-        if !shared.rules.singles_only && context.bases.runners[0] != -1 && context.bases.runners[1] == -1 {
-            let runner_index = context.bases.runners[0] as usize;
+        if let Some(from) = steal_from(&shared.rules, &context.bases.runners) {
+            let runner_index = context.bases.runners[from] as usize;
             let runner = offense.hitters[runner_index];
-            if streams.advancement.next() < runner.steal_attempt {
+            if streams.advancement.next() < steal_attempt(context, shared, offense, outs, from) {
                 let outs_before = outs;
                 let bases_before = bases_mask(&context.bases.runners);
                 let runs_before = sides.batting.runs;
                 let runners_before = context.bases.runners;
                 let runner_runs = runners_before.map(|id| if id >= 0 { sides.batting.batting[id as usize].r } else { 0 });
                 let success_uniform = streams.advancement.next();
-                let steal_outs = record_steal(context, shared, sides, offense, outs, runner_index, steal_pitcher_index, success_uniform)?;
+                let steal_outs = record_steal(context, shared, sides, offense, outs, from, steal_pitcher_index, success_uniform)?;
                 let outcome = if steal_outs == outs_before { MomentOutcome::StolenBase } else { MomentOutcome::CaughtStealing };
                 outs = steal_outs;
                 let pitcher = defense.pitchers[steal_pitcher_index];
                 observe!(outs_before, bases_before, runs_before, runner, pitcher, outcome, runners_before, runner_runs, false);
-                if outs == limit { break; }
+                if outs == limit || context.bases.ended { break; }
                 workload.before_plate_appearance(defense, &sides.pitching.pitching, sides.pitching.runs - sides.batting.runs, context.bases.runners[1] != -1 || context.bases.runners[2] != -1);
             }
         }
@@ -540,4 +605,44 @@ pub fn play_half(context: &mut InningContext, shared: &Shared, offense: &TeamInp
         observe!(outs_before, bases_before, runs_before, profile, active_profile, outcome, runners_before, runner_runs, event > 2);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIRST: i16 = 0;
+    const SECOND: i16 = 1;
+    const THIRD: i16 = 2;
+
+    #[test]
+    fn standard_steals_take_second_from_first_only_and_never_under_singles_only() {
+        let standard = GameRules::default();
+        assert_eq!(steal_from(&standard, &[FIRST, -1, -1]), Some(0));
+        assert_eq!(steal_from(&standard, &[FIRST, -1, THIRD]), Some(0));
+        assert_eq!(steal_from(&standard, &[-1, SECOND, -1]), None);
+        assert_eq!(steal_from(&standard, &[FIRST, SECOND, -1]), None);
+        assert_eq!(steal_from(&GameRules { singles_only: true, ..standard }, &[FIRST, -1, -1]), None);
+        // Second from first, the runner on third stays, and a caught runner costs one out.
+        assert_eq!(steal_result(&standard, 0, 0b101, 0, true), (0, 0b110, 0));
+        assert_eq!(steal_result(&standard, 1, 0b101, 0, false), (2, 0b100, 0));
+    }
+
+    #[test]
+    fn open_road_steals_lead_with_the_runner_who_has_an_open_base_and_moves_everyone() {
+        let rules = GameRules { open_road: true, ..GameRules::default() };
+        assert_eq!(steal_from(&rules, &[-1, SECOND, -1]), Some(1));
+        assert_eq!(steal_from(&rules, &[FIRST, SECOND, -1]), Some(1));
+        assert_eq!(steal_from(&rules, &[FIRST, -1, THIRD]), Some(0));
+        assert_eq!(steal_from(&rules, &[-1, SECOND, THIRD]), None);
+        assert_eq!(steal_from(&rules, &[FIRST, SECOND, THIRD]), None);
+        assert_eq!(steal_from(&rules, &[-1, -1, THIRD]), None);
+        // First and third: the steal of second scores the runner from third.
+        assert_eq!(steal_result(&rules, 0, 0b101, 0, true), (0, 0b010, 1));
+        // First and second: a double steal to second and third.
+        assert_eq!(steal_result(&rules, 1, 0b011, 1, true), (1, 0b110, 0));
+        // A caught stealing ends the half at any count, under any out rule.
+        assert_eq!(steal_result(&rules, 0, 0b011, 1, false).0, 3);
+        assert_eq!(steal_result(&GameRules { outs: 4, ..rules }, 1, 0b001, 0, false).0, 4);
+    }
 }

@@ -26,7 +26,7 @@
 
 <section class="wire" aria-labelledby="waivers-heading">
  <h3 id="waivers-heading">Waivers</h3>
- <p class="note">You claim {ordinal(place)} of {market.priority.length}. Marked cards are claimed in the order you mark them while you can afford them; unclaimed cards leave for good.</p>
+ <p class="note">You have the {ordinal(place)} claim out of {market.priority.length} clubs. Mark players you want in priority order; claims resolve when waivers close, and unclaimed players leave the league.</p>
  {#if cards.length}
   <ul>
    {#each cards as item (item.seasonId)}

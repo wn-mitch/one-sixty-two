@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verticalFold, type HostRegion, type HostRegions } from './regions.svelte.ts';
+import { edgeOcclusions, verticalFold, type HostRegion, type HostRegions } from './regions.svelte.ts';
 
 // Geometry the iPhone Duo simulator reports with the device open, in landscape and rotated to portrait.
 const fold = (overrides: Partial<HostRegion> = {}): HostRegion => ({ kind: 'division', active: false, x: 455.5, y: 0, width: 40, height: 669, margins: [0, 20, 0, 20], ...overrides });
@@ -25,5 +25,28 @@ describe('verticalFold', () => {
 	it('refuses a split that leaves either pane too narrow', () => {
 		expect(verticalFold(open([fold({ x: 300 })]))).toBeNull();
 		expect(verticalFold(open([fold({ x: 520 })]))).toBeNull();
+	});
+});
+
+// Geometry the iPhone Duo simulator reports on the closed outer display: the time and Wi-Fi block against the right edge, the camera inside it.
+const occlusion = (overrides: Partial<HostRegion> = {}): HostRegion => ({ kind: 'occlusion', active: true, x: 382, y: 0, width: 84, height: 174, margins: [0, 0, 0, 0], ...overrides });
+const outer = (regions: HostRegion[]): HostRegions => ({ width: 466, height: 644, regions });
+
+describe('edgeOcclusions', () => {
+	it('keeps the status block against the right edge and drops the camera inside it', () => {
+		const camera = occlusion({ x: 399.67, y: 29.33, width: 37, height: 37 });
+		expect(edgeOcclusions(outer([camera, occlusion()]))).toEqual([{ side: 'right', x: 382, y: 0, width: 84, height: 174, top: true }]);
+	});
+
+	it('finds a block against the left edge away from the top', () => {
+		expect(edgeOcclusions(outer([occlusion({ x: 0, y: 470 })]))).toEqual([{ side: 'left', x: 0, y: 470, width: 84, height: 174, top: false }]);
+	});
+
+	it('ignores inactive, full-height and full-width occlusions, folds, and the website', () => {
+		expect(edgeOcclusions(outer([occlusion({ active: false })]))).toEqual([]);
+		expect(edgeOcclusions(outer([occlusion({ height: 644 })]))).toEqual([]);
+		expect(edgeOcclusions(outer([occlusion({ x: 0, width: 466, height: 30 })]))).toEqual([]);
+		expect(edgeOcclusions(outer([occlusion({ kind: 'division' })]))).toEqual([]);
+		expect(edgeOcclusions(null)).toEqual([]);
 	});
 });

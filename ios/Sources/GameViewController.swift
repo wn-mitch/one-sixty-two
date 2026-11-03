@@ -13,6 +13,10 @@ final class GameViewController: UIViewController {
         self?.urlPolicy?.isAppURL(url) ?? false
     }
     private let regionBridge = ReservedRegionBridge()
+    private var leadingToSafeArea: NSLayoutConstraint?
+    private var trailingToSafeArea: NSLayoutConstraint?
+    private var leadingToEdge: NSLayoutConstraint?
+    private var trailingToEdge: NSLayoutConstraint?
 
     private let loadingView = UIView()
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
@@ -85,9 +89,14 @@ final class GameViewController: UIViewController {
         regionBridge.attach(to: webView)
 
         view.addSubview(webView)
+        let leading = webView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor)
+        let trailing = webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor)
+        leadingToSafeArea = leading
+        trailingToSafeArea = trailing
+        leadingToEdge = webView.leadingAnchor.constraint(equalTo: view.leadingAnchor)
+        trailingToEdge = webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            leading, trailing,
             webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
         ])
@@ -97,6 +106,15 @@ final class GameViewController: UIViewController {
         super.viewDidLayoutSubviews()
         // Folding, unfolding and rotating relayout the web view; the fold moves with it.
         regionBridge.update()
+        // A side inset that is only a status column runs the web view to the edge; the page keeps clear of the occlusion.
+        guard let leadingToSafeArea, let trailingToSafeArea, let leadingToEdge, let trailingToEdge else { return }
+        let sides = ReservedRegionBridge.openSides(in: view)
+        let openLeading = view.effectiveUserInterfaceLayoutDirection == .rightToLeft ? sides.right : sides.left
+        let openTrailing = view.effectiveUserInterfaceLayoutDirection == .rightToLeft ? sides.left : sides.right
+        if leadingToEdge.isActive != openLeading || trailingToEdge.isActive != openTrailing {
+            NSLayoutConstraint.deactivate([leadingToSafeArea, leadingToEdge, trailingToSafeArea, trailingToEdge])
+            NSLayoutConstraint.activate([openLeading ? leadingToEdge : leadingToSafeArea, openTrailing ? trailingToEdge : trailingToSafeArea])
+        }
     }
 
     private func configureStatusViews() {

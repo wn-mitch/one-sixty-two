@@ -1,19 +1,23 @@
 <script lang="ts">
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
+	import { POSITION_GLOSSARY, STAT_GLOSSARY } from '#lib/game/glossary.ts';
 
 	const HITTERS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
 	const PITCHERS = ['SP', 'SP', 'SP', 'CL', 'RP', 'RP', 'RP'];
+	const hitterPositions = POSITION_GLOSSARY.filter(entry => entry.group === 'hitter');
+	const pitcherPositions = POSITION_GLOSSARY.filter(entry => entry.group === 'pitcher');
 </script>
 
 <svelte:head>
 	<title>How to play | 162-0</title>
-	<meta name="description" content="Draft sixteen exact historical player seasons, then try to survive 162 games without a loss." />
+	<meta name="description" content="Open 16 packs from baseball history, draft a full team, and see if you can survive a 162-game season without a loss." />
 </svelte:head>
 
 <article class="how">
 	<header class="intro">
 		<h1>How to play</h1>
-		<p class="lede">Draft sixteen real player seasons from franchise packs, then see if your club can play all 162 games without a loss.</p>
+		<p class="lede">Open 16 packs from baseball history, draft a full 16-player team, and see if you can win all 162 games.</p>
+		<p class="sublede">New to baseball? You don’t need to know the players — the <a href="#baseball-basics">quick baseball guide below</a> explains every stat and position in plain English.</p>
 	</header>
 
 	<ol class="steps">
@@ -28,8 +32,8 @@
 					<rect class="base" x="49" y="67" width="6" height="6" transform="rotate(45 52 70)" />
 				</svg>
 			</div>
-			<h2><span class="number">1</span>Choose a home park</h2>
-			<p>Your park hosts 81 games. Elevation affects ball flight; fences and wall heights determine what clears the yard. Those conditions apply to both teams, and parks are not balanced to produce equal win totals.</p>
+			<h2><span class="number">1</span>Pick a home ballpark</h2>
+			<p>Your team plays half its games (81 of 162) here. Fence distances and altitude affect how far the ball flies for both teams — not sure which to pick? Any ballpark is fine, or tap <strong>Pick a random park</strong>.</p>
 		</li>
 
 		<li class="step">
@@ -39,9 +43,9 @@
 					<span class="pack-years">1960–1969</span>
 				</div>
 			</div>
-			<h2><span class="number">2</span>Open a pack</h2>
-			<p>Each pack is one franchise from one decade. Take one exact player season from it and put him in an open position he can play.</p>
-			<p>Two packs in every draft, and sometimes others, are jackpots: a handful of elite seasons from any franchise.</p>
+			<h2><span class="number">2</span>Open a pack and draft a player</h2>
+			<p>Tap the foil pack to reveal a real MLB team and decade, then tap the card to browse its players. Pick <strong>one player season</strong> and place them into an open spot they can play.</p>
+			<p>At least twice per draft you’ll hit a <strong>Jackpot</strong> pack: six elite seasons from any team and era.</p>
 		</li>
 
 		<li class="step">
@@ -49,8 +53,8 @@
 				<div class="pack small"><span class="pack-name">Cubs</span><span class="pack-years">1980s</span></div>
 				<div class="pack small extra"><span class="plus">+</span><span class="pack-years">2 left</span></div>
 			</div>
-			<h2><span class="number">3</span>Spend extra packs wisely</h2>
-			<p>Twice per draft you can open a second franchise before picking, then keep one of the two. They do not refill.</p>
+			<h2><span class="number">3</span>Use extra packs when stuck</h2>
+			<p>Twice per draft (three times on your first draft), you can tap <strong>Extra pack</strong> to open another team and pick between them. Extra packs don’t refill, so save them for a pack that doesn’t fit your open spots.</p>
 		</li>
 
 		<li class="step">
@@ -62,8 +66,8 @@
 					{#each PITCHERS as slot, index (index)}<span class:filled={index < 2}>{slot}</span>{/each}
 				</div>
 			</div>
-			<h2><span class="number">4</span>Fill all sixteen spots</h2>
-			<p>Nine hitters, three starters, a closer and three relievers. Where a player fits matters as much as his numbers.</p>
+			<h2><span class="number">4</span>Fill all 16 roster spots</h2>
+			<p>You need <strong>9 hitters</strong> and <strong>7 pitchers</strong> (3 starters, 1 closer, 3 relievers). You can only use each team and each player once — and you can move hitters between eligible positions on your field anytime before the season starts.</p>
 		</li>
 
 		<li class="step">
@@ -73,20 +77,75 @@
 					<span class="streak">{#each { length: 12 } as _, index (index)}<i></i>{/each}</span>
 				</div>
 			</div>
-			<h2><span class="number">5</span>Play the season</h2>
-			<p>Set your batting order, starting rotation and bullpen roles, then simulate all 162 games. Each plate appearance plays out against the opposing pitcher, with fielding, baserunning and the park shaping the result.</p>
-			<p>Afterward, inspect game scores and player stats to see where your team won or lost. The finished team stays in My teams, and its cards join your Collection.</p>
+			<h2><span class="number">5</span>Set your lineup and play 162 games</h2>
+			<p>Arrange your batting order, starting pitchers, and bullpen roles — or tap <strong>Smart all</strong> to set the best order automatically — then simulate all 162 games against the 2025 MLB clubs.</p>
+			<p>Afterward, check your grade, awards, and game-by-game results. Every finished team is saved in <strong>My teams</strong>, and its cards join your <strong>Collection</strong>.</p>
 		</li>
 
 		<li class="step">
 			<div class="art" aria-hidden="true">
 				<span class="earn"><TokenAmount amount={1} /></span>
 			</div>
-			<h2><span class="number">6</span>Earn tokens</h2>
-			<p>Each season you finish earns a token, and your first earns a bonus one. Spend them in the Shop on card finishes. Finishes never change statistics.</p>
-			<p>The daily run gives everyone the same park and first pack each day. Finish it once to earn a bonus token.</p>
+			<h2><span class="number">6</span>Earn tokens and play the daily</h2>
+			<p>Every finished season earns <strong>1 token</strong> (your first earns a bonus one). Spend tokens in the <strong>Shop</strong> to unlock foil and holo card finishes, then apply them in the <strong>Card factory</strong>. Finishes are purely cosmetic.</p>
+			<p>Try the <strong>Daily</strong> for a shared challenge: everyone gets the same ballpark and opening pack each day, and finishing it earns 2 tokens.</p>
 		</li>
 	</ol>
+
+	<section id="baseball-basics" class="basics" aria-labelledby="basics-heading">
+		<header class="basics-intro">
+			<h2 id="basics-heading">New to baseball? Quick guide</h2>
+			<p>Don’t know the stats or positions? Sort players by <strong>WAR</strong> and pick the highest <strong>WAR/162</strong> number that fits an open spot — you’ll draft a great team right away.</p>
+		</header>
+
+		<div class="basics-grid">
+			<section class="basics-panel" aria-labelledby="stats-guide-heading">
+				<h3 id="stats-guide-heading">Reading the numbers on a card</h3>
+				<ul class="stat-list">
+					{#each STAT_GLOSSARY as stat (stat.code)}
+						<li>
+							<div class="stat-head">
+								<strong>{stat.code}</strong>
+								<span class="stat-name">{stat.name}</span>
+								<span class="direction" class:lower={stat.direction === 'lower'}>
+									{stat.direction === 'higher' ? 'Higher is better' : 'Lower is better'}
+								</span>
+							</div>
+							<p>{stat.summary}</p>
+						</li>
+					{/each}
+				</ul>
+			</section>
+
+			<section class="basics-panel" aria-labelledby="positions-guide-heading">
+				<h3 id="positions-guide-heading">The 16 roster spots</h3>
+				<div class="position-groups">
+					<div>
+						<h4>Hitters (9 spots)</h4>
+						<dl>
+							{#each hitterPositions as pos (pos.code)}
+								<div>
+									<dt><strong>{pos.code}</strong> {pos.name}</dt>
+									<dd>{pos.summary}</dd>
+								</div>
+							{/each}
+						</dl>
+					</div>
+					<div>
+						<h4>Pitchers (7 spots)</h4>
+						<dl>
+							{#each pitcherPositions as pos (pos.code)}
+								<div>
+									<dt><strong>{pos.code}</strong> {pos.name}</dt>
+									<dd>{pos.summary}</dd>
+								</div>
+							{/each}
+						</dl>
+					</div>
+				</div>
+			</section>
+		</div>
+	</section>
 
 	<footer class="next">
 		<a class="button primary" href="/">Start a draft</a>
@@ -96,14 +155,17 @@
 
 <style>
 	.how { width: min(100% - 2rem, 72rem); margin: 0 auto; padding: var(--space-8) 0 var(--space-16); }
-	.intro { max-width: 40rem; padding-bottom: var(--space-8); }
+	.intro { max-width: 44rem; padding-bottom: var(--space-8); }
 	h1 { font-size: clamp(var(--text-2xl), 7vw, var(--text-score)); }
-	.lede { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-lg); line-height: 1.45; max-width: 36ch; }
+	.lede { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-lg); line-height: 1.45; max-width: 40ch; }
+	.sublede { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; max-width: 56ch; }
+	.sublede a { color: var(--accent); font-weight: 650; }
 
 	.steps { display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
 	.step { display: grid; align-content: start; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 	.step h2 { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-lg); letter-spacing: -.01em; }
-	.step p { margin: 0; color: var(--muted); max-width: 52ch; }
+	.step p { margin: 0; color: var(--muted); max-width: 52ch; line-height: 1.55; }
+	.step p strong { color: var(--text); }
 	.number { color: var(--accent); font: italic 900 var(--text-xl)/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
 
 	.art { display: flex; align-items: center; justify-content: center; gap: var(--space-3); height: 8.5rem; border-radius: var(--radius); background: var(--background); overflow: hidden; }
@@ -135,10 +197,35 @@
 
 	.earn { color: var(--accent); font: 800 var(--text-3xl)/1 'Barlow Condensed', sans-serif; }
 
+	.basics { margin-top: var(--space-12); padding-top: var(--space-8); border-top: 1px solid var(--border); display: grid; gap: var(--space-6); }
+	.basics-intro { max-width: 44rem; display: grid; gap: var(--space-2); }
+	.basics-intro h2 { margin: 0; font-size: var(--text-2xl); }
+	.basics-intro p { margin: 0; color: var(--muted); line-height: 1.55; }
+	.basics-intro p strong { color: var(--text); }
+	.basics-grid { display: grid; gap: var(--space-5); }
+	.basics-panel { display: grid; align-content: start; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+	.basics-panel h3 { margin: 0; font-size: var(--text-lg); }
+	.basics-panel h4 { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+	.stat-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+	.stat-list li { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
+	.stat-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); margin-bottom: var(--space-1); }
+	.stat-head strong { font-size: var(--text-sm); }
+	.stat-name { color: var(--muted); font-size: var(--text-xs); font-weight: 650; }
+	.direction { margin-left: auto; padding: .1rem .5rem; border-radius: 999px; background: color-mix(in oklch, var(--success) 16%, transparent); color: var(--success); font-size: var(--text-xs); font-weight: 700; }
+	.direction.lower { background: color-mix(in oklch, var(--focus) 16%, transparent); color: var(--focus); }
+	.stat-list p { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
+	.position-groups { display: grid; gap: var(--space-5); }
+	dl { display: grid; gap: var(--space-2); margin: 0; }
+	dl > div { display: grid; gap: 2px; }
+	dt { font-size: var(--text-sm); font-weight: 650; }
+	dt strong { display: inline-block; min-width: 2.25rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+	dd { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+
 	.next { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-8); }
 	.next .button { min-width: 10rem; }
 
 	@media (min-width: 40rem) { .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+	@media (min-width: 56rem) { .basics-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); } }
 	@media (min-width: 64rem) { .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 	@media (max-width: 22rem) {
 		.slots { grid-template-columns: repeat(9, 1.35rem); }

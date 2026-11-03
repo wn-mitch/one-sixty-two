@@ -71,11 +71,11 @@
 	const leaders = $derived(libraryLeaders(entries, 6));
 	const selectionHint = $derived(headToHead
 		? selected.length === 0
-			? 'Select two saved teams.'
+			? 'Pick two saved teams to play a best-of-five.'
 			: selected.length === 1
-				? '1 of 2 selected. Choose one more team.'
+				? '1 of 2 selected. Pick one more team.'
 				: '2 of 2 selected. Change or deselect either team.'
-		: 'Select a team to inspect. Ctrl- or ⌘-click to start head-to-head.');
+		: 'Select a team to inspect, or turn on Head-to-head to match two teams up.');
 	const cards = $derived.by(() => {
 		const byEntry = new Map<string, Map<string, CardViewModel>>();
 		for (const entry of entries) {

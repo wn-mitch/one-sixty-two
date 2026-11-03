@@ -61,9 +61,9 @@
 	</div>
 	{#if rankingLoading || rankingError || mediaUnavailable}
 		<p class="source-note" role="status">
-			{#if rankingLoading}Historical WAR rankings are still loading.
-			{:else if rankingError}Historical WAR rankings are unavailable; simulated results remain complete.
-			{:else}Some card media is unavailable; standard placeholders are shown.
+			{#if rankingLoading}Loading WAR rankings…
+			{:else if rankingError}WAR rankings couldn’t load, but your simulated season results are complete.
+			{:else}Some player photos couldn’t load right now.
 			{/if}
 		</p>
 	{/if}

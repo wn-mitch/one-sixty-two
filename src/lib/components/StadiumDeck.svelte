@@ -51,6 +51,16 @@
   else favorites.add(id);
   persist();
  }
+ function pickRandom(): void {
+  if (!ordered.length || busy) return;
+  const pool = ordered.length > 1 ? ordered.filter(stadium => stadium.ref.id !== selected) : ordered;
+  const choice = pool[Math.floor(Math.random() * pool.length)];
+  if (!choice) return;
+  selected = choice.ref.id;
+  void tick().then(() => {
+   deck?.querySelector<HTMLElement>('.choice.selected')?.scrollIntoView({ block: 'center', behavior: appSettings.effectiveEnabled ? 'smooth' : 'auto' });
+  });
+ }
  const chosen = $derived(ordered.find(stadium => stadium.ref.id === selected));
  let deck = $state<HTMLElement>();
  let leaving = $state(false);
@@ -75,8 +85,8 @@
 
 <section bind:this={deck} class="stadium-deck" aria-labelledby="stadium-heading" inert={leaving}>
  <h2 id="stadium-heading" tabindex="-1">Choose your home stadium</h2>
- <p class="intro muted">You play 81 of your 162 games here. Its fences and altitude change how far the ball carries, for both teams.</p>
- <GuideTip step="stadium" anchor={() => deck?.querySelector<HTMLElement>('.choice-wrap')} text="Your goal: draft a team from baseball history that wins all 162 games. Start by tapping any park to make it your home." />
+ <p class="intro muted">Your team plays half its games (81 of 162) here. Fence distances and altitude affect how far the ball carries for both teams — any park is a great place to start.</p>
+ <GuideTip step="stadium" anchor={() => deck?.querySelector<HTMLElement>('.choice-wrap')} text="Welcome to 162-0! Your goal is to draft a 16-player baseball team that wins all 162 games. Tap any ballpark below (or Pick a random park) to make it your home." />
  <div class="deck-tools">
   <label class="search"><span class="sr-only">Find a stadium by park or team</span>
    <input type="search" placeholder="Find a park or team" autocomplete="off" bind:value={query} />
@@ -85,6 +95,7 @@
    <button type="button" aria-pressed={sort === 'stadium'} onclick={() => setSort('stadium')}>Stadium</button>
    <button type="button" aria-pressed={sort === 'team'} onclick={() => setSort('team')}>Team</button>
   </div>
+  <button type="button" class="secondary random-park" disabled={busy || !ordered.length} onclick={pickRandom}>Pick a random park</button>
   <p class="muted">{favorites.size ? `${favorites.size} favorite${favorites.size === 1 ? '' : 's'} pinned first` : 'Star a park to pin it first'}</p>
  </div>
  <form onsubmit={event => { event.preventDefault(); void choose(); }}>
@@ -111,7 +122,7 @@
    </div>
   </fieldset>
   <div class="commit">
-   <p class="muted" aria-live="polite">{chosen ? chosen.name : 'No stadium selected'}</p>
+   <p class="muted" aria-live="polite">{chosen ? chosen.name : 'Pick any park above, or try a random one'}</p>
    <button class="primary" type="submit" disabled={busy || !selected}>Draft at this stadium</button>
   </div>
  </form>

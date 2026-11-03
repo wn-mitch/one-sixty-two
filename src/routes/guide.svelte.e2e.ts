@@ -65,3 +65,32 @@ test('a guided draft ends with roster and first-results callouts', async ({ page
 	await expect(callout(page)).toHaveAttribute('data-guide-step', 'results');
 	await expect(callout(page)).toContainText('162-0 is a perfect season');
 });
+
+test('newcomer helpers: How to play, random park, Baseball guide, and Replay tips work', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto('/');
+	await page.getByRole('link', { name: 'How to play', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'New to baseball? Quick guide' })).toBeVisible();
+	await expect(page.locator('#baseball-basics').getByText('Lower is better')).toBeVisible();
+
+	await page.goto('/classic?new=1');
+	await expect(page.getByRole('button', { name: 'Draft at this stadium', exact: true })).toBeDisabled();
+	await page.getByRole('button', { name: 'Pick a random park', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Draft at this stadium', exact: true })).toBeEnabled();
+	await page.getByRole('button', { name: 'Draft at this stadium', exact: true }).click();
+
+	await page.getByRole('button', { name: 'Baseball guide', exact: true }).click();
+	const guideDialog = page.getByRole('dialog', { name: 'Baseball & card guide' });
+	await expect(guideDialog).toBeVisible();
+	await expect(guideDialog.getByText('DH Designated hitter')).toBeVisible();
+	await expect(guideDialog.getByText('Lower is better')).toBeVisible();
+	await guideDialog.getByRole('button', { name: 'Back to game', exact: true }).click();
+	await expect(guideDialog).toBeHidden();
+
+	await callout(page).getByRole('button', { name: 'Skip guidance', exact: true }).click();
+	await expect(callout(page)).toHaveCount(0);
+	await page.getByRole('button', { name: 'Menu', exact: true }).click();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await page.getByRole('button', { name: 'Replay tips', exact: true }).click();
+	await expect(callout(page)).toHaveAttribute('data-guide-step', 'pack');
+});

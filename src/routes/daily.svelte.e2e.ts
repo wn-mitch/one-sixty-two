@@ -52,8 +52,18 @@ test('a first visit leads with drafting a team; the daily skips the stadium choi
  expect(playTop!.y).toBeLessThan(panelTop!.y);
  await expectAboveFold(page, [panel.getByRole('button', { name: 'Play today’s daily', exact: true }), playNow]);
  await panel.getByRole('button', { name: 'Play today’s daily', exact: true }).click();
+ // First daily on a device with no saved nickname asks for a leaderboard nickname before starting.
+ const nicknamePrompt = page.getByRole('dialog', { name: 'Pick a leaderboard nickname' });
+ await expect(nicknamePrompt).toBeVisible();
+ await nicknamePrompt.getByLabel('Leaderboard nickname').fill('Ab');
+ await nicknamePrompt.getByRole('button', { name: 'Save & play daily', exact: true }).click();
+ await expect(nicknamePrompt.getByRole('alert')).toContainText('3 to 20 characters');
+ await nicknamePrompt.getByLabel('Leaderboard nickname').fill('Leadoff Kid');
+ await nicknamePrompt.getByRole('button', { name: 'Save & play daily', exact: true }).click();
+ await expect(nicknamePrompt).toBeHidden();
  await expect(page).toHaveURL(/\/daily$/);
  await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeFocused();
+ expect(await deviceRows(page, 'SELECT board_name FROM device_profile')).toEqual([{ board_name: 'Leadoff Kid' }]);
  await openPack(page);
 
  const [run] = await deviceRows(page, 'SELECT json, season_key FROM daily_runs WHERE date = ?', [date]);

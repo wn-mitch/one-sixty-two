@@ -5,6 +5,7 @@
  import { page } from '$app/state';
  import Welcome from '#lib/components/Welcome.svelte';
  import ConfirmNewDraft from '#lib/components/ConfirmNewDraft.svelte';
+ import DailyNamePrompt from '#lib/components/DailyNamePrompt.svelte';
  import ErrorDialog from '#lib/components/ErrorDialog.svelte';
  import DraftSkeleton from '#lib/components/skeletons/DraftSkeleton.svelte';
  import LineupSkeleton from '#lib/components/skeletons/LineupSkeleton.svelte';
@@ -101,7 +102,7 @@
   const current = session;
   const path = page.url.pathname;
   if ((path !== '/classic' && path !== '/daily') || !current || current.phase !== 'start') return;
-  if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew) return;
+  if (!current.manifest || current.loading || current.error || current.incompatible || current.confirmNew || current.promptDailyName) return;
   untrack(() => {
    const daily = current.daily?.run;
    const dailyReady = daily?.kind === 'active' || (daily?.kind === 'complete' && !!daily.draft) || (daily?.kind === 'unplayed' && page.url.searchParams.get('play') === '1');
@@ -302,6 +303,7 @@
     {/snippet}
    </ErrorDialog>
    <ConfirmNewDraft open={currentSession.confirmNew} onKeep={() => currentSession.confirmNew = false} onDiscard={() => void currentSession.startNew()} />
+   <DailyNamePrompt open={currentSession.promptDailyName} busy={currentSession.loading} onSave={name => currentSession.confirmDailyName(name)} onAnonymous={() => currentSession.playDailyAnonymous()} onCancel={() => currentSession.cancelDailyName()} />
   </div>
 
   {#if currentSession.phase === 'start'}
@@ -324,7 +326,7 @@
       onNew={() => currentSession.requestNew()} />
     {:else if !phaseLoadError}<DraftSkeleton pool={currentSession.phase === 'choosing' && currentSession.draft.packs.length <= 1} />{/if}
    {:else if currentSession.phase === 'lineup'}
-    <GuideTip step="roster" anchor={() => document.querySelector<HTMLElement>('.lineup .simulate button.primary')} text="Your team is complete. Adjust the batting order and bullpen roles if you like, then play all 162 games." />
+    <GuideTip step="roster" anchor={() => document.querySelector<HTMLElement>('.lineup .simulate button.primary')} text="Your 16-player roster is set! You can tweak the batting order and bullpen roles — or tap Smart all at the top to optimize them automatically — then play all 162 games." />
     {#if Lineup}
      <Lineup lineup={classicLineupView(currentSession.draft, currentSession.manifest, currentSession.profiles)} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} busy={currentSession.busy} onMove={(id, slot) => currentSession.reassign(id, slot as HitterSlot)} onOrder={(kind, order) => currentSession.order(kind, order)} onRoles={reliefRoles => currentSession.roles(reliefRoles as ReliefAssignment[])} onsimulate={() => void currentSession.simulate()} />
     {:else if !phaseLoadError}<LineupSkeleton />{/if}
@@ -333,7 +335,7 @@
      <Progress count={currentSession.result ? currentSession.revealed : currentSession.completed} games={currentSession.result?.games ?? null} seed={currentSession.result?.seed ?? 0} revealed={currentSession.result ? currentSession.revealed : 0} revealing={!!currentSession.result} onskip={() => currentSession.skip()} />
     {:else if !phaseLoadError}<ProgressSkeleton />{/if}
    {:else if currentSession.phase === 'results' && currentSession.result}
-    {#if !currentSession.shared}<GuideTip step="results" anchor={() => document.querySelector<HTMLElement>('.scoreboard .record-block')} text="Your season's record: 162-0 is a perfect season. Season grades this record, Draft shows how many wins your team was built for, and the difference is luck. Every finished season earns a token for the Shop." />{/if}
+    {#if !currentSession.shared}<GuideTip step="results" anchor={() => document.querySelector<HTMLElement>('.scoreboard .record-block')} text="Here’s your final record — 162-0 is a perfect season. Season grades your actual wins, Draft shows how many wins your roster was built for, and the gap is luck. Every finished season earns a token for the Shop." />{/if}
     {#if Results}
      <Results result={currentSession.result} draft={currentSession.draft} profiles={currentSession.profiles} manifest={currentSession.manifest} {rankings} {rankingLoading} {rankingError} onNew={() => currentSession.requestNew()} onShare={(action, format, model) => void currentSession.share(action, format, model)} publication={currentSession.publication} sharing={currentSession.sharing} shareStatus={currentSession.shareStatus} challenge={currentSession.challenge} newStickers={currentSession.newStickers} newCards={currentSession.newCards} reward={currentSession.reward} ownSeason={!currentSession.shared} dailyStandings={currentSession.dailyStandings} stadiumStandings={currentSession.stadiumStandings} onDailyName={(name) => currentSession.nameDaily(currentSession.draft!.daily!, name)} />
     {:else if !phaseLoadError}<ResultsSkeleton />{/if}

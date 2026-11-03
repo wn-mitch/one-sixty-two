@@ -1,10 +1,11 @@
 <script lang="ts" module>
- export interface BrowseOption { value: string; label?: string; count?: number }
+ export interface BrowseOption { value: string; label?: string; title?: string; count?: number }
 </script>
 
 <script lang="ts">
  import type { Snippet } from 'svelte';
  import { MediaQuery } from 'svelte/reactivity';
+ import InfoTooltip from './InfoTooltip.svelte';
 
  /**
   * The card-browsing layout every card list shares: search, a sort switch and filter chips with
@@ -23,6 +24,7 @@
   onSearch,
   sorts = [],
   sort = '',
+  sortHelp = '',
   descending,
   onSort,
   filters = [],
@@ -51,6 +53,8 @@
   onSearch?: () => void;
   sorts?: readonly BrowseOption[];
   sort?: string;
+  /** Optional plain-English help tooltip beside the Sort label. */
+  sortHelp?: string;
   /** When set, the active sort shows its direction and choosing it again asks to reverse. */
   descending?: boolean;
   onSort?: (value: string) => void;
@@ -106,7 +110,10 @@
   </div>
   {:else}
   <div class="sort-row" class:many={sorts.length > 4} role="group" aria-labelledby="{uid}-sort-label">
-   <span id="{uid}-sort-label" class="sort-label">Sort by</span>
+   <span class="sort-head">
+    <span id="{uid}-sort-label" class="sort-label">Sort by</span>
+    {#if sortHelp}<InfoTooltip label="sorting" text={sortHelp} />{/if}
+   </span>
    <span class="sort-options" class:stacked={sorts.length > 2}>
     {#each sorts as option (option.value)}
      {@const active = sort === option.value}
@@ -127,7 +134,7 @@
      <legend>{filterLegend}</legend>
      <div class="filter-options" role="group" aria-label={filterLegend}>
       {#each filters as option (option.value)}
-       <button type="button" class="quiet filter" aria-pressed={filter === option.value} aria-label={option.label ?? option.value} onclick={() => { if (filter !== option.value) onFilter?.(option.value); }}>
+       <button type="button" class="quiet filter" aria-pressed={filter === option.value} aria-label={option.label ?? option.value} title={option.title} onclick={() => { if (filter !== option.value) onFilter?.(option.value); }}>
         <span>{option.label ?? option.value}</span>{#if option.count !== undefined}<span class="filter-count">{option.count}</span>{/if}
        </button>
       {/each}
@@ -170,6 +177,7 @@
  .search-field input::-webkit-search-cancel-button { display: none; }
  .clear-search { position: absolute; top: 50%; right: 2px; translate: 0 -50%; width: 2.75rem; padding: 0; color: var(--muted); font-size: 1.4rem; line-height: 1; }
  .sort-row { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); font-size: var(--text-sm); }
+ .sort-head { display: inline-flex; align-items: center; gap: var(--space-1); }
  .sort-label { color: var(--muted); font-weight: 650; white-space: nowrap; }
  .sort-options { display: flex; flex: 1; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
  .sort-options button { flex: 1; min-height: 2.5rem; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--muted); font-size: var(--text-base); }

@@ -75,9 +75,9 @@
 
 <main class="challenge">
 	{#if data.record}
-		<p class="eyebrow">You've been challenged</p>
+		<p class="eyebrow">You’ve been challenged</p>
 		<h1>Beat {data.record.wins}–{data.record.losses}</h1>
-		<p class="lede muted">{data.daily ? 'They played the daily. Draft today’s daily and play its 162 games.' : 'Draft your own club from baseball history and play its 162 games.'} Then take this club on in a best-of-five.</p>
+		<p class="lede muted">{data.daily ? 'They played today’s daily. Open 16 packs to draft your own team and play the same 162-game schedule.' : 'Open 16 packs from baseball history to draft your own team and play a 162-game season.'} Then face off in a best-of-five series.</p>
 		{#if data.poster}<img src={data.poster.url} width={data.poster.width} height={data.poster.height} alt={data.poster.alt} />{/if}
 		<div class="actions">
 			{#if data.daily}

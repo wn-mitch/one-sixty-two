@@ -123,7 +123,7 @@
    <div><dt>Bank</dt><dd>{cash}</dd></div>
   </dl>
   {#if pack}<p class="note"><strong>{pack.name}.</strong> {pack.summary}</p>{/if}
-  <p class="note">Every win pays, more the wider the margin. Win more than your fans expect and the stands fill, the gate grows and the home crowd leans the strike zone your way. Disappoint them and it turns.</p>
+  <p class="note">Every win earns cash, and bigger margins pay more. Beat your fans’ expectations to fill the stands, grow gate income, and get a friendlier home strike zone — disappoint them and the crowd turns.</p>
  </section>
 
  <Standings rows={table} {human} {rival} {clubName} />

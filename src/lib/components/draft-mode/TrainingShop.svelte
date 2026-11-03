@@ -76,13 +76,13 @@
    </button>
   {/each}
  </div>
- <p class="detail">{TRAININGS[chosen].detail}. One training per player per stop.</p>
+ <p class="detail">{TRAININGS[chosen].detail}. Each player can take one training per stop.</p>
  {#if !steady(chosen)}
-  <label class="intensive"><input type="checkbox" bind:checked={intensive} onchange={() => { notice = ''; }} /> Intensive: gains half as much again, with the risk shown of an injury for games {first}–{last}</label>
+  <label class="intensive"><input type="checkbox" bind:checked={intensive} onchange={() => { notice = ''; }} /> Intensive: 50% bigger boost, with an injury risk for games {first}–{last}</label>
  {/if}
  {#if hurtNotice}<p class="hurt" role="status">{hurtNotice}</p>{/if}
- {#if chosen === 'fielding' || chosen === 'crossTraining'}<p class="detail">Glove: 50 is a median fielder at the position, 100 elite.</p>{/if}
- {#if chosen === 'crossTraining'}<p class="detail">A learned position fields 15 below his best glove that leads there (30 moving up to short or center) and shows with a + on his card.</p>{/if}
+ {#if chosen === 'fielding' || chosen === 'crossTraining'}<p class="detail">Fielding scale: 50 is average for the position, 100 is elite.</p>{/if}
+ {#if chosen === 'crossTraining'}<p class="detail">A newly learned position plays 15 glove points below the player’s best related position (30 when moving up to shortstop or center field) and shows a + on their card.</p>{/if}
  {#if notice}<p class="notice" role="status">{notice}</p>{/if}
  {#if rows.length}
   <ul aria-label={`${TRAININGS[chosen].name} for your players`}>

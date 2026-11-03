@@ -7,6 +7,7 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import SiteMenu from '#lib/components/SiteMenu.svelte';
 	import { showsExternalSupport, SUPPORT_URL } from '#lib/app/host.ts';
+	import { hostEdgeOcclusions } from '#lib/app/regions.svelte.ts';
 	import Toaster from '#lib/components/Toaster.svelte';
 	import TokenAmount from '#lib/components/TokenAmount.svelte';
 	import { refreshStickers } from '#lib/collection/store.svelte.ts';
@@ -38,6 +39,17 @@
 	})));
 	// Roster links (/r, /c) and shared Draft seasons (/d) set their own preview from their published image.
 	const rosterLink = $derived(/^\/(r|c|d)\//.test(page.url.pathname));
+	// In the iOS app the page runs under a status column (iPhone Duo outer display); its time and Wi-Fi block
+	// gets a backdrop, and top bars clear it through --clear-top-left and --clear-top-right.
+	const occlusions = $derived(hostEdgeOcclusions.current);
+	$effect(() => {
+		const root = document.documentElement.style;
+		for (const side of ['left', 'right'] as const) {
+			const block = occlusions.find(occlusion => occlusion.side === side && occlusion.top);
+			if (block) root.setProperty(`--clear-top-${side}`, `${block.width}px`);
+			else root.removeProperty(`--clear-top-${side}`);
+		}
+	});
 	let FeedbackTools = $state<typeof import('#lib/dev/FeedbackTools.svelte').default | null>(null);
 
 	onMount(() => {
@@ -149,6 +161,9 @@
 	</footer>
 </div>
 <Toaster />
+{#each occlusions as occlusion (`${occlusion.side}:${occlusion.y}`)}
+	<div class="status-backdrop {occlusion.side}" class:top={occlusion.top} aria-hidden="true" style:left="{occlusion.x}px" style:top="{occlusion.y}px" style:width="{occlusion.width}px" style:height="{occlusion.height}px"></div>
+{/each}
 <LoadingCards active={changingPage || pendingScreens.size > 0} label={loadingLabel} />
 
 {#if FeedbackTools}
@@ -187,6 +202,7 @@
 		column-gap: var(--space-4);
 		row-gap: 0;
 		border-bottom: 1px solid var(--border);
+		padding-inline: var(--clear-top-left, 0px) var(--clear-top-right, 0px);
 	}
 	.site-header > a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: var(--text-sm); }
 	.wordmark { flex: none; color: var(--text); text-decoration: none; font-size: var(--text-xl) !important; font-weight: 850; letter-spacing: -.04em; gap: var(--space-3); }
@@ -220,6 +236,18 @@
 	/* Home deals cards behind the header: no rule cutting across them, and a fade keeps the links legible. */
 	.site:has(:global(main.home-start)) .site-header { border-bottom-color: transparent; }
 	.site:has(:global(main.home-start)) .site-header::before { content: ''; position: absolute; z-index: -1; inset: 0 calc(-1 * max(var(--space-4), env(safe-area-inset-left))) -2.5rem; background: linear-gradient(var(--background) 55%, transparent); pointer-events: none; }
+	/* Content scrolls under the host's status block; the backdrop keeps the time and Wi-Fi legible over it. */
+	.status-backdrop {
+		position: fixed;
+		z-index: 35;
+		pointer-events: none;
+		background: color-mix(in srgb, var(--background) 72%, transparent);
+		-webkit-backdrop-filter: blur(12px);
+		backdrop-filter: blur(12px);
+	}
+	/* Round the corner that faces into the page. */
+	.status-backdrop.right.top { border-bottom-left-radius: var(--radius-lg); }
+	.status-backdrop.left.top { border-bottom-right-radius: var(--radius-lg); }
 	footer {
 		position: relative;
 		z-index: 2;

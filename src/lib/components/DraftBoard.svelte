@@ -20,6 +20,7 @@
  import FoilPack from './FoilPack.svelte';
  import SiteMenu from './SiteMenu.svelte';
  import GuideTip from './GuideTip.svelte';
+ import BaseballGuide from './BaseballGuide.svelte';
  import TokenAmount from './TokenAmount.svelte';
  import { boardWide } from './skeletons/board.ts';
  import { hostFold } from '../app/regions.svelte.ts';
@@ -187,12 +188,13 @@
  const pitcherOnly = $derived(destinations.length > 0 && destinations.every(slot => !HITTER_SLOTS.includes(slot as HitterSlot)));
  /** Explain only a missing destination; the chosen card and slot already identify a valid pick. */
  const placementGuide = $derived(!selectedProfile ? '' : !places.length
-  ? `No open spot fits ${selectedName}. Move a hitter to make room, or cancel.`
-  : !pendingSlot ? `Choose ${pitcherOnly && !benchLegal ? 'a pitching slot' : benchLegal ? 'a highlighted position or the bench' : 'a highlighted position'} for ${selectedName}.`
+  ? `No open spot fits ${selectedName}. Move a hitter on your field to make room, or cancel.`
+  : !pendingSlot ? `Tap ${pitcherOnly && !benchLegal ? 'a highlighted pitching spot' : benchLegal ? 'a highlighted spot or the bench' : 'a highlighted spot on the field'} for ${selectedName}, then Draft.`
   : '');
  const extraLeft = $derived(draft ? extraPacksLeft(draft) : 0);
  let draftMenuOpen = $state(false);
  let draftMenuTrigger = $state<HTMLButtonElement>();
+ let baseballGuide = $state<ReturnType<typeof BaseballGuide>>();
  const canConfirm = $derived(phase === 'choosing' && !busy && !leaving && !movingSeasonId && !!selectedProfile && !!pendingSlot && places.includes(pendingSlot));
 
  function clearTransient(): void {
@@ -809,6 +811,7 @@
    {#if (roll && !(dealing && !dealtArrived)) || (pile && phase === 'choosing')}<p class="eyebrow header-pick">Pick {source.pickNumber} of {pickTotal}</p>{/if}
    </div>
    <div class="header-actions">
+   <BaseballGuide compact />
    <a class="shop-link" href="/shop" aria-label={shopState.snapshot ? `Shop, ${shopState.snapshot.balance} ${shopState.snapshot.balance === 1 ? 'token' : 'tokens'}` : 'Shop'}>
     <span>Shop</span><span class="shop-balance" aria-hidden="true"><TokenAmount amount={shopState.snapshot?.balance ?? null} /></span>
    </a>
@@ -832,27 +835,29 @@
      <span class="sr-only">Draft options</span>
     </button>
     <div class="draft-menu-panel" id="{uid}-draft-menu" hidden={!draftMenuOpen}>
+     <button type="button" onclick={() => { draftMenuOpen = false; baseballGuide?.open(draftMenuTrigger); }}>Baseball guide</button>
      <button type="button" disabled={loading} onclick={() => { draftMenuOpen = false; draftMenuTrigger?.focus({ preventScroll: true }); onNew(); }}>New draft…</button>
      <a href="/how-to-play">How to play</a>
     </div>
    </div>
+   <BaseballGuide bind:this={baseballGuide} showTrigger={false} />
   {/if}
  </div>
  <div class="board-columns">
   <section class="draft-browser" aria-label="Make your next pick" inert={leaving}>
    {#if classic && draft && draft.picks.length === 0 && (phase === 'ready' || dealing)}
-    <GuideTip step="pack" anchor={() => visible('.foil-pack')} text={`You make ${pickTotal} picks to fill your team. Each pack is one franchise from one decade: tap it to open.`} />
+    <GuideTip step="pack" anchor={() => visible('.foil-pack')} text={`You’ll open ${pickTotal} packs to build your team. Each pack gives you one MLB team from one decade — tap the pack to open it, then tap the card to see its players.`} />
    {:else if classic && draft && showingCandidates && draft.picks.length === 0}
-    <GuideTip step="card" anchor={() => visible('.candidate-card')} text="Each card is one real player season. WAR/162 is how many wins that season adds over a full year: higher is better." />
+    <GuideTip step="card" anchor={() => visible('.candidate-card')} text="Each card is one real player’s season. New to baseball stats? Look at WAR/162 — higher means a better season." />
     <GuideTip step="slots" anchor={() => visible(cardsWide ? '.candidate-card .placement:enabled' : '.candidate-card .compact-qualification')} text={cardsWide
-     ? 'The buttons under each card are the empty spots on your team that season can fill. Choose one, then Draft.'
-     : '“Open” lists the empty spots on your team this player can fill. Tap a card, then a highlighted spot, to draft that season.'} />
+     ? 'The buttons under each card are the open spots that player can fill on your team. Click a position, then click Draft.'
+     : '“Open” shows which empty spots this player can fill. Tap a card, pick a highlighted spot on your field, then tap Draft.'} />
    {:else if classic && draft && showingCandidates && draft.picks.length >= 1}
-    <GuideTip step="field" anchor={() => visible(wide ? '.field-panel .panel-header' : '.open-field')} text="Your field: 9 hitters including a DH, 3 starting pitchers and 4 relievers. Every pick fills one spot." />
+    <GuideTip step="field" anchor={() => visible(wide ? '.field-panel .panel-header' : '.open-field')} text="Your field holds 16 players: 9 hitters (including a Designated Hitter, DH, who bats only), 3 starting pitchers (SP), a closer (CL), and 3 relief pitchers (RP)." />
     {#if extraLeft > 0}
      <GuideTip step="extra" anchor={() => visible('.reroll')} text={draft.bonusPack && extraLeft === extraPackAllowance(draft)
-      ? `Here's a free bonus pack. Tap Extra pack to add another franchise to choose from before you pick. Every draft gets ${extraLeft - 1}; your first gets ${extraLeft}.`
-      : `Extra pack adds another franchise to choose from before you pick. You have ${extraLeft} for the whole draft and they don't refill, so save them for a pack that doesn't fit.`} />
+      ? `You have a free bonus pack! Tap Extra pack to open another team and choose between them before picking. Every draft gets ${extraLeft - 1}; your first gets ${extraLeft}.`
+      : `Extra pack opens another team to choose from before you pick. You have ${extraLeft} left for this draft and they don’t refill, so save them for a tough pack.`} />
     {/if}
     <GuideTip step="free" anchor={() => visible('a.shop-link')} text={`Everything in 162-0 is free, with no ads. Extra packs can't be bought: ${draft.bonusPack ? 'after this first draft, ' : ''}every draft gets ${draftRules(draft.schemaVersion).extraPacks}. Tokens come from finishing seasons and only change how your cards look in the Shop.`} extra={freeExtra} />
    {/if}
@@ -896,7 +901,7 @@
  .draft-board, .draft-browser { min-width: 0; }
  /* Holds the fading copy of the pool when a pack is added; the foil pack shows above it. */
  .draft-browser { position: relative; }
- .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; }
+ .draft-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 5; background: var(--background); padding-block: .5rem; padding-inline: var(--clear-top-left, 0px) var(--clear-top-right, 0px); }
  .open-field { flex: none; display: flex; align-items: center; gap: .5rem; min-height: 3rem; padding-inline: .75rem; white-space: nowrap; }
  .field-count { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
  .reroll { flex: none; display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; padding-inline: .75rem; font-size: .875rem; }

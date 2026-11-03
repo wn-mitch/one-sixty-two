@@ -74,7 +74,16 @@ Further candidates: **lowering the mound**; **legalized steroids**; **random sta
 
 The opening decree is **revealed before drafting**. Later decrees are **announced at chapter checkpoints before spending and roster decisions**. The full future decree calendar is hidden. Each decree is drawn by the run seed from the decrees the engine supports, never repeating within a run. The whole season's schedule is visible from the start. Opposing GMs only respond to information they could legitimately know.
 
-The selected twenty-item catalog below is **accepted for continued design**, not a set of twenty completely specified rules. Both batter's-box candidates remain in scope. The draw currently uses the eight decrees marked *implemented*; the others join it once their rules are complete and the engine supports them.
+Decrees should expose a specific weakness in a roster and create a reason to adapt at the market stop. A dramatic rule with a clear counter and a paired risk and reward are both valid. Some decrees can make a favorite player a poor fit for a chapter; others can create an opportunity for a bench or market player. Keeping the existing roster should remain a meaningful choice when a swap costs future value or cap room.
+
+Candidates for this roster-puzzle direction include the existing **No Free Passes** (patience versus pitching control) and **Singles Appreciation Night** (contact and on-base ability versus power), plus:
+
+- **The Open Road:** *Implemented.* The lead runner with an open base ahead may steal it (third from second before second from first). A successful steal advances every runner one base, so a runner on third scores; a caught stealing ends the half inning and no run scores. A runner attempts only when his success chance against the catcher beats the run-expectancy break-even for that state, and then at twice his card's attempt rate (provisional), so speed pays against weak arms and a strong catcher shuts the running game down.
+- **The Fly-Ball Tax:** A caught outfield fly advances every runner one base unless it is the final out. This is the implemented **Everybody Tags** rule, considered here as a roster puzzle around fly-ball tendencies and ground-ball pitching. Whether those tendencies are visible and actionable needs verification.
+
+The Fly-Ball Tax remains a design candidate, not a change to the active draw. Test whether the relevant player traits are visible and materially affect results before choosing or tuning a decree.
+
+The selected twenty-item catalog below is **accepted for continued design**, not a set of twenty completely specified rules. Both batter's-box candidates remain in scope. The draw currently uses the nine decrees marked *implemented*; the others join it once their rules are complete and the engine supports them.
 
 | # | Decree | Candidate rule / unresolved semantics |
 |---|---|---|

@@ -47,7 +47,7 @@
 <div class="window-panel">
  <DecreeMemo {decree} label={run.chapter ? `Chapter ${run.chapter + 1} decree` : 'Opening decree'} />
  <div class="status">
-  <p>{clubName(human)} · {owned.length} of {size} cards · {step === 'market' ? 'trade, and cut to waivers or claim from them, then close waivers' : 'place, cut and take cleanup commons, then submit a legal roster'}</p>
+  <p>{clubName(human)} · {owned.length} of {size} cards · {step === 'market' ? 'make trades, cut players, or claim from waivers, then close waivers to continue' : 'fill any open spots under the salary cap (or tap Auto-fix), then submit your roster'}</p>
   <CapBar {payroll} cap={effectiveCap(run.budgets[human])} />
   {#if step === 'cleanup'}<button type="button" class="secondary" disabled={working} onclick={onAutofix}>Auto-fix</button>{/if}
  </div>
@@ -58,7 +58,7 @@
  {:else}
  <section aria-labelledby="cleanup-heading">
   <h3 id="cleanup-heading">Cleanup commons</h3>
-  <p class="note">Each stack shows its top card. Commons cost at most {money(run.pool.rules.commonSalaryMax)}.{#if full}{' '}Your roster is full; cut a card to take another.{/if}</p>
+  <p class="note">Need to fill an open spot or get under the cap? Take affordable players from these stacks (at most {money(run.pool.rules.commonSalaryMax)} each).{#if full}{' '}Your roster is full — cut a card first to take another.{/if}</p>
   <div class="stacks">
    {#each tops as { role, card } (role)}
     <div class="stack">

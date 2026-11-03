@@ -2,7 +2,7 @@
 	/** Modal confirmation before a new draft replaces the saved run. Escape, the backdrop, and Keep draft all keep it. */
 	let {
 		open, onKeep, onDiscard,
-		message = 'Your picks are permanent. Starting a new draft replaces this saved run with a new seed.'
+		message = 'Starting a new draft will discard your current picks and deal a fresh set of packs.'
 	}: { open: boolean; onKeep: () => void; onDiscard: () => void; message?: string } = $props();
 	let dialog = $state<HTMLDialogElement>();
 	let keep = $state<HTMLButtonElement>();

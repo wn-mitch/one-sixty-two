@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { appSettings, PLAYBACK_SPEEDS } from '#lib/game/settings.svelte.ts';
+	import { guide } from '#lib/game/guide.svelte.ts';
 	import { deviceTilt, type DeviceTiltState } from '#lib/cards/device-tilt.ts';
+	import { toasts } from '#lib/toast.svelte.ts';
 	import BoardNameSetting from './BoardNameSetting.svelte';
 
 	let { showTrigger = true }: { showTrigger?: boolean } = $props();
@@ -231,7 +233,7 @@
 				<div class="setting-row">
 					<div class="setting-copy">
 						<label for={blockedId}>Blocked players</label>
-						<p>Also list players with no open position, so you can pick one and rearrange your field. On phones, they appear after players who can be placed.</p>
+						<p>Also show players whose positions are already full, so you can rearrange your field to make room.</p>
 					</div>
 					<button
 						id={blockedId}
@@ -246,11 +248,31 @@
 				</div>
 
 				<div class="setting-group">
-					<p id={rosterLabelId} class="setting-label">Roster first click</p>
+					<div class="setting-copy">
+						<p id={rosterLabelId} class="setting-label">Roster first click</p>
+						<p>Choose what happens when you tap a drafted hitter on your field: move them to another spot, or flip open their full card.</p>
+					</div>
 					<div class="choice-buttons" role="group" aria-labelledby={rosterLabelId}>
 						<button type="button" aria-pressed={appSettings.rosterFirstClick === 'move'} disabled={!ready} onclick={() => appSettings.setRosterFirstClick('move')}>Move first</button>
 						<button type="button" aria-pressed={appSettings.rosterFirstClick === 'review'} disabled={!ready} onclick={() => appSettings.setRosterFirstClick('review')}>Review first</button>
 					</div>
+				</div>
+
+				<div class="setting-row">
+					<div class="setting-copy">
+						<p class="setting-label">First-season tips</p>
+						<p>Show the step-by-step draft walkthrough again.</p>
+					</div>
+					<button
+						type="button"
+						class="secondary"
+						disabled={!ready}
+						onclick={() => {
+							guide.reset();
+							toasts.show('First-season tips are back on.', { id: 'guide' });
+							closeSettings();
+						}}
+					>Replay tips</button>
 				</div>
 			</div>
 

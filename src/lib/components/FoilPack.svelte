@@ -7,6 +7,7 @@
 	import SealedPack from './SealedPack.svelte';
 	import { STOCK, roles } from '../cards/tokens.ts';
 	import { appSettings } from '../game/settings.svelte.ts';
+	import { guide } from '../game/guide.svelte.ts';
 	import { EASE_IN_OUT, EASE_OUT, MOTION } from '../motion-timing.ts';
 	import { isJackpot, type Roll } from '../game/types.ts';
 	import { rollKey } from '../game/draft.ts';
@@ -114,11 +115,13 @@
 	});
 	/** Half the dealt cards' laid-out width, so the row centers on them. */
 	const anchor = $derived((planned * layout.size * LIFT - (LIFT - 1) * layout.size + Math.max(0, planned - 1) * GAP) / 2);
-	/** The caption names what to tap only after the player hesitates, so the pack and card teach themselves. */
+	/** Show the tap caption right away on pick 1 or during the guided first run; later picks wait so the pack stays quiet. */
 	let hinting = $state(false);
+	const immediateHint = $derived(pickNumber === 1 || guide.active);
 	$effect(() => {
 		if (stage !== 'sealed' && stage !== 'dealt') return;
 		void shown.length;
+		if (immediateHint) { hinting = true; return; }
 		hinting = false;
 		const timer = setTimeout(() => hinting = true, MOTION.tapHint);
 		return () => clearTimeout(timer);
@@ -466,7 +469,7 @@
 				<span class="pack-count">Pick {pickNumber} of {pickCount}</span>
 		</SealedPack>
 	</div>
-	<p class="caption" class:hidden={!hinting} aria-hidden="true">{stage === 'sealed' ? 'Tap the pack' : shown.length > 1 ? 'Take one pack' : 'Take the card'}</p>
+	<p class="caption" class:hidden={!hinting} aria-hidden="true">{stage === 'sealed' ? 'Tap the pack to open' : shown.length > 1 ? 'Tap a pack to keep it' : 'Tap the card to see its players'}</p>
 </div>
 
 <style>

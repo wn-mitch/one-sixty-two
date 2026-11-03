@@ -161,10 +161,10 @@
 		const next = { ...coverPreferences, [stack.key]: seasonId };
 		coverPreferences = next;
 		if (!saveStackCoverPreferences(next)) {
-			preferenceStatus = 'Cover choice is active for this visit, but browser storage is unavailable, so it will not survive reload.';
+			preferenceStatus = 'Cover updated for this visit, but your browser blocked saving it for next time.';
 			toasts.show(preferenceStatus, { id: 'collection-cover', tone: 'error' });
 		} else {
-			preferenceStatus = 'Cover choice saved on this device.';
+			preferenceStatus = 'Cover saved on this device.';
 		}
 	}
 
@@ -182,7 +182,7 @@
 {#if !cards.length}
 	<section class="empty">
 		<h2>No cards yet</h2>
-		<p class="muted">Finish a season and every card on that roster joins your collection on this device, with the stickers its season earned.</p>
+		<p class="muted">Finish a 162-game season and every player you drafted joins your collection here, along with any stickers they earned.</p>
 		<a class="button primary" href="/?build=1">Build my team</a>
 	</section>
 {:else}

@@ -143,7 +143,7 @@
 
 <style>
 	.page { display: grid; gap: var(--space-3); width: min(100%, 84rem); padding-block: var(--space-4); }
-	.intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+	.intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding-right: var(--clear-top-right, 0px); }
 	h1 { margin: 0; font-size: var(--text-2xl); letter-spacing: -.03em; }
 	.card-count { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 	.factory-link { margin-left: auto; align-self: center; }

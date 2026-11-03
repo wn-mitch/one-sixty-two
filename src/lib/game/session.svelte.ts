@@ -6,7 +6,7 @@ import { newCards, newStickers, type NewCard, type NewSticker } from '../collect
 import { refreshStickers } from '../collection/store.svelte.ts';
 import { refreshShop } from '../cosmetics/store.svelte.ts';
 import { grantedReward, type SeasonReward } from '../cosmetics/ledger.ts';
-import { loadDailyStandings, type DailyStandingsView } from './standings.ts';
+import { loadDailyStandings, saveBoardName, savedBoardName, type DailyStandingsView } from './standings.ts';
 import { submitStadiumRun, type StadiumStandingsView } from './stadium-standings.ts';
 import { clearCompletedDraft, DAILY_STORAGE_NOTICE, persistDraft, restoreDaily, restoreDraft, RESUME_NOTICE, type DailyRun, type Restore, type SavedPhase } from './persistence.ts';
 import { dailyDate, dailyLabel, dailyStadium } from './daily.ts';
@@ -48,6 +48,15 @@ function scoutingLabelOf(draft: Draft, manifest: Manifest, values: ReadonlyMap<s
  catch { return null; }
 }
 
+const DAILY_NAME_PROMPTED_KEY = '162-zero:daily-name-prompted:v1';
+
+function readDailyNamePrompted(): boolean {
+ try { return localStorage.getItem(DAILY_NAME_PROMPTED_KEY) === '1'; } catch { return false; }
+}
+function writeDailyNamePrompted(): void {
+ try { localStorage.setItem(DAILY_NAME_PROMPTED_KEY, '1'); } catch { /* ignore blocked storage */ }
+}
+
 export class Session {
  manifest = $state.raw<Manifest | null>(null);
  draft = $state.raw<Draft | null>(null);
@@ -63,6 +72,7 @@ export class Session {
  resumeNotice = $state('');
  announce = $state('');
  confirmNew = $state(false);
+ promptDailyName = $state(false);
  completed = $state(0);
  revealed = $state(0);
  shareLink = $state('');
@@ -288,7 +298,7 @@ export class Session {
    this.retryAction = null;
   } catch (error) {
    if (epoch !== this.epoch) return;
-   this.error = error instanceof Error ? error.message : 'Could not load game data. Please retry.';
+   this.error = error instanceof Error ? error.message : 'Couldn’t load game data. Please try again.';
    if (!this.incompatible) this.retryAction = this.draft ? 'resume' : 'initialize';
   } finally { if (epoch === this.epoch) this.loading = false; }
   // `/classic?resume=1` (answering a challenge with the draft in progress) skips the Resume button.
@@ -406,8 +416,23 @@ export class Session {
   const view = await loadDailyStandings((await deviceDb()).db, manifest, date, location.origin, fetch, name);
   if (manifest === this.manifest) this.dailyStandings = view;
  }
+ /** Saves a leaderboard nickname from the pre-daily prompt and starts today's daily. */
+ async confirmDailyName(name: string): Promise<void> {
+  try { await saveBoardName((await deviceDb()).db, name); } catch { /* play still proceeds if storage is blocked */ }
+  this.promptDailyName = false;
+  await this.playDaily({ skipNamePrompt: true });
+ }
+ /** Remembers that the player chose to stay Anonymous and starts today's daily. */
+ async playDailyAnonymous(): Promise<void> {
+  writeDailyNamePrompted();
+  this.promptDailyName = false;
+  await this.playDaily({ skipNamePrompt: true });
+ }
+ cancelDailyName(): void {
+  this.promptDailyName = false;
+ }
  /** Starts today's daily with its seed and stadium pinned, resumes it, or reopens a finished one's results. */
- async playDaily(): Promise<void> {
+ async playDaily(options?: { skipNamePrompt?: boolean }): Promise<void> {
   if (!this.manifest || this.loading || !this.daily) return;
   if (this.daily.date !== dailyDate()) { await this.refreshDaily(); return; }
   const { date, run } = this.daily;
@@ -419,6 +444,13 @@ export class Session {
    return;
   }
   if (run.kind !== 'unplayed') return;
+  if (!options?.skipNamePrompt && !readDailyNamePrompted()) {
+   const existingName = await deviceDb().then(({ db }) => savedBoardName(db)).catch(() => null);
+   if (!existingName) {
+    this.promptDailyName = true;
+    return;
+   }
+  }
   this.stopRun();
   this.clearShareState();
   ++this.epoch;
@@ -752,7 +784,7 @@ export class Session {
    if (!this.shareIsCurrent(request, epoch)) return;
    if (isShareIncompatibility(error)) {
     this.incompatible = true;
-    this.error = error instanceof Error ? error.message : 'Replay is incompatible with this dataset.';
+    this.error = error instanceof Error ? error.message : 'This replay link is from an older version of the game.';
     this.shareStatus = 'This replay cannot be published by the current model. Start a new draft.';
    } else {
     this.shareStatus = `${error instanceof Error ? error.message : 'Share images could not be prepared.'} Retry the same action.`;

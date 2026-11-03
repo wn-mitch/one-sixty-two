@@ -22,6 +22,10 @@
 </script>
 
 <figure class={`win-chart ${tone}`}>
+	<figcaption>
+		<span class="chart-title">Win probability</span>
+		<strong class="chart-summary">{summary}</strong>
+	</figcaption>
 	<div class="plot">
 		<svg viewBox={`0 0 ${halves} 100`} preserveAspectRatio="none" role="img" aria-label={label}>
 			<defs>
@@ -44,13 +48,15 @@
 	<div class="ticks" aria-hidden="true">
 		{#each ticks as inning (inning)}<span style:left={`${(inning * 2 - 1) / halves * 100}%`}>{inning}</span>{/each}
 	</div>
-	<figcaption>{summary}</figcaption>
 </figure>
 
 <style>
 	.win-chart { --tone: var(--success); display: grid; gap: var(--space-1); margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); }
 	.win-chart.lowlight { --tone: var(--error); }
-	.plot { position: relative; height: 5.5rem; border-radius: 4px; background: var(--background); }
+	figcaption { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); margin-bottom: var(--space-1); }
+	.chart-title { color: var(--muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+	.chart-summary { color: var(--tone); font-size: var(--text-sm); font-weight: 750; font-variant-numeric: tabular-nums; }
+	.plot { position: relative; height: 4.75rem; border-radius: 4px; background: var(--background); }
 	svg { display: block; width: 100%; height: 100%; overflow: visible; }
 	.inning { stroke: var(--surface); stroke-width: 1; }
 	.even { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 3; }
@@ -64,5 +70,4 @@
 	.scale.mid { top: 50%; transform: translateY(-120%); }
 	.ticks { position: relative; height: .875rem; color: var(--muted); font-size: .625rem; font-variant-numeric: tabular-nums; }
 	.ticks span { position: absolute; transform: translateX(-50%); }
-	figcaption { color: var(--tone); font-size: var(--text-sm); font-weight: 750; font-variant-numeric: tabular-nums; }
 </style>

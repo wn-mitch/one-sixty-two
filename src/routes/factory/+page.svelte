@@ -103,8 +103,8 @@
 		</CardBrowser>
 	{/if}
 	<details class="factory-help">
-		<summary>About era finishes</summary>
-		<p>Shop unlocks finish types; Card factory equips them. Each choice applies only to one era and tier. Deck default keeps your saved deck-wide finish; Era original restores the era’s own pattern. Owned finishes are free to reuse. Cosmetic only, saved on this device.</p>
+		<summary>How era finishes work</summary>
+		<p>Unlock finishes in the Shop, then customize how each decade’s cards look here. Each choice applies to one decade and card tier. <strong>Deck default</strong> uses your overall choice; <strong>Era original</strong> restores that decade’s classic pattern. Everything is cosmetic only and saved on this device.</p>
 	</details>
 </main>
 

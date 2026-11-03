@@ -2,9 +2,9 @@ import UIKit
 import WebKit
 
 /// Reports the web view's reserved regions (the iPhone Duo fold and camera occlusions) to the page,
-/// which lays out around them (`src/lib/app/regions.ts`). Frames are in the web view's coordinate
-/// space, which is the page's CSS pixel space because the view is pinned to the safe area with no
-/// content insets. Inactive regions are included: the fold stays a layout boundary when fully open.
+/// which lays out around them (`src/lib/app/regions.svelte.ts`). Frames are in the web view's coordinate
+/// space, which is the page's CSS pixel space because the view has no content insets. Inactive regions
+/// are included: the fold stays a layout boundary when fully open.
 @MainActor
 final class ReservedRegionBridge {
     static let globalName = "__hostRegions"
@@ -42,6 +42,29 @@ final class ReservedRegionBridge {
         return encode(width: view.bounds.width, height: view.bounds.height, regions: regions)
     }
 
+    /// The sides, in screen terms, whose safe-area inset is only an active occlusion hugging that edge
+    /// and shorter than the view, such as the iPhone Duo outer display's status column. The web view
+    /// runs to those edges; the page backs the occlusion and keeps its controls clear of it.
+    static func openSides(in view: UIView) -> OpenSides {
+        guard #available(iOS 27.1, *) else { return OpenSides() }
+        let occlusions = view.reservedRegions(kind: .occlusion, options: .includeInactive).filter(\.isActive).map(\.frame)
+        return openSides(bounds: view.bounds, insets: view.safeAreaInsets, occlusions: occlusions)
+    }
+
+    nonisolated static func openSides(bounds: CGRect, insets: UIEdgeInsets, occlusions: [CGRect]) -> OpenSides {
+        let tolerance: CGFloat = 0.5
+        func explains(_ frame: CGRect, inset: CGFloat, atLeft: Bool) -> Bool {
+            guard inset > 0, frame.height < bounds.height - tolerance else { return false }
+            return atLeft
+                ? frame.minX <= bounds.minX + tolerance && frame.maxX >= bounds.minX + inset - tolerance
+                : frame.maxX >= bounds.maxX - tolerance && frame.minX <= bounds.maxX - inset + tolerance
+        }
+        return OpenSides(
+            left: occlusions.contains { explains($0, inset: insets.left, atLeft: true) },
+            right: occlusions.contains { explains($0, inset: insets.right, atLeft: false) }
+        )
+    }
+
     @available(iOS 27.1, *)
     private static func region(kind: String, _ region: UIView.ReservedRegion) -> HostRegion {
         HostRegion(
@@ -64,6 +87,11 @@ final class ReservedRegionBridge {
     static func script(payload: String) -> String {
         "window.\(globalName) = \(payload);"
     }
+}
+
+struct OpenSides: Equatable {
+    var left = false
+    var right = false
 }
 
 struct HostRegions: Encodable, Equatable {

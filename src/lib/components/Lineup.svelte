@@ -13,6 +13,7 @@
  import { arriveAtTop, clearStage, flyInto, riseIn, stash, take } from './phase-motion.ts';
  import { MOTION } from '../motion-timing.ts';
  import InfoTooltip from './InfoTooltip.svelte';
+ import BaseballGuide from './BaseballGuide.svelte';
  import { smartBattingOrder, smartReliefRoles, smartRotation } from '../game/smart-lineup.ts';
  /** A card's season so far against its own line, tinted when it runs well above or below the card. */
  export type LineupForm = { now: string; card: string; form: 'hot' | 'cold' | null };
@@ -384,22 +385,29 @@
 
 <section bind:this={lineupRoot} class="lineup" aria-label={title} aria-busy={busy} inert={leaving}>
  <header>
-  <div class="lineup-heading"><h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">{title}</h2>{@render smartButton('Smart all', battingIsSmart && startersAreSmart && rolesAreSmart, applySmartAll, 'Smart all applies the batting order, starting rotation, and relief-role recommendations together.')}</div>
+  <div class="lineup-heading">
+   <h2 id="lineup-heading" bind:this={lineupHeading} tabindex="-1">{title}</h2>
+   <div class="heading-tools">
+    <BaseballGuide compact showLineupStats />
+    {@render smartButton('Smart all', battingIsSmart && startersAreSmart && rolesAreSmart, applySmartAll, 'Automatically sets your batting order, starting pitchers, and bullpen roles using baseball analytics. Great if you want to jump straight into the season.', true)}
+   </div>
+  </div>
+  {#if !intro}<p class="lineup-intro muted">Adjust your batting order, pitching rotation, and bullpen roles — or tap <strong>Smart all</strong> to set them automatically.</p>{/if}
   {#if !rankings && (rankingLoading || rankingError)}
-   <p class="muted">{rankingLoading ? 'Season value rankings are loading.' : 'Season value rankings are unavailable.'} Your lineup can still be edited.</p>
+   <p class="muted">{rankingLoading ? 'Loading WAR rankings…' : 'WAR rankings couldn’t load.'} You can still edit your lineup.</p>
   {/if}
  </header>
  <p class="announcement" aria-live="polite" aria-atomic="true">{announcement}</p>
  {@render intro?.()}
  <div class="lineup-columns">
   <section aria-labelledby="batting-heading">
-   <div class="section-heading"><h3 id="batting-heading">Batting order</h3>{@render smartButton('Smart lineup', battingIsSmart, () => applySmartOrder('batting'), 'Smart lineup bats your three best hitters 1, 2 and 4: the best on-base hitter leads off and the most power bats cleanup. The next two bat 5 and 3, and the rest follow, best first. Each spot down the order comes up about 18 fewer times a season.')}</div>
+   <div class="section-heading"><h3 id="batting-heading">Batting order</h3>{@render smartButton('Smart lineup', battingIsSmart, () => applySmartOrder('batting'), 'Puts your three best hitters in spots 1, 2, and 4 — your highest on-base hitter leads off and your biggest power hitter bats 4th. Each spot down the order bats about 18 fewer times over the season.')}</div>
    {@render orderList('batting', lineup.battingOrder)}
   </section>
   <section aria-labelledby="rotation-heading">
-   <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3>{@render smartButton('Ace first', startersAreSmart, () => applySmartOrder('starter'), 'The three starters cycle in this order, 54 starts each, without injuries or fatigue. The order decides which games each one gets. Ace first gives your best arm opening day.')}</div>
+   <div class="section-heading"><h3 id="rotation-heading">Starting rotation</h3>{@render smartButton('Ace first', startersAreSmart, () => applySmartOrder('starter'), 'Your three starters take turns in this order — 54 starts each. Ace first puts your best pitcher on the mound for Opening Day.')}</div>
    {@render orderList('starter', lineup.starterOrder)}
-   <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3>{@render smartButton('Smart roles', rolesAreSmart, applySmartRoles, "Smart roles gives your best arm the closer's job, the next two setup, and the rest middle and long relief. Roles set first choices; backup roles need a day off. If those choices are unavailable, remaining named arms pitch before the league-average pool, with primary closers last. Rest limits still apply. See Rules & model for details.")}</div>
+   <div class="section-heading relief-heading"><h3 id="relief-heading">Relief</h3>{@render smartButton('Smart roles', rolesAreSmart, applySmartRoles, "Assigns your best reliever as Closer (9th inning), the next two as Setup (7th–8th), and the rest to middle and long relief. Rest rules still apply between games.")}</div>
    <ul class="order fixed" aria-labelledby="relief-heading">
     {#each lineup.bullpen as { slot, seasonId } (slot)}
      {@const profile = seasonId ? bySeason.get(seasonId) : undefined}
@@ -445,10 +453,10 @@
  </footer>
 </section>
 
-{#snippet smartButton(label: string, applied: boolean, apply: () => void, help?: string)}
+{#snippet smartButton(label: string, applied: boolean, apply: () => void, help?: string, primary = false)}
  <div class="smart-controls">
   {#if help}<InfoTooltip label={label} text={help} />{/if}
-  <button type="button" class="secondary smart" disabled={busy || applied || !lineup.ready} title={applied ? 'Already in this order' : undefined} onclick={apply}>
+  <button type="button" class:primary class:secondary={!primary} class="smart" disabled={busy || applied || !lineup.ready} title={applied ? 'Already in this order' : undefined} onclick={apply}>
    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 4.5h10M3 8h7M3 11.5h4"></path></svg>
    {label}
   </button>
@@ -555,8 +563,11 @@
 <style>
  .lineup { min-width: 0; }
  header { margin-block: var(--space-6) var(--space-8); }
- .lineup-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+ .lineup-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding-right: var(--clear-top-right, 0px); }
+ .heading-tools { display: flex; flex: none; align-items: center; gap: var(--space-1); }
  .lineup-heading .smart-controls { flex: none; }
+ .lineup-intro { margin: var(--space-2) 0 0; }
+ .lineup-intro strong { color: var(--text); }
  h2 { margin: 0 0 var(--space-2); font-size: var(--text-2xl); }
  header > .muted { max-width: 60ch; font-size: var(--text-sm); margin: 0; }
  .lineup-columns { display: grid; gap: var(--space-8); }

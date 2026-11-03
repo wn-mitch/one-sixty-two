@@ -12,6 +12,7 @@
  import PoolSkeleton from './skeletons/PoolSkeleton.svelte';
  import Skeleton from './skeletons/Skeleton.svelte';
  import { appSettings } from '../game/settings.svelte.ts';
+ import { positionName } from '../game/glossary.ts';
 
  /** A hitter position, the whole rotation (SP), the whole bullpen (RP), or every player. */
  type FilterSlot = Slot | 'SP' | 'RP' | 'All';
@@ -339,18 +340,20 @@
 <svelte:window onpointerdown={handlePointerDown} onfocusin={handleFocusIn} />
 <div use:candidateGridMotion={gridMotion} class:candidates-wide={wide} class="candidates">
 <CardBrowser label="Choose a historical player season" {wide} {busy} searchable={false}
- sorts={[{ value: 'war', label: 'WAR' }, { value: 'metrics', label: 'OPS / ERA' }, ...source.sorts.map(({ value, label }) => ({ value, label }))]} {sort} onSort={value => reshuffle(() => sort = value)}
- filters={filterOptions.map(option => ({ value: option, count: option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0 }))}
- filter={activeFilter} filterLegend="Qualifies for position" filterToggle="Positions" onFilter={value => reshuffle(() => filter = value as FilterSlot)}
+ sorts={[{ value: 'war', label: 'WAR' }, { value: 'metrics', label: 'OPS / ERA' }, ...source.sorts.map(({ value, label }) => ({ value, label }))]} {sort}
+ sortHelp="WAR/162 measures overall value (higher is better). OPS measures hitting (higher is better) and ERA measures pitching runs allowed (lower is better)."
+ onSort={value => reshuffle(() => sort = value)}
+ filters={filterOptions.map(option => ({ value: option, title: option === 'All' ? 'All positions' : `${option} — ${positionName(option)}`, count: option === 'All' ? visibleGroups.length : filterCounts.get(option) ?? 0 }))}
+ filter={activeFilter} filterLegend="Open positions" filterToggle="Positions" onFilter={value => reshuffle(() => filter = value as FilterSlot)}
  resultsId="{uid}-results">
  {#snippet rail()}
   {#if rankingLoading}
    <!-- A small spinner says rankings are on the way; the full explanation is for screen readers and the tooltip. -->
-   {@const rankingNote = `Loading composite WAR/162.${sort === 'war' ? ' Cards are in stable ID order until it arrives. Sort by OPS / ERA to rank by those stats now.' : ''} Drafting is available.`}
+   {@const rankingNote = `Loading WAR rankings.${sort === 'war' ? ' You can sort by OPS / ERA or start drafting now.' : ''} Drafting is available.`}
    <p class="ranking-status ranking-loading muted" role="status" title={rankingNote}><span class="ranking-spinner" aria-hidden="true"></span><span aria-hidden="true">Ranking WAR</span><span class="sr-only">{rankingNote}</span></p>
   {:else if rankingError}
    <div class="ranking-status">
-    <p role="status">Composite WAR/162 is unavailable.{sort === 'war' ? ' Cards are in stable ID order, not ranked by WAR. Sort by OPS / ERA or retry.' : ''} You can still draft.</p>
+    <p role="status">WAR rankings couldn’t load right now.{sort === 'war' ? ' Sort by OPS / ERA, retry, or keep drafting.' : ''} You can still draft.</p>
     <button type="button" class="secondary" onclick={onRetryRankings}>Retry rankings</button>
    </div>
   {/if}
@@ -359,18 +362,18 @@
   {#if source.waiting}
    <p class="notice">{source.waiting}</p>
   {:else if groups.length === 0 && !showBlocked && blockedGroupCount > 0}
-   <p class="notice">These players have no open position. Turn on Blocked players in Settings to select one and make room on your field.</p>
+   <p class="notice">None of these players fit an open spot on your field. Turn on Blocked players in Settings to view them and rearrange your roster.</p>
   {:else if groups.length === 0}
    {#if activeFilter !== 'All'}
     <div class="empty">
      <h3>No players for this position.</h3>
-     <p class="muted">Browse all historical qualifications.</p>
+     <p class="muted">Try another position or show everyone in this pack.</p>
      <button type="button" class="secondary" disabled={busy} onclick={() => { filter = 'All'; resetBrowse(); }}>Show all positions</button>
     </div>
    {:else if busy}
     <Skeleton label="Loading the player pool…"><PoolSkeleton {wide} rail={false} /></Skeleton>
    {:else}
-    <p class="notice">No eligible seasons are available in this pool. Your current roll is preserved.</p>
+    <p class="notice">No eligible players are available in this pack. Your pick hasn’t been used.</p>
    {/if}
   {:else}
    {#if shownGroups.length}

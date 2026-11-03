@@ -1,6 +1,7 @@
 <script lang="ts">
  import Standings from './Standings.svelte';
  import type { DraftSharedReport, SharedLine } from '../../draft/share-report.ts';
+ import { decreeIcon, decreeNamed } from '../../draft/decrees.ts';
 
  /** A shared Draft Mode season, read-only: the record and grade, standings, moments, final roster and the run's identity. */
  let { report }: { report: DraftSharedReport } = $props();
@@ -64,7 +65,7 @@
 
  <section aria-labelledby="shared-decrees">
   <h2 id="shared-decrees">Decrees</h2>
-  <ol class="decrees">{#each report.decrees as decree, chapter (chapter)}<li>Chapter {chapter + 1}: {decree}</li>{/each}</ol>
+  <ol class="decrees">{#each report.decrees as decree, chapter (chapter)}{@const known = decreeNamed(decree)}<li><span class="decree-icon" class:blank={!known} style:--icon={known ? `url(${decreeIcon(known.id)})` : null} aria-hidden="true"></span>Chapter {chapter + 1}: {decree}</li>{/each}</ol>
  </section>
 
  <footer class="muted">
@@ -95,6 +96,9 @@
  .roster .muted { grid-column: 2; font-size: var(--text-xs); }
  .slot { color: var(--muted); font-size: var(--text-xs); font-weight: 700; padding-top: .15rem; }
  .name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
- .decrees { margin: 0; padding-left: var(--space-5); display: grid; gap: var(--space-1); }
+ .decrees { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
+ .decrees li { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+ .decree-icon { width: 1.75rem; aspect-ratio: 1; background: var(--accent); -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+ .decree-icon.blank { background: none; }
  footer { font-size: var(--text-xs); overflow-wrap: anywhere; }
 </style>

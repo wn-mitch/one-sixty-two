@@ -214,11 +214,11 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
    {#snippet status()}
     <div class="checklist" aria-live="polite">
      {#if current.step === 'market'}
-     <p class="label">Waivers open</p><p>Commons and Submit open once waivers close.</p>
+     <p class="label">Waivers open</p><p>Close waivers when you’re done trading and claiming to finalize your roster.</p>
     {:else if current.blockers.length}
       <p class="label">Before you submit</p>
       <ul>{#each current.blockers as blocker (blocker)}<li>{blocker}</li>{/each}</ul>
-     {:else}<p class="ready">Roster is legal.</p>{/if}
+     {:else}<p class="ready">Roster is legal and ready to submit.</p>{/if}
     </div>
    {/snippet}
    {#snippet rowControl(seasonId: string)}
@@ -256,7 +256,7 @@ import { developed, lastingUpgrades, trainedLine } from '#lib/draft/training.ts'
   <Progress
    count={broadcast.count} games={broadcast.games} seed={session.run.setup.seed} revealed={session.revealed} revealing={session.revealing}
    heading={session.revealing ? `Games ${broadcast.first}–${broadcast.last}` : `Playing games ${broadcast.first}–${broadcast.last}`}
-   note={session.revealing ? 'These games are locked. This replay only reveals them.' : 'Every club plays nine games; lineups change again at the next stop.'}
+   note={session.revealing ? 'These games are complete — revealing the results.' : 'Every club plays nine games; you can adjust your lineup again at the next stop.'}
    onskip={() => session.skip()}
   />
  {:else if session.screen === 'report' && session.run && session.season}

@@ -57,6 +57,10 @@
 {#snippet momentPanel(label: string, tone: 'highlight' | 'lowlight', copy: SeasonMomentCopy | null, card: ResultsCard | null, view: CardViewModel | null, moment: SeasonMoment | null, trace: WinPoint[] | null)}
  <article class={`moment-card ${tone}`} class:has-participant={!!view}>
   {#if copy}
+   <header class="moment-head">
+    <p class="moment-label">{label}</p>
+    {#if copy.final}<p class="final">{copy.final}</p>{/if}
+   </header>
    {#if view && !card}
     <!-- Not one of yours: the opponent's card shows in black and white. -->
     <figure class="participant-card outsider">
@@ -80,22 +84,22 @@
     </button>
    {/if}
    <div class="moment-copy">
-    <p class="moment-label">{label}</p>
     <h4>{copy.matchup}</h4>
     <p class="situation">{copy.situation}</p>
     <blockquote class="call"><p>“{copy.call}”</p></blockquote>
     <p class="story">{copy.action} {copy.score}</p>
-    {#if moment && trace?.length}
-     <MomentWinChart {trace} {moment} {tone} summary={`${copy.winChance} (${copy.swing})`} />
-    {:else}
-     <p class="expectancy">{copy.winChance} <small>{copy.swing}</small></p>
-    {/if}
-    {#if copy.final}<p class="final">{copy.final}</p>{/if}
    </div>
+   {#if moment && trace?.length}
+    <div class="moment-chart">
+     <MomentWinChart {trace} {moment} {tone} summary={`${copy.winChance} (${copy.swing})`} />
+    </div>
+   {:else}
+    <p class="expectancy">{copy.winChance} <small>{copy.swing}</small></p>
+   {/if}
   {:else}
    <div class="moment-copy">
     <p class="moment-label">{label}</p>
-    <p class="empty">No {tone === 'highlight' ? 'positive' : 'negative'} win-expectancy swing was recorded this season.</p>
+    <p class="empty">No big {tone === 'highlight' ? 'positive' : 'negative'} momentum swings were recorded this season.</p>
    </div>
   {/if}
  </article>
@@ -112,39 +116,73 @@
 </section>
 
 <style>
- .season-moments { display: grid; gap: var(--space-4); min-width: 0; }
- .heading .eyebrow { margin: 0 0 var(--space-2); }
+ .season-moments { display: grid; gap: var(--space-3); min-width: 0; }
  .heading h3 { font-size: var(--text-xl); }
  .moment-grid { display: grid; gap: var(--space-4); }
- .moment-card { display: grid; align-content: start; gap: var(--space-4); min-width: 0; padding: var(--space-5); border: 1px solid var(--border); border-top: .25rem solid var(--border); border-radius: var(--radius); background: var(--surface); }
- /* The player card leads the panel; the copy reads as its caption. */
- .moment-card.has-participant { grid-template-columns: 11rem minmax(0, 1fr); }
+ .moment-card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3) var(--space-4);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-top: .25rem solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+ }
+ /* Card sits beside the play summary; header and win-probability chart span full width so nothing leaves a void. */
+ .moment-card.has-participant { grid-template-columns: 8.5rem minmax(0, 1fr); }
  .moment-card.highlight { border-top-color: var(--success); }
  .moment-card.lowlight { border-top-color: var(--error); }
- /* Only the card itself is the inspect target; it does not stretch down the panel. */
- .participant-card { all: unset; display: block; align-self: start; width: 100%; border-radius: var(--radius); cursor: pointer; touch-action: manipulation; }
- .outsider { display: grid; gap: var(--space-2); margin: 0; cursor: default; }
+ .moment-head {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+ }
+ .participant-card {
+  all: unset;
+  display: block;
+  align-self: start;
+  width: 100%;
+  border-radius: var(--radius);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 160ms var(--ease-out);
+ }
+ button.participant-card:hover, button.participant-card:focus-visible { transform: translateY(-.2rem); }
+ .outsider { display: grid; gap: var(--space-1); margin: 0; cursor: default; }
  .outsider .participant-art { filter: grayscale(1) contrast(1.05); }
  .outsider figcaption { color: var(--muted); font-size: var(--text-xs); font-weight: 750; letter-spacing: .08em; text-align: center; text-transform: uppercase; }
  .participant-card:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
- .participant-art { display: block; width: 100%; border-radius: var(--radius); box-shadow: 0 .75rem 1.5rem color-mix(in oklch, var(--background) 68%, transparent); }
+ .participant-art { display: block; width: 100%; border-radius: var(--radius); box-shadow: 0 .5rem 1.2rem color-mix(in oklch, var(--background) 68%, transparent); }
  .moment-copy { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-2); min-width: 0; }
- .moment-label { margin: 0; color: var(--muted); font-size: var(--text-xs); font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+ .moment-chart { grid-column: 1 / -1; min-width: 0; }
+ .moment-label { margin: 0; color: var(--muted); font-size: var(--text-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
  .highlight .moment-label { color: var(--success); }
  .lowlight .moment-label { color: var(--error); }
- h4 { margin: 0; font-size: var(--text-base); overflow-wrap: anywhere; }
+ h4 { margin: 0; font-size: var(--text-base); line-height: 1.25; overflow-wrap: anywhere; }
  .situation, .story, .final, .empty { margin: 0; }
- .situation, .final { color: var(--muted); font-size: var(--text-xs); }
+ .situation { color: var(--muted); font-size: var(--text-xs); }
+ .final { color: var(--text); font-size: var(--text-xs); font-weight: 750; font-variant-numeric: tabular-nums; }
  .call { margin: 0; padding-left: var(--space-3); border-left: 3px solid var(--border); }
+ .highlight .call { border-left-color: color-mix(in oklch, var(--success) 55%, var(--border)); }
+ .lowlight .call { border-left-color: color-mix(in oklch, var(--error) 55%, var(--border)); }
  .call p { margin: 0; max-width: 56ch; font: italic 700 1.125rem/1.2 'Barlow Condensed', sans-serif; letter-spacing: .005em; }
  .story { max-width: 64ch; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
- .expectancy { margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); font-weight: 750; font-variant-numeric: tabular-nums; }
+ .expectancy { grid-column: 1 / -1; margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--border); font-weight: 750; font-variant-numeric: tabular-nums; }
  .expectancy small { margin-left: var(--space-2); font-size: var(--text-sm); }
- @media (min-width: 48rem) {
+ @media (min-width: 52rem) {
   .moment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
  }
  @media (max-width: 30rem) {
-  .moment-card { gap: var(--space-3); padding: var(--space-4); }
-  .moment-card.has-participant { grid-template-columns: 6.5rem minmax(0, 1fr); }
+  .moment-card { gap: var(--space-3); padding: var(--space-3); }
+  .moment-card.has-participant { grid-template-columns: 6.25rem minmax(0, 1fr); }
  }
+ :global([data-motion='off']) .participant-card { transition: none; }
+ @media (prefers-reduced-motion: reduce) { .participant-card { transition: none; } }
 </style>

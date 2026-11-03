@@ -23,7 +23,7 @@
 <section class="pack" aria-labelledby="pack-heading">
  <h3 id="pack-heading">Supplemental pack</h3>
  <p class="condition"><strong>{condition.name}.</strong> {condition.detail}</p>
- <p class="note">Sign one card that fits under the cap; its price stays its salary. The worst record gets the best pack.</p>
+ <p class="note">Sign one fresh player who fits under your salary cap; their signing price becomes their salary. Lower-ranked clubs get first crack at the best packs.</p>
  <ul aria-label="Pack cards">
   {#each pack as item (item.seasonId)}
    {@const price = marketPrice(run, item)}

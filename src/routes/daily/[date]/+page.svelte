@@ -66,9 +66,9 @@
 
 <main class="board-page">
 	<header>
-		<h1>Daily <span>{label}</span> board</h1>
+		<h1>Daily <span>{label}</span> leaderboard</h1>
 		{#if view}
-			<p class="lede">{view.total === 0 ? 'No runs yet.' : `${count(view.total)} daily ${view.total === 1 ? 'run' : 'runs'}${view.final ? '' : ' so far'}.`} The board lists only runs the server has replayed.</p>
+			<p class="lede">{view.total === 0 ? 'No runs yet.' : `${count(view.total)} daily ${view.total === 1 ? 'run' : 'runs'}${view.final ? '' : ' so far'}.`} Entries appear once verified automatically.</p>
 		{/if}
 	</header>
 
@@ -103,7 +103,7 @@
 			</ol>
 			{#if reportError}<p class="error" role="alert">{reportError}</p>{/if}
 		{:else}
-			<p class="muted">{view.total ? 'No run has been checked yet. Runs join the board once the server has replayed them.' : 'Nobody has finished this daily yet.'}</p>
+			<p class="muted">{view.total ? 'Checking today’s top runs — entries appear here once verified.' : 'Nobody has finished this daily yet.'}</p>
 		{/if}
 		<p class="rules muted">Names follow the <a href="/conduct">board name rules</a>.</p>
 	{/if}

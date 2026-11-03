@@ -16,17 +16,17 @@
  const pack = $derived(franchiseId ? franchisePackage(franchiseId) : null);
  const rivals = $derived(franchiseId ? (franchiseId === 'NYM' ? ['NYY'] : RIVALS[franchiseId] ?? []) : []);
  const LABELS: Record<Difficulty, string> = { rookie: 'Rookie', pro: 'Pro', ace: 'Ace' };
- const DETAILS: Record<Difficulty, string> = { rookie: 'AI clubs misjudge cards often.', pro: 'AI clubs misjudge some cards.', ace: 'AI clubs rarely misjudge a card.' };
+ const DETAILS: Record<Difficulty, string> = { rookie: 'AI clubs often miss top picks.', pro: 'AI clubs draft smartly with occasional slips.', ace: 'AI clubs rarely make a bad pick.' };
 </script>
 
 <section class="entry" aria-labelledby="entry-heading">
  <h1 id="entry-heading">Draft Mode</h1>
- <p class="lede">Draft against seven AI clubs from passed packs, build a legal roster under the cap, then play a 162-game league season in six chapters, with a stop every nine games.</p>
+ <p class="lede">Draft against seven AI clubs from passed packs, fit your roster under the salary cap, and manage a 162-game league season across six chapters — with trades, training, and a stop every nine games.</p>
  {#if refused}<p class="refused" role="status">{refused}</p>{/if}
 
  <fieldset>
-  <legend>Your franchise</legend>
-  <p class="note">A franchise brings its home park and a guaranteed rival, and some bring a package of economic or training perks, an exaggerated home park that both clubs play in, or a home crowd that reacts during games. The commissioner's opening decree is revealed at the draft table, and a new one every chapter.</p>
+  <legend>Choose your franchise</legend>
+  <p class="note">Your franchise sets your home park, your rival, and any special franchise perks (like budget, training discounts, unique park rules, or crowd effects). The commissioner’s opening rule decree is revealed at the draft table, with a new decree each chapter.</p>
   <div class="franchises">
    {#each sorted as franchise (franchise.id)}
     <label class="franchise" class:selected={franchiseId === franchise.id}>
@@ -64,7 +64,7 @@
   {:else}
    <p>Choose a franchise to start.</p>
   {/if}
-  {#if franchiseId}<p class="package" aria-live="polite">{#if pack}<strong>{pack.name}.</strong> {pack.summary}{:else}An ordinary franchise: the table cap, standard training and its real park.{/if}</p>{/if}
+  {#if franchiseId}<p class="package" aria-live="polite">{#if pack}<strong>{pack.name}.</strong> {pack.summary}{:else}Standard franchise: regular salary cap, standard training, and its real home park.{/if}</p>{/if}
   <button class="primary" disabled={!franchiseId || busy} onclick={() => onStart(franchiseId, difficulty)}>{busy ? 'Dealing…' : 'Start draft'}</button>
  </div>
 </section>

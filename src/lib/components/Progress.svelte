@@ -49,7 +49,7 @@
 		{#if record}
 			<p class="record"><span class="win">{record.wins} W</span><span aria-hidden="true">·</span><span class="loss">{record.losses} L</span></p>
 		{:else}
-			<p class="record muted">Every game is computed independently.</p>
+			<p class="record muted">Simulating every game…</p>
 		{/if}
 	</div>
 	<SeasonReel {games} {seed} shown={lit} />
@@ -59,8 +59,8 @@
 	</div>
 	<p class="muted explanation">
 		{note ?? (revealing
-			? 'The full result is locked. This replay only reveals the completed games.'
-			: 'All 162 games continue, even after a loss.')}
+			? 'Your 162-game season is complete — revealing the results.'
+			: 'All 162 games are played out, even after a loss.')}
 	</p>
 
 	<button class="secondary" type="button" onclick={onskip}>Skip animation</button>

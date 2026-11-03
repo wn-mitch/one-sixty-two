@@ -19,6 +19,15 @@ export interface Decree {
 
 export const COMMISSIONER = 'Mad Fred';
 
+/** The commissioner's office seal: white on transparent, drawn as a CSS mask so it takes the text colour. */
+export const COMMISSIONER_SEAL = '/draft/commissioner-seal.png';
+
+/** A decree's icon, white on transparent like the seal. */
+export const decreeIcon = (id: string): string => `/draft/decrees/${id}.png`;
+
+/** The decree with this name, for snapshots that keep only names. */
+export const decreeNamed = (name: string): Decree | undefined => DECREES.find(decree => decree.name === name);
+
 const decree = (id: string, name: string, memo: string, rule: string, change: Partial<GameRules>): Decree => ({ id, name, memo, rule, rules: { ...STANDARD_RULES, ...change } });
 
 export const DECREES: readonly Decree[] = [
@@ -29,7 +38,8 @@ export const DECREES: readonly Decree[] = [
  decree('singles', 'Singles Appreciation Night', 'No one likes a stolen heart.', 'Every hit, home runs included, is a single: the batter takes first and each runner moves up exactly one base, as on an error. No steals.', { singlesOnly: true }),
  decree('no-free-passes', 'No Free Passes', 'Nothing in this league is free. A walk will now cost the defense double.', 'A walk or hit batter takes second, and every runner moves up two bases.', { freePassTwo: true }),
  decree('double-jeopardy', 'Double Jeopardy', 'A club that hits into a double play has had enough for one inning.', 'A double play ends the half inning, and no run scores on it.', { doublePlayEnds: true }),
- decree('everybody-tags', 'Everybody Tags', 'In the interest of fairness, every runner may now tag up.', 'A caught fly to the outfield that is not the last out moves every runner up a base; a runner on third scores. Infield pop-ups move nobody.', { everybodyTags: true })
+ decree('everybody-tags', 'Everybody Tags', 'In the interest of fairness, every runner may now tag up.', 'A caught fly to the outfield that is not the last out moves every runner up a base; a runner on third scores. Infield pop-ups move nobody.', { everybodyTags: true }),
+ decree('open-road', 'The Open Road', 'The basepaths have been deregulated. Proceed at your own risk.', 'A runner with an open base ahead may steal it, from first or second. A successful steal moves every runner up a base, and a runner on third scores; a caught stealing ends the half inning.', { openRoad: true })
 ];
 
 /** The run's six decrees in chapter order, the first being the opening decree. */

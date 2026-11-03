@@ -83,8 +83,10 @@ export interface GameRules {
  doublePlayEnds: boolean;
  /** Every runner advances one base on a caught outfield fly that is not the last out. */
  everybodyTags: boolean;
+ /** The lead runner with an open base ahead may steal it; a steal moves every runner up a base, and a caught stealing ends the half inning. */
+ openRoad: boolean;
 }
-export const STANDARD_RULES: Readonly<GameRules> = { innings: 9, outs: 3, singlesOnly: false, freePassTwo: false, doublePlayEnds: false, everybodyTags: false };
+export const STANDARD_RULES: Readonly<GameRules> = { innings: 9, outs: 3, singlesOnly: false, freePassTwo: false, doublePlayEnds: false, everybodyTags: false, openRoad: false };
 
 export interface LeagueSegmentInput {
  modelVersion: typeof MODEL_VERSION; rulesVersion: typeof RULES_VERSION; seed: number;

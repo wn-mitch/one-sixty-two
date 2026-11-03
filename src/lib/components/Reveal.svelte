@@ -71,16 +71,16 @@
 				<h2>Jackpot</h2>
 				<p class="era">{jackpot.jackpot.length} elite seasons</p>
 			</div>
-			<p class="status">{concealed ? 'Dealing a pack…' : revealing ? 'Revealing your player pool…' : 'Choose one elite season from any franchise.'}</p>
+			<p class="status">{concealed ? 'Dealing a pack…' : revealing ? 'Loading players…' : 'Pick one elite season from any team.'}</p>
 		{:else if team}
 			<div class="roll-copy">
 				<h2 style:--chars={(franchise?.name ?? team.franchiseId).length}>{franchise?.name ?? team.franchiseId}</h2>
 				<p class="era">{years?.first}–{years?.last}</p>
 			</div>
-			<p class="status">{concealed ? 'Dealing a franchise…' : revealing ? 'Revealing your player pool…' : 'Choose one exact season from this franchise.'}</p>
+			<p class="status">{concealed ? 'Dealing a team…' : revealing ? 'Loading players…' : 'Pick one player season from this team.'}</p>
 		{:else}
 			<h2>Your next great pick.</h2>
-			<p class="status">Open a pack to deal a franchise and an era.</p>
+			<p class="status">Open a pack to reveal a team and decade.</p>
 		{/if}
 	</div>
 </section>

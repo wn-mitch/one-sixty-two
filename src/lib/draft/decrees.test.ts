@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { simulateLeagueSegment } from '../engine/node.ts';
 import type { Profile } from '../game/types.ts';
-import { LEAGUE_CHAPTERS } from '../sim/league-types.ts';
+import { LEAGUE_CHAPTERS, STANDARD_RULES } from '../sim/league-types.ts';
 import { leagueProfile, testLeagueData } from '../sim/test-fixtures.ts';
 import { decreeAt, decreeCalendar, DECREES, segmentDecree } from './decrees.ts';
 import { RIVALS } from './franchises.ts';
@@ -59,5 +59,20 @@ describe('decree rules in play', () => {
     }
    }
   }
+ });
+ it('runs on The Open Road only when the steal pays, and then more than under standard rules', () => {
+  const steals = (rules: typeof STANDARD_RULES, stealSuccess: number) => {
+   const runners = new Map([...profiles].map(([id, profile]) => [id, { ...profile, stealAttempt: 0.25, stealSuccess }]));
+   const { detailGames } = simulateLeagueSegment({ ...segmentInput(run, season, runners, data, names), rules: { ...rules } });
+   const lines = detailGames.flatMap(game => [...game.home.batting, ...game.away.batting]);
+   return { sb: lines.reduce((sum, line) => sum + line.SB, 0), cs: lines.reduce((sum, line) => sum + line.CS, 0) };
+  };
+  const openRoad = { ...STANDARD_RULES, openRoad: true };
+  const attempts = ({ sb, cs }: { sb: number; cs: number }) => sb + cs;
+  // A 50% base stealer is below the break-even when a caught stealing ends the half, so he almost
+  // always stays put; only a steal that scores the runner from third can pay.
+  expect(attempts(steals(openRoad, 0.5))).toBeLessThan(attempts(steals(STANDARD_RULES, 0.5)) / 5);
+  // An elite one runs twice as often, and from second as well as first.
+  expect(steals(openRoad, 0.95).sb).toBeGreaterThan(2 * steals(STANDARD_RULES, 0.95).sb);
  });
 });

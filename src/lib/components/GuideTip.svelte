@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, untrack, type Snippet } from 'svelte';
-	import { guide, type GuideStep } from '../game/guide.svelte.ts';
+	import { guide, GUIDE_STEPS, type GuideStep } from '../game/guide.svelte.ts';
 
 	/**
 	 * A first-season callout pointing at what it explains. It floats beside its anchor (below it when
@@ -92,6 +92,7 @@
 		aria-label="First-season tip"
 		data-guide-step={step}
 	>
+		<p class="guide-step" aria-hidden="true">Tip {guide.stepNumber(step)} of {GUIDE_STEPS.length}</p>
 		<p role="status">{text}{#if extra}{' '}{@render extra()}{/if}</p>
 		<div class="guide-actions">
 			<button type="button" class="quiet" onclick={() => guide.done(step)}>Got it</button>
@@ -134,7 +135,8 @@
 	.guide-tip.docked { position: fixed; left: 50%; bottom: max(var(--space-4), env(safe-area-inset-bottom)); translate: -50% 0; }
 	.guide-tip.docked::before { display: none; }
 	.guide-tip.covered { visibility: hidden; }
-	.guide-tip p { margin: 0; line-height: 1.45; }
+	.guide-step { margin: 0 0 var(--space-1); color: var(--accent); font-size: var(--text-xs); font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+	.guide-tip p:not(.guide-step) { margin: 0; line-height: 1.45; }
 	.guide-tip p :global(a) { color: var(--accent); font-weight: 650; }
 	.guide-actions { display: flex; justify-content: flex-end; gap: var(--space-1); }
 	.guide-actions button { min-height: 2.75rem; padding-inline: var(--space-3); font-size: var(--text-sm); }

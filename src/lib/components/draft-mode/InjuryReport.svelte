@@ -67,7 +67,7 @@
  {:else}<p class="note">No injuries on your club.</p>{/if}
 
  {#if offers.length}
-  <p class="note">A push buys an edge for games {first}–{last} at a risk: 1 in 8, plus 1 in 16 for each earlier push on the same player this chapter. Of injuries, {Math.round((1 - MAJOR_SHARE) * 4)} in 4 are minor (he sits games {nextFirst}–{nextLast}, or plays them hurt) and 1 in 4 major (out games {nextFirst}–{nextLast}). Declining every push is always safe.</p>
+  <p class="note">Pushes give a short-term boost for games {first}–{last} at an injury risk (1 in 8, plus 1 in 16 per earlier push on that player this chapter). Most injuries ({Math.round((1 - MAJOR_SHARE) * 4)} in 4) are minor; 1 in 4 are major and sideline the player for games {nextFirst}–{nextLast}. Skipping pushes is always safe.</p>
   <ul aria-label="Pushes">
    {#each offers as offer (`${offer.kind}:${offer.cardId}`)}
     <li>

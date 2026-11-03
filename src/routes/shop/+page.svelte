@@ -45,7 +45,7 @@
 				shopReady
 			]);
 			if (!live) return;
-			mediaNotice = media ? '' : 'Photos are unavailable. Preview cards retain their identities and finish; reload to retry photos.';
+			mediaNotice = media ? '' : 'Player photos couldn’t load right now. You can still preview finishes, or reload to try again.';
 			data = { manifest, rankings, media };
 		} catch (caught) {
 			if (!live) return;
@@ -127,10 +127,10 @@
 	{#if mediaNotice}<p class="muted" role="status">{mediaNotice}</p>{/if}
 	{#if support}<SupportOffers />{/if}
 	<details class="earning">
-		<summary>Tokens &amp; unlocks</summary>
-		<p>Finish a season to earn 1 token. Your first earns 2. Replays and head-to-head series do not earn tokens.</p>
-		<p>Each finish or colorway costs 1 token. Shop purchases unlock types without changing any cards. Equip them in Card factory. Foil unlocks work on Silver and Gold cards; colorways work on any Gem holo.</p>
-		<p>Cosmetic only. Unlocks and earned tokens stay on this device{#if support}; purchased tokens come back from the App Store{/if}. Compact cards and exported images keep their simplified finish.</p>
+		<summary>How tokens &amp; unlocks work</summary>
+		<p>Finish any season to earn 1 token (your first earns 2, and the daily earns 2). Replays and head-to-head series don’t earn tokens.</p>
+		<p>Each finish or colorway costs 1 token to unlock. Once unlocked, head to <strong>Card factory</strong> to apply it to any decade’s cards. Foil unlocks work on Silver and Gold cards; colorways work on any Gem holo.</p>
+		<p>Everything in the Shop is cosmetic only — finishes never affect stats or game results. Unlocks and earned tokens stay on this device{#if support}; purchased tokens sync with the App Store{/if}.</p>
 	</details>
 </main>
 
@@ -138,7 +138,7 @@
 	.shop-page { display: grid; gap: var(--space-5); width: min(100%, 84rem); min-width: 0; padding-block: var(--space-5) var(--space-8); }
 	.shop-page.motion-enabled { opacity: 0; transform: translateY(.5rem); }
 	.shop-page.motion-enabled.content-ready { opacity: 1; transform: none; transition: opacity 280ms ease-out, transform 280ms ease-out; }
-	.shop-intro { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+	.shop-intro { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-right: var(--clear-top-right, 0px); }
 	.shop-tools { display: flex; align-items: center; gap: var(--space-6); }
 	.factory-link { font-size: var(--text-sm); }
 	.wallet { display: grid; justify-items: end; gap: var(--space-1); }

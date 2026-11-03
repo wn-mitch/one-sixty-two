@@ -6,8 +6,8 @@
 <article class="about">
 	<header class="intro">
 		<a class="back-link" href="/">← Back to Play</a>
-		<h1>What happens under the hood</h1>
-		<p class="lede">162-0 turns real historical team-seasons into a transparent plate-appearance game. The choices are yours; the approximations are published here.</p>
+		<h1>Rules &amp; how the simulation works</h1>
+		<p class="lede">162-0 turns real historical baseball seasons into a transparent, pitch-by-pitch game. Every choice is yours, and every rule and approximation is explained below.</p>
 		<nav aria-label="About page sections">
 			<a href="#draft">Draft</a><a href="#season">Season</a><a href="#simulation">Simulation</a><a href="#head-to-head">Head-to-head</a><a href="#rankings">Rankings</a><a href="/how-to-play">How to play</a><a href="/credits">Data and image credits</a>
 		</nav>
@@ -94,7 +94,7 @@
 			<p>A collected team bullpen card has no individual WAR; its included and excluded pitcher-seasons remain visible in its card details.</p>
 
 			<h3>What the ranking is not</h3>
-			<p>The composite batting/pitching WAR/162 scalar is context and comparison only: it orders draft choices and selects cosmetic finishes, but never makes a player stronger in a matchup. The same pinned file separately supplies <code>fld162</code> fielding evidence to <code>defense-v2</code>; that position-aware, residualized estimate is disclosed independently and must not be confused with the composite WAR scalar. Rate statistics from shortened seasons are not adjusted for games played, missing values show as unavailable rather than zero, and an incomplete latest-year capture is excluded rather than extrapolated. Neither external source is presented as an internally reproduced Baseball-Reference, FanGraphs, or proprietary scouting model.</p>
+			<p>WAR/162 is for sorting and comparing cards — it also sets each card’s visual finish (Base, Foil, Emboss, or Gem), but it never boosts a player during a game. Fielding strength comes separately from position-specific defensive stats (<code>fld162</code>). Shortened seasons are not extrapolated, missing values show as unavailable rather than zero, and incomplete latest-year data is left out.</p>
 
 			<div class="ranking-source">
 				<dl>
