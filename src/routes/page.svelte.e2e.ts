@@ -241,6 +241,12 @@ test('resumes its exact roll, finishes a roster, and recomputes every shared sco
 	const storedPixels = await imagePixelDigest(page, { url: publication.images.field.url });
 	const clipboardPixels = await imagePixelDigest(page, { clipboard: true });
 	expect(clipboardPixels).toEqual({ ...SHARE_DIMENSIONS.field, sha256: storedPixels.sha256 });
+	// The copied alt text is the preview's own description, naming the record.
+	await sharePanel.getByRole('button', { name: 'Copy alt text', exact: true }).click();
+	await expect(page.locator('[data-toast]')).toHaveText('Alt text copied.');
+	const copiedAlt = await page.evaluate(() => navigator.clipboard.readText());
+	expect(copiedAlt).toContain(`${publication.record.wins}–${publication.record.losses} season`);
+	await expect(sharePanel.locator('.preview img')).toHaveAttribute('alt', copiedAlt);
 	const downloadEvent = page.waitForEvent('download');
 	await sharePanel.getByRole('button', { name: 'Download PNG', exact: true }).click();
 	const download = await downloadEvent;

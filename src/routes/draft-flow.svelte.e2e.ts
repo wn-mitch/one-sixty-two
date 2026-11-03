@@ -197,6 +197,25 @@ test.describe('draft interaction boundaries', () => {
 		await expect(page.getByRole('button', { name: 'Roll next franchise', exact: true })).toBeVisible();
 	});
 
+	test('keeps open-slot text inside its slot when the reader enlarges the browser font size', async ({ page, request }) => {
+		const manifest = await currentManifest(request);
+		const scenario = await cardScenario(request, manifest, () => true);
+		await openSavedDraft(page, scenario.draft);
+		await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+		// A selected candidate marks its legal slots with the extra Place line.
+		await selectWideCandidate(page, scenario.profile);
+		const panel = page.locator('.field-panel');
+		await expect(panel.locator('.highlighted .slot-placeholder small').first()).toBeVisible();
+		const spills = await panel.locator('.slot-placeholder').evaluateAll(slots => slots.flatMap(slot => {
+			const box = slot.getBoundingClientRect();
+			return [...slot.children].filter(text => {
+				const inner = text.getBoundingClientRect();
+				return inner.left < box.left - .5 || inner.right > box.right + .5 || inner.bottom > box.bottom + .5;
+			}).map(text => text.textContent);
+		}));
+		expect(spills).toEqual([]);
+	});
+
 	test('hides fully blocked desktop groups until the Blocked players setting and drops filled-position filters', async ({ page, request }) => {
 		const manifest = await currentManifest(request);
 		const scenario = await blockedScenario(request, manifest);

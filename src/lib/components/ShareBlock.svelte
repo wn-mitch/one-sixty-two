@@ -2,6 +2,7 @@
 	import { challengeUrl } from '#lib/game/share.ts';
 	import { onDestroy } from 'svelte';
 	import ShareArtwork from '#lib/share/ShareArtwork.svelte';
+	import { shareAltText } from '#lib/share/model.ts';
 	import { renderSharePng } from '#lib/share/render.ts';
 	import { toasts } from '#lib/toast.svelte.ts';
 	import {
@@ -25,7 +26,6 @@
 	const FORMAT_LABELS: Record<ShareFormat, string> = { field: 'Field', fan: 'Cards' };
 	let format = $state<ShareFormat>(SHARE_FORMATS[0]);
 	let publishedImage = $derived(publication?.images[format] ?? null);
-	let previewRecord = $derived(publication?.record ?? model.record);
 	// The live preview renders at the published pixel size and scales down, so compact card minimums
 	// lay out exactly as they do in the captured PNG.
 	let previewWidth = $state(0);
@@ -79,6 +79,17 @@
 	// Share progress and outcomes are toasts; one slot so an outcome replaces its progress message.
 	$effect(() => { if (status) toasts.show(status, { id: 'share', tone: statusIsError ? 'error' : 'info' }); });
 
+	let altText = $derived(shareAltText(model, format));
+	/** Copies the image's description, for players who post the PNG somewhere that asks for alt text. */
+	async function copyAltText(): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(altText);
+			toasts.show('Alt text copied.', { id: 'share' });
+		} catch {
+			toasts.show('Could not copy alt text.', { id: 'share', tone: 'error' });
+		}
+	}
+
 	function selectLink(event: FocusEvent | MouseEvent): void {
 		(event.currentTarget as HTMLInputElement).select();
 	}
@@ -103,14 +114,14 @@
 				src={publishedImage.url}
 				width={publishedImage.width}
 				height={publishedImage.height}
-				alt={`${previewRecord.wins}-${previewRecord.losses} season share image`}
+				alt={altText}
 			/>
 		{:else if localImage}
 			<img
 				src={localImage}
 				width={SHARE_DIMENSIONS[format].width}
 				height={SHARE_DIMENSIONS[format].height}
-				alt={`${previewRecord.wins}-${previewRecord.losses} season share image`}
+				alt={altText}
 			/>
 		{:else}
 			<div class="stage" style:width="{SHARE_DIMENSIONS[format].width}px" style:transform="scale({previewScale})">
@@ -127,6 +138,7 @@
 			<button type="button" disabled={sharing} onclick={() => onShare('copy-link', format)}>Copy link</button>
 			<button type="button" disabled={sharing} onclick={() => onShare('download', format)}>Download PNG</button>
 			<button type="button" disabled={sharing} onclick={() => onShare('copy-image', format)}>Copy image</button>
+			<button type="button" onclick={() => void copyAltText()}>Copy alt text</button>
 		</div>
 	</div>
 
@@ -217,7 +229,7 @@
 	.actions .primary { min-height: 3rem; }
 	.action-group {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		overflow: hidden;
@@ -235,7 +247,9 @@
 		white-space: nowrap;
 	}
 	.action-group button { padding-inline: var(--space-2); }
-	.action-group button + button { border-left: 1px solid var(--border); }
+	/* Two by two: a rule between the columns and between the rows. */
+	.action-group button:nth-child(even) { border-left: 1px solid var(--border); }
+	.action-group button:nth-child(n + 3) { border-top: 1px solid var(--border); }
 	.action-group button:hover:not(:disabled) { background: var(--surface-raised); }
 	.share-panel button:disabled { cursor: wait; opacity: .58; }
 	label {

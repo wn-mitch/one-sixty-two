@@ -436,8 +436,8 @@
   text-transform: uppercase;
  }
  .slot-placeholder b { font-size: 1rem; letter-spacing: .04em; }
- .slot-placeholder span { font-size: .75rem; letter-spacing: .06em; }
- .slot-placeholder small { color: var(--accent); font-size: .6875rem; letter-spacing: .05em; }
+ .slot-placeholder span { font-size: 12px; letter-spacing: .06em; }
+ .slot-placeholder small { color: var(--accent); font-size: min(11px, calc(100cqi * 15 / 424)); letter-spacing: .05em; }
  .highlighted .card-frame { outline-color: var(--accent); }
  .highlighted .slot-placeholder { border-color: var(--accent); color: var(--accent); background: color-mix(in oklch, var(--accent) 14%, transparent); }
  .preview .card-frame { outline-style: dashed; }
@@ -490,12 +490,12 @@
  .mini-photo :global(.team-mark) { width: 70%; height: auto; aspect-ratio: 1; flex-basis: auto; overflow: hidden; }
  /* The park's name reads like a player caption: name, then its slot. One line each, so it stays inside the field window. */
  .mini-caption { display: grid; width: calc(100cqi * 80 / 424); text-align: center; }
- .mini-caption strong, .mini-caption span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .5625rem; line-height: 1.08; }
+ .mini-caption strong, .mini-caption span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 9px; line-height: 1.08; }
  .mini-caption span { color: var(--muted); }
  @media (prefers-reduced-motion: reduce) { .stadium-mini, .mini-card { transition: none; } }
  .slot-placeholder b { font-size: calc(100cqi * 15 / 424); }
- /* Small fields (beside the iPhone Duo fold) shrink the state line with the card; phone sheets keep 12px. */
- .slot-placeholder span { font-size: max(.5rem, min(.75rem, calc(100cqi * 16 / 424))); }
+ /* Slot text is card art: it scales with the field, never with the reader's font size, which would spill it out of fixed-size slots. Small fields (beside the iPhone Duo fold) shrink the state line; phone sheets keep 12px. */
+ .slot-placeholder span { font-size: max(8px, min(12px, calc(100cqi * 16 / 424))); }
  @media (prefers-reduced-motion: reduce) { .flipper { transition: none; } }
  :global([data-motion='off']) .flipper { transition: none; }
 </style>

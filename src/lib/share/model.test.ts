@@ -5,7 +5,7 @@ import type { MediaManifest } from '../media/types.ts';
 import type { WarRankings } from '../rankings/types.ts';
 import { testSeason } from '../sim/test-fixtures.ts';
 import type { GameResult, SeasonResult } from '../sim/types.ts';
-import { createShareRenderModel, type CreateShareRenderModelInput } from './model.ts';
+import { createShareRenderModel, shareAltText, type CreateShareRenderModelInput } from './model.ts';
 import { previewCards } from './og-cards.ts';
 import type { ShareRenderModel } from './types.ts';
 
@@ -83,6 +83,17 @@ function publishedAssets(dataVersion: string): { media: MediaManifest; rankings:
 }
 
 describe('share render model', () => {
+	it('writes alt text naming every card once, in the order the artwork reads', () => {
+		const model = createShareRenderModel(fixture());
+		const alt = shareAltText(model, 'field');
+		expect(alt).toContain(`${model.record.wins}–${model.record.losses} season`);
+		expect(alt).toContain(model.homeStadium.name);
+		for (const entry of model.cards) expect(alt.split(`${entry.card.full} (${entry.card.year})`)).toHaveLength(2);
+		const order = model.battingOrder.map(id => alt.indexOf(model.cards.find(card => card.seasonId === id)!.card.full));
+		expect(order).toEqual([...order].sort((a, b) => a - b));
+		expect(shareAltText(model, 'fan')).toContain(`${model.cards.length} cards`);
+	});
+
 	it('builds one deterministic canonical card array in slot order', () => {
 		const input = fixture();
 		const first = createShareRenderModel({ ...input, profiles: [...input.profiles].reverse(), draft: { ...input.draft, picks: [...input.draft.picks].reverse() } });

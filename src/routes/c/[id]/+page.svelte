@@ -102,7 +102,8 @@
 <style>
 	.challenge { display: grid; justify-items: center; gap: var(--space-4); width: min(100%, 30rem); margin-inline: auto; padding-block: var(--space-8); text-align: center; }
 	.eyebrow { margin: 0; color: var(--accent); font-size: var(--text-xs); font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-	h1 { margin: 0; font: italic 900 clamp(2.75rem, 12vw, 4.5rem) / .95 'Barlow Condensed', sans-serif; text-transform: uppercase; }
+	/* The record leads: 800 with even digit widths and a little tracking keeps "141–21" from running together. */
+	h1 { margin: 0; font: italic 800 clamp(2.75rem, 12vw, 4.5rem) / .95 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; letter-spacing: .02em; text-transform: uppercase; }
 	.lede { margin: 0; max-width: 34ch; }
 	img { width: 100%; height: auto; border-radius: var(--radius-lg); }
 	.actions { display: grid; justify-items: center; gap: var(--space-3); width: 100%; }

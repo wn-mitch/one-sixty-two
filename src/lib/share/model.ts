@@ -1,5 +1,5 @@
 import { createCardViewModel } from '../cards/view-model.ts';
-import { CURRENT_REPLAY_SCHEMA_VERSION, DEFENSE_METHOD_VERSION, HITTER_SLOTS, MODEL_VERSION, RULES_VERSION, SLOTS, STARTER_SLOTS, VALUATION_VERSION } from '../game/types.ts';
+import { CURRENT_REPLAY_SCHEMA_VERSION, DEFENSE_METHOD_VERSION, HITTER_SLOTS, MODEL_VERSION, RELIEF_SLOTS, RULES_VERSION, SLOTS, STARTER_SLOTS, VALUATION_VERSION } from '../game/types.ts';
 import { ENVIRONMENT_VERSION, GEOMETRY_VERSION } from '../sim/park-types.ts';
 import type { Candidate, Draft, Manifest, Profile, Slot } from '../game/types.ts';
 import type { MediaManifest } from '../media/types.ts';
@@ -8,7 +8,7 @@ import type { WarRankings } from '../rankings/types.ts';
 import type { ScoutingLabel } from '../game/scouting.ts';
 import type { SeasonResult } from '../sim/types.ts';
 import { validateProfile } from '../sim/validation.ts';
-import type { ShareRecord, ShareRenderModel, ShareStadium } from './types.ts';
+import type { ShareFormat, ShareRecord, ShareRenderModel, ShareStadium } from './types.ts';
 
 export interface CreateShareRenderModelInput {
 	draft: Draft;
@@ -234,4 +234,28 @@ export function createShareRenderModel(input: CreateShareRenderModelInput): Shar
 		...(draft.daily === undefined ? {} : { daily: draft.daily }),
 		...(input.scouting ? { scouting: input.scouting } : {})
 	};
+}
+
+/**
+ * Alt text for a share image, for players to paste where they post it: the record, home park,
+ * layout, and every card in the order the artwork reads (batting order, rotation, bullpen).
+ */
+export function shareAltText(model: ShareRenderModel, format: ShareFormat): string {
+	const bySeason = new Map(model.cards.map(entry => [entry.seasonId, entry]));
+	const player = (seasonId: string): string => {
+		const entry = bySeason.get(seasonId);
+		return entry ? `${entry.card.full} (${entry.card.year})` : '';
+	};
+	const lineup = model.battingOrder.map((seasonId, index) => `${index + 1}. ${bySeason.get(seasonId)?.slot ?? ''} ${player(seasonId)}`.trim());
+	const rotation = model.starterOrder.map(player).filter(Boolean);
+	const bullpen = model.cards.filter(entry => entry.slot === 'CL' || (RELIEF_SLOTS as readonly Slot[]).includes(entry.slot)).map(entry => `${entry.slot} ${player(entry.seasonId)}`);
+	const { wins, losses } = model.record;
+	const layout = format === 'field' ? `The roster stands on the field at ${model.homeStadium.name}.` : `The roster's ${model.cards.length} cards are laid out in a grid.`;
+	return [
+		`162-0 share image for a ${wins}–${losses} season${model.daily ? ` in the ${model.daily} daily` : ''}, home park ${model.homeStadium.name}.`,
+		layout,
+		`Batting order: ${lineup.join(', ')}.`,
+		rotation.length ? `Rotation: ${rotation.join(', ')}.` : '',
+		bullpen.length ? `Bullpen: ${bullpen.join(', ')}.` : ''
+	].filter(Boolean).join(' ');
 }

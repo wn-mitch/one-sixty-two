@@ -607,7 +607,8 @@
  /* The lifted row floats above neighbours that slide aside; the opened gap marks the insertion point. */
  .drag-source { z-index: 2; background: var(--surface-raised); border-radius: var(--radius); box-shadow: 0 12px 32px oklch(8% .01 255 / .52); }
 
- .assignment-control { flex: 0 0 6.25rem; min-width: 0; }
+ /* A fixed width, not just a flex basis: WebKit otherwise sizes the stats column from the longest position option and squeezes the name column to one letter. */
+ .assignment-control { flex: 0 0 6.25rem; width: 6.25rem; min-width: 0; }
  .stats { display: flex; gap: var(--space-3); font-variant-numeric: tabular-nums; }
  .stat { display: grid; justify-items: end; min-width: 2.75rem; line-height: 1.2; }
  .stat .value { font-size: var(--text-sm); font-weight: 650; }
